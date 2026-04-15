@@ -5,12 +5,12 @@ import type { ExtractedWine } from '../types/wine';
 
 const ExtractedWineSchema = z.object({
   name: z.string(),
-  producer: z.string(),
-  region: z.string(),
+  producer: z.string().nullish().transform((v) => v ?? ''),
+  region: z.string().nullish().transform((v) => v ?? ''),
   appellation: z.string().nullish(),
   grape: z.string().nullish(),
-  vintage: z.number().nullable(),
-  menuPrice: z.number().nullable(),
+  vintage: z.number().nullable().catch(null),
+  menuPrice: z.number().nullable().catch(null),
   currency: z.string().default('GBP'),
 });
 
@@ -39,7 +39,8 @@ export async function extractWineList(imageUri: string): Promise<ExtractedWine[]
   const parsed = OCRResponseSchema.safeParse(raw);
   if (!parsed.success) {
     console.error('[OCR] Parse error:', parsed.error.message);
-    throw new Error('Could not parse wine list from image. Please try a clearer photo.');
+    console.error('[OCR] Raw that failed:', JSON.stringify(raw));
+    throw new Error(`Could not parse wine list from image. Please try a clearer photo.\n\nDetail: ${parsed.error.message}`);
   }
   console.log('[OCR] Wines found:', parsed.data.wines.length);
   return parsed.data.wines;

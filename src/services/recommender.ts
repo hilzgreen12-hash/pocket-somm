@@ -49,6 +49,7 @@ const WineRecommendationSchema = z.object({
   rarityAssessment: RarityAssessmentSchema,
   fitScore: z.number().min(0).max(100),
   valueScore: z.number().min(0).max(100),
+  outsidePreferences: z.string().nullable().optional(),
 });
 
 const RecommendationResponseSchema = z.object({

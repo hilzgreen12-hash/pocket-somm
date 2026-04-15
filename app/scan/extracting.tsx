@@ -147,6 +147,9 @@ export default function ExtractingScreen() {
           ? 'This could take a minute or two'
           : 'Scoring by critic rating, vintage quality and value'}
       </Text>
+      {stage === 'recommending' && (
+        <Text style={styles.body}>This may take a minute or two</Text>
+      )}
       {stage === 'reading' && (
         <Text style={styles.profileNote}>
           We're making a recommendation based on your profile preferences. Change your preferences for this result only by setting filters for this search.

@@ -2,16 +2,43 @@ import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { spacing } from '../../constants/theme';
 
+// Build the non-linear value array
+const VALUES: (number | null)[] = [
+  // £20–£150 in £10 steps
+  ...Array.from({ length: 14 }, (_, i) => 20 + i * 10),   // 20,30,...,150
+  // £170–£450 in £20 steps
+  ...Array.from({ length: 15 }, (_, i) => 170 + i * 20),  // 170,190,...,450
+  // £500–£1500 in £50 steps
+  ...Array.from({ length: 21 }, (_, i) => 500 + i * 50),  // 500,550,...,1500
+  // No limit
+  null,
+];
+
+const MAX_INDEX = VALUES.length - 1; // 50
+
+function valueToIndex(value: number | null): number {
+  if (value === null) return MAX_INDEX;
+  // Find closest index
+  let closest = 0;
+  let diff = Infinity;
+  VALUES.forEach((v, i) => {
+    if (v !== null) {
+      const d = Math.abs(v - value);
+      if (d < diff) { diff = d; closest = i; }
+    }
+  });
+  return closest;
+}
+
 interface Props {
   value: number | null;
   onChange: (value: number | null) => void;
 }
 
-const MAX = 500;
-
 export function BudgetSlider({ value, onChange }: Props) {
-  const current = value ?? 20;
-  const atMax = current >= MAX;
+  const index = valueToIndex(value);
+  const current = VALUES[index];
+  const atMax = current === null;
 
   return (
     <View>
@@ -19,11 +46,11 @@ export function BudgetSlider({ value, onChange }: Props) {
         {atMax ? 'No limit' : `Up to £${current}`}
       </Text>
       <Slider
-        minimumValue={20}
-        maximumValue={MAX}
-        step={5}
-        value={current}
-        onValueChange={(v) => onChange(v >= MAX ? null : v)}
+        minimumValue={0}
+        maximumValue={MAX_INDEX}
+        step={1}
+        value={index}
+        onValueChange={(i) => onChange(VALUES[Math.round(i)])}
         minimumTrackTintColor="rgba(255,255,255,0.80)"
         maximumTrackTintColor="rgba(255,255,255,0.20)"
         thumbTintColor="#FFFFFF"

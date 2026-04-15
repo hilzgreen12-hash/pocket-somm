@@ -23,7 +23,7 @@ export default function OnboardingScreen() {
   const { updatePreferences, isSaving } = usePreferences();
 
   const [step, setStep] = useState(0);
-  const [wineType, setWineType] = useState<WineType>('any');
+  const [wineTypes, setWineTypes] = useState<WineType[]>([]);
   const [styleProfiles, setStyleProfiles] = useState<string[]>([]);
   const [favouriteRegions, setFavouriteRegions] = useState<string[]>([]);
   const [favouriteGrapes, setFavouriteGrapes] = useState<string[]>([]);
@@ -36,7 +36,7 @@ export default function OnboardingScreen() {
   function handleNext() {
     if (isLast) {
       updatePreferences({
-        wineType,
+        wineTypes,
         styleProfiles,
         favouriteRegions,
         favouriteGrapes,
@@ -72,7 +72,7 @@ export default function OnboardingScreen() {
         <Text style={styles.hint}>{STEPS[step].hint}</Text>
 
         {step === 0 && (
-          <WineTypePicker selected={wineType} onChange={setWineType} />
+          <WineTypePicker selected={wineTypes} onChange={setWineTypes} />
         )}
 
         {step === 1 && (

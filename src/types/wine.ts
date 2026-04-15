@@ -44,6 +44,7 @@ export interface WineRecommendation {
   rarityAssessment: RarityAssessment;
   fitScore: number;     // 0–100, match to user preferences
   valueScore: number;   // 0–100, value for money vs market price
+  outsidePreferences?: string | null; // set when wine breaks a stated preference, explains why it's still worth it
 }
 
 export interface RecommendationResponse {

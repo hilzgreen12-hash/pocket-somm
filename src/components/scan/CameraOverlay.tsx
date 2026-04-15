@@ -5,16 +5,27 @@ const { width } = Dimensions.get('window');
 const FRAME_WIDTH = width * 0.9;
 const FRAME_HEIGHT = FRAME_WIDTH * 1.4;
 
-interface Props {
-  onCapture: () => void;
+export interface FrameRect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
-export function CameraOverlay({ onCapture }: Props) {
+interface Props {
+  onCapture: () => void;
+  onFrameLayout?: (rect: FrameRect) => void;
+}
+
+export function CameraOverlay({ onCapture, onFrameLayout }: Props) {
   return (
     <View style={styles.container} pointerEvents="box-none">
       <Text style={styles.hint}>Frame the wine list within the guides</Text>
 
-      <View style={[styles.frame, { width: FRAME_WIDTH, height: FRAME_HEIGHT }]}>
+      <View
+        style={[styles.frame, { width: FRAME_WIDTH, height: FRAME_HEIGHT }]}
+        onLayout={(e) => onFrameLayout?.(e.nativeEvent.layout)}
+      >
         <View style={[styles.corner, styles.topLeft]} />
         <View style={[styles.corner, styles.topRight]} />
         <View style={[styles.corner, styles.bottomLeft]} />

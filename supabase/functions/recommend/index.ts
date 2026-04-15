@@ -11,6 +11,10 @@ Unless the diner has explicitly requested a single grape variety, each of the 3 
 
 HARD RULE — COLOUR PREFERENCE:
 If the diner has specified one or more colours (red, white, rosé, sparkling), only recommend wines of those colours. This is absolute. If no colour preference is stated, recommend the best option regardless of colour.
+The four colour categories are strictly separate: red, white (still only — not sparkling), rosé, sparkling. Champagne and all other sparkling wines count as "sparkling", NOT "white". If the diner has selected "white" but not "sparkling", do not recommend any sparkling or Champagne. If the diner has selected "sparkling" but not "white", do not recommend still white wines.
+
+HARD RULE — BUDGET:
+If the diner has stated a budget, exclude ALL wines with a menu price above that budget. This is absolute — do not recommend a wine over budget regardless of quality, rarity, or any other factor. If the wine's menu price is unknown (null), it may be included. If fewer than 3 qualifying wines exist within budget, recommend as many as qualify rather than exceeding the budget.
 
 HARD RULE — REGION AND GRAPE EXCLUSIONS:
 If the diner has listed regions or grape varieties to avoid, exclude all wines from those regions or made from those grapes. This is absolute and cannot be overridden by quality or value considerations.
@@ -99,6 +103,7 @@ For each recommended wine return:
     - notes: 1 sentence explaining the rarity (e.g. production size, limited distribution) (string)
 - fitScore: 0–100, match to diner's stated preferences (number)
 - valueScore: 0–100, value for money at menu price vs estimated market price (number)
+- outsidePreferences: if this wine breaches any of the diner's stated preferences (budget, colour, excluded region or grape), set this to a short string explaining what the exception is and why the wine is still worth serious consideration — e.g. "This exceeds your £50 budget at £75, but this vintage of Krug is exceptionally rare on restaurant lists and represents a genuinely special opportunity." If the wine is fully within preferences, set this to null.
 
 Also return a top-level "summary" field: 1–2 sentences summarising your recommendation approach.
 
@@ -130,6 +135,10 @@ Deno.serve(async (req) => {
       ? `HARD RULE — COLOUR: Only recommend ${wineTypes.map((t: string) => colourLabels[t] ?? t).join(' or ')} wines. Exclude all other colours absolutely.`
       : 'No colour restriction — recommend the best option regardless of colour.';
 
+    const budgetLine = budget
+      ? `HARD RULE — BUDGET: The diner's maximum budget is £${budget} per bottle. Exclude every wine priced above £${budget} on the menu. This is absolute.`
+      : '';
+
     const dislikedRegionsLine = dislikedRegions?.length
       ? `HARD RULE — EXCLUDE REGIONS: Never recommend wines from these regions: ${dislikedRegions.join(', ')}. This is absolute.`
       : '';
@@ -150,6 +159,7 @@ Diner preferences:
 - Grapes to avoid (EXCLUDE): ${dislikedGrapes?.length ? dislikedGrapes.join(', ') : 'None'}
 
 ${colourLine}
+${budgetLine}
 ${dislikedRegionsLine}
 ${dislikedGrapesLine}
 `;

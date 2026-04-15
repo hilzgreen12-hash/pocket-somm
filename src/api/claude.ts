@@ -4,12 +4,10 @@ const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
 async function invokeFunction(name: string, body: unknown): Promise<unknown> {
-  const { data: { session } } = await supabase.auth.getSession();
   const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session?.access_token ?? ANON_KEY}`,
       'apikey': ANON_KEY,
     },
     body: JSON.stringify(body),

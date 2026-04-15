@@ -34,6 +34,15 @@ export function WineRecommendationCard({ wine, rank, pricing }: Props) {
         )}
       </View>
 
+      {/* Outside-preferences notice */}
+      {wine.outsidePreferences && (
+        <View style={styles.outsideNotice}>
+          <Text style={styles.outsideText}>
+            ⚠ This is outside your preferences, but it's worth your consideration — {wine.outsidePreferences}
+          </Text>
+        </View>
+      )}
+
       {/* Name + vintage + price */}
       <View style={styles.header}>
         <View style={styles.titleGroup}>
@@ -166,5 +175,20 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: colors.border,
     marginVertical: spacing.md,
+  },
+  outsideNotice: {
+    backgroundColor: 'rgba(180,140,60,0.12)',
+    borderLeftWidth: 2,
+    borderLeftColor: colors.gold,
+    borderRadius: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    marginBottom: spacing.sm,
+  },
+  outsideText: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 13,
+    color: colors.gold,
+    lineHeight: 19,
   },
 });
