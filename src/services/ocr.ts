@@ -44,3 +44,4 @@ export async function extractWineList(imageUri: string): Promise<ExtractedWine[]
   console.log('[OCR] Wines found:', parsed.data.wines.length);
   return parsed.data.wines;
 }
+

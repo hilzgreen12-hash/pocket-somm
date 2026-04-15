@@ -1,5 +1,4 @@
 import { TextInput, StyleSheet } from 'react-native';
-import { colors, spacing } from '../../constants/theme';
 
 interface Props {
   value: string;
@@ -13,7 +12,7 @@ export function FoodPairingInput({ value, onChange }: Props) {
       value={value}
       onChangeText={onChange}
       placeholder="e.g. rack of lamb, truffle risotto, grilled sea bass…"
-      placeholderTextColor={colors.textMuted}
+      placeholderTextColor="rgba(255,255,255,0.25)"
       multiline
       numberOfLines={2}
     />
@@ -22,14 +21,13 @@ export function FoodPairingInput({ value, onChange }: Props) {
 
 const styles = StyleSheet.create({
   input: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    padding: spacing.md,
-    fontSize: 15,
-    color: colors.text,
-    backgroundColor: colors.surface,
-    minHeight: 70,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.25)',
+    paddingVertical: 8,
+    fontSize: 14,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: '#FFFFFF',
+    minHeight: 60,
     textAlignVertical: 'top',
   },
 });

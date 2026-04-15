@@ -63,13 +63,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontWeight: '700',
+    fontFamily: 'CormorantGaramond_700Bold',
     color: colors.burgundy,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.xxl,
@@ -92,10 +93,11 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
   },
   link: {
+    fontFamily: 'CormorantGaramond_400Regular',
     textAlign: 'center',
     color: colors.burgundy,
     marginTop: spacing.lg,

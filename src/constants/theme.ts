@@ -1,14 +1,29 @@
+// Little Greene Arras — deep warm terracotta
+const ARRAS = '#69413C';
+
 export const colors = {
-  burgundy: '#6B1E3C',
-  background: '#FAFAF8',
-  surface: '#FFFFFF',
-  text: '#1A1A1A',
-  textMuted: '#6B6B6B',
-  border: '#E5E0D8',
-  success: '#2E7D32',
-  warning: '#E65100',
-  error: '#C62828',
-  gold: '#B8860B',
+  background: ARRAS,
+  surface: '#572F2B',
+  surfaceElevated: '#4A2522',
+
+  burgundy: '#E8A0A0',   // soft rose — readable against terracotta
+  burgundyDim: '#B06060',
+
+  gold: '#D4B060',
+  goldDim: '#8A7040',
+
+  // White text system
+  text: '#FFFFFF',
+  textMuted: 'rgba(255,255,255,0.55)',
+  textSubtle: 'rgba(255,255,255,0.25)',
+
+  // Borders — white with low opacity
+  border: 'rgba(255,255,255,0.10)',
+  borderLight: 'rgba(255,255,255,0.18)',
+
+  success: '#6DBF8A',
+  warning: '#D4923A',
+  error: '#D44040',
 };
 
 export const spacing = {

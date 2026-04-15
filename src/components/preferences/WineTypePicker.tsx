@@ -3,12 +3,12 @@ import { colors, spacing } from '../../constants/theme';
 
 export type WineType = 'red' | 'white' | 'rose' | 'sparkling' | 'any';
 
-const WINE_TYPES: { id: WineType; label: string; emoji: string }[] = [
-  { id: 'red', label: 'Red', emoji: '🍷' },
-  { id: 'white', label: 'White', emoji: '🥂' },
-  { id: 'rose', label: 'Rosé', emoji: '🌸' },
-  { id: 'sparkling', label: 'Sparkling', emoji: '✨' },
-  { id: 'any', label: 'Any', emoji: '🍾' },
+const WINE_TYPES: { id: WineType; label: string }[] = [
+  { id: 'red',       label: 'Red' },
+  { id: 'white',     label: 'White' },
+  { id: 'rose',      label: 'Rosé' },
+  { id: 'sparkling', label: 'Sparkling' },
+  { id: 'any',       label: 'No preference' },
 ];
 
 interface Props {
@@ -18,17 +18,18 @@ interface Props {
 
 export function WineTypePicker({ selected, onChange }: Props) {
   return (
-    <View style={styles.row}>
+    <View>
       {WINE_TYPES.map((type) => {
         const active = selected === type.id;
         return (
           <TouchableOpacity
             key={type.id}
-            style={[styles.tile, active && styles.tileActive]}
+            style={styles.row}
             onPress={() => onChange(type.id)}
           >
-            <Text style={styles.emoji}>{type.emoji}</Text>
-            <Text style={[styles.label, active && styles.labelActive]}>{type.label}</Text>
+            <Text style={[styles.label, active && styles.labelActive]}>
+              {type.label}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -38,36 +39,14 @@ export function WineTypePicker({ selected, onChange }: Props) {
 
 const styles = StyleSheet.create({
   row: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-    flexWrap: 'wrap',
-  },
-  tile: {
-    flex: 1,
-    minWidth: 56,
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  tileActive: {
-    borderColor: colors.burgundy,
-    backgroundColor: colors.burgundy + '12',
-  },
-  emoji: {
-    fontSize: 22,
-    marginBottom: 4,
+    paddingVertical: 10,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: colors.text,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.40)',
   },
   labelActive: {
-    color: colors.burgundy,
-    fontWeight: '700',
+    color: '#FFFFFF',
   },
 });

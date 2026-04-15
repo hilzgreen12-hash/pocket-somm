@@ -1,30 +1,29 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../constants/theme';
-import type { VintageAssessment } from '../../types/wine';
+import type { RarityAssessment } from '../../types/wine';
 
 interface Props {
-  assessment: VintageAssessment;
+  rarity: RarityAssessment;
 }
 
 const LABEL_COLORS: Record<string, string> = {
-  Exceptional: '#5CB85C',
-  Excellent:   '#4AA84A',
-  Good:        '#6BAA72',
-  Average:     '#C4823A',
-  Challenging: '#C46030',
-  Poor:        '#C44040',
+  'Very Rare': '#C9A84C',
+  'Rare':      '#B8934A',
+  'Uncommon':  '#9A7A56',
 };
 
-export function VintageBadge({ assessment }: Props) {
-  const color = LABEL_COLORS[assessment.label] ?? colors.textMuted;
+export function RarityBadge({ rarity }: Props) {
+  if (rarity.label === 'Widely Available') return null;
+
+  const color = LABEL_COLORS[rarity.label] ?? colors.textMuted;
 
   return (
     <View style={styles.container}>
       <View style={[styles.badge, { backgroundColor: color + '25', borderColor: color + '60' }]}>
-        <Text style={[styles.label, { color }]}>{assessment.label} Vintage</Text>
-        <Text style={[styles.score, { color }]}>{assessment.score}/100</Text>
+        <Text style={[styles.label, { color }]}>{rarity.label}</Text>
+        <Text style={[styles.score, { color }]}>{rarity.score}/100</Text>
       </View>
-      <Text style={styles.notes}>{assessment.notes}</Text>
+      <Text style={styles.notes}>{rarity.notes}</Text>
     </View>
   );
 }

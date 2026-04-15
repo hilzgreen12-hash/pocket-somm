@@ -1,6 +1,6 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { STYLE_PROFILES } from '../../constants/styleProfiles';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 
 interface Props {
   selected: string[];
@@ -15,16 +15,19 @@ export function StylePicker({ selected, onChange }: Props) {
   }
 
   return (
-    <View style={styles.wrap}>
+    <View>
       {STYLE_PROFILES.map((profile) => {
         const active = selected.includes(profile.id);
         return (
           <TouchableOpacity
             key={profile.id}
-            style={[styles.chip, active && styles.chipActive]}
+            style={styles.row}
             onPress={() => toggle(profile.id)}
           >
-            <Text style={[styles.chipText, active && styles.chipTextActive]}>{profile.label}</Text>
+            <Text style={[styles.label, active && styles.labelActive]}>
+              {profile.label}
+            </Text>
+            <Text style={styles.description}>{profile.description}</Text>
           </TouchableOpacity>
         );
       })}
@@ -33,29 +36,22 @@ export function StylePicker({ selected, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: spacing.sm,
+  row: {
+    paddingVertical: 10,
   },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  chipActive: {
-    backgroundColor: colors.burgundy,
-    borderColor: colors.burgundy,
-  },
-  chipText: {
+  label: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 14,
-    color: colors.text,
+    color: 'rgba(255,255,255,0.40)',
+    marginBottom: 2,
   },
-  chipTextActive: {
-    color: '#fff',
-    fontWeight: '600',
+  labelActive: {
+    color: '#FFFFFF',
+  },
+  description: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.22)',
+    lineHeight: 16,
   },
 });

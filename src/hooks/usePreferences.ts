@@ -13,13 +13,18 @@ export function usePreferences() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('style_preferences, default_budget')
+        .select('style_preferences, default_budget, default_wine_type, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes')
         .eq('user_id', session!.user.id)
         .single();
       if (error) return null;
       return {
+        wineType: data.default_wine_type ?? 'any',
         styleProfiles: data.style_preferences ?? [],
-        defaultBudget: data.default_budget ?? 100,
+        defaultBudget: data.default_budget ?? null,
+        favouriteRegions: data.favourite_regions ?? [],
+        favouriteGrapes: data.favourite_grapes ?? [],
+        dislikedRegions: data.disliked_regions ?? [],
+        dislikedGrapes: data.disliked_grapes ?? [],
       } as UserPreferences;
     },
   });
@@ -29,8 +34,13 @@ export function usePreferences() {
       if (!session) return;
       await supabase.from('profiles').upsert({
         user_id: session.user.id,
-        style_preferences: updates.styleProfiles,
-        default_budget: updates.defaultBudget,
+        ...(updates.wineType !== undefined && { default_wine_type: updates.wineType }),
+        ...(updates.styleProfiles !== undefined && { style_preferences: updates.styleProfiles }),
+        ...(updates.defaultBudget !== undefined && { default_budget: updates.defaultBudget }),
+        ...(updates.favouriteRegions !== undefined && { favourite_regions: updates.favouriteRegions }),
+        ...(updates.favouriteGrapes !== undefined && { favourite_grapes: updates.favouriteGrapes }),
+        ...(updates.dislikedRegions !== undefined && { disliked_regions: updates.dislikedRegions }),
+        ...(updates.dislikedGrapes !== undefined && { disliked_grapes: updates.dislikedGrapes }),
       });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['preferences'] }),
@@ -39,5 +49,6 @@ export function usePreferences() {
   return {
     preferences,
     updatePreferences: mutation.mutate,
+    isSaving: mutation.isPending,
   };
 }

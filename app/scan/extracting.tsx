@@ -2,51 +2,117 @@ import { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { useScanStore } from '../../src/stores/scanStore';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { extractWineList } from '../../src/services/ocr';
 import { recommendWines } from '../../src/services/recommender';
 import { colors, spacing } from '../../src/constants/theme';
+import type { ExtractedWine } from '../../src/types/wine';
+import type { UserPreferences } from '../../src/types/preferences';
+
+function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | undefined): ExtractedWine[] {
+  if (!prefs) return wines.slice(0, 25);
+
+  let filtered = wines;
+
+  // Hard filter: remove disliked regions
+  if (prefs.dislikedRegions?.length) {
+    filtered = filtered.filter((w) =>
+      !prefs.dislikedRegions.some((r) =>
+        w.region?.toLowerCase().includes(r.toLowerCase()) ||
+        (w.appellation ?? '').toLowerCase().includes(r.toLowerCase())
+      )
+    );
+  }
+
+  // Hard filter: remove disliked grapes
+  if (prefs.dislikedGrapes?.length) {
+    filtered = filtered.filter((w) =>
+      !prefs.dislikedGrapes.some((g) =>
+        (w.grape ?? '').toLowerCase().includes(g.toLowerCase())
+      )
+    );
+  }
+
+  // Hard filter: remove wines above budget
+  if (prefs.defaultBudget) {
+    filtered = filtered.filter((w) => w.menuPrice === null || w.menuPrice <= prefs.defaultBudget);
+  }
+
+  // Soft sort: favourites first
+  const isFavourite = (w: ExtractedWine) =>
+    prefs.favouriteRegions?.some((r) => w.region?.toLowerCase().includes(r.toLowerCase())) ||
+    prefs.favouriteGrapes?.some((g) => (w.grape ?? '').toLowerCase().includes(g.toLowerCase()));
+
+  const favourited = filtered.filter(isFavourite);
+  const others = filtered.filter((w) => !isFavourite(w));
+
+  return [...favourited, ...others].slice(0, 25);
+}
 
 type Stage = 'reading' | 'recommending' | 'error';
 
 export default function ExtractingScreen() {
-  const { imageUri, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
+  const { imageUri, imageUris, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
+  const { preferences: userProfile } = usePreferences();
   const [stage, setStage] = useState<Stage>('reading');
   const [errorDetail, setErrorDetail] = useState('');
 
   useEffect(() => {
-    if (!imageUri) {
+    if (!imageUri && !imageUris) {
       router.replace('/(tabs)/scan');
       return;
     }
-    run();
+    const token = { active: true };
+    run(token);
+    return () => { token.active = false; };
   }, []);
 
-  async function run() {
+  async function run(token: { active: boolean }) {
     try {
       // Step 1: OCR
       setStage('reading');
-      const wines = await extractWineList(imageUri!);
+      let wines;
+      if (imageUris) {
+        // Multiple screenshots — run OCR in parallel and merge
+        const results = await Promise.all(imageUris.map(extractWineList));
+        const seen = new Set<string>();
+        wines = results.flat().filter((w) => {
+          const key = `${w.name}__${w.producer}`.toLowerCase();
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      } else {
+        wines = await extractWineList(imageUri!);
+      }
+
+      if (!token.active) return;
 
       if (!wines.length) {
-        setErrorDetail('No wines were detected in the photo. Try a clearer shot with better lighting, and make sure the full list is in frame.');
+        setErrorDetail('No wines were detected. Try a clearer shot with better lighting, and make sure the full list is in frame.');
         setStage('error');
         return;
       }
 
       setExtractedWines(wines);
 
-      // Step 2: Recommend
+      // Step 2: Pre-filter by user profile then recommend
       setStage('recommending');
+      const winesForRecommend = preFilterWines(wines, userProfile);
       const recommendation = await recommendWines({
-        wines,
+        wines: winesForRecommend,
         wineType: preferences.wineType,
         styleProfiles: preferences.styleProfiles,
         budget: preferences.budget,
         foodPairing: preferences.foodPairing,
       });
+
+      if (!token.active) return;
+
       setRecommendation(recommendation);
       router.replace('/scan/results');
     } catch (err) {
+      if (!token.active) return;
       const message = err instanceof Error ? err.message : String(err);
       setErrorDetail(message);
       setError(message);
@@ -68,15 +134,20 @@ export default function ExtractingScreen() {
 
   return (
     <View style={styles.container}>
-      <ActivityIndicator size="large" color={colors.burgundy} />
+      <ActivityIndicator size="large" color={colors.gold} />
       <Text style={styles.title}>
         {stage === 'reading' ? 'Reading wine list…' : 'Finding your best match…'}
       </Text>
       <Text style={styles.body}>
         {stage === 'reading'
-          ? 'Claude is identifying the wines on your list'
+          ? 'This could take a minute or two'
           : 'Scoring by critic rating, vintage quality and value'}
       </Text>
+      {stage === 'reading' && (
+        <Text style={styles.profileNote}>
+          We're making a recommendation based on your profile preferences. Change your preferences for this result only by setting filters for this search.
+        </Text>
+      )}
     </View>
   );
 }
@@ -91,16 +162,27 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 20,
-    fontWeight: '600',
+    fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
     marginTop: spacing.lg,
     marginBottom: spacing.sm,
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   body: {
     fontSize: 14,
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     textAlign: 'center',
+  },
+  profileNote: {
+    fontSize: 12,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    lineHeight: 18,
+    opacity: 0.7,
   },
   errorContainer: {
     flex: 1,
@@ -111,13 +193,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 20,
-    fontWeight: '700',
+    fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
     marginBottom: spacing.md,
     textAlign: 'center',
   },
   errorBody: {
     fontSize: 14,
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,
@@ -131,7 +214,7 @@ const styles = StyleSheet.create({
   },
   retryText: {
     color: '#fff',
-    fontWeight: '600',
+    fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
   },
 });

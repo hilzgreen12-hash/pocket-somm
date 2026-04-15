@@ -22,7 +22,7 @@ export default function SignIn() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Pocket Som</Text>
+      <Text style={styles.title}>Pocket Somm</Text>
       <Text style={styles.subtitle}>Your personal sommelier</Text>
 
       <TextInput
@@ -65,13 +65,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontWeight: '700',
+    fontFamily: 'CormorantGaramond_700Bold',
     color: colors.burgundy,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.xxl,
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
   },
   guestButton: {
@@ -103,10 +104,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   guestText: {
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     fontSize: 14,
   },
   link: {
+    fontFamily: 'CormorantGaramond_400Regular',
     textAlign: 'center',
     color: colors.burgundy,
     marginTop: spacing.lg,

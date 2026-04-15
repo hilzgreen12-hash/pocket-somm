@@ -2,7 +2,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { router } from 'expo-router';
 import { useScanStore } from '../../src/stores/scanStore';
 import { WineRecommendationCard } from '../../src/components/results/WineRecommendationCard';
-import { colors, spacing, typography } from '../../src/constants/theme';
+import { colors, spacing } from '../../src/constants/theme';
 
 export default function ResultsScreen() {
   const { recommendation, reset } = useScanStore();
@@ -13,16 +13,27 @@ export default function ResultsScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
-      <Text style={styles.heading}>Our Recommendation</Text>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 60 }}
+    >
+      <View style={styles.hero}>
+        <Text style={styles.eyebrow}>Pocket Somm recommends</Text>
+        <Text style={styles.heading}>Your Wines</Text>
+        {recommendation.summary ? (
+          <Text style={styles.summary}>{recommendation.summary}</Text>
+        ) : null}
+      </View>
 
-      {recommendation.wines.map((wine, i) => (
-        <WineRecommendationCard
-          key={wine.name}
-          wine={wine}
-          rank={i + 1}
-        />
-      ))}
+      <View style={styles.cards}>
+        {recommendation.wines.map((wine, i) => (
+          <WineRecommendationCard
+            key={wine.name + i}
+            wine={wine}
+            rank={i + 1}
+          />
+        ))}
+      </View>
 
       <TouchableOpacity
         style={styles.newScanButton}
@@ -41,26 +52,51 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
-    paddingTop: 60,
+  },
+  hero: {
+    paddingTop: 64,
     paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    marginBottom: spacing.md,
+  },
+  eyebrow: {
+    fontSize: 11,
+    fontFamily: 'CormorantGaramond_700Bold',
+    color: colors.burgundy,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    marginBottom: spacing.xs,
   },
   heading: {
-    fontSize: 24,
-    fontWeight: '700',
+    fontSize: 32,
+    fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
-    marginBottom: spacing.lg,
+    letterSpacing: -0.5,
+    marginBottom: spacing.md,
+  },
+  summary: {
+    fontSize: 14,
+    color: colors.textMuted,
+    lineHeight: 21,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+  },
+  cards: {
+    paddingHorizontal: spacing.md,
   },
   newScanButton: {
+    marginHorizontal: spacing.md,
     marginTop: spacing.lg,
     padding: spacing.md,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.burgundy,
+    borderColor: colors.borderLight,
     alignItems: 'center',
   },
   newScanText: {
-    color: colors.burgundy,
-    fontWeight: '600',
-    fontSize: 16,
+    color: colors.textMuted,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 15,
   },
 });

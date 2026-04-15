@@ -9,7 +9,7 @@ export function PermissionScreen({ onRequest }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Camera Access</Text>
-      <Text style={styles.body}>Pocket Som needs your camera to scan wine lists.</Text>
+      <Text style={styles.body}>Pocket Somm needs your camera to scan wine lists.</Text>
       <TouchableOpacity style={styles.button} onPress={onRequest}>
         <Text style={styles.buttonText}>Grant Permission</Text>
       </TouchableOpacity>
@@ -27,12 +27,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontWeight: '700',
+    fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
     marginBottom: spacing.sm,
   },
   body: {
     ...typography.body,
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.xl,
@@ -45,7 +46,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontWeight: '600',
+    fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
   },
 });

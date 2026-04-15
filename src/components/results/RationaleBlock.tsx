@@ -8,7 +8,7 @@ interface Props {
 export function RationaleBlock({ text }: Props) {
   return (
     <View style={styles.container}>
-      <Text style={styles.label}>Why this wine?</Text>
+      <Text style={styles.label}>Sommelier's Note</Text>
       <Text style={styles.text}>{text}</Text>
     </View>
   );
@@ -16,21 +16,25 @@ export function RationaleBlock({ text }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.background,
-    borderRadius: 8,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: 10,
     padding: spacing.md,
-    marginVertical: spacing.sm,
+    marginTop: spacing.sm,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.burgundy,
   },
   label: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.textMuted,
+    fontSize: 10,
+    fontFamily: 'CormorantGaramond_700Bold',
+    color: colors.burgundy,
     textTransform: 'uppercase',
-    letterSpacing: 0.8,
+    letterSpacing: 1.2,
     marginBottom: spacing.xs,
   },
   text: {
     ...typography.body,
+    fontFamily: 'CormorantGaramond_400Regular',
     color: colors.text,
+    lineHeight: 23,
   },
 });

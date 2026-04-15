@@ -1,30 +1,30 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../constants/theme';
-import type { VintageAssessment } from '../../types/wine';
+import type { DrinkingWindow } from '../../types/wine';
 
 interface Props {
-  assessment: VintageAssessment;
+  window: DrinkingWindow;
 }
 
-const LABEL_COLORS: Record<string, string> = {
-  Exceptional: '#5CB85C',
-  Excellent:   '#4AA84A',
-  Good:        '#6BAA72',
-  Average:     '#C4823A',
-  Challenging: '#C46030',
-  Poor:        '#C44040',
+const STATUS_COLORS: Record<string, string> = {
+  'Too Young':   '#5B8DD9',
+  'Approaching': '#5BAAD9',
+  'Peak':        '#5CB85C',
+  'Fading':      '#C4823A',
+  'Past Peak':   '#C44040',
 };
 
-export function VintageBadge({ assessment }: Props) {
-  const color = LABEL_COLORS[assessment.label] ?? colors.textMuted;
+export function DrinkingWindowBadge({ window: dw }: Props) {
+  const color = STATUS_COLORS[dw.status] ?? colors.textMuted;
+  const range = dw.from && dw.to ? `${dw.from}–${dw.to}` : dw.from ? `from ${dw.from}` : null;
 
   return (
     <View style={styles.container}>
       <View style={[styles.badge, { backgroundColor: color + '25', borderColor: color + '60' }]}>
-        <Text style={[styles.label, { color }]}>{assessment.label} Vintage</Text>
-        <Text style={[styles.score, { color }]}>{assessment.score}/100</Text>
+        <Text style={[styles.label, { color }]}>Drinking Window · {dw.status}</Text>
+        {range && <Text style={[styles.range, { color }]}>{range}</Text>}
       </View>
-      <Text style={styles.notes}>{assessment.notes}</Text>
+      <Text style={styles.notes}>{dw.notes}</Text>
     </View>
   );
 }
@@ -48,7 +48,7 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
     letterSpacing: 0.2,
   },
-  score: {
+  range: {
     fontSize: 13,
     fontFamily: 'CormorantGaramond_700Bold',
   },

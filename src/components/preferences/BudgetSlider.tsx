@@ -1,90 +1,47 @@
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { colors, spacing } from '../../constants/theme';
+import { spacing } from '../../constants/theme';
 
 interface Props {
   value: number | null;
   onChange: (value: number | null) => void;
 }
 
+const MAX = 500;
+
 export function BudgetSlider({ value, onChange }: Props) {
-  const unknown = value === null;
+  const current = value ?? 150;
+  const atMax = current >= MAX;
 
   return (
     <View>
-      <View style={styles.header}>
-        <Text style={styles.value}>
-          {unknown ? 'No limit' : `Up to £${value}`}
-        </Text>
-        <TouchableOpacity
-          style={[styles.unknownBtn, unknown && styles.unknownBtnActive]}
-          onPress={() => onChange(unknown ? 100 : null)}
-        >
-          <Text style={[styles.unknownText, unknown && styles.unknownTextActive]}>
-            I don't know
-          </Text>
-        </TouchableOpacity>
+      <Text style={styles.value}>
+        {atMax ? 'No limit' : `Up to £${current}`}
+      </Text>
+      <Slider
+        minimumValue={20}
+        maximumValue={MAX}
+        step={5}
+        value={current}
+        onValueChange={(v) => onChange(v >= MAX ? null : v)}
+        minimumTrackTintColor="rgba(255,255,255,0.80)"
+        maximumTrackTintColor="rgba(255,255,255,0.20)"
+        thumbTintColor="#FFFFFF"
+      />
+      <View style={styles.labels}>
+        <Text style={styles.label}>£20</Text>
+        <Text style={styles.label}>No limit</Text>
       </View>
-
-      {!unknown && (
-        <>
-          <Slider
-            minimumValue={20}
-            maximumValue={500}
-            step={5}
-            value={value ?? 100}
-            onValueChange={(v) => onChange(v)}
-            minimumTrackTintColor={colors.burgundy}
-            maximumTrackTintColor={colors.border}
-            thumbTintColor={colors.burgundy}
-          />
-          <View style={styles.labels}>
-            <Text style={styles.label}>£20</Text>
-            <Text style={styles.label}>£500+</Text>
-          </View>
-        </>
-      )}
-
-      {unknown && (
-        <Text style={styles.unknownHint}>
-          We'll recommend the best value wine regardless of price
-        </Text>
-      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: spacing.sm,
-  },
   value: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.burgundy,
-  },
-  unknownBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  unknownBtnActive: {
-    borderColor: colors.burgundy,
-    backgroundColor: colors.burgundy + '12',
-  },
-  unknownText: {
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  unknownTextActive: {
-    color: colors.burgundy,
-    fontWeight: '600',
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 20,
+    color: '#FFFFFF',
+    marginBottom: spacing.sm,
   },
   labels: {
     flexDirection: 'row',
@@ -92,13 +49,8 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   label: {
-    fontSize: 12,
-    color: colors.textMuted,
-  },
-  unknownHint: {
-    fontSize: 13,
-    color: colors.textMuted,
-    fontStyle: 'italic',
-    marginTop: spacing.xs,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.40)',
   },
 });
