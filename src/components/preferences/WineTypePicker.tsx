@@ -1,35 +1,44 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { colors, spacing } from '../../constants/theme';
+import { colors } from '../../constants/theme';
 
-export type WineType = 'red' | 'white' | 'rose' | 'sparkling' | 'any';
+export type WineType = 'red' | 'white' | 'rose' | 'sparkling';
 
 const WINE_TYPES: { id: WineType; label: string }[] = [
   { id: 'red',       label: 'Red' },
   { id: 'white',     label: 'White' },
   { id: 'rose',      label: 'Rosé' },
   { id: 'sparkling', label: 'Sparkling' },
-  { id: 'any',       label: 'No preference' },
 ];
 
 interface Props {
-  selected: WineType;
-  onChange: (type: WineType) => void;
+  selected: WineType[];
+  onChange: (types: WineType[]) => void;
+  max?: number;
 }
 
-export function WineTypePicker({ selected, onChange }: Props) {
+export function WineTypePicker({ selected, onChange, max = 4 }: Props) {
+  function toggle(id: WineType) {
+    if (selected.includes(id)) {
+      onChange(selected.filter((t) => t !== id));
+    } else if (selected.length < max) {
+      onChange([...selected, id]);
+    }
+  }
+
   return (
     <View>
       {WINE_TYPES.map((type) => {
-        const active = selected === type.id;
+        const active = selected.includes(type.id);
         return (
           <TouchableOpacity
             key={type.id}
             style={styles.row}
-            onPress={() => onChange(type.id)}
+            onPress={() => toggle(type.id)}
           >
             <Text style={[styles.label, active && styles.labelActive]}>
               {type.label}
             </Text>
+            {active && <Text style={styles.checkmark}>✓</Text>}
           </TouchableOpacity>
         );
       })}
@@ -39,14 +48,24 @@ export function WineTypePicker({ selected, onChange }: Props) {
 
 const styles = StyleSheet.create({
   row: {
-    paddingVertical: 10,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
   },
   label: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 14,
+    fontSize: 16,
     color: 'rgba(255,255,255,0.40)',
   },
   labelActive: {
     color: '#FFFFFF',
+    fontWeight: '600',
+  },
+  checkmark: {
+    fontSize: 16,
+    color: colors.burgundy,
   },
 });

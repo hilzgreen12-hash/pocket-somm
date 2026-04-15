@@ -13,12 +13,15 @@ export function usePreferences() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('style_preferences, default_budget, default_wine_type, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes')
+        .select('style_preferences, default_budget, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes')
         .eq('user_id', session!.user.id)
         .single();
-      if (error) return null;
+      if (error) {
+        console.warn('[Preferences] Query error:', error.message);
+        return null;
+      }
       return {
-        wineType: data.default_wine_type ?? 'any',
+        wineTypes: data.default_wine_types ?? [],
         styleProfiles: data.style_preferences ?? [],
         defaultBudget: data.default_budget ?? null,
         favouriteRegions: data.favourite_regions ?? [],
@@ -34,7 +37,7 @@ export function usePreferences() {
       if (!session) return;
       await supabase.from('profiles').upsert({
         user_id: session.user.id,
-        ...(updates.wineType !== undefined && { default_wine_type: updates.wineType }),
+        ...(updates.wineTypes !== undefined && { default_wine_types: updates.wineTypes }),
         ...(updates.styleProfiles !== undefined && { style_preferences: updates.styleProfiles }),
         ...(updates.defaultBudget !== undefined && { default_budget: updates.defaultBudget }),
         ...(updates.favouriteRegions !== undefined && { favourite_regions: updates.favouriteRegions }),
@@ -44,6 +47,7 @@ export function usePreferences() {
       });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['preferences'] }),
+    onError: (err) => console.error('[Preferences] Save error:', err),
   });
 
   return {

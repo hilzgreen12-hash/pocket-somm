@@ -101,10 +101,14 @@ export default function ExtractingScreen() {
       const winesForRecommend = preFilterWines(wines, userProfile);
       const recommendation = await recommendWines({
         wines: winesForRecommend,
-        wineType: preferences.wineType,
+        wineTypes: preferences.wineTypes,
         styleProfiles: preferences.styleProfiles,
         budget: preferences.budget,
         foodPairing: preferences.foodPairing,
+        favouriteRegions: preferences.favouriteRegions,
+        favouriteGrapes: preferences.favouriteGrapes,
+        dislikedRegions: preferences.dislikedRegions,
+        dislikedGrapes: preferences.dislikedGrapes,
       });
 
       if (!token.active) return;

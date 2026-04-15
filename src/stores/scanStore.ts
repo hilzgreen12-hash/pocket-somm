@@ -1,13 +1,15 @@
 import { create } from 'zustand';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 
-export type WineType = 'red' | 'white' | 'rose' | 'sparkling' | 'any';
-
 export interface ScanPreferences {
-  wineType: WineType;
+  wineTypes: string[];
   styleProfiles: string[];
   budget: number | null;
   foodPairing: string;
+  favouriteRegions: string[];
+  favouriteGrapes: string[];
+  dislikedRegions: string[];
+  dislikedGrapes: string[];
 }
 
 interface ScanState {
@@ -23,15 +25,19 @@ interface ScanState {
   setExtractedWines: (wines: ExtractedWine[]) => void;
   setRecommendation: (rec: RecommendationResponse) => void;
   setError: (message: string) => void;
-  setPreferences: (prefs: ScanPreferences) => void;
+  setPreferences: (prefs: Partial<ScanPreferences>) => void;
   reset: () => void;
 }
 
 const DEFAULT_PREFERENCES: ScanPreferences = {
-  wineType: 'any',
+  wineTypes: [],
   styleProfiles: [],
   budget: null,
   foodPairing: '',
+  favouriteRegions: [],
+  favouriteGrapes: [],
+  dislikedRegions: [],
+  dislikedGrapes: [],
 };
 
 export const useScanStore = create<ScanState>((set) => ({
@@ -47,6 +53,6 @@ export const useScanStore = create<ScanState>((set) => ({
   setExtractedWines: (wines) => set({ extractedWines: wines }),
   setRecommendation: (rec) => set({ recommendation: rec }),
   setError: (message) => set({ error: message }),
-  setPreferences: (prefs) => set({ preferences: prefs }),
+  setPreferences: (prefs) => set((s) => ({ preferences: { ...s.preferences, ...prefs } })),
   reset: () => set({ imageUri: null, imageUris: null, extractedWines: null, recommendation: null, error: null, preferences: DEFAULT_PREFERENCES }),
 }));

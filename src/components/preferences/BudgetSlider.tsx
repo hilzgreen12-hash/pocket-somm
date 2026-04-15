@@ -10,7 +10,7 @@ interface Props {
 const MAX = 500;
 
 export function BudgetSlider({ value, onChange }: Props) {
-  const current = value ?? 150;
+  const current = value ?? 20;
   const atMax = current >= MAX;
 
   return (

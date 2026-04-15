@@ -1,17 +1,29 @@
+import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { usePreferences } from '../src/hooks/usePreferences';
 
 export default function Index() {
   const { session, loading } = useAuth();
   const { preferences } = usePreferences();
+  const [hasLaunched, setHasLaunched] = useState<boolean | null>(null);
 
-  if (loading) return null;
+  useEffect(() => {
+    AsyncStorage.getItem('hasLaunched').then((v) => setHasLaunched(v === 'true'));
+  }, []);
 
-  if (!session) return <Redirect href="/(auth)/sign-in" />;
+  if (loading || hasLaunched === null) return null;
 
-  // New user — no profile saved yet
-  if (preferences === null) return <Redirect href="/onboarding" />;
+  // Signed-in users
+  if (session) {
+    if (preferences === null) return <Redirect href="/onboarding" />;
+    return <Redirect href="/(tabs)/scan" />;
+  }
 
-  return <Redirect href="/(tabs)/scan" />;
+  // Returning guest — skip welcome
+  if (hasLaunched) return <Redirect href="/(tabs)/scan" />;
+
+  // First-time visitor
+  return <Redirect href="/welcome" />;
 }

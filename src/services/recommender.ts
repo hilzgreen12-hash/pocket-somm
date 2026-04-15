@@ -4,10 +4,14 @@ import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 
 interface RecommendInput {
   wines: ExtractedWine[];
-  wineType: string;
+  wineTypes: string[];
   styleProfiles: string[];
   budget: number | null;
   foodPairing: string;
+  favouriteRegions: string[];
+  favouriteGrapes: string[];
+  dislikedRegions: string[];
+  dislikedGrapes: string[];
 }
 
 const VintageAssessmentSchema = z.object({

@@ -9,8 +9,14 @@ Your task: given a wine list and the diner's preferences, recommend exactly 3 wi
 HARD RULE — GRAPE VARIETY DIVERSITY (non-negotiable):
 Unless the diner has explicitly requested a single grape variety, each of the 3 recommended wines MUST be a different grape variety. This is an absolute constraint — it overrides all scoring considerations. Before finalising your 3 picks, check that no two wines share the same primary grape variety. If your top 3 by score contain duplicates, replace the lower-ranked duplicate with the next-best wine of a different grape variety. The 3 picks must also span at least 2 different regions.
 
-HARD RULE — WINE TYPE:
-Only recommend wines that match the diner's stated wine type (red, white, rosé, sparkling). This constraint is absolute and cannot be overridden.
+HARD RULE — COLOUR PREFERENCE:
+If the diner has specified one or more colours (red, white, rosé, sparkling), only recommend wines of those colours. This is absolute. If no colour preference is stated, recommend the best option regardless of colour.
+
+HARD RULE — REGION AND GRAPE EXCLUSIONS:
+If the diner has listed regions or grape varieties to avoid, exclude all wines from those regions or made from those grapes. This is absolute and cannot be overridden by quality or value considerations.
+
+SOFT PREFERENCE — FAVOURITE REGIONS AND GRAPES:
+If the diner has listed favourite regions or grape varieties, weight these positively in your ranking. All else being equal, a wine from a favourite region or grape should rank above one that isn't. This is a preference, not a hard filter — do not exclude wines that don't match if they are significantly better quality or value.
 
 SCORING PRIORITY — after applying the hard rules above, rank by:
 
@@ -103,22 +109,49 @@ Do not include markdown, explanation, or any text outside the JSON.`;
 
 Deno.serve(async (req) => {
   try {
-    const { wines, wineType, styleProfiles, budget, foodPairing, _strictDiversity } = await req.json();
+    const {
+      wines,
+      wineTypes,
+      styleProfiles,
+      budget,
+      foodPairing,
+      favouriteRegions,
+      favouriteGrapes,
+      dislikedRegions,
+      dislikedGrapes,
+      _strictDiversity,
+    } = await req.json();
 
-    const wineTypeLabel: Record<string, string> = {
-      red: 'Red wine only — exclude all whites, rosé, and sparkling',
-      white: 'White wine only — exclude all reds, rosé, and sparkling',
-      rose: 'Rosé only — exclude all reds, whites, and sparkling',
-      sparkling: 'Sparkling wine only — exclude all still wines',
-      any: 'No colour restriction — recommend the best option regardless of type',
+    const colourLabels: Record<string, string> = {
+      red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling',
     };
+
+    const colourLine = wineTypes?.length
+      ? `HARD RULE — COLOUR: Only recommend ${wineTypes.map((t: string) => colourLabels[t] ?? t).join(' or ')} wines. Exclude all other colours absolutely.`
+      : 'No colour restriction — recommend the best option regardless of colour.';
+
+    const dislikedRegionsLine = dislikedRegions?.length
+      ? `HARD RULE — EXCLUDE REGIONS: Never recommend wines from these regions: ${dislikedRegions.join(', ')}. This is absolute.`
+      : '';
+
+    const dislikedGrapesLine = dislikedGrapes?.length
+      ? `HARD RULE — EXCLUDE GRAPES: Never recommend wines made primarily from these varieties: ${dislikedGrapes.join(', ')}. This is absolute.`
+      : '';
 
     const userContext = `
 Diner preferences:
-- Wine type: ${wineTypeLabel[wineType] ?? 'No restriction'}
-- Style: ${styleProfiles?.length ? styleProfiles.join(', ') : 'No preference — prioritise quality and value'}
+- Colour: ${wineTypes?.length ? wineTypes.join(', ') : 'No preference'}
+- Style profiles: ${styleProfiles?.length ? styleProfiles.join(', ') : 'No preference — prioritise quality and value'}
 - Budget: up to £${budget ?? 'unlimited'} per bottle on the menu
 - Food pairing: ${foodPairing || 'Not specified'}
+- Favourite regions (prioritise these): ${favouriteRegions?.length ? favouriteRegions.join(', ') : 'None specified'}
+- Favourite grapes (prioritise these): ${favouriteGrapes?.length ? favouriteGrapes.join(', ') : 'None specified'}
+- Regions to avoid (EXCLUDE): ${dislikedRegions?.length ? dislikedRegions.join(', ') : 'None'}
+- Grapes to avoid (EXCLUDE): ${dislikedGrapes?.length ? dislikedGrapes.join(', ') : 'None'}
+
+${colourLine}
+${dislikedRegionsLine}
+${dislikedGrapesLine}
 `;
 
     const wineListText = JSON.stringify(wines, null, 2);

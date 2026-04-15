@@ -13,14 +13,16 @@ import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function ScanTab() {
+  const { session } = useAuth();
   const { setPreferences, setImage, setImageUris } = useScanStore();
   const { preferences: savedPreferences } = usePreferences();
 
-  const [wineType, setWineType] = useState<WineType>(
-    (savedPreferences?.wineType ?? 'any') as WineType
+  const [wineTypes, setWineTypes] = useState<WineType[]>(
+    savedPreferences?.wineTypes ?? []
   );
   const [styleProfiles, setStyleProfiles] = useState<string[]>(
     savedPreferences?.styleProfiles ?? []
@@ -39,8 +41,12 @@ export default function ScanTab() {
   }
 
   const WINE_TYPE_LABELS: Record<string, string> = {
-    red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling', any: 'e.g. Red Wine',
+    red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling',
   };
+
+  const wineTypeLabel = wineTypes.length > 0
+    ? wineTypes.map((t) => WINE_TYPE_LABELS[t]).join(', ')
+    : 'e.g. Red Wine';
 
   const styleLabel = styleProfiles.length
     ? styleProfiles.length === 1
@@ -52,15 +58,28 @@ export default function ScanTab() {
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
-      setWineType((savedPreferences.wineType ?? 'any') as WineType);
+      setWineTypes(savedPreferences.wineTypes ?? []);
       setStyleProfiles(savedPreferences.styleProfiles ?? []);
       setBudget(savedPreferences.defaultBudget ?? null);
       setPrefsLoaded(true);
     }
   }, [savedPreferences]);
 
+  function buildPreferences() {
+    return {
+      wineTypes,
+      styleProfiles,
+      budget,
+      foodPairing,
+      favouriteRegions: savedPreferences?.favouriteRegions ?? [],
+      favouriteGrapes: savedPreferences?.favouriteGrapes ?? [],
+      dislikedRegions: savedPreferences?.dislikedRegions ?? [],
+      dislikedGrapes: savedPreferences?.dislikedGrapes ?? [],
+    };
+  }
+
   function handleScan() {
-    setPreferences({ wineType, styleProfiles, budget, foodPairing });
+    setPreferences(buildPreferences());
     router.push('/scan/camera');
   }
 
@@ -71,7 +90,7 @@ export default function ScanTab() {
       quality: 1,
     });
     if (!result.canceled && result.assets.length > 0) {
-      setPreferences({ wineType, styleProfiles, budget, foodPairing });
+      setPreferences(buildPreferences());
       if (result.assets.length === 1) {
         setImage(result.assets[0].uri);
         router.push('/scan/preview');
@@ -98,11 +117,11 @@ export default function ScanTab() {
             <Text style={styles.question}>What are you drinking?</Text>
           </TouchableOpacity>
           {!wineTypeOpen && (
-            <Text style={styles.selectionSummary}>{WINE_TYPE_LABELS[wineType]}</Text>
+            <Text style={styles.selectionSummary}>{wineTypeLabel}</Text>
           )}
           {wineTypeOpen && (
             <View style={styles.pickerWrap}>
-              <WineTypePicker selected={wineType} onChange={(v) => { setWineType(v); toggleSection('wineType'); }} />
+              <WineTypePicker selected={wineTypes} onChange={setWineTypes} />
             </View>
           )}
         </View>
@@ -141,6 +160,12 @@ export default function ScanTab() {
           <Text style={styles.uploadButtonText}>Upload Screenshot / Photo</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.accountButton} onPress={() => router.push('/(tabs)/profile')}>
+          <Text style={styles.accountButtonText}>
+            {session ? 'Account' : 'Sign In / Create Account'}
+          </Text>
+        </TouchableOpacity>
+
       </View>
     </ScrollView>
   );
@@ -152,9 +177,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingTop: 64,
+    paddingTop: 96,
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.lg,
+    paddingBottom: spacing.xxl,
     alignItems: 'center',
   },
   appName: {
@@ -177,12 +202,12 @@ const styles = StyleSheet.create({
   },
   question: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 15,
+    fontSize: 20,
     color: '#FFFFFF',
   },
   selectionSummary: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 13,
+    fontSize: 14,
     color: 'rgba(255,255,255,0.40)',
     marginBottom: spacing.sm,
   },
@@ -214,5 +239,15 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: '#FFFFFF',
     fontSize: 15,
+  },
+  accountButton: {
+    padding: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.lg,
+  },
+  accountButtonText: {
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: 'rgba(255,255,255,0.40)',
+    fontSize: 20,
   },
 });

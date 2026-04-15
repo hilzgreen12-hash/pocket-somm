@@ -1,7 +1,7 @@
-export type WineType = 'red' | 'white' | 'rose' | 'sparkling' | 'any';
+export type WineType = 'red' | 'white' | 'rose' | 'sparkling';
 
 export interface UserPreferences {
-  wineType: WineType;
+  wineTypes: WineType[];
   styleProfiles: string[];
   defaultBudget: number;
   defaultCurrency: string;
