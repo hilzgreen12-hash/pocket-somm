@@ -11,11 +11,12 @@ interface Props {
   wine: WineRecommendation;
   rank: number;
   pricing?: PricingData;
+  showVintage?: boolean;
 }
 
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
-export function WineRecommendationCard({ wine, rank, pricing }: Props) {
+export function WineRecommendationCard({ wine, rank, pricing, showVintage = true }: Props) {
   const isTop = rank === 1;
 
   return (
@@ -47,7 +48,7 @@ export function WineRecommendationCard({ wine, rank, pricing }: Props) {
       <View style={styles.header}>
         <View style={styles.titleGroup}>
           <Text style={styles.name}>{wine.name}</Text>
-          {wine.vintage && (
+          {showVintage && wine.vintage && (
             <Text style={styles.vintage}>{wine.vintage}</Text>
           )}
         </View>
@@ -69,8 +70,8 @@ export function WineRecommendationCard({ wine, rank, pricing }: Props) {
 
       <View style={styles.divider} />
 
-      <VintageBadge assessment={wine.vintageAssessment} />
-      <DrinkingWindowBadge window={wine.drinkingWindow} />
+      {showVintage && <VintageBadge assessment={wine.vintageAssessment} />}
+      {showVintage && <DrinkingWindowBadge window={wine.drinkingWindow} />}
       <RarityBadge rarity={wine.rarityAssessment} />
 
       <RationaleBlock text={wine.rationale} />

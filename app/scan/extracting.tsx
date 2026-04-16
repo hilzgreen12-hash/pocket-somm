@@ -150,6 +150,8 @@ export default function ExtractingScreen() {
       {stage === 'recommending' && (
         <Text style={styles.body}>This may take a minute or two</Text>
       )}
+      <Text style={styles.stayNote}>Please don't leave this page while we're searching</Text>
+
       {stage === 'reading' && (
         <Text style={styles.profileNote}>
           We're making a recommendation based on your profile preferences. Change your preferences for this result only by setting filters for this search.
@@ -181,6 +183,14 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
     textAlign: 'center',
+  },
+  stayNote: {
+    fontSize: 12,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.gold,
+    textAlign: 'center',
+    marginTop: spacing.lg,
+    opacity: 0.8,
   },
   profileNote: {
     fontSize: 12,
