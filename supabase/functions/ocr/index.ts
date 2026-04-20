@@ -54,8 +54,8 @@ Deno.serve(async (req) => {
       const pageText = stripHtml(html).slice(0, 12000); // cap to avoid token overflow
 
       response = await client.messages.create({
-        model: 'claude-opus-4-6',
-        max_tokens: 8096,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
         system: URL_SYSTEM_PROMPT,
         messages: [
           { role: 'user', content: `Extract all wines from this wine list text. Return only JSON.\n\n${pageText}` },
@@ -63,8 +63,8 @@ Deno.serve(async (req) => {
       });
     } else {
       response = await client.messages.create({
-        model: 'claude-opus-4-6',
-        max_tokens: 8096,
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 4096,
         system: IMAGE_SYSTEM_PROMPT,
         messages: [
           {

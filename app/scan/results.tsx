@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
-import { VintageBadge } from '../../src/components/results/VintageBadge';
-import { DrinkingWindowBadge } from '../../src/components/results/DrinkingWindowBadge';
+import { recommendWines } from '../../src/services/recommender';
+import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
 import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { RationaleBlock } from '../../src/components/results/RationaleBlock';
 import { colors, spacing } from '../../src/constants/theme';
@@ -16,8 +16,28 @@ if (Platform.OS === 'android') {
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
 export default function ResultsScreen() {
-  const { recommendation, reset } = useScanStore();
+  const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  async function handleAlternativeList() {
+    if (!extractedWines || !recommendation) return;
+    setIsGenerating(true);
+    try {
+      const excludeWines = recommendation.wines.map((w) => w.name);
+      const newRec = await recommendWines({
+        wines: extractedWines.slice(0, 25),
+        ...preferences,
+        excludeWines,
+      });
+      setRecommendation(newRec);
+      setOpenIndex(0);
+    } catch (err) {
+      // silently fail — existing results remain
+    } finally {
+      setIsGenerating(false);
+    }
+  }
 
   if (!recommendation) {
     router.replace('/(tabs)/scan');
@@ -104,8 +124,7 @@ export default function ResultsScreen() {
 
                   <View style={styles.divider} />
 
-                  {!noVintages && <VintageBadge assessment={wine.vintageAssessment} />}
-                  {!noVintages && <DrinkingWindowBadge window={wine.drinkingWindow} />}
+                  {!noVintages && <VintageWindowBadge assessment={wine.vintageAssessment} window={wine.drinkingWindow} />}
                   <RarityBadge rarity={wine.rarityAssessment} />
                   <RationaleBlock text={wine.rationale} />
                 </View>
@@ -118,6 +137,18 @@ export default function ResultsScreen() {
       <Text style={styles.scoreNote}>
         Scores are Pocket Somm's estimates based on critical consensus from its training data.
       </Text>
+
+      <TouchableOpacity
+        style={styles.alternativeButton}
+        onPress={handleAlternativeList}
+        disabled={isGenerating}
+      >
+        {isGenerating ? (
+          <ActivityIndicator size="small" color={colors.text} />
+        ) : (
+          <Text style={styles.alternativeText}>Generate An Alternative List</Text>
+        )}
+      </TouchableOpacity>
 
       <TouchableOpacity
         style={styles.newScanButton}
@@ -281,6 +312,22 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.70)',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  alternativeButton: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+    minHeight: 50,
+    justifyContent: 'center',
+  },
+  alternativeText: {
+    color: colors.text,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
   },
   newScanButton: {
     marginHorizontal: spacing.md,

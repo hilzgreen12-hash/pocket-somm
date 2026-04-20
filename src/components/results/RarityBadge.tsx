@@ -21,14 +21,12 @@ const LABEL_COLORS: Record<string, string> = {
 export function RarityBadge({ rarity }: Props) {
   if (rarity.label === 'Widely Available') return null;
 
-  const color = LABEL_COLORS[rarity.label] ?? colors.textMuted;
-
   return (
     <View style={styles.container}>
       <View style={styles.row}>
-        <Text style={[styles.star, { color }]}>★</Text>
+        <Text style={styles.star}>★</Text>
         <View style={styles.textGroup}>
-          <Text style={[styles.label, { color }]}>{LABEL_MAP[rarity.label] ?? rarity.label}</Text>
+          <Text style={styles.label}>{LABEL_MAP[rarity.label] ?? rarity.label}</Text>
           <Text style={styles.notes}>{rarity.notes}</Text>
         </View>
       </View>
@@ -48,6 +46,7 @@ const styles = StyleSheet.create({
   star: {
     fontSize: 13,
     lineHeight: 20,
+    color: colors.text,
   },
   textGroup: {
     flex: 1,
@@ -57,6 +56,7 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
     letterSpacing: 0.2,
     marginBottom: 2,
+    color: colors.text,
   },
   notes: {
     fontSize: 13,

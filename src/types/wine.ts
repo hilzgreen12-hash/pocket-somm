@@ -10,7 +10,6 @@ export interface ExtractedWine {
 }
 
 export interface VintageAssessment {
-  score: number;        // 0–100
   label: string;        // e.g. "Exceptional", "Challenging", "Good"
   notes: string;        // e.g. "2014 was an outstanding year for white Burgundy"
 }
@@ -23,7 +22,6 @@ export interface DrinkingWindow {
 }
 
 export interface RarityAssessment {
-  score: number;        // 0–100 (100 = extremely rare)
   label: 'Very Rare' | 'Rare' | 'Uncommon' | 'Widely Available';
   notes: string;        // e.g. "Tiny domaine producing under 1,000 cases annually"
 }
@@ -42,8 +40,6 @@ export interface WineRecommendation {
   vintageAssessment: VintageAssessment;
   drinkingWindow: DrinkingWindow;
   rarityAssessment: RarityAssessment;
-  fitScore: number;     // 0–100, match to user preferences
-  valueScore: number;   // 0–100, value for money vs market price
   outsidePreferences?: string | null; // set when wine breaks a stated preference, explains why it's still worth it
 }
 

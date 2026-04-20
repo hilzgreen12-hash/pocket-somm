@@ -12,10 +12,10 @@ interface RecommendInput {
   favouriteGrapes: string[];
   dislikedRegions: string[];
   dislikedGrapes: string[];
+  excludeWines?: string[];
 }
 
 const VintageAssessmentSchema = z.object({
-  score: z.number().min(0).max(100),
   label: z.enum(['Exceptional', 'Excellent', 'Good', 'Average', 'Challenging', 'Poor']),
   notes: z.string(),
 });
@@ -28,7 +28,6 @@ const DrinkingWindowSchema = z.object({
 });
 
 const RarityAssessmentSchema = z.object({
-  score: z.number().min(0).max(100),
   label: z.enum(['Very Rare', 'Rare', 'Uncommon', 'Widely Available']),
   notes: z.string(),
 });
@@ -47,8 +46,6 @@ const WineRecommendationSchema = z.object({
   vintageAssessment: VintageAssessmentSchema,
   drinkingWindow: DrinkingWindowSchema,
   rarityAssessment: RarityAssessmentSchema,
-  fitScore: z.number().min(0).max(100),
-  valueScore: z.number().min(0).max(100),
   outsidePreferences: z.string().nullable().optional(),
 });
 

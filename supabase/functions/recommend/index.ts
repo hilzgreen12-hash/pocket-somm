@@ -89,7 +89,6 @@ For each recommended wine return:
 - rationale: 2–4 sentences explaining why this wine is recommended, covering score, vintage, drinking window, rarity, and value (string)
 - criticScore: estimated average critic score 0–100 (number)
 - vintageAssessment: object with:
-    - score: 0–100 vintage quality for this region and year (number)
     - label: one of "Exceptional" | "Excellent" | "Good" | "Average" | "Challenging" | "Poor" (string)
     - notes: 1 sentence on the vintage character for this specific appellation/year (string)
 - drinkingWindow: object with:
@@ -98,11 +97,8 @@ For each recommended wine return:
     - status: one of "Too Young" | "Approaching" | "Peak" | "Fading" | "Past Peak" (string)
     - notes: 1 sentence on the current drinking status (string)
 - rarityAssessment: object with:
-    - score: 0–100 rarity score (100 = extremely rare, 0 = widely available) (number)
     - label: one of "Very Rare" | "Rare" | "Uncommon" | "Widely Available" (string)
     - notes: 1 sentence explaining the rarity (e.g. production size, limited distribution) (string)
-- fitScore: 0–100, match to diner's stated preferences (number)
-- valueScore: 0–100, value for money at menu price vs estimated market price (number)
 - outsidePreferences: if this wine breaches any of the diner's stated preferences (budget, colour, excluded region or grape), set this to a short string explaining what the exception is and why the wine is still worth serious consideration — e.g. "This exceeds your £50 budget at £75, but this vintage of Krug is exceptionally rare on restaurant lists and represents a genuinely special opportunity." If the wine is fully within preferences, set this to null.
 
 Also return a top-level "summary" field: 1–2 sentences summarising your recommendation approach.
@@ -124,6 +120,7 @@ Deno.serve(async (req) => {
       favouriteGrapes,
       dislikedRegions,
       dislikedGrapes,
+      excludeWines,
       _strictDiversity,
     } = await req.json();
 
@@ -167,13 +164,13 @@ ${dislikedGrapesLine}
     const wineListText = JSON.stringify(wines, null, 2);
 
     const response = await client.messages.create({
-      model: 'claude-opus-4-6',
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       system: SYSTEM_PROMPT,
       messages: [
         {
           role: 'user',
-          content: `${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${_strictDiversity ? 'CRITICAL: Your previous response contained duplicate grape varieties. This is NOT allowed. You MUST select 3 wines where each is a completely different primary grape variety. Check each grape before including it.\n\n' : ''}Recommend exactly 3 wines. IMPORTANT: each must be a different grape variety — check this before finalising. Rank by: critic score → vintage quality → value for money → preference fit.`,
+          content: `${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${_strictDiversity ? 'CRITICAL: Your previous response contained duplicate grape varieties. This is NOT allowed. You MUST select 3 wines where each is a completely different primary grape variety. Check each grape before including it.\n\n' : ''}Recommend exactly 3 wines. IMPORTANT: each must be a different grape variety — check this before finalising. Rank by: critic score → vintage quality → value for money → preference fit.`,
         },
       ],
     });
