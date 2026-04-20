@@ -15,16 +15,17 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 export function DrinkingWindowBadge({ window: dw }: Props) {
-  const color = STATUS_COLORS[dw.status] ?? colors.textMuted;
-  const range = dw.from && dw.to ? `${dw.from}–${dw.to}` : dw.from ? `from ${dw.from}` : null;
+  const range = dw.from && dw.to ? ` · ${dw.from}–${dw.to}` : dw.from ? ` · from ${dw.from}` : '';
 
   return (
     <View style={styles.container}>
-      <View style={[styles.badge, { backgroundColor: color + '25', borderColor: color + '60' }]}>
-        <Text style={[styles.label, { color }]}>Drinking Window · {dw.status}</Text>
-        {range && <Text style={[styles.range, { color }]}>{range}</Text>}
+      <View style={styles.row}>
+        <Text style={styles.star}>★</Text>
+        <View style={styles.textGroup}>
+          <Text style={styles.label}>Drinking Window · {dw.status}{range}</Text>
+          <Text style={styles.notes}>{dw.notes}</Text>
+        </View>
       </View>
-      <Text style={styles.notes}>{dw.notes}</Text>
     </View>
   );
 }
@@ -33,24 +34,25 @@ const styles = StyleSheet.create({
   container: {
     marginBottom: spacing.sm,
   },
-  badge: {
+  row: {
     flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 6,
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  star: {
+    fontSize: 13,
+    lineHeight: 20,
+    color: colors.text,
+  },
+  textGroup: {
+    flex: 1,
   },
   label: {
     fontSize: 13,
     fontFamily: 'CormorantGaramond_600SemiBold',
     letterSpacing: 0.2,
-  },
-  range: {
-    fontSize: 13,
-    fontFamily: 'CormorantGaramond_700Bold',
+    marginBottom: 2,
+    color: colors.text,
   },
   notes: {
     fontSize: 13,

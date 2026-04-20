@@ -25,11 +25,12 @@ export default function SignUp() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Save your preferences and scan history</Text>
+      <Text style={styles.subtitle}>Save your preferences and allow Pocket Somm to learn from your selections. Your personal sommelier awaits</Text>
 
       <TextInput
         style={styles.input}
         placeholder="Email"
+        placeholderTextColor={colors.textMuted}
         value={email}
         onChangeText={setEmail}
         autoCapitalize="none"
@@ -38,6 +39,7 @@ export default function SignUp() {
       <TextInput
         style={styles.input}
         placeholder="Password"
+        placeholderTextColor={colors.textMuted}
         value={password}
         onChangeText={setPassword}
         secureTextEntry
@@ -64,14 +66,14 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontFamily: 'CormorantGaramond_700Bold',
-    color: colors.burgundy,
+    color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
-    ...typography.body,
     fontFamily: 'CormorantGaramond_400Regular',
-    color: colors.textMuted,
+    fontSize: 16,
+    color: colors.text,
     textAlign: 'center',
     marginBottom: spacing.xxl,
   },
@@ -82,6 +84,8 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
     fontSize: 16,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.text,
     backgroundColor: colors.surface,
   },
   button: {
@@ -92,14 +96,14 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   buttonText: {
-    color: '#fff',
+    color: colors.text,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
   },
   link: {
     fontFamily: 'CormorantGaramond_400Regular',
     textAlign: 'center',
-    color: colors.burgundy,
+    color: colors.text,
     marginTop: spacing.lg,
     fontSize: 14,
   },

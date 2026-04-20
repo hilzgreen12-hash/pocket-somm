@@ -13,25 +13,22 @@ export default function WelcomeScreen() {
     <View style={styles.container}>
       <View style={styles.hero}>
         <Text style={styles.appName}>Pocket Somm</Text>
-        <Text style={styles.tagline}>Your personal sommelier,{'\n'}wherever you dine</Text>
+        <Text style={styles.tagline}>Your personal sommelier{'\n'}Master any wine list, anywhere</Text>
       </View>
 
       <View style={styles.actions}>
-        <TouchableOpacity style={styles.primaryButton} onPress={handleGuest}>
-          <Text style={styles.primaryText}>Start Scanning</Text>
-        </TouchableOpacity>
-
         <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/(auth)/sign-up')}>
           <Text style={styles.secondaryText}>Create Account</Text>
+          <Text style={styles.secondaryNote}>Save & learn your preferences so your results become more personal</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.primaryButton} onPress={handleGuest}>
+          <Text style={styles.primaryText}>Start Scanning</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.linkButton} onPress={() => router.push('/(auth)/sign-in')}>
           <Text style={styles.linkText}>Sign In</Text>
         </TouchableOpacity>
-
-        <Text style={styles.accountNote}>
-          An account will save & learn your preferences so your results become more personal
-        </Text>
       </View>
     </View>
   );
@@ -81,13 +78,22 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.borderLight,
     borderRadius: 14,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
+    gap: 6,
   },
   secondaryText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 18,
     color: colors.text,
+  },
+  secondaryNote: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 15,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
   },
   linkButton: {
     padding: spacing.md,
@@ -97,13 +103,5 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 16,
     color: colors.textMuted,
-  },
-  accountNote: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 13,
-    color: colors.textSubtle,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginTop: spacing.xs,
   },
 });
