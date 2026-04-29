@@ -109,7 +109,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   button: {
-    backgroundColor: colors.burgundy,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     borderRadius: 10,
     padding: spacing.md,
     alignItems: 'center',

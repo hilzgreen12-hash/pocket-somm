@@ -2,7 +2,7 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-const SYSTEM_PROMPT = `You are Pocket Somm, an expert sommelier with encyclopaedic knowledge of wine regions, producers, vintages, critic scores, and market value.
+const SYSTEM_PROMPT = `You are Vinster, an expert sommelier with encyclopaedic knowledge of wine regions, producers, vintages, critic scores, and market value.
 
 Your task: given a wine list and the diner's preferences, recommend exactly 3 wines ranked by suitability.
 
@@ -100,6 +100,7 @@ For each recommended wine return:
     - label: one of "Very Rare" | "Rare" | "Uncommon" | "Widely Available" (string)
     - notes: 1 sentence explaining the rarity (e.g. production size, limited distribution) (string)
 - outsidePreferences: if this wine breaches any of the diner's stated preferences (budget, colour, excluded region or grape), set this to a short string explaining what the exception is and why the wine is still worth serious consideration — e.g. "This exceeds your £50 budget at £75, but this vintage of Krug is exceptionally rare on restaurant lists and represents a genuinely special opportunity." If the wine is fully within preferences, set this to null.
+- topPickReasons: FOR THE FIRST (TOP-RANKED) WINE ONLY — an array of exactly 2 or 3 short, punchy phrases (max 12 words each) that explain why this wine ranks above the other two. These should be the decisive differentiating factors, not generic praise. Draw on the actual scoring dimensions: critic score, vintage quality, drinking window, rarity, and value. Examples of good reasons: "Highest critic score on this list — averaging 96 points", "2015 vintage: exceptional year for this appellation, now at peak", "Best value: menu price just 1.4× market retail". Do NOT pad with vague statements like "a great wine" or "highly recommended". For wines #2 and #3 set topPickReasons to null.
 
 Also return a top-level "summary" field: 1–2 sentences summarising your recommendation approach.
 
@@ -121,6 +122,7 @@ Deno.serve(async (req) => {
       dislikedRegions,
       dislikedGrapes,
       excludeWines,
+      topScoringMode,
       _strictDiversity,
     } = await req.json();
 
@@ -143,6 +145,11 @@ Deno.serve(async (req) => {
     const dislikedGrapesLine = dislikedGrapes?.length
       ? `HARD RULE — EXCLUDE GRAPES: Never recommend wines made primarily from these varieties: ${dislikedGrapes.join(', ')}. This is absolute.`
       : '';
+
+    const topScoringOverride = topScoringMode ? `
+TOP SCORING MODE — ACTIVE:
+The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the grape diversity rule. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, topPickReasons, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
+` : '';
 
     const userContext = `
 Diner preferences:
@@ -170,7 +177,7 @@ ${dislikedGrapesLine}
       messages: [
         {
           role: 'user',
-          content: `${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${_strictDiversity ? 'CRITICAL: Your previous response contained duplicate grape varieties. This is NOT allowed. You MUST select 3 wines where each is a completely different primary grape variety. Check each grape before including it.\n\n' : ''}Recommend exactly 3 wines. IMPORTANT: each must be a different grape variety — check this before finalising. Rank by: critic score → vintage quality → value for money → preference fit.`,
+          content: `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${_strictDiversity ? 'CRITICAL: Your previous response contained duplicate grape varieties. This is NOT allowed. You MUST select 3 wines where each is a completely different primary grape variety. Check each grape before including it.\n\n' : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list. Grape diversity rule does not apply.' : 'Recommend exactly 3 wines. IMPORTANT: each must be a different grape variety — check this before finalising.'} Rank by: critic score → vintage quality → value for money → preference fit.`,
         },
       ],
     });
@@ -182,7 +189,7 @@ ${dislikedGrapesLine}
     if (!match) throw new Error(`No JSON found in response: ${text.slice(0, 200)}`);
     const parsed = JSON.parse(match[0]);
 
-    return new Response(JSON.stringify(parsed), {
+    return new Response(JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {

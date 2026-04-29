@@ -41,11 +41,159 @@ export interface WineRecommendation {
   drinkingWindow: DrinkingWindow;
   rarityAssessment: RarityAssessment;
   outsidePreferences?: string | null; // set when wine breaks a stated preference, explains why it's still worth it
+  topPickReasons?: string[] | null;  // 2–3 bullet points for the #1 wine only, explaining why it ranks above the others
 }
 
 export interface RecommendationResponse {
   wines: WineRecommendation[];
   summary: string;
+  topScoringMode?: boolean;
+}
+
+// Label scanner types
+export interface WineDetails {
+  producer: string | null;
+  region: string | null;
+  wineName: string | null;
+  vintage: string | null;
+}
+
+export interface WineDetailsComplete {
+  producer: string;
+  region: string;
+  wineName: string | null;
+  vintage: string;
+  colour?: 'red' | 'white' | 'rosé' | 'sparkling' | null;
+}
+
+export interface WineIntelligence {
+  criticScore: number | null;
+  drinkingWindowFrom: number | null;
+  drinkingWindowTo: number | null;
+  drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
+  grapeVariety: string | null;
+  tastingNotes: string;
+}
+
+export interface Recipe {
+  servings: number;
+  prepTime: string;
+  cookTime: string;
+  ingredients: string[];
+  instructions: string[];
+}
+
+export interface Pairing {
+  dishName: string;
+  chefInspiration: string;
+  pairingNotes: string;
+  introduction: string;
+  recipe: Recipe;
+}
+
+export type DietaryPreference = 'vegetarian' | 'pescatarian' | 'carnivore' | 'vegan';
+export type AllergenFilter = 'dairy-free' | 'nut-free' | 'gluten-free';
+
+export interface DietaryFilters {
+  dietary: DietaryPreference | null;
+  allergens: AllergenFilter[];
+  customAllergen: string;
+}
+
+// Cellar types
+export interface CellarWine {
+  id: string;
+  user_id: string;
+  wine_name: string;
+  producer: string | null;
+  region: string | null;
+  vintage: string | null;
+  quantity: number;
+  storage_location: string | null;
+  date_received: string | null;
+  critic_score: number | null;
+  drinking_window_from: number | null;
+  drinking_window_to: number | null;
+  drinking_window_status: string;
+  tasting_notes: string | null;
+  grape_variety: string | null;
+  label_image_path: string | null;
+  user_notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// Rack types
+export interface WineRack {
+  id: string;
+  user_id: string;
+  name: string;
+  rows: number;
+  cols: number;
+  storage_type: 'rack' | 'fridge';
+  created_at: string;
+}
+
+export interface RackSlot {
+  id: string;
+  rack_id: string;
+  row_index: number;
+  col_index: number;
+  cellar_wine_id: string | null;
+  wine?: CellarWine | null;
+}
+
+// Community types
+export interface CommunityPost {
+  id: string;
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  content: string;
+  wine_name: string | null;
+  wine_producer: string | null;
+  wine_vintage: string | null;
+  cellar_wine_id: string | null;
+  created_at: string;
+  like_count?: number;
+  comment_count?: number;
+  user_has_liked?: boolean;
+}
+
+export interface CommunityComment {
+  id: string;
+  post_id: string;
+  user_id: string;
+  display_name: string;
+  avatar: string | null;
+  content: string;
+  created_at: string;
+}
+
+export interface ChosenWine {
+  id: string;
+  user_id: string;
+  chosen_at: string;
+  wine_name: string;
+  producer: string | null;
+  region: string | null;
+  appellation: string | null;
+  grape: string | null;
+  vintage: number | null;
+  menu_price: number | null;
+  currency: string;
+  critic_score: number | null;
+  rationale: string | null;
+  vintage_assessment: VintageAssessment | null;
+  drinking_window: DrinkingWindow | null;
+  rarity_assessment: RarityAssessment | null;
+  restaurant_name: string | null;
+  address: string | null;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  tasting_note: string | null;
+  user_score: number | null;
 }
 
 export interface PricingData {

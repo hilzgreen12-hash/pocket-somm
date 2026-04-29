@@ -1,13 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
+import { useScanHistory } from '../../src/hooks/useScanHistory';
+import { useAuth } from '../../src/hooks/useAuth';
 import { recommendWines } from '../../src/services/recommender';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
 import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { RationaleBlock } from '../../src/components/results/RationaleBlock';
+import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { colors, spacing } from '../../src/constants/theme';
+import type { WineRecommendation } from '../../src/types/wine';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -17,8 +21,21 @@ const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
 export default function ResultsScreen() {
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
+  const { autoSave, saveToAccount } = useScanHistory();
+  const { session } = useAuth();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [savedToAccount, setSavedToAccount] = useState(false);
+  const hasSaved = useRef(false);
+  const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
+  const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (recommendation && extractedWines && !hasSaved.current) {
+      hasSaved.current = true;
+      autoSave.mutate({ extractedWines, recommendation });
+    }
+  }, []);
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
@@ -56,7 +73,15 @@ export default function ResultsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.heading}>Pocket Somm{'\n'}Recommends</Text>
+        <Text style={styles.heading}>Vinster{'\n'}Recommends</Text>
+        {recommendation.topScoringMode && (
+          <View style={styles.topScoringBanner}>
+            <Text style={styles.topScoringBannerTitle}>Top Scoring Mode</Text>
+            <Text style={styles.topScoringBannerBody}>
+              These are the three highest-rated wines on the list by critic score. Your usual preferences, budget, and style have not been applied. Some wines may not yet be in their ideal drinking window, may represent poor value, or may fall outside your usual tastes — check the details before ordering.
+            </Text>
+          </View>
+        )}
         {noVintages && (
           <Text style={styles.vintageNote}>Note: there are no vintages provided on this list</Text>
         )}
@@ -110,6 +135,32 @@ export default function ResultsScreen() {
                 </View>
               </TouchableOpacity>
 
+              {/* Chosen indicator */}
+              {session && (
+                <TouchableOpacity
+                  style={[styles.chosenButton, chosenIndexes.has(i) && styles.chosenButtonDone]}
+                  onPress={() => {
+                    if (!chosenIndexes.has(i)) setChosenModalWine(wine);
+                  }}
+                >
+                  <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
+                    {chosenIndexes.has(i) ? '✓ Added to Your Chosen Wines' : 'I ordered this'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+
+              {/* Top pick reasons — always visible on card #1 */}
+              {isTop && wine.topPickReasons && wine.topPickReasons.length > 0 && (
+                <View style={styles.topPickReasons}>
+                  {wine.topPickReasons.map((reason, ri) => (
+                    <View key={ri} style={styles.topPickReasonRow}>
+                      <Text style={styles.topPickBullet}>◆</Text>
+                      <Text style={styles.topPickReasonText}>{reason}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+
               {/* Expanded details */}
               {isOpen && (
                 <View style={styles.details}>
@@ -135,7 +186,7 @@ export default function ResultsScreen() {
       </View>
 
       <Text style={styles.scoreNote}>
-        Scores are Pocket Somm's estimates based on critical consensus from its training data.
+        Scores are Vinster's estimates based on critical consensus from its training data.
       </Text>
 
       <TouchableOpacity
@@ -150,12 +201,43 @@ export default function ResultsScreen() {
         )}
       </TouchableOpacity>
 
+      {session && !savedToAccount && (
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={async () => {
+            const items = autoSave.data;
+            if (!items?.[0]) return;
+            await saveToAccount.mutateAsync(items[0]);
+            setSavedToAccount(true);
+          }}
+          disabled={saveToAccount.isPending}
+        >
+          <Text style={styles.saveButtonText}>
+            {saveToAccount.isPending ? 'Saving…' : 'Save to My Account'}
+          </Text>
+        </TouchableOpacity>
+      )}
+      {savedToAccount && (
+        <Text style={styles.savedConfirm}>Saved to your account</Text>
+      )}
+
       <TouchableOpacity
         style={styles.newScanButton}
         onPress={() => { reset(); router.replace('/(tabs)/scan'); }}
       >
         <Text style={styles.newScanText}>Start Another Search</Text>
       </TouchableOpacity>
+
+      <ChosenWineModal
+        wine={chosenModalWine}
+        visible={chosenModalWine !== null}
+        onClose={() => setChosenModalWine(null)}
+        onSaved={() => {
+          const idx = recommendation!.wines.indexOf(chosenModalWine!);
+          if (idx !== -1) setChosenIndexes((prev) => new Set([...prev, idx]));
+          setChosenModalWine(null);
+        }}
+      />
 
     </ScrollView>
   );
@@ -178,6 +260,32 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: 1.5,
     marginBottom: spacing.md,
+    textAlign: 'center',
+  },
+  topScoringBanner: {
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.md,
+    backgroundColor: 'rgba(212,176,96,0.08)',
+    width: '100%',
+  },
+  topScoringBannerTitle: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 14,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 4,
+    textAlign: 'center',
+  },
+  topScoringBannerBody: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    color: 'rgba(212,176,96,0.80)',
+    lineHeight: 20,
     textAlign: 'center',
   },
   vintageNote: {
@@ -289,6 +397,50 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
     marginVertical: spacing.md,
   },
+  chosenButton: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.sm,
+    marginBottom: 2,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  chosenButtonDone: {
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(212,176,96,0.10)',
+  },
+  chosenButtonText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.50)',
+  },
+  chosenButtonTextDone: {
+    color: colors.gold,
+  },
+  topPickReasons: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    gap: 6,
+  },
+  topPickReasonRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
+  topPickBullet: {
+    fontSize: 8,
+    color: colors.gold,
+    marginTop: 5,
+  },
+  topPickReasonText: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.gold,
+    lineHeight: 20,
+  },
   outsideNotice: {
     backgroundColor: 'rgba(180,140,60,0.12)',
     borderLeftWidth: 2,
@@ -328,6 +480,27 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
+  },
+  saveButton: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+  },
+  savedConfirm: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    color: colors.gold,
+    textAlign: 'center',
+    marginTop: spacing.md,
   },
   newScanButton: {
     marginHorizontal: spacing.md,

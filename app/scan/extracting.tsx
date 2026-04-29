@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { SearchProgress } from '../../src/components/SearchProgress';
+import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useScanStore } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -52,6 +54,7 @@ function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | 
 type Stage = 'reading' | 'recommending' | 'error';
 
 export default function ExtractingScreen() {
+  useKeepAwake();
   const { imageUri, imageUris, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
   const { preferences: userProfile } = usePreferences();
   const [stage, setStage] = useState<Stage>('reading');
@@ -137,27 +140,13 @@ export default function ExtractingScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <ActivityIndicator size="large" color={colors.gold} />
-      <Text style={styles.title}>
-        {stage === 'reading' ? 'Reading wine list…' : 'Finding your best match…'}
-      </Text>
-      <Text style={styles.body}>
-        {stage === 'reading'
-          ? 'This could take a minute or two'
-          : 'Scoring by critic rating, vintage quality and value'}
-      </Text>
-      {stage === 'recommending' && (
-        <Text style={styles.body}>This may take a minute or two</Text>
-      )}
-      <Text style={styles.stayNote}>Please don't leave this page while we're searching</Text>
-
-      {stage === 'reading' && (
-        <Text style={styles.profileNote}>
-          We're making a recommendation based on your profile preferences. Change your preferences for this result only by setting filters for this search.
-        </Text>
-      )}
-    </View>
+    <SearchProgress
+      title={stage === 'reading' ? 'Reading your wine list…' : 'Finding your perfect match…'}
+      subtitle="Vinster needs up to a minute for your result"
+      body={stage === 'reading'
+        ? 'Identifying every wine on the list'
+        : 'Scoring by critic rating, vintage quality and value'}
+    />
   );
 }
 
@@ -169,14 +158,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     padding: spacing.xl,
   },
+  brand: {
+    fontSize: 36,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.text,
+    letterSpacing: 1.5,
+    marginBottom: spacing.xxl,
+  },
   title: {
     fontSize: 20,
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
-    marginTop: spacing.lg,
     marginBottom: spacing.sm,
     textAlign: 'center',
-    letterSpacing: -0.3,
+  },
+  timing: {
+    fontSize: 15,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    color: colors.gold,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
   body: {
     fontSize: 14,
@@ -187,19 +188,10 @@ const styles = StyleSheet.create({
   stayNote: {
     fontSize: 12,
     fontFamily: 'CormorantGaramond_600SemiBold',
-    color: colors.gold,
+    color: colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.lg,
     opacity: 0.8,
-  },
-  profileNote: {
-    fontSize: 12,
-    fontFamily: 'CormorantGaramond_400Regular',
-    color: colors.textMuted,
-    textAlign: 'center',
-    marginTop: spacing.md,
-    lineHeight: 18,
-    opacity: 0.7,
   },
   errorContainer: {
     flex: 1,
@@ -224,7 +216,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   retryButton: {
-    backgroundColor: colors.burgundy,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,

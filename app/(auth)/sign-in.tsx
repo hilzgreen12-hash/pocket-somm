@@ -22,7 +22,7 @@ export default function SignIn() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Pocket Somm</Text>
+      <Text style={styles.title}>Vinster</Text>
       <Text style={styles.subtitle}>Your personal sommelier</Text>
 
       <TextInput
@@ -87,7 +87,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   button: {
-    backgroundColor: colors.burgundy,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     padding: spacing.md,
     alignItems: 'center',

@@ -16,7 +16,7 @@ export default function SignUp() {
     if (error) {
       Alert.alert('Sign up failed', error.message);
     } else {
-      Alert.alert('Check your email', 'We sent you a confirmation link.', [
+      Alert.alert('Account created', 'You can now sign in.', [
         { text: 'OK', onPress: () => router.replace('/(auth)/sign-in') },
       ]);
     }
@@ -25,7 +25,7 @@ export default function SignUp() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Save your preferences and allow Pocket Somm to learn from your selections. Your personal sommelier awaits</Text>
+      <Text style={styles.subtitle}>Save your preferences and allow Vinster to learn from your selections. Your personal sommelier awaits</Text>
 
       <TextInput
         style={styles.input}
@@ -89,7 +89,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
   },
   button: {
-    backgroundColor: colors.burgundy,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     borderRadius: 8,
     padding: spacing.md,
     alignItems: 'center',
