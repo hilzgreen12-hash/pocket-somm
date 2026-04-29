@@ -10,6 +10,7 @@ export interface ScanPreferences {
   favouriteGrapes: string[];
   dislikedRegions: string[];
   dislikedGrapes: string[];
+  topScoringMode: boolean;
 }
 
 interface ScanState {
@@ -19,6 +20,7 @@ interface ScanState {
   recommendation: RecommendationResponse | null;
   error: string | null;
   preferences: ScanPreferences;
+  needsReset: boolean;
 
   setImage: (uri: string) => void;
   setImageUris: (uris: string[]) => void;
@@ -26,6 +28,7 @@ interface ScanState {
   setRecommendation: (rec: RecommendationResponse) => void;
   setError: (message: string) => void;
   setPreferences: (prefs: Partial<ScanPreferences>) => void;
+  clearNeedsReset: () => void;
   reset: () => void;
 }
 
@@ -38,6 +41,7 @@ const DEFAULT_PREFERENCES: ScanPreferences = {
   favouriteGrapes: [],
   dislikedRegions: [],
   dislikedGrapes: [],
+  topScoringMode: false,
 };
 
 export const useScanStore = create<ScanState>((set) => ({
@@ -47,6 +51,7 @@ export const useScanStore = create<ScanState>((set) => ({
   recommendation: null,
   error: null,
   preferences: DEFAULT_PREFERENCES,
+  needsReset: false,
 
   setImage: (uri) => set({ imageUri: uri, imageUris: null, extractedWines: null, recommendation: null, error: null }),
   setImageUris: (uris) => set({ imageUris: uris, imageUri: null, extractedWines: null, recommendation: null, error: null }),
@@ -54,5 +59,6 @@ export const useScanStore = create<ScanState>((set) => ({
   setRecommendation: (rec) => set({ recommendation: rec }),
   setError: (message) => set({ error: message }),
   setPreferences: (prefs) => set((s) => ({ preferences: { ...s.preferences, ...prefs } })),
-  reset: () => set({ imageUri: null, imageUris: null, extractedWines: null, recommendation: null, error: null, preferences: DEFAULT_PREFERENCES }),
+  clearNeedsReset: () => set({ needsReset: false }),
+  reset: () => set({ imageUri: null, imageUris: null, extractedWines: null, recommendation: null, error: null, preferences: DEFAULT_PREFERENCES, needsReset: true }),
 }));

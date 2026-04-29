@@ -9,4 +9,6 @@ export interface UserPreferences {
   favouriteGrapes: string[];
   dislikedRegions: string[];
   dislikedGrapes: string[];
+  dietaryNeeds: string[];
+  allergyRisks: string[];
 }

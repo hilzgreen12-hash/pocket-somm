@@ -13,6 +13,7 @@ interface RecommendInput {
   dislikedRegions: string[];
   dislikedGrapes: string[];
   excludeWines?: string[];
+  topScoringMode?: boolean;
 }
 
 const VintageAssessmentSchema = z.object({
@@ -47,11 +48,13 @@ const WineRecommendationSchema = z.object({
   drinkingWindow: DrinkingWindowSchema,
   rarityAssessment: RarityAssessmentSchema,
   outsidePreferences: z.string().nullable().optional(),
+  topPickReasons: z.array(z.string()).nullable().optional(),
 });
 
 const RecommendationResponseSchema = z.object({
   wines: z.array(WineRecommendationSchema).max(3),
   summary: z.string(),
+  topScoringMode: z.boolean().optional(),
 });
 
 function hasDuplicateGrapes(wines: RecommendationResponse['wines']): boolean {

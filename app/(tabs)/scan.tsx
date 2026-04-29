@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Switch } from 'react-native';
+import { TabFooter } from '../../src/components/TabFooter';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -12,20 +13,21 @@ import { WineTypePicker, WineType } from '../../src/components/preferences/WineT
 import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
-import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function ScanTab() {
+  const { height } = useWindowDimensions();
+  const paddingTop = Math.max(60, height * 0.13);
   const { session } = useAuth();
-  const { setPreferences, setImage, setImageUris } = useScanStore();
+  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset } = useScanStore();
   const { preferences: savedPreferences } = usePreferences();
 
   const [wineTypes, setWineTypes] = useState<WineType[]>(
     savedPreferences?.wineTypes ?? []
   );
   const [styleProfiles, setStyleProfiles] = useState<string[]>(
-    savedPreferences?.styleProfiles ?? []
+    savedPreferences?.styleProfiles ?? ['crisp-white']
   );
   const [budget, setBudget] = useState<number | null>(
     savedPreferences?.defaultBudget ?? null
@@ -33,6 +35,7 @@ export default function ScanTab() {
   const [foodPairing, setFoodPairing] = useState('');
   const [wineTypeOpen, setWineTypeOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
+  const [topScoringMode, setTopScoringMode] = useState(false);
 
   function toggleSection(section: 'wineType' | 'style') {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -46,24 +49,36 @@ export default function ScanTab() {
 
   const wineTypeLabel = wineTypes.length > 0
     ? wineTypes.map((t) => WINE_TYPE_LABELS[t]).join(', ')
-    : 'e.g. Red Wine';
+    : 'Any';
 
   const styleLabel = styleProfiles.length
     ? styleProfiles.length === 1
       ? styleProfiles[0].replace(/-/g, ' ')
       : `${styleProfiles.length} styles selected`
-    : 'e.g. Burgundy';
+    : 'Any';
 
   // Sync defaults from profile once loaded (React Query is async)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
       setWineTypes(savedPreferences.wineTypes ?? []);
-      setStyleProfiles(savedPreferences.styleProfiles ?? []);
+      setStyleProfiles(savedPreferences.styleProfiles ?? ['crisp-white']);
       setBudget(savedPreferences.defaultBudget ?? null);
       setPrefsLoaded(true);
     }
   }, [savedPreferences]);
+
+  // Re-sync to profile defaults when user starts a new search
+  useEffect(() => {
+    if (needsReset) {
+      setWineTypes(savedPreferences?.wineTypes ?? []);
+      setStyleProfiles(savedPreferences?.styleProfiles ?? ['crisp-white']);
+      setBudget(savedPreferences?.defaultBudget ?? null);
+      setFoodPairing('');
+      setTopScoringMode(false);
+      clearNeedsReset();
+    }
+  }, [needsReset]);
 
   function buildPreferences() {
     return {
@@ -75,6 +90,7 @@ export default function ScanTab() {
       favouriteGrapes: savedPreferences?.favouriteGrapes ?? [],
       dislikedRegions: savedPreferences?.dislikedRegions ?? [],
       dislikedGrapes: savedPreferences?.dislikedGrapes ?? [],
+      topScoringMode,
     };
   }
 
@@ -102,23 +118,27 @@ export default function ScanTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
 
       <View style={styles.header}>
-        <Text style={styles.appName}>Pocket Somm</Text>
+        <Text style={styles.appName}>List</Text>
+        <Text style={styles.subtitle}>Set your preferences then scan or upload a wine list to receive deep AI generated wine recommendations.</Text>
+        <Text style={styles.profileNote}>Your profile settings will be used in our recommendations.</Text>
       </View>
+
+      <View style={styles.divider} />
 
       <View style={styles.body}>
 
         {/* Wine type accordion */}
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>What are you drinking?</Text>
+          <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>What are you drinking?</Text>
+              {!wineTypeOpen && <Text style={styles.selectionSummary}>{wineTypeLabel}</Text>}
+            </View>
+            <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
-          {!wineTypeOpen && (
-            <Text style={styles.selectionSummary}>{wineTypeLabel}</Text>
-          )}
           {wineTypeOpen && (
             <View style={styles.pickerWrap}>
               <WineTypePicker selected={wineTypes} onChange={setWineTypes} />
@@ -128,13 +148,13 @@ export default function ScanTab() {
 
         {/* Style accordion */}
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>What wine style are you vibing?</Text>
+          <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>What style are you vibing?</Text>
+              {!styleOpen && <Text style={styles.selectionSummary}>{styleLabel}</Text>}
+            </View>
+            <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
-          {!styleOpen && (
-            <Text style={styles.selectionSummary}>{styleLabel}</Text>
-          )}
           {styleOpen && (
             <View style={styles.pickerWrap}>
               <StylePicker selected={styleProfiles} onChange={setStyleProfiles} />
@@ -143,14 +163,33 @@ export default function ScanTab() {
         </View>
 
         <View style={styles.section}>
+          <View style={styles.bubbleWrap}>
+            <Text style={styles.question}>What are you dining on? (optional)</Text>
+            <FoodPairingInput value={foodPairing} onChange={setFoodPairing} />
+          </View>
+        </View>
+
+        <View style={[styles.section, { alignItems: 'center' }]}>
           <Text style={styles.question}>Budget?</Text>
           <BudgetSlider value={budget} onChange={setBudget} />
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.question}>Broadly or specifically, what are you dining on?</Text>
-          <FoodPairingInput value={foodPairing} onChange={setFoodPairing} />
+        <View style={styles.divider} />
+
+        <View style={styles.toggleRow}>
+          <View style={styles.toggleLeft}>
+            <Text style={styles.toggleLabel}>Top Scoring Wines</Text>
+            <Text style={styles.toggleSub}>Ignore all preferences — show the 3 highest-rated wines on the list</Text>
+          </View>
+          <Switch
+            value={topScoringMode}
+            onValueChange={setTopScoringMode}
+            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
+            thumbColor="#FFFFFF"
+          />
         </View>
+
+        <View style={styles.divider} />
 
         <TouchableOpacity style={styles.scanButton} onPress={handleScan}>
           <Text style={styles.scanButtonText}>Scan Wine List</Text>
@@ -160,13 +199,12 @@ export default function ScanTab() {
           <Text style={styles.uploadButtonText}>Upload Screenshot / Photo</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.accountButton} onPress={() => router.push('/(tabs)/profile')}>
-          <Text style={styles.accountButtonText}>
-            {session ? 'Account' : 'Sign In / Create Account'}
-          </Text>
+        <TouchableOpacity style={styles.historyButton} onPress={() => router.push('/scan/history')}>
+          <Text style={styles.historyButtonText}>View Previous Lists / Recco's</Text>
         </TouchableOpacity>
 
       </View>
+      <TabFooter />
     </ScrollView>
   );
 }
@@ -177,10 +215,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
   },
   header: {
-    paddingTop: 96,
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingTop: 0,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
     alignItems: 'center',
+  },
+  brandName: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 22,
+    color: 'rgba(255,255,255,0.50)',
+    letterSpacing: 1,
+    marginBottom: spacing.md,
   },
   appName: {
     fontFamily: 'CormorantGaramond_600SemiBold',
@@ -188,28 +233,66 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 1.5,
   },
+  subtitle: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 18,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+  },
   body: {
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.xl,
   },
   section: {
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
   },
-  questionRow: {
+  accordionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
     marginBottom: 4,
+  },
+  accordionLeft: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  chevron: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.45)',
+    marginLeft: spacing.sm,
   },
   question: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 20,
+    fontSize: 15,
     color: '#FFFFFF',
+    textAlign: 'center',
   },
   selectionSummary: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 14,
     color: 'rgba(255,255,255,0.40)',
-    marginBottom: spacing.sm,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  bubbleWrap: {
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
   },
   pickerWrap: {
     marginTop: spacing.sm,
@@ -240,14 +323,44 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 15,
   },
-  accountButton: {
-    padding: spacing.md,
+  historyButton: {
     alignItems: 'center',
     marginTop: spacing.lg,
+    marginBottom: spacing.sm,
   },
-  accountButtonText: {
-    fontFamily: 'CormorantGaramond_400Regular',
-    color: 'rgba(255,255,255,0.40)',
-    fontSize: 20,
+  historyButtonText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.textMuted,
+    fontSize: 14,
+    textDecorationLine: 'underline',
+  },
+  profileNote: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: spacing.sm,
+    textAlign: 'center',
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+    gap: spacing.md,
+  },
+  toggleLeft: {
+    flex: 1,
+  },
+  toggleLabel: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 15,
+    color: '#FFFFFF',
+  },
+  toggleSub: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.45)',
+    marginTop: 2,
+    lineHeight: 18,
   },
 });

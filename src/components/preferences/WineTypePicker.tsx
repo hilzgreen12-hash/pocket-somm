@@ -17,6 +17,8 @@ interface Props {
 }
 
 export function WineTypePicker({ selected, onChange, max = 4 }: Props) {
+  const anyActive = selected.length === 0;
+
   function toggle(id: WineType) {
     if (selected.includes(id)) {
       onChange(selected.filter((t) => t !== id));
@@ -27,6 +29,10 @@ export function WineTypePicker({ selected, onChange, max = 4 }: Props) {
 
   return (
     <View>
+      <TouchableOpacity style={styles.row} onPress={() => onChange([])}>
+        <Text style={[styles.label, anyActive && styles.labelActive]}>Any</Text>
+        {anyActive && <Text style={styles.checkmark}>✓</Text>}
+      </TouchableOpacity>
       {WINE_TYPES.map((type) => {
         const active = selected.includes(type.id);
         return (

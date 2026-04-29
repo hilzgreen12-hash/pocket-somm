@@ -1,0 +1,126 @@
+import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { router } from 'expo-router';
+import { useRackStore } from '../../../src/stores/rackStore';
+import { useRacks } from '../../../src/hooks/useRacks';
+import { colors, spacing } from '../../../src/constants/theme';
+
+function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.counterRow}>
+      <Text style={styles.counterLabel}>{label}</Text>
+      <View style={styles.counterControls}>
+        <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.max(1, value - 1))}>
+          <Text style={styles.counterBtnText}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.counterValue}>{value}</Text>
+        <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.min(30, value + 1))}>
+          <Text style={styles.counterBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+export default function RackDetectScreen() {
+  const { detectedRows, detectedCols, pendingStorageType, reset } = useRackStore();
+  const isFridge = pendingStorageType === 'fridge';
+  const [rows, setRows] = useState(detectedRows);
+  const [cols, setCols] = useState(detectedCols);
+  const [name, setName] = useState(isFridge ? 'My Wine Fridge' : 'My Wine Rack');
+  const [saving, setSaving] = useState(false);
+  const { create } = useRacks();
+
+  async function handleSave() {
+    if (!name.trim()) {
+      Alert.alert('Name required', `Please give your ${isFridge ? 'fridge' : 'rack'} a name.`);
+      return;
+    }
+    setSaving(true);
+    try {
+      const rack = await create.mutateAsync({ name: name.trim(), rows, cols, storageType: pendingStorageType });
+      reset();
+      router.replace(`/cellar/rack/${rack.id}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      Alert.alert(`Error saving ${isFridge ? 'fridge' : 'rack'}`, msg);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  if (saving) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator color={colors.gold} size="large" />
+        <Text style={styles.loadingText}>{isFridge ? 'Building your fridge…' : 'Building your rack…'}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.back}>Retake</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>{isFridge ? 'Confirm Fridge' : 'Confirm Rack'}</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      <View style={styles.body}>
+        <Text style={styles.intro}>We detected the dimensions below. Adjust if needed, then give your {isFridge ? 'fridge' : 'rack'} a name.</Text>
+
+        <View style={styles.preview}>
+          <Text style={styles.previewLabel}>{rows} × {cols}</Text>
+          <Text style={styles.previewSub}>{rows * cols} bottle slots</Text>
+        </View>
+
+        <Counter label="Rows" value={rows} onChange={setRows} />
+        <View style={styles.divider} />
+        <Counter label="Columns" value={cols} onChange={setCols} />
+
+        <Text style={styles.fieldLabel}>{isFridge ? 'Fridge' : 'Rack'} Name</Text>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder={isFridge ? 'e.g. Kitchen Wine Fridge' : 'e.g. Dining Room Rack'}
+          placeholderTextColor={colors.textMuted}
+        />
+      </View>
+
+      <View style={styles.footer}>
+        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+          <Text style={styles.saveButtonText}>{isFridge ? 'Save Fridge' : 'Save Rack'}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.lg },
+  loadingText: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
+  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
+  title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
+  body: { flex: 1, padding: spacing.xl },
+  intro: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl },
+  preview: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xl },
+  previewLabel: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, letterSpacing: 1 },
+  previewSub: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.xs },
+  counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
+  counterLabel: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  counterControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  counterBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  counterBtnText: { fontSize: 22, color: colors.text, fontFamily: 'CormorantGaramond_400Regular' },
+  counterValue: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, minWidth: 40, textAlign: 'center' },
+  divider: { height: 1, backgroundColor: colors.border },
+  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.xl, marginBottom: spacing.sm },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
+  footer: { padding: spacing.xl, paddingBottom: 48 },
+  saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  saveButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+});

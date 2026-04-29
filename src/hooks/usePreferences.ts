@@ -13,7 +13,7 @@ export function usePreferences() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('style_preferences, default_budget, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes')
+        .select('style_preferences, default_budget, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks')
         .eq('user_id', session!.user.id)
         .single();
       if (error) {
@@ -28,6 +28,8 @@ export function usePreferences() {
         favouriteGrapes: data.favourite_grapes ?? [],
         dislikedRegions: data.disliked_regions ?? [],
         dislikedGrapes: data.disliked_grapes ?? [],
+        dietaryNeeds: data.dietary_needs ?? [],
+        allergyRisks: data.allergy_risks ?? [],
       } as UserPreferences;
     },
   });
@@ -44,6 +46,8 @@ export function usePreferences() {
         ...(updates.favouriteGrapes !== undefined && { favourite_grapes: updates.favouriteGrapes }),
         ...(updates.dislikedRegions !== undefined && { disliked_regions: updates.dislikedRegions }),
         ...(updates.dislikedGrapes !== undefined && { disliked_grapes: updates.dislikedGrapes }),
+        ...(updates.dietaryNeeds !== undefined && { dietary_needs: updates.dietaryNeeds }),
+        ...(updates.allergyRisks !== undefined && { allergy_risks: updates.allergyRisks }),
       });
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['preferences'] }),

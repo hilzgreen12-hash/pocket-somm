@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.border,
   },
   dotActive: {
-    backgroundColor: colors.burgundy,
+    backgroundColor: '#FFFFFF',
   },
   scroll: {
     flex: 1,
@@ -223,7 +223,8 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
   },
   nextButton: {
-    backgroundColor: colors.burgundy,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     borderRadius: 12,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,

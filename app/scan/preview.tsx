@@ -88,7 +88,8 @@ const styles = StyleSheet.create({
     flex: 2,
     padding: spacing.md,
     borderRadius: 8,
-    backgroundColor: colors.burgundy,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     alignItems: 'center',
   },
   confirmText: {

@@ -31,7 +31,41 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
-          <Stack screenOptions={{ headerShown: false }} />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="welcome" />
+            <Stack.Screen name="onboarding" />
+            <Stack.Screen name="(auth)" />
+            <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="scan/camera" />
+            <Stack.Screen name="scan/preview" />
+            <Stack.Screen name="scan/extracting" />
+            <Stack.Screen name="scan/preferences" />
+            <Stack.Screen name="scan/results" />
+            <Stack.Screen name="scan/url" />
+            <Stack.Screen name="label/camera" />
+            <Stack.Screen name="label/confirm" />
+            <Stack.Screen name="label/results" />
+            <Stack.Screen name="chef/camera" />
+            <Stack.Screen name="chef/confirm" />
+            <Stack.Screen name="chef/results" />
+            <Stack.Screen name="chef/find-pairing" />
+            <Stack.Screen name="chef/pairing-results" />
+            <Stack.Screen name="cellar/list" />
+            <Stack.Screen name="cellar/add" />
+            <Stack.Screen name="cellar/import-preview" />
+            <Stack.Screen name="cellar/racks" />
+            <Stack.Screen name="cellar/rack/camera" />
+            <Stack.Screen name="cellar/rack/detect" />
+            <Stack.Screen name="cellar/rack/[rackId]" />
+            <Stack.Screen name="cellar/[wineId]" />
+            <Stack.Screen name="scan/history" />
+            <Stack.Screen name="profile/wine" />
+            <Stack.Screen name="profile/recipe" />
+            <Stack.Screen name="wines/chosen" />
+            <Stack.Screen name="account" />
+            <Stack.Screen name="about" />
+          </Stack>
           <StatusBar style="light" />
         </AuthProvider>
       </QueryClientProvider>

@@ -14,20 +14,18 @@ export function FoodPairingInput({ value, onChange }: Props) {
       placeholder="e.g. rack of lamb, truffle risotto, grilled sea bass…"
       placeholderTextColor="rgba(255,255,255,0.25)"
       multiline
-      numberOfLines={2}
+      numberOfLines={1}
     />
   );
 }
 
 const styles = StyleSheet.create({
   input: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.25)',
-    paddingVertical: 8,
+    paddingVertical: 4,
     fontSize: 14,
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: '#FFFFFF',
-    minHeight: 60,
+    minHeight: 40,
     textAlignVertical: 'top',
   },
 });

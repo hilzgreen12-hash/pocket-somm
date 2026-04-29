@@ -9,6 +9,7 @@ async function invokeFunction(name: string, body: unknown): Promise<unknown> {
     headers: {
       'Content-Type': 'application/json',
       'apikey': ANON_KEY,
+      'Authorization': `Bearer ${ANON_KEY}`,
     },
     body: JSON.stringify(body),
   });

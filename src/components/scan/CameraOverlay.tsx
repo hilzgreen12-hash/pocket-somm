@@ -15,12 +15,13 @@ export interface FrameRect {
 interface Props {
   onCapture: () => void;
   onFrameLayout?: (rect: FrameRect) => void;
+  hint?: string;
 }
 
-export function CameraOverlay({ onCapture, onFrameLayout }: Props) {
+export function CameraOverlay({ onCapture, onFrameLayout, hint = 'Frame the wine list within the guides' }: Props) {
   return (
     <View style={styles.container} pointerEvents="box-none">
-      <Text style={styles.hint}>Frame the wine list within the guides</Text>
+      <Text style={styles.hint}>{hint}</Text>
 
       <View
         style={[styles.frame, { width: FRAME_WIDTH, height: FRAME_HEIGHT }]}

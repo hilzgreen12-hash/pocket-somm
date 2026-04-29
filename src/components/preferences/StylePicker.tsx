@@ -16,6 +16,13 @@ export function StylePicker({ selected, onChange }: Props) {
     setLocal(selected);
   }, [selected]);
 
+  const anyActive = local.length === 0;
+
+  function selectAny() {
+    setLocal([]);
+    onChange([]);
+  }
+
   function toggle(id: string) {
     if (local.includes(id)) {
       const next = local.filter((s) => s !== id);
@@ -30,6 +37,12 @@ export function StylePicker({ selected, onChange }: Props) {
 
   return (
     <View>
+      <TouchableOpacity style={styles.row} onPress={selectAny} activeOpacity={0.6}>
+        <View style={styles.rowInner}>
+          <Text style={[styles.label, anyActive && styles.labelActive]}>Any</Text>
+          {anyActive && <Text style={styles.checkmark}>✓</Text>}
+        </View>
+      </TouchableOpacity>
       {STYLE_PROFILES.map((profile) => {
         const active = local.includes(profile.id);
         const atMax = local.length >= MAX && !active;

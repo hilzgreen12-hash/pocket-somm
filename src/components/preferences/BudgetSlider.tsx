@@ -41,7 +41,7 @@ export function BudgetSlider({ value, onChange }: Props) {
   const atMax = current === null;
 
   return (
-    <View>
+    <View style={{ width: '100%' }}>
       <Text style={styles.value}>
         {atMax ? 'No limit' : `Up to £${current}`}
       </Text>
@@ -66,9 +66,10 @@ export function BudgetSlider({ value, onChange }: Props) {
 const styles = StyleSheet.create({
   value: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 20,
+    fontSize: 15,
     color: '#FFFFFF',
     marginBottom: spacing.sm,
+    textAlign: 'center',
   },
   labels: {
     flexDirection: 'row',

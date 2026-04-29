@@ -9,7 +9,7 @@ export function PermissionScreen({ onRequest }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Camera Access</Text>
-      <Text style={styles.body}>Pocket Somm needs your camera to scan wine lists.</Text>
+      <Text style={styles.body}>Vinster needs your camera to scan wine lists.</Text>
       <TouchableOpacity style={styles.button} onPress={onRequest}>
         <Text style={styles.buttonText}>Grant Permission</Text>
       </TouchableOpacity>

@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Pocket Somm",
+    "name": "Vinster",
     "slug": "pocket-som",
     "version": "1.0.0",
     "orientation": "portrait",
-    "scheme": "pocket-som",
+    "scheme": "vinster",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -13,10 +13,15 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.vinster.app",
+      "buildNumber": "2",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
-      "package": "com.pocketsomm.app",
+      "package": "com.vinster.app",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -38,6 +43,7 @@
       "eas": {
         "projectId": "a2a37591-2b1f-4e9c-9a0c-7d7f00fdda64"
       }
-    }
+    },
+    "owner": "hilary_cwc"
   }
 }
