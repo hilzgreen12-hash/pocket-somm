@@ -15,6 +15,7 @@ export interface ScanHistoryItem {
   recommendation: RecommendationResponse;
   savedToAccount: boolean;
   city?: string | null;
+  restaurantName?: string | null;
   sessionId?: string;
 }
 
@@ -77,6 +78,7 @@ export function useScanHistory() {
       const now = new Date().toISOString();
 
       let city: string | null = null;
+      let restaurantName: string | null = null;
       let latitude: number | null = null;
       let longitude: number | null = null;
       try {
@@ -86,7 +88,12 @@ export function useScanHistory() {
           latitude = pos.coords.latitude;
           longitude = pos.coords.longitude;
           const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-          if (geo) city = geo.city ?? geo.subregion ?? geo.region ?? null;
+          if (geo) {
+            city = geo.city ?? geo.subregion ?? geo.region ?? null;
+            // Use the establishment name if the geocoder returns one (e.g. "The Clove Club")
+            // Falls back to null — user can fill it in on the results screen
+            restaurantName = (geo.name && geo.name !== geo.street && geo.name !== geo.streetNumber) ? geo.name : null;
+          }
         }
       } catch { /* location unavailable */ }
 
@@ -102,7 +109,7 @@ export function useScanHistory() {
             city,
             latitude,
             longitude,
-            restaurant_name: null,
+            restaurant_name: restaurantName,
             image_path: null,
             preferences_snapshot: null,
           })
@@ -118,6 +125,7 @@ export function useScanHistory() {
         recommendation,
         savedToAccount: !!session,
         city,
+        restaurantName,
         sessionId,
       };
       const existing = await readLocal();
