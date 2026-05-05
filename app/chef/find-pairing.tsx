@@ -1,33 +1,45 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
 import { SearchProgress } from '../../src/components/SearchProgress';
+import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { useAuth } from '../../src/hooks/useAuth';
 import { findFoodWinePairing } from '../../src/api/label';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function FindPairingScreen() {
   useKeepAwake();
+  const { session } = useAuth();
   const { wines } = useCellar();
+  const { preferences: savedPreferences } = usePreferences();
   const { setCellarResult, setGeneralResult, setDish, setMode } = useFoodPairingStore();
 
   const [dish, setDishLocal] = useState('');
   const [flavours, setFlavours] = useState('');
-  const [difficulty, setDifficulty] = useState<string | null>(null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
+  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const [signInPromptShown, setSignInPromptShown] = useState(false);
+  const pendingFindRef = useRef(false);
 
-  const DIFFICULTY_OPTIONS = ['Super Simple', 'Easy to Moderate', 'Challenging', 'Very Technical'];
-
-  async function handleFind() {
+  async function handleFind(skipPrompt = false) {
     if (!dish.trim()) {
       Alert.alert('What are you cooking?', 'Please describe your dish first.');
       return;
     }
     if (mode === 'cellar' && wines.length === 0) {
       Alert.alert('Empty cellar', 'Your cellar is empty. Switch to "Suggest a Style" to get a general recommendation.');
+      return;
+    }
+
+    if (!session && !signInPromptShown && !skipPrompt) {
+      setSignInPromptShown(true);
+      pendingFindRef.current = true;
+      setSignInPromptVisible(true);
       return;
     }
 
@@ -47,12 +59,12 @@ export default function FindPairingScreen() {
         drinking_window_status: w.drinking_window_status,
       }));
 
-      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined, difficulty ?? undefined) as any;
+      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined, undefined, wines.length > 0 ? (savedPreferences as unknown as Record<string, unknown>) : null) as any;
 
       if (mode === 'cellar') {
         setCellarResult(result.recommendations as CellarRecommendation[]);
       } else {
-        setGeneralResult(result as GeneralRecommendation);
+        setGeneralResult(result.recommendations as GeneralRecommendation[], result.summary);
       }
       router.push('/chef/pairing-results');
     } catch {
@@ -83,6 +95,11 @@ export default function FindPairingScreen() {
       <Text style={styles.heading}>Find a Wine Pairing</Text>
       <Text style={styles.subheading}>Tell us what you're cooking and we'll find the perfect wine.</Text>
 
+      <Text style={styles.profileNote}>
+        Vinster will use your wine profile settings to guide its results.{' '}
+        <Text style={styles.profileNoteLink} onPress={() => router.push('/profile/recipe')}>Update profile settings</Text>
+      </Text>
+
       <Text style={styles.label}>What are you cooking?</Text>
       <TextInput
         style={styles.input}
@@ -107,19 +124,6 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
-      <Text style={styles.label}>Recipe difficulty</Text>
-      <View style={styles.difficultyGrid}>
-        {DIFFICULTY_OPTIONS.map((opt) => (
-          <TouchableOpacity
-            key={opt}
-            style={[styles.difficultyBtn, difficulty === opt && styles.difficultyBtnActive]}
-            onPress={() => setDifficulty(difficulty === opt ? null : opt)}
-          >
-            <Text style={[styles.difficultyBtnText, difficulty === opt && styles.difficultyBtnTextActive]}>{opt}</Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-
       <Text style={styles.label}>Where should Vinster look?</Text>
       <View style={styles.toggleRow}>
         <TouchableOpacity
@@ -139,9 +143,17 @@ export default function FindPairingScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleFind}>
+      <TouchableOpacity style={styles.button} onPress={() => handleFind()}>
         <Text style={styles.buttonText}>Find Pairing</Text>
       </TouchableOpacity>
+
+      <SignInPromptModal
+        visible={signInPromptVisible}
+        onDismiss={() => { setSignInPromptVisible(false); pendingFindRef.current = false; }}
+        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
+        onContinue={() => { setSignInPromptVisible(false); handleFind(true); }}
+      />
     </ScrollView>
   );
 }
@@ -159,6 +171,8 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   heading: { fontSize: 30, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
+  profileNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
+  profileNoteLink: { fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textDecorationLine: 'underline' },
   label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm, textAlign: 'center' },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 17, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%' },

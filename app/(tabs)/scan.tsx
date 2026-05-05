@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Modal } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
+import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabFooter } from '../../src/components/TabFooter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -58,6 +59,7 @@ export default function ScanTab() {
   const [isUploading, setIsUploading] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [signInPromptShown, setSignInPromptShown] = useState(false);
+  const pendingActionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
@@ -93,9 +95,10 @@ export default function ScanTab() {
     };
   }
 
-  function maybeShowSignInPrompt(): boolean {
+  function maybeShowSignInPrompt(proceed: () => void): boolean {
     if (!session && !signInPromptShown) {
       setSignInPromptShown(true);
+      pendingActionRef.current = proceed;
       setSignInPromptVisible(true);
       return true;
     }
@@ -104,6 +107,14 @@ export default function ScanTab() {
 
   function dismissSignInPrompt() {
     setSignInPromptVisible(false);
+    pendingActionRef.current = null;
+  }
+
+  function continueWithoutAccount() {
+    setSignInPromptVisible(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    action?.();
   }
 
   async function handleViewLastSearch() {
@@ -120,14 +131,14 @@ export default function ScanTab() {
   }
 
   function handleScan() {
-    if (maybeShowSignInPrompt()) return;
-    setPreferences(buildPreferences());
-    router.push('/scan/camera');
+    const go = () => { setPreferences(buildPreferences()); router.push('/scan/camera'); };
+    if (maybeShowSignInPrompt(go)) return;
+    go();
   }
 
   async function handleScreenshot() {
     if (isUploading) return;
-    if (maybeShowSignInPrompt()) return;
+    if (maybeShowSignInPrompt(() => handleScreenshot())) return;
     setIsUploading(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -241,38 +252,13 @@ export default function ScanTab() {
       </View>
       <TabFooter />
 
-      <Modal
+      <SignInPromptModal
         visible={signInPromptVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={dismissSignInPrompt}
-      >
-        <TouchableOpacity style={styles.promptOverlay} activeOpacity={1} onPress={dismissSignInPrompt}>
-          <TouchableOpacity style={styles.promptSheet} activeOpacity={1} onPress={() => {}}>
-            <TouchableOpacity style={styles.promptClose} onPress={dismissSignInPrompt}>
-              <Text style={styles.promptCloseText}>✕</Text>
-            </TouchableOpacity>
-
-            <Text style={styles.promptHeading}>Get more from Vinster</Text>
-            <Text style={styles.promptBody}>
-              Sign in to your account for advanced results tailoring and to archive and manage your results.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.promptSignIn}
-              onPress={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
-            >
-              <Text style={styles.promptSignInText}>Sign In</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
-            >
-              <Text style={styles.promptCreate}>Not registered? Create Account</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
+        onDismiss={dismissSignInPrompt}
+        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
+        onContinue={continueWithoutAccount}
+      />
 
     </ScrollView>
   );
@@ -428,66 +414,5 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     textAlign: 'center',
     lineHeight: 24,
-  },
-  promptOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  promptSheet: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: spacing.xl,
-    width: '100%',
-  },
-  promptClose: {
-    alignSelf: 'flex-end',
-    padding: 4,
-    marginBottom: spacing.sm,
-  },
-  promptCloseText: {
-    fontSize: 16,
-    color: colors.textMuted,
-  },
-  promptHeading: {
-    fontFamily: 'CormorantGaramond_700Bold',
-    fontSize: 24,
-    color: colors.text,
-    textAlign: 'center',
-    marginBottom: spacing.sm,
-    letterSpacing: 0.5,
-  },
-  promptBody: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.75)',
-    textAlign: 'center',
-    lineHeight: 24,
-    marginBottom: spacing.lg,
-  },
-  promptSignIn: {
-    borderWidth: 1,
-    borderColor: colors.gold,
-    borderRadius: 12,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    marginBottom: spacing.sm,
-  },
-  promptSignInText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 16,
-    color: colors.gold,
-  },
-  promptCreate: {
-    fontFamily: 'CormorantGaramond_400Regular',
-    fontSize: 14,
-    color: colors.textMuted,
-    textAlign: 'center',
-    textDecorationLine: 'underline',
-    paddingVertical: spacing.sm,
   },
 });
