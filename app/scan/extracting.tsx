@@ -12,7 +12,7 @@ import type { ExtractedWine } from '../../src/types/wine';
 import type { UserPreferences } from '../../src/types/preferences';
 
 function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | undefined): ExtractedWine[] {
-  if (!prefs) return wines.slice(0, 25);
+  if (!prefs) return wines.slice(0, 80);
 
   let filtered = wines;
 
@@ -48,7 +48,7 @@ function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | 
   const favourited = filtered.filter(isFavourite);
   const others = filtered.filter((w) => !isFavourite(w));
 
-  return [...favourited, ...others].slice(0, 50);
+  return [...favourited, ...others].slice(0, 80);
 }
 
 type Stage = 'reading' | 'recommending' | 'error';

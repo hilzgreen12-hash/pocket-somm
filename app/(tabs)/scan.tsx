@@ -57,6 +57,7 @@ export default function ScanTab() {
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const [signInPromptShown, setSignInPromptShown] = useState(false);
 
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
@@ -64,14 +65,6 @@ export default function ScanTab() {
       setPrefsLoaded(true);
     }
   }, [savedPreferences]);
-
-  useEffect(() => {
-    if (!session) {
-      AsyncStorage.getItem('vinster_signin_prompt_dismissed').then((v) => {
-        if (v !== 'true') setSignInPromptVisible(true);
-      });
-    }
-  }, [session]);
 
   useEffect(() => {
     if (needsReset) {
@@ -100,9 +93,17 @@ export default function ScanTab() {
     };
   }
 
+  function maybeShowSignInPrompt(): boolean {
+    if (!session && !signInPromptShown) {
+      setSignInPromptShown(true);
+      setSignInPromptVisible(true);
+      return true;
+    }
+    return false;
+  }
+
   function dismissSignInPrompt() {
     setSignInPromptVisible(false);
-    AsyncStorage.setItem('vinster_signin_prompt_dismissed', 'true');
   }
 
   async function handleViewLastSearch() {
@@ -119,12 +120,14 @@ export default function ScanTab() {
   }
 
   function handleScan() {
+    if (maybeShowSignInPrompt()) return;
     setPreferences(buildPreferences());
     router.push('/scan/camera');
   }
 
   async function handleScreenshot() {
     if (isUploading) return;
+    if (maybeShowSignInPrompt()) return;
     setIsUploading(true);
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -257,13 +260,13 @@ export default function ScanTab() {
 
             <TouchableOpacity
               style={styles.promptSignIn}
-              onPress={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
+              onPress={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
             >
               <Text style={styles.promptSignInText}>Sign In</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
+              onPress={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
             >
               <Text style={styles.promptCreate}>Not registered? Create Account</Text>
             </TouchableOpacity>
