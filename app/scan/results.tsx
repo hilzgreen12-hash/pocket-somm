@@ -66,7 +66,7 @@ export default function ResultsScreen() {
     try {
       const excludeWines = recommendation.wines.map((w) => w.name);
       const newRec = await recommendWines({
-        wines: extractedWines.slice(0, 50),
+        wines: extractedWines.slice(0, 80),
         ...preferences,
         excludeWines,
       });
