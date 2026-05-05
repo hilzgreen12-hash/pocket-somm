@@ -207,10 +207,6 @@ export default function ResultsScreen() {
         })}
       </View>
 
-      <Text style={styles.scoreNote}>
-        Scores are Vinster's estimates based on critical consensus from its training data.
-      </Text>
-
       {!isFromHistory && (
         <>
           <TouchableOpacity
