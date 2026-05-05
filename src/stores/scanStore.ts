@@ -11,6 +11,8 @@ export interface ScanPreferences {
   dislikedRegions: string[];
   dislikedGrapes: string[];
   topScoringMode: boolean;
+  profileWineTypes: string[];
+  profileStyleProfiles: string[];
 }
 
 interface ScanState {
@@ -42,6 +44,8 @@ const DEFAULT_PREFERENCES: ScanPreferences = {
   dislikedRegions: [],
   dislikedGrapes: [],
   topScoringMode: false,
+  profileWineTypes: [],
+  profileStyleProfiles: [],
 };
 
 export const useScanStore = create<ScanState>((set) => ({

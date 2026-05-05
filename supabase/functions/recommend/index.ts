@@ -6,8 +6,8 @@ const SYSTEM_PROMPT = `You are Vinster, an expert sommelier with encyclopaedic k
 
 Your task: given a wine list and the diner's preferences, recommend exactly 3 wines ranked by suitability.
 
-HARD RULE — GRAPE VARIETY DIVERSITY (non-negotiable):
-Unless the diner has explicitly requested a single grape variety, each of the 3 recommended wines MUST be a different grape variety. This is an absolute constraint — it overrides all scoring considerations. Before finalising your 3 picks, check that no two wines share the same primary grape variety. If your top 3 by score contain duplicates, replace the lower-ranked duplicate with the next-best wine of a different grape variety. The 3 picks must also span at least 2 different regions.
+SOFT PREFERENCE — GRAPE VARIETY AND REGIONAL DIVERSITY:
+Where quality and scoring allow, prefer recommending wines of different grape varieties and from different regions — this gives the diner an interesting range. However, if the best options on the list share a grape variety (e.g. a tightly focused list, or the diner has requested a specific colour that limits variety), recommending them is fine. Quality and preference fit always take priority over diversity.
 
 HARD RULE — COLOUR PREFERENCE:
 If the diner has specified one or more colours (red, white, rosé, sparkling), only recommend wines of those colours. This is absolute. If no colour preference is stated, recommend the best option regardless of colour.
@@ -127,7 +127,6 @@ Deno.serve(async (req) => {
       dislikedGrapes,
       excludeWines,
       topScoringMode,
-      _strictDiversity,
       profileWineTypes,
       profileStyleProfiles,
     } = await req.json();
@@ -156,7 +155,7 @@ Deno.serve(async (req) => {
 
     const topScoringOverride = topScoringMode ? `
 TOP SCORING MODE — ACTIVE:
-The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the grape diversity rule. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, topPickReasons, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
+The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, topPickReasons, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
 ` : '';
 
     const mergedStyleProfiles = [...new Set([...(styleProfiles ?? []), ...(profileStyleProfiles ?? [])])];
@@ -187,7 +186,7 @@ ${dislikedGrapesLine}
       messages: [
         {
           role: 'user',
-          content: `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${_strictDiversity ? 'CRITICAL: Your previous response contained duplicate grape varieties. This is NOT allowed. You MUST select 3 wines where each is a completely different primary grape variety. Check each grape before including it.\n\n' : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list. Grape diversity rule does not apply.' : 'Recommend exactly 3 wines. IMPORTANT: each must be a different grape variety — check this before finalising.'} Rank by: critic score → vintage quality → value for money → preference fit.`,
+          content: `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`,
         },
       ],
     });
