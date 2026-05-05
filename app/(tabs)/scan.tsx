@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { TabFooter } from '../../src/components/TabFooter';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -20,7 +21,7 @@ export default function ScanTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
   const { session } = useAuth();
-  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset } = useScanStore();
+  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences } = usePreferences();
 
   const [wineTypes, setWineTypes] = useState<WineType[]>([]);
@@ -87,6 +88,19 @@ export default function ScanTab() {
       profileWineTypes: savedPreferences?.wineTypes ?? [],
       profileStyleProfiles: savedPreferences?.styleProfiles ?? [],
     };
+  }
+
+  async function handleViewLastSearch() {
+    try {
+      const raw = await AsyncStorage.getItem('vinster_scan_history');
+      if (!raw) return;
+      const items = JSON.parse(raw);
+      if (!items.length) return;
+      const last = items[0];
+      setExtractedWines(last.extractedWines);
+      setRecommendation(last.recommendation);
+      router.push('/scan/results?fromHistory=true');
+    } catch { /* no history available */ }
   }
 
   function handleScan() {
@@ -197,9 +211,14 @@ export default function ScanTab() {
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity style={styles.historyButton} onPress={() => router.push('/scan/history')}>
-          <Text style={styles.historyButtonText}>View Archive</Text>
-        </TouchableOpacity>
+        <View style={styles.archiveRow}>
+          <TouchableOpacity style={styles.archiveButton} onPress={() => router.push('/scan/history')}>
+            <Text style={styles.archiveButtonText}>View Archive</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.archiveButton} onPress={handleViewLastSearch}>
+            <Text style={styles.archiveButtonText}>View Last Search</Text>
+          </TouchableOpacity>
+        </View>
 
       </View>
       <TabFooter />
@@ -330,15 +349,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  historyButton: {
+  archiveRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  archiveButton: {
+    flex: 1,
     borderWidth: 1,
     borderColor: colors.gold,
     borderRadius: 14,
-    padding: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
-    marginTop: spacing.sm,
   },
-  historyButtonText: {
+  archiveButtonText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: colors.gold,
     fontSize: 14,

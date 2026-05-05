@@ -11,6 +11,7 @@ import { VintageWindowBadge } from '../../src/components/results/VintageWindowBa
 import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { RationaleBlock } from '../../src/components/results/RationaleBlock';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
+import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { WineRecommendation } from '../../src/types/wine';
 
@@ -21,17 +22,17 @@ if (Platform.OS === 'android') {
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
 export default function ResultsScreen() {
-  const { fromHistory } = useLocalSearchParams<{ fromHistory?: string }>();
+  const { fromHistory, sessionId } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
-  const { autoSave, saveToAccount } = useScanHistory();
+  const { autoSave } = useScanHistory();
   const { session } = useAuth();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [savedToAccount, setSavedToAccount] = useState(false);
   const hasSaved = useRef(false);
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
+  const [restaurantReviewVisible, setRestaurantReviewVisible] = useState(false);
 
   useEffect(() => {
     if (recommendation && extractedWines && !hasSaved.current) {
@@ -207,6 +208,15 @@ export default function ResultsScreen() {
         })}
       </View>
 
+      {isFromHistory && sessionId && (
+        <TouchableOpacity
+          style={styles.restaurantButton}
+          onPress={() => setRestaurantReviewVisible(true)}
+        >
+          <Text style={styles.restaurantButtonText}>Review this Restaurant</Text>
+        </TouchableOpacity>
+      )}
+
       {!isFromHistory && (
         <>
           <TouchableOpacity
@@ -215,26 +225,6 @@ export default function ResultsScreen() {
           >
             <Text style={styles.alternativeText}>Generate An Alternative List</Text>
           </TouchableOpacity>
-
-          {session && !savedToAccount && (
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={async () => {
-                const items = autoSave.data;
-                if (!items?.[0]) return;
-                await saveToAccount.mutateAsync(items[0]);
-                setSavedToAccount(true);
-              }}
-              disabled={saveToAccount.isPending}
-            >
-              <Text style={styles.saveButtonText}>
-                {saveToAccount.isPending ? 'Saving…' : 'Save to My Account'}
-              </Text>
-            </TouchableOpacity>
-          )}
-          {savedToAccount && (
-            <Text style={styles.savedConfirm}>Saved to your account</Text>
-          )}
 
           <TouchableOpacity
             style={styles.newScanButton}
@@ -255,6 +245,15 @@ export default function ResultsScreen() {
           setChosenModalWine(null);
         }}
       />
+
+      {sessionId && (
+        <RestaurantReviewModal
+          visible={restaurantReviewVisible}
+          sessionId={sessionId}
+          onClose={() => setRestaurantReviewVisible(false)}
+          onSaved={() => setRestaurantReviewVisible(false)}
+        />
+      )}
 
     </ScrollView>
   );
@@ -490,6 +489,20 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.70)',
     textAlign: 'center',
     lineHeight: 24,
+  },
+  restaurantButton: {
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 14,
+  },
+  restaurantButtonText: {
+    color: colors.text,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
   },
   alternativeButton: {
     marginHorizontal: spacing.md,
