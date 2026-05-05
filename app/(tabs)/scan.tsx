@@ -23,12 +23,8 @@ export default function ScanTab() {
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset } = useScanStore();
   const { preferences: savedPreferences } = usePreferences();
 
-  const [wineTypes, setWineTypes] = useState<WineType[]>(
-    savedPreferences?.wineTypes ?? []
-  );
-  const [styleProfiles, setStyleProfiles] = useState<string[]>(
-    savedPreferences?.styleProfiles ?? ['crisp-white']
-  );
+  const [wineTypes, setWineTypes] = useState<WineType[]>([]);
+  const [styleProfiles, setStyleProfiles] = useState<string[]>([]);
   const [budget, setBudget] = useState<number | null>(
     savedPreferences?.defaultBudget ?? null
   );
@@ -57,23 +53,19 @@ export default function ScanTab() {
       : `${styleProfiles.length} styles selected`
     : 'Any';
 
-  // Sync defaults from profile once loaded (React Query is async)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
-      setWineTypes(savedPreferences.wineTypes ?? []);
-      setStyleProfiles(savedPreferences.styleProfiles ?? ['crisp-white']);
       setBudget(savedPreferences.defaultBudget ?? null);
       setPrefsLoaded(true);
     }
   }, [savedPreferences]);
 
-  // Re-sync to profile defaults when user starts a new search
   useEffect(() => {
     if (needsReset) {
-      setWineTypes(savedPreferences?.wineTypes ?? []);
-      setStyleProfiles(savedPreferences?.styleProfiles ?? ['crisp-white']);
+      setWineTypes([]);
+      setStyleProfiles([]);
       setBudget(savedPreferences?.defaultBudget ?? null);
       setFoodPairing('');
       setTopScoringMode(false);
@@ -132,7 +124,7 @@ export default function ScanTab() {
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
         <Text style={styles.subtitle}>Set your preferences then scan or upload a wine list to receive deep AI generated wine recommendations.</Text>
-        <Text style={styles.profileNote}>Your search preferences will override your profile settings. If not set, your profile preferences will guide our recommendations.</Text>
+        <Text style={styles.profileNote}>Your profile preferences (regions, grapes, dietary) are always applied. Wine type and style reset to Any for each new scan.</Text>
       </View>
 
       <View style={styles.body}>
