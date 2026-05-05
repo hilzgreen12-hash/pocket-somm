@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
@@ -21,6 +21,8 @@ if (Platform.OS === 'android') {
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
 export default function ResultsScreen() {
+  const { fromHistory } = useLocalSearchParams<{ fromHistory?: string }>();
+  const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
   const { autoSave, saveToAccount } = useScanHistory();
   const { session } = useAuth();
@@ -88,6 +90,11 @@ export default function ResultsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
+        {isFromHistory && (
+          <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+            <Text style={styles.backLink}>Back</Text>
+          </TouchableOpacity>
+        )}
         <Text style={styles.heading}>Vinster{'\n'}Recommends</Text>
         {recommendation.topScoringMode && (
           <View style={styles.topScoringBanner}>
@@ -204,39 +211,43 @@ export default function ResultsScreen() {
         Scores are Vinster's estimates based on critical consensus from its training data.
       </Text>
 
-      <TouchableOpacity
-        style={styles.alternativeButton}
-        onPress={handleAlternativeList}
-      >
-        <Text style={styles.alternativeText}>Generate An Alternative List</Text>
-      </TouchableOpacity>
+      {!isFromHistory && (
+        <>
+          <TouchableOpacity
+            style={styles.alternativeButton}
+            onPress={handleAlternativeList}
+          >
+            <Text style={styles.alternativeText}>Generate An Alternative List</Text>
+          </TouchableOpacity>
 
-      {session && !savedToAccount && (
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={async () => {
-            const items = autoSave.data;
-            if (!items?.[0]) return;
-            await saveToAccount.mutateAsync(items[0]);
-            setSavedToAccount(true);
-          }}
-          disabled={saveToAccount.isPending}
-        >
-          <Text style={styles.saveButtonText}>
-            {saveToAccount.isPending ? 'Saving…' : 'Save to My Account'}
-          </Text>
-        </TouchableOpacity>
-      )}
-      {savedToAccount && (
-        <Text style={styles.savedConfirm}>Saved to your account</Text>
-      )}
+          {session && !savedToAccount && (
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={async () => {
+                const items = autoSave.data;
+                if (!items?.[0]) return;
+                await saveToAccount.mutateAsync(items[0]);
+                setSavedToAccount(true);
+              }}
+              disabled={saveToAccount.isPending}
+            >
+              <Text style={styles.saveButtonText}>
+                {saveToAccount.isPending ? 'Saving…' : 'Save to My Account'}
+              </Text>
+            </TouchableOpacity>
+          )}
+          {savedToAccount && (
+            <Text style={styles.savedConfirm}>Saved to your account</Text>
+          )}
 
-      <TouchableOpacity
-        style={styles.newScanButton}
-        onPress={() => { reset(); router.replace('/(tabs)/scan'); }}
-      >
-        <Text style={styles.newScanText}>Start Another Search</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.newScanButton}
+            onPress={() => { reset(); router.replace('/(tabs)/scan'); }}
+          >
+            <Text style={styles.newScanText}>Start Another Search</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       <ChosenWineModal
         wine={chosenModalWine}
@@ -263,6 +274,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.xl,
     alignItems: 'center',
+  },
+  backRow: {
+    alignSelf: 'flex-start',
+    marginBottom: spacing.sm,
+  },
+  backLink: {
+    fontSize: 16,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.textMuted,
   },
   heading: {
     fontFamily: 'CormorantGaramond_600SemiBold',

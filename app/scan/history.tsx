@@ -18,7 +18,7 @@ export default function ScanHistoryScreen() {
   function handleView(item: typeof history[0]) {
     setExtractedWines(item.extractedWines);
     setRecommendation(item.recommendation);
-    router.push('/scan/results');
+    router.push('/scan/results?fromHistory=true');
   }
 
   return (
