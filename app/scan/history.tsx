@@ -19,7 +19,10 @@ export default function ScanHistoryScreen() {
   function handleView(item: ScanArchiveItem) {
     setExtractedWines(item.extractedWines);
     setRecommendation(item.recommendation);
-    router.push(`/scan/results?fromHistory=true&sessionId=${item.id}`);
+    const params = new URLSearchParams({ fromHistory: 'true', sessionId: item.id });
+    if (item.restaurantName) params.set('restaurant', item.restaurantName);
+    if (item.city) params.set('city', item.city);
+    router.push(`/scan/results?${params.toString()}`);
   }
 
   return (

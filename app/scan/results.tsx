@@ -24,7 +24,7 @@ if (Platform.OS === 'android') {
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
 export default function ResultsScreen() {
-  const { fromHistory, sessionId } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string }>();
+  const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
   const { autoSave } = useScanHistory();
@@ -214,7 +214,7 @@ export default function ResultsScreen() {
                   }}
                 >
                   <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
-                    {chosenIndexes.has(i) ? '✓ Added to Your Chosen Wines' : 'Review This Wine'}
+                    {chosenIndexes.has(i) ? '✓ Added to Your Wine Archive' : 'Review This Wine'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -285,6 +285,8 @@ export default function ResultsScreen() {
       <ChosenWineModal
         wine={chosenModalWine}
         visible={chosenModalWine !== null}
+        initialRestaurantName={isFromHistory ? (historyRestaurant ?? null) : (restaurantName || null)}
+        initialCity={isFromHistory ? (historyCity ?? null) : (autoSave.data?.[0]?.city ?? null)}
         onClose={() => setChosenModalWine(null)}
         onSaved={() => {
           const idx = recommendation!.wines.indexOf(chosenModalWine!);

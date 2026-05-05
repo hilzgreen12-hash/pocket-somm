@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, ActivityIndicator, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import * as Location from 'expo-location';
+import { router } from 'expo-router';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { colors, spacing } from '../constants/theme';
@@ -12,72 +12,51 @@ import type { WineRecommendation } from '../types/wine';
 interface Props {
   wine: WineRecommendation | null;
   visible: boolean;
+  initialRestaurantName?: string | null;
+  initialCity?: string | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function ChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
+export function ChosenWineModal({ wine, visible, initialRestaurantName, initialCity, onClose, onSaved }: Props) {
   const { session } = useAuth();
   const { save } = useChosenWines();
 
   const [restaurant, setRestaurant] = useState('');
-  const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
-  const [lat, setLat] = useState<number | null>(null);
-  const [lng, setLng] = useState<number | null>(null);
   const [tastingNote, setTastingNote] = useState('');
+  const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
-  const [locating, setLocating] = useState(false);
+  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      setRestaurant('');
+      setRestaurant(initialRestaurantName ?? '');
+      setCity(initialCity ?? '');
       setTastingNote('');
+      setOtherObservations('');
       setUserScore(null);
-      getLocation();
+      setSaved(false);
     }
-  }, [visible]);
-
-  async function getLocation() {
-    setLocating(true);
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') return;
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setLat(pos.coords.latitude);
-      setLng(pos.coords.longitude);
-      const [geo] = await Location.reverseGeocodeAsync({
-        latitude: pos.coords.latitude,
-        longitude: pos.coords.longitude,
-      });
-      if (geo) {
-        const streetParts = [geo.streetNumber, geo.street].filter(Boolean);
-        setAddress(streetParts.join(' '));
-        setCity(geo.city ?? geo.subregion ?? geo.region ?? '');
-      }
-    } catch {
-      // location unavailable — user can fill manually
-    } finally {
-      setLocating(false);
-    }
-  }
+  }, [visible, initialRestaurantName, initialCity]);
 
   async function handleSave() {
     if (!wine || !session) return;
     await save.mutateAsync({
       wine,
       restaurantName: restaurant,
-      address,
       city,
-      latitude: lat,
-      longitude: lng,
       tastingNote,
+      otherObservations,
       userScore,
     });
+    setSaved(true);
     onSaved();
   }
 
   if (!wine) return null;
+
+  const wineName = wine.vintage ? `${wine.vintage} ${wine.name}` : wine.name;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -88,13 +67,12 @@ export function ChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
         <View style={styles.sheet}>
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
 
-            <Text style={styles.heading}>I Chose This</Text>
-            <Text style={styles.wineName}>{wine.name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
+            <Text style={styles.heading}>{wineName}</Text>
             <Text style={styles.wineProducer}>{wine.producer}{wine.region ? ` · ${wine.region}` : ''}</Text>
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Where did you order it?</Text>
+            <Text style={styles.sectionLabel}>Where did you drink it?</Text>
 
             <Text style={styles.fieldLabel}>Restaurant name</Text>
             <TextInput
@@ -104,18 +82,6 @@ export function ChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
               placeholder="e.g. The Clove Club"
               placeholderTextColor={colors.textMuted}
             />
-
-            <Text style={styles.fieldLabel}>Address</Text>
-            <View style={styles.inputRow}>
-              <TextInput
-                style={[styles.input, { flex: 1 }]}
-                value={address}
-                onChangeText={setAddress}
-                placeholder="Street address"
-                placeholderTextColor={colors.textMuted}
-              />
-              {locating && <ActivityIndicator size="small" color={colors.gold} style={{ marginLeft: 8 }} />}
-            </View>
 
             <Text style={styles.fieldLabel}>City</Text>
             <TextInput
@@ -133,10 +99,22 @@ export function ChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
               style={[styles.input, styles.noteInput]}
               value={tastingNote}
               onChangeText={setTastingNote}
-              placeholder="What did you think? Flavours, texture, finish…"
+              placeholder="Flavours, texture, finish…"
               placeholderTextColor={colors.textMuted}
               multiline
               numberOfLines={4}
+              textAlignVertical="top"
+            />
+
+            <Text style={styles.sectionLabel}>Other observations (optional)</Text>
+            <TextInput
+              style={[styles.input, styles.noteInput]}
+              value={otherObservations}
+              onChangeText={setOtherObservations}
+              placeholder="Value, food match, service, occasion…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={3}
               textAlignVertical="top"
             />
 
@@ -156,15 +134,24 @@ export function ChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
             />
             <Text style={styles.scoreHint}>out of 100</Text>
 
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSave}
-              disabled={save.isPending}
-            >
-              <Text style={styles.saveButtonText}>
-                {save.isPending ? 'Saving…' : 'Add to My Chosen Wines'}
-              </Text>
-            </TouchableOpacity>
+            {saved ? (
+              <View style={styles.savedRow}>
+                <Text style={styles.savedText}>Saved — </Text>
+                <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
+                  <Text style={styles.savedLink}>View Wine Archive</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSave}
+                disabled={save.isPending}
+              >
+                <Text style={styles.saveButtonText}>
+                  {save.isPending ? 'Saving…' : 'Add to Your Wine Archive'}
+                </Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -197,17 +184,11 @@ const styles = StyleSheet.create({
   },
   heading: {
     fontFamily: 'CormorantGaramond_700Bold',
-    fontSize: 28,
+    fontSize: 26,
     color: colors.text,
     textAlign: 'center',
-    letterSpacing: 1,
+    letterSpacing: 0.5,
     marginBottom: spacing.xs,
-  },
-  wineName: {
-    fontFamily: 'CormorantGaramond_700Bold',
-    fontSize: 18,
-    color: colors.text,
-    textAlign: 'center',
   },
   wineProducer: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
@@ -246,12 +227,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
   },
-  inputRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
   noteInput: {
-    minHeight: 90,
+    minHeight: 80,
     marginBottom: spacing.md,
   },
   scoreInput: {
@@ -262,6 +239,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginBottom: spacing.lg,
+  },
+  savedRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  savedText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+    color: colors.gold,
+  },
+  savedLink: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+    color: colors.gold,
+    textDecorationLine: 'underline',
   },
   saveButton: {
     borderWidth: 1,

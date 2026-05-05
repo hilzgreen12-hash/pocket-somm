@@ -4,16 +4,14 @@ import type { ChosenWine, WineRecommendation } from '../types/wine';
 export interface SaveChosenWineInput {
   wine: WineRecommendation;
   restaurantName: string;
-  address: string;
   city: string;
-  latitude: number | null;
-  longitude: number | null;
   tastingNote: string;
+  otherObservations: string;
   userScore: number | null;
 }
 
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<void> {
-  const { wine, restaurantName, address, city, latitude, longitude, tastingNote, userScore } = input;
+  const { wine, restaurantName, city, tastingNote, otherObservations, userScore } = input;
   await supabase.from('chosen_wines').insert({
     user_id: userId,
     wine_name: wine.name,
@@ -30,11 +28,9 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     drinking_window: wine.drinkingWindow,
     rarity_assessment: wine.rarityAssessment,
     restaurant_name: restaurantName || null,
-    address: address || null,
     city: city || null,
-    latitude,
-    longitude,
     tasting_note: tastingNote || null,
+    other_observations: otherObservations || null,
     user_score: userScore,
   });
 }

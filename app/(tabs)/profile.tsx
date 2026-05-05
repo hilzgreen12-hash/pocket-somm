@@ -47,7 +47,7 @@ export default function ProfileTab() {
             <Text style={styles.buttonText}>Your Wine Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/wines/chosen')}>
-            <Text style={styles.buttonText}>Your Chosen Wines</Text>
+            <Text style={styles.buttonText}>Your Wine Archive</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -61,7 +61,17 @@ export default function ProfileTab() {
             <Text style={styles.buttonText}>Your Recipe Profile</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/recipes/chosen')}>
-            <Text style={styles.buttonText}>Your Chosen Recipes</Text>
+            <Text style={styles.buttonText}>Your Recipe Archive</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/account')}>
+            <Text style={styles.buttonText}>Account Settings</Text>
           </TouchableOpacity>
         </View>
       </View>
