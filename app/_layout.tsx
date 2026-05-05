@@ -61,7 +61,6 @@ export default function RootLayout() {
             <Stack.Screen name="scan/extracting" />
             <Stack.Screen name="scan/preferences" />
             <Stack.Screen name="scan/results" />
-            <Stack.Screen name="scan/url" />
             <Stack.Screen name="label/camera" />
             <Stack.Screen name="label/confirm" />
             <Stack.Screen name="label/results" />

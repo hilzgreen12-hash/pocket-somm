@@ -20,21 +20,6 @@ If you cannot identify any wines, return: { "wines": [] }`;
 
 const IMAGE_SYSTEM_PROMPT = `You are a wine list parser. Extract every wine from the provided image of a restaurant wine list.\n\n${WINE_FIELDS}`;
 
-const URL_SYSTEM_PROMPT = `You are a wine list parser. Extract every wine from the provided text of a restaurant wine list.\n\n${WINE_FIELDS}`;
-
-function stripHtml(html: string): string {
-  return html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-}
-
 Deno.serve(async (req) => {
   if (!req.headers.get('Authorization')) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
@@ -42,55 +27,29 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { imageBase64, url } = body;
+    const { imageBase64 } = body;
 
-    if (!imageBase64 && !url) {
-      return new Response(JSON.stringify({ error: 'imageBase64 or url required' }), { status: 400 });
+    if (!imageBase64) {
+      return new Response(JSON.stringify({ error: 'imageBase64 required' }), { status: 400 });
     }
 
-    let response;
-
-    if (url) {
-      let parsedUrl: URL;
-      try { parsedUrl = new URL(url); } catch {
-        return new Response(JSON.stringify({ error: 'Invalid URL' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-      }
-      if (parsedUrl.protocol !== 'https:') {
-        return new Response(JSON.stringify({ error: 'Only https:// URLs are supported' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
-      }
-      // Fetch and strip the webpage
-      const pageRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (!pageRes.ok) throw new Error(`Failed to fetch URL: ${pageRes.status}`);
-      const html = await pageRes.text();
-      const pageText = stripHtml(html).slice(0, 12000); // cap to avoid token overflow
-
-      response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
-        system: URL_SYSTEM_PROMPT,
-        messages: [
-          { role: 'user', content: `Extract all wines from this wine list text. Return only JSON.\n\n${pageText}` },
-        ],
-      });
-    } else {
-      response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 4096,
-        system: IMAGE_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'image',
-                source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
-              },
-              { type: 'text', text: 'Extract all wines from this wine list. Return only JSON.' },
-            ],
-          },
-        ],
-      });
-    }
+    const response = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 4096,
+      system: IMAGE_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
+            },
+            { type: 'text', text: 'Extract all wines from this wine list. Return only JSON.' },
+          ],
+        },
+      ],
+    });
 
     const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
