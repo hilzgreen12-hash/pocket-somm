@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { recommendWines } from '../../src/services/recommender';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
 import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { RationaleBlock } from '../../src/components/results/RationaleBlock';
@@ -63,6 +64,17 @@ export default function ResultsScreen() {
   }, [recommendation]);
 
   if (!recommendation) return null;
+
+  if (isGenerating) {
+    return (
+      <SearchProgress
+        title="Finding your alternative picks…"
+        subtitle="Vinster needs up to 20 seconds"
+        body="Scoring a fresh selection by critic rating, vintage quality and value"
+        durationMs={20000}
+      />
+    );
+  }
 
   const noVintages = recommendation.wines.every((w) => !w.vintage);
 
@@ -195,13 +207,8 @@ export default function ResultsScreen() {
       <TouchableOpacity
         style={styles.alternativeButton}
         onPress={handleAlternativeList}
-        disabled={isGenerating}
       >
-        {isGenerating ? (
-          <ActivityIndicator size="small" color={colors.text} />
-        ) : (
-          <Text style={styles.alternativeText}>Generate An Alternative List</Text>
-        )}
+        <Text style={styles.alternativeText}>Generate An Alternative List</Text>
       </TouchableOpacity>
 
       {session && !savedToAccount && (
