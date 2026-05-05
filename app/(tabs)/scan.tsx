@@ -198,7 +198,7 @@ export default function ScanTab() {
         </View>
 
         <TouchableOpacity style={styles.historyButton} onPress={() => router.push('/scan/history')}>
-          <Text style={styles.historyButtonText}>View Previous Lists and Wine Recommendations</Text>
+          <Text style={styles.historyButtonText}>View Archive</Text>
         </TouchableOpacity>
 
       </View>
