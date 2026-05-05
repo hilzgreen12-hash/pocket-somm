@@ -58,7 +58,8 @@ export async function findFoodWinePairing(
   dish: string,
   mode: 'cellar' | 'general',
   cellarWines?: { id: string; wine_name: string; producer: string | null; region: string | null; vintage: string | null; grape_variety: string | null; drinking_window_status: string }[],
-  difficulty?: string
+  difficulty?: string,
+  userPreferences?: Record<string, unknown> | null,
 ): Promise<unknown> {
-  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty });
+  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty, userPreferences });
 }

@@ -55,6 +55,10 @@ export default function ChefResultsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+        <Text style={styles.backLink}>Back</Text>
+      </TouchableOpacity>
+
       <View style={styles.header}>
         <Text style={styles.producer}>{wine.producer}</Text>
         {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
@@ -75,6 +79,8 @@ export default function ChefResultsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm },
+  backLink: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
