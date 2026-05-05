@@ -40,16 +40,30 @@ export function useScanHistory() {
 
   const autoSave = useMutation({
     mutationFn: async ({ extractedWines, recommendation }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse }) => {
-      const existing = await readLocal();
+      const now = new Date().toISOString();
       const newItem: ScanHistoryItem = {
         id: Date.now().toString(),
-        savedAt: new Date().toISOString(),
+        savedAt: now,
         extractedWines,
         recommendation,
-        savedToAccount: false,
+        savedToAccount: !!session,
       };
+      const existing = await readLocal();
       const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
       await writeLocal(updated);
+
+      if (session) {
+        await supabase.from('scan_sessions').insert({
+          user_id: session.user.id,
+          captured_at: now,
+          extracted_wines: extractedWines,
+          recommendation,
+          restaurant_name: null,
+          image_path: null,
+          preferences_snapshot: null,
+        });
+      }
+
       return updated;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['scan-history'] }),

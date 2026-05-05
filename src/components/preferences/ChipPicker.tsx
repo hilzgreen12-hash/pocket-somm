@@ -12,7 +12,7 @@ interface Props {
   allOptionLabel?: string;
 }
 
-export function ChipPicker({ options, selected, onChange, activeColor = colors.burgundy, max, listMode, allOptionLabel }: Props) {
+export function ChipPicker({ options, selected, onChange, activeColor = colors.gold, max, listMode, allOptionLabel }: Props) {
   const [local, setLocal] = useState(selected);
 
   // Sync from parent when Supabase returns updated data

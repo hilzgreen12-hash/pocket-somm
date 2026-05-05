@@ -110,6 +110,10 @@ Return ONLY valid JSON in this exact format:
 Do not include markdown, explanation, or any text outside the JSON.`;
 
 Deno.serve(async (req) => {
+  if (!req.headers.get('Authorization')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+
   try {
     const {
       wines,
@@ -182,7 +186,7 @@ ${dislikedGrapesLine}
       ],
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
     // Extract JSON object from response regardless of surrounding text
     const match = text.match(/\{[\s\S]*\}/);

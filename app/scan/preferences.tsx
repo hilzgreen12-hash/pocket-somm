@@ -27,9 +27,14 @@ export default function PreferencesScreen() {
     try {
       const recommendation = await recommendWines({
         wines: extractedWines,
+        wineTypes: preferences?.wineTypes ?? [],
         styleProfiles,
         budget,
         foodPairing,
+        favouriteRegions: preferences?.favouriteRegions ?? [],
+        favouriteGrapes: preferences?.favouriteGrapes ?? [],
+        dislikedRegions: preferences?.dislikedRegions ?? [],
+        dislikedGrapes: preferences?.dislikedGrapes ?? [],
       });
       setRecommendation(recommendation);
       router.push('/scan/results');

@@ -19,7 +19,16 @@ export default function ChefConfirmScreen() {
   const [wineName, setWineName] = useState(wineDetails?.wineName ?? '');
   const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
   const [colour, setColour] = useState<'red' | 'white' | 'rosé' | 'sparkling' | null>(null);
+  const [dietaryNote, setDietaryNote] = useState('');
+  const [difficulty, setDifficulty] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const DIFFICULTY_OPTIONS = [
+    'Super Simple',
+    'Easy to Moderate',
+    'Challenging',
+    'Very Technical',
+  ];
 
   async function handleConfirm() {
     if (!producer.trim() || !region.trim()) {
@@ -43,6 +52,8 @@ export default function ChefConfirmScreen() {
         dietary: (preferences?.dietaryPreference as any) ?? null,
         allergens: (preferences?.allergens as any) ?? [],
         customAllergen: (preferences?.customAllergen as any) ?? '',
+        dietaryNote: dietaryNote.trim() || null,
+        difficulty: difficulty || null,
       };
       const pairings = await generatePairings(confirmed, filters);
       setPairings(pairings);
@@ -102,6 +113,32 @@ export default function ChefConfirmScreen() {
         ))}
       </View>
 
+      <View style={styles.sectionDivider} />
+
+      <Text style={styles.label}>Dietary restrictions or allergies (optional)</Text>
+      <TextInput
+        style={styles.input}
+        value={dietaryNote}
+        onChangeText={setDietaryNote}
+        placeholder="e.g. Nut allergy, dairy-free, no shellfish"
+        placeholderTextColor={colors.textMuted}
+      />
+
+      <Text style={styles.label}>Recipe difficulty</Text>
+      <View style={styles.difficultyGrid}>
+        {DIFFICULTY_OPTIONS.map((opt) => (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.difficultyBtn, difficulty === opt && styles.difficultyBtnActive]}
+            onPress={() => setDifficulty(difficulty === opt ? null : opt)}
+          >
+            <Text style={[styles.difficultyBtnText, difficulty === opt && styles.difficultyBtnTextActive]}>
+              {opt}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <TouchableOpacity style={[styles.button, loading && styles.buttonDisabled]} onPress={handleConfirm} disabled={loading}>
         <Text style={styles.buttonText}>{loading ? 'Crafting pairings…' : 'Get Pairings'}</Text>
       </TouchableOpacity>
@@ -131,6 +168,12 @@ const styles = StyleSheet.create({
   colourBtnActive: { borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.10)' },
   colourBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted },
   colourBtnTextActive: { color: '#FFFFFF' },
+  sectionDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
+  difficultyBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  difficultyBtnActive: { borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.10)' },
+  difficultyBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted },
+  difficultyBtnTextActive: { color: '#FFFFFF' },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },

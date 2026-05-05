@@ -25,9 +25,8 @@ function WineRow({ wine }: { wine: CellarWine }) {
   return (
     <TouchableOpacity style={styles.row} onPress={() => router.push(`/cellar/${wine.id}`)}>
       <View style={styles.rowMain}>
-        <Text style={styles.rowName} numberOfLines={1}>{wine.wine_name}</Text>
+        <Text style={styles.rowName} numberOfLines={1}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
         <Text style={styles.rowDetail} numberOfLines={1}>{wine.producer} · {wine.region}</Text>
-        <Text style={styles.rowVintage}>{wine.vintage ?? '—'}</Text>
       </View>
       <View style={styles.rowRight}>
         <Text style={[styles.rowStatus, { color: STATUS_COLORS[wine.drinking_window_status] ?? colors.textMuted }]}>

@@ -119,6 +119,7 @@ export interface CellarWine {
   grape_variety: string | null;
   label_image_path: string | null;
   user_notes: string | null;
+  is_wishlist: boolean;
   created_at: string;
   updated_at: string;
 }

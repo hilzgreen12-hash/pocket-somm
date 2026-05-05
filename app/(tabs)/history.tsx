@@ -10,7 +10,7 @@ import type { ScanSession } from '../../src/types/scan';
 export default function HistoryTab() {
   const { session } = useAuth();
 
-  const { data: sessions, isLoading } = useQuery({
+  const { data: sessions, isLoading, isError } = useQuery({
     queryKey: ['scan-sessions', session?.user.id],
     enabled: !!session,
     queryFn: async () => {
@@ -44,6 +44,15 @@ export default function HistoryTab() {
     );
   }
 
+  if (isError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyTitle}>Couldn't load history</Text>
+        <Text style={styles.emptyBody}>Check your connection and try again.</Text>
+      </View>
+    );
+  }
+
   if (!sessions?.length) {
     return (
       <View style={styles.center}>
@@ -61,17 +70,17 @@ export default function HistoryTab() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
         renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card}>
+          <View style={styles.card}>
             <Text style={styles.cardDate}>
               {format(new Date(item.captured_at), 'd MMM yyyy · h:mm a')}
             </Text>
             {item.restaurant_name && (
               <Text style={styles.cardRestaurant}>{item.restaurant_name}</Text>
             )}
-            {item.recommendation?.topPick && (
-              <Text style={styles.cardWine}>{item.recommendation.topPick.name}</Text>
+            {item.recommendation?.wines?.[0] && (
+              <Text style={styles.cardWine}>{item.recommendation.wines[0].name}</Text>
             )}
-          </TouchableOpacity>
+          </View>
         )}
       />
     </View>
@@ -111,7 +120,7 @@ const styles = StyleSheet.create({
   },
   cardWine: {
     fontSize: 14,
-    color: colors.burgundy,
+    color: '#FFFFFF',
     marginTop: 2,
   },
   center: {

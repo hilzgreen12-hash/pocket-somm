@@ -28,6 +28,7 @@ export default function CameraScreen() {
 
   async function handleCapture() {
     if (!cameraRef.current) return;
+    try {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     const photo = await cameraRef.current.takePictureAsync({
       base64: false,
@@ -96,6 +97,9 @@ export default function CameraScreen() {
 
     setImage(uri);
     router.push('/scan/preview');
+    } catch (err) {
+      console.error('[Camera] Capture failed:', err);
+    }
   }
 
   return (

@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import * as ImagePicker from 'expo-image-picker';
@@ -31,41 +31,60 @@ export default function ChefTab() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop }]}>
-      <View style={styles.hero}>
-        <Text style={styles.appName}>Chef</Text>
-        <Text style={styles.subtitle}>Choose a bottle, scan the label, and receive deep AI generated, top Chef inspired recipe inspiration.</Text>
-        <Text style={styles.subtitle}>Tell us what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.</Text>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+
+      <Text style={styles.appName}>Chef</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>
+          Whether you've got a recipe in mind and aren't sure what to drink, or you have chosen your bottle first, let us recommend your pairing.
+        </Text>
+        <Text style={styles.sectionDesc}>
+          Set your food preferences in your profile to ensure Vinster's recommendations are tailored to your tastes and dietary concerns.
+        </Text>
       </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/chef/find-pairing')}>
-          <Text style={styles.secondaryButtonText}>Find a Wine Pairing</Text>
-        </TouchableOpacity>
+      <View style={styles.divider} />
 
-        <TouchableOpacity style={styles.primaryButton} onPress={() => router.push('/chef/camera')}>
-          <Text style={styles.primaryButtonText}>Scan Wine Label</Text>
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>
+          Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
+        </Text>
+        <TouchableOpacity style={styles.button} onPress={() => router.push('/chef/find-pairing')}>
+          <Text style={styles.buttonText}>Find a Wine Pairing</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity style={styles.secondaryButton} onPress={handleUpload}>
-          <Text style={styles.secondaryButtonText}>Upload Screenshot / Photo</Text>
-        </TouchableOpacity>
-
       </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>
+          Choose a bottle then scan or upload a photo of the label to receive deep AI generated, top chef inspired recipe suggestions.
+        </Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/camera')}>
+            <Text style={styles.buttonText}>Scan Wine Label</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={handleUpload}>
+            <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <TabFooter />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
-  hero: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  brandName: { fontSize: 22, fontFamily: 'CormorantGaramond_400Regular_Italic', color: 'rgba(255,255,255,0.50)', letterSpacing: 1, marginBottom: spacing.xl },
-  appName: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5 },
-  subtitle: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, textAlign: 'center' },
-  actions: { gap: spacing.sm },
-  primaryButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  primaryButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
-  secondaryButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  secondaryButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  container: { flex: 1, backgroundColor: colors.background },
+  appName: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
+  profileNote: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  buttonRow: { flexDirection: 'row', gap: spacing.xs },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
 });

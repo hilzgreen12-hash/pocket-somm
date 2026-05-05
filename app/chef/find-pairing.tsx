@@ -15,8 +15,11 @@ export default function FindPairingScreen() {
 
   const [dish, setDishLocal] = useState('');
   const [flavours, setFlavours] = useState('');
+  const [difficulty, setDifficulty] = useState<string | null>(null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
+
+  const DIFFICULTY_OPTIONS = ['Super Simple', 'Easy to Moderate', 'Challenging', 'Very Technical'];
 
   async function handleFind() {
     if (!dish.trim()) {
@@ -44,7 +47,7 @@ export default function FindPairingScreen() {
         drinking_window_status: w.drinking_window_status,
       }));
 
-      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined) as any;
+      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined, difficulty ?? undefined) as any;
 
       if (mode === 'cellar') {
         setCellarResult(result.recommendations as CellarRecommendation[]);
@@ -104,6 +107,19 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
+      <Text style={styles.label}>Recipe difficulty</Text>
+      <View style={styles.difficultyGrid}>
+        {DIFFICULTY_OPTIONS.map((opt) => (
+          <TouchableOpacity
+            key={opt}
+            style={[styles.difficultyBtn, difficulty === opt && styles.difficultyBtnActive]}
+            onPress={() => setDifficulty(difficulty === opt ? null : opt)}
+          >
+            <Text style={[styles.difficultyBtnText, difficulty === opt && styles.difficultyBtnTextActive]}>{opt}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
       <Text style={styles.label}>Where should Vinster look?</Text>
       <View style={styles.toggleRow}>
         <TouchableOpacity
@@ -145,13 +161,18 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
   label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm, textAlign: 'center' },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 17, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
+  difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%' },
+  difficultyBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', width: '48.5%' },
+  difficultyBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
+  difficultyBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted },
+  difficultyBtnTextActive: { color: colors.gold },
   toggleRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl, width: '100%' },
   toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
-  toggleBtnActive: { borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.08)' },
+  toggleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.08)' },
   toggleText: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
-  toggleTextActive: { color: '#FFFFFF' },
+  toggleTextActive: { color: colors.gold },
   toggleSub: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
-  toggleSubActive: { color: colors.burgundy },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  toggleSubActive: { color: colors.gold },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
+  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
 });

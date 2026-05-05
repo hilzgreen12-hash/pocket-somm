@@ -57,7 +57,8 @@ export async function importCellarDocument(base64Image: string): Promise<{ wines
 export async function findFoodWinePairing(
   dish: string,
   mode: 'cellar' | 'general',
-  cellarWines?: { id: string; wine_name: string; producer: string | null; region: string | null; vintage: string | null; grape_variety: string | null; drinking_window_status: string }[]
+  cellarWines?: { id: string; wine_name: string; producer: string | null; region: string | null; vintage: string | null; grape_variety: string | null; drinking_window_status: string }[],
+  difficulty?: string
 ): Promise<unknown> {
-  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines });
+  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty });
 }

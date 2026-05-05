@@ -72,6 +72,6 @@ const styles = StyleSheet.create({
   },
   checkmark: {
     fontSize: 16,
-    color: colors.burgundy,
+    color: colors.gold,
   },
 });

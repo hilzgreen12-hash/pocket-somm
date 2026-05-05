@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, useWindowDimensions } from 'react-native';
 import { useState } from 'react';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -61,58 +61,85 @@ export default function CellarTab() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop }]}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+
       {importing && (
         <View style={styles.importingOverlay}>
           <ActivityIndicator size="large" color={colors.gold} />
           <Text style={styles.importingText}>Reading your cellar document…</Text>
         </View>
       )}
-      <View style={styles.hero}>
-        <Text style={styles.title}>Cellar</Text>
-        <Text style={styles.subtitle}>Scan or upload a wine label to add wines to your cellar, track your collection, and gain insight into your favourite bottles.</Text>
+
+      <Text style={styles.title}>Cellar</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>View, manage and share your cellar using the below functions.</Text>
       </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.viewButton} onPress={() => requireAuth(session, () => router.push('/cellar/list'))}>
-          <Text style={styles.viewButtonText}>View Cellar List</Text>
-        </TouchableOpacity>
+      <View style={styles.divider} />
 
-        <TouchableOpacity style={styles.viewButton} onPress={() => requireAuth(session, () => router.push('/cellar/racks'))}>
-          <Text style={styles.viewButtonText}>View Live Cellar</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.primaryButton} onPress={() => requireAuth(session, () => router.push('/label/camera'))}>
-          <Text style={styles.primaryButtonText}>Scan Wine Label</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => requireAuth(session, handleUpload)}>
-          <Text style={styles.secondaryButtonText}>Upload Screenshot / Photo</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.secondaryButton} onPress={() => requireAuth(session, handleImportDocument)}>
-          <Text style={styles.secondaryButtonText}>Import Cellar Document</Text>
-        </TouchableOpacity>
-
+      {/* Section 1 — Label scanning */}
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>
+          Scan a label or upload a label photo to receive wine insights and/or to add a wine to your cellar or wish list.
+        </Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/label/camera'))}>
+            <Text style={styles.buttonText}>Scan Wine Label</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, handleUpload)}>
+            <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      <View style={styles.divider} />
+
+      {/* Section 2 — Cellar viewing */}
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>
+          View and edit your cellar in list format or in your virtual wine rack. Create and edit wine racks to reflect your home storage so you never lose a bottle.
+        </Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/cellar/list'))}>
+            <Text style={styles.buttonText}>View Cellar List</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/cellar/racks'))}>
+            <Text style={styles.buttonText}>View Live Cellar</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={styles.button} onPress={() => requireAuth(session, () => router.push('/cellar/wishlist'))}>
+          <Text style={styles.buttonText}>View Wish List</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Section 3 — Import */}
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>
+          Import your cellar documents so that Vinster can add wines to your collection.
+        </Text>
+        <TouchableOpacity style={styles.button} onPress={() => requireAuth(session, handleImportDocument)}>
+          <Text style={styles.buttonText}>Import Cellar Document</Text>
+        </TouchableOpacity>
+      </View>
+
       <TabFooter />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
-  hero: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  brandName: { fontSize: 22, fontFamily: 'CormorantGaramond_400Regular_Italic', color: 'rgba(255,255,255,0.50)', letterSpacing: 1, marginBottom: spacing.xl },
-  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5 },
-  subtitle: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, textAlign: 'center' },
-  actions: { gap: spacing.sm },
+  container: { flex: 1, backgroundColor: colors.background },
   importingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 10, gap: spacing.lg },
   importingText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl },
-  viewButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  viewButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
-  primaryButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  primaryButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
-  secondaryButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  secondaryButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  buttonRow: { flexDirection: 'row', gap: spacing.xs },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
 });

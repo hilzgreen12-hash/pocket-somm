@@ -187,7 +187,7 @@ const styles = StyleSheet.create({
   heading: {
     fontSize: 26,
     fontFamily: 'CormorantGaramond_700Bold',
-    color: colors.burgundy,
+    color: '#FFFFFF',
     marginBottom: spacing.sm,
   },
   hint: {

@@ -7,7 +7,7 @@ export function usePreferences() {
   const { session } = useAuth();
   const queryClient = useQueryClient();
 
-  const { data: preferences } = useQuery({
+  const { data: preferences, isLoading: prefsLoading, isError: prefsError } = useQuery({
     queryKey: ['preferences', session?.user.id],
     enabled: !!session,
     queryFn: async () => {
@@ -17,8 +17,8 @@ export function usePreferences() {
         .eq('user_id', session!.user.id)
         .single();
       if (error) {
-        console.warn('[Preferences] Query error:', error.message);
-        return null;
+        if (error.code === 'PGRST116') return null; // no profile row yet — new user
+        throw new Error(error.message); // real error — surface to caller
       }
       return {
         wineTypes: data.default_wine_types ?? [],
@@ -37,7 +37,7 @@ export function usePreferences() {
   const mutation = useMutation({
     mutationFn: async (updates: Partial<UserPreferences>) => {
       if (!session) return;
-      await supabase.from('profiles').upsert({
+      const { error } = await supabase.from('profiles').upsert({
         user_id: session.user.id,
         ...(updates.wineTypes !== undefined && { default_wine_types: updates.wineTypes }),
         ...(updates.styleProfiles !== undefined && { style_preferences: updates.styleProfiles }),
@@ -49,6 +49,7 @@ export function usePreferences() {
         ...(updates.dietaryNeeds !== undefined && { dietary_needs: updates.dietaryNeeds }),
         ...(updates.allergyRisks !== undefined && { allergy_risks: updates.allergyRisks }),
       });
+      if (error) throw new Error(error.message);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['preferences'] }),
     onError: (err) => console.error('[Preferences] Save error:', err),
@@ -58,5 +59,7 @@ export function usePreferences() {
     preferences,
     updatePreferences: mutation.mutate,
     isSaving: mutation.isPending,
+    prefsLoading,
+    prefsError,
   };
 }
