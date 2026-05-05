@@ -51,7 +51,7 @@ export default function ChosenWinesScreen() {
                 {wine.user_score != null && (
                   <View style={styles.scoreBadge}>
                     <Text style={styles.scoreValue}>{wine.user_score}</Text>
-                    <Text style={styles.scoreMax}>/10</Text>
+                    <Text style={styles.scoreMax}>/100</Text>
                   </View>
                 )}
               </View>
