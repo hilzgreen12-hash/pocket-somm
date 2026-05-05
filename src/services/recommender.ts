@@ -14,6 +14,8 @@ interface RecommendInput {
   dislikedGrapes: string[];
   excludeWines?: string[];
   topScoringMode?: boolean;
+  profileWineTypes?: string[];
+  profileStyleProfiles?: string[];
 }
 
 const VintageAssessmentSchema = z.object({
@@ -57,27 +59,11 @@ const RecommendationResponseSchema = z.object({
   topScoringMode: z.boolean().optional(),
 });
 
-function hasDuplicateGrapes(wines: RecommendationResponse['wines']): boolean {
-  const grapes = wines
-    .map((w) => w.grape?.split('/')[0].trim().toLowerCase())
-    .filter(Boolean) as string[];
-  return new Set(grapes).size < grapes.length;
-}
-
 export async function recommendWines(input: RecommendInput): Promise<RecommendationResponse> {
   const raw = await callRecommend(input);
   const parsed = RecommendationResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error('Could not parse recommendation response.');
   }
-
-  // If duplicate grape varieties returned, retry once with a stricter instruction
-  if (hasDuplicateGrapes(parsed.data.wines)) {
-    console.warn('[Recommend] Duplicate grapes detected — retrying with strict diversity prompt');
-    const raw2 = await callRecommend({ ...input, _strictDiversity: true });
-    const parsed2 = RecommendationResponseSchema.safeParse(raw2);
-    if (parsed2.success) return parsed2.data;
-  }
-
   return parsed.data;
 }

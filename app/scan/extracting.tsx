@@ -112,6 +112,8 @@ export default function ExtractingScreen() {
         favouriteGrapes: preferences.favouriteGrapes,
         dislikedRegions: preferences.dislikedRegions,
         dislikedGrapes: preferences.dislikedGrapes,
+        profileWineTypes: preferences.profileWineTypes,
+        profileStyleProfiles: preferences.profileStyleProfiles,
       });
 
       if (!token.active) return;
