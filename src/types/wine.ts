@@ -189,11 +189,9 @@ export interface ChosenWine {
   drinking_window: DrinkingWindow | null;
   rarity_assessment: RarityAssessment | null;
   restaurant_name: string | null;
-  address: string | null;
   city: string | null;
-  latitude: number | null;
-  longitude: number | null;
   tasting_note: string | null;
+  other_observations: string | null;
   user_score: number | null;
 }
 

@@ -9,7 +9,7 @@ function formatDate(iso: string) {
 }
 
 function locationLine(wine: ChosenWine): string {
-  const parts = [wine.restaurant_name, wine.address, wine.city].filter(Boolean);
+  const parts = [wine.restaurant_name, wine.city].filter(Boolean);
   return parts.join(', ');
 }
 
@@ -22,7 +22,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Chosen Wines</Text>
+        <Text style={styles.title}>Your Wine Archive</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -30,7 +30,7 @@ export default function ChosenWinesScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>
-            When you order a wine from a Vinster recommendation, tap "I ordered this" to record it here — with your tasting notes, score, and where you drank it.
+            When you choose a wine from a Vinster recommendation, tap "Review This Wine" to record it here — with your tasting notes, score, and where you drank it.
           </Text>
         </View>
       ) : (
@@ -41,7 +41,7 @@ export default function ChosenWinesScreen() {
               <View style={styles.cardTop}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.wineName}>
-                    {wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}
+                    {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
                   </Text>
                   <Text style={styles.wineProducer}>
                     {wine.producer}{wine.region ? ` · ${wine.region}` : ''}
@@ -65,6 +65,13 @@ export default function ChosenWinesScreen() {
                 <View style={styles.noteBlock}>
                   <Text style={styles.noteLabel}>Tasting note</Text>
                   <Text style={styles.noteText}>{wine.tasting_note}</Text>
+                </View>
+              ) : null}
+
+              {wine.other_observations ? (
+                <View style={[styles.noteBlock, { borderLeftColor: colors.border }]}>
+                  <Text style={[styles.noteLabel, { color: colors.textMuted }]}>Other observations</Text>
+                  <Text style={styles.noteText}>{wine.other_observations}</Text>
                 </View>
               ) : null}
 

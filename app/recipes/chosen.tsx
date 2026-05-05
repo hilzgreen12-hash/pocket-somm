@@ -9,7 +9,7 @@ export default function ChosenRecipesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Chosen Recipes</Text>
+        <Text style={styles.title}>Your Recipe Archive</Text>
         <View style={{ width: 40 }} />
       </View>
 
