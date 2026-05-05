@@ -56,10 +56,13 @@ export default function ResultsScreen() {
     }
   }
 
-  if (!recommendation) {
-    router.replace('/(tabs)/scan');
-    return null;
-  }
+  useEffect(() => {
+    if (!recommendation) {
+      router.replace('/(tabs)/scan');
+    }
+  }, [recommendation]);
+
+  if (!recommendation) return null;
 
   const noVintages = recommendation.wines.every((w) => !w.vintage);
 

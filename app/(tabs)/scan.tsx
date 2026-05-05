@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Switch } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { TabFooter } from '../../src/components/TabFooter';
 
 if (Platform.OS === 'android') {
@@ -59,6 +59,7 @@ export default function ScanTab() {
 
   // Sync defaults from profile once loaded (React Query is async)
   const [prefsLoaded, setPrefsLoaded] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
       setWineTypes(savedPreferences.wineTypes ?? []);
@@ -100,20 +101,28 @@ export default function ScanTab() {
   }
 
   async function handleScreenshot() {
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      quality: 1,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      setPreferences(buildPreferences());
-      if (result.assets.length === 1) {
-        setImage(result.assets[0].uri);
-        router.push('/scan/preview');
-      } else {
-        setImageUris(result.assets.map((a) => a.uri));
-        router.push('/scan/extracting');
+    if (isUploading) return;
+    setIsUploading(true);
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true,
+        quality: 1,
+      });
+      if (!result.canceled && result.assets.length > 0) {
+        setPreferences(buildPreferences());
+        if (result.assets.length === 1) {
+          setImage(result.assets[0].uri);
+          router.push('/scan/preview');
+        } else {
+          setImageUris(result.assets.map((a) => a.uri));
+          router.push('/scan/extracting');
+        }
       }
+    } catch (err) {
+      console.error('[Scan] Image picker failed:', err);
+    } finally {
+      setIsUploading(false);
     }
   }
 
@@ -123,10 +132,8 @@ export default function ScanTab() {
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
         <Text style={styles.subtitle}>Set your preferences then scan or upload a wine list to receive deep AI generated wine recommendations.</Text>
-        <Text style={styles.profileNote}>Your profile settings will be used in our recommendations.</Text>
+        <Text style={styles.profileNote}>Your search preferences will override your profile settings. If not set, your profile preferences will guide our recommendations.</Text>
       </View>
-
-      <View style={styles.divider} />
 
       <View style={styles.body}>
 
@@ -169,38 +176,35 @@ export default function ScanTab() {
           </View>
         </View>
 
-        <View style={[styles.section, { alignItems: 'center' }]}>
-          <Text style={styles.question}>Budget?</Text>
-          <BudgetSlider value={budget} onChange={setBudget} />
-        </View>
-
-        <View style={styles.divider} />
-
-        <View style={styles.toggleRow}>
-          <View style={styles.toggleLeft}>
-            <Text style={styles.toggleLabel}>Top Scoring Wines</Text>
-            <Text style={styles.toggleSub}>Ignore all preferences — show the 3 highest-rated wines on the list</Text>
+        <View style={styles.section}>
+          <View style={styles.bubbleWrap}>
+            <Text style={styles.question}>Budget?</Text>
+            <BudgetSlider value={budget} onChange={setBudget} />
           </View>
-          <Switch
-            value={topScoringMode}
-            onValueChange={setTopScoringMode}
-            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
-            thumbColor="#FFFFFF"
-          />
         </View>
 
-        <View style={styles.divider} />
-
-        <TouchableOpacity style={styles.scanButton} onPress={handleScan}>
-          <Text style={styles.scanButtonText}>Scan Wine List</Text>
+        <TouchableOpacity
+          style={[styles.accordionRow, topScoringMode && styles.accordionRowActive]}
+          onPress={() => setTopScoringMode((v) => !v)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.accordionLeft}>
+            <Text style={[styles.question, topScoringMode && styles.questionActive]}>Top Scoring Wines</Text>
+            <Text style={styles.selectionSummary}>Ignore all preferences — show the 3 highest-rated wines on the list</Text>
+          </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.uploadButton} onPress={handleScreenshot}>
-          <Text style={styles.uploadButtonText}>Upload Screenshot / Photo</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>
+            <Text style={styles.buttonHalfText}>Scan Wine List</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
+            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Screenshot / Photo'}</Text>
+          </TouchableOpacity>
+        </View>
 
         <TouchableOpacity style={styles.historyButton} onPress={() => router.push('/scan/history')}>
-          <Text style={styles.historyButtonText}>View Previous Lists / Recco's</Text>
+          <Text style={styles.historyButtonText}>View Previous Lists and Wine Recommendations</Text>
         </TouchableOpacity>
 
       </View>
@@ -235,14 +239,22 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 18,
-    color: colors.textMuted,
+    fontSize: 16,
+    color: '#FFFFFF',
     marginTop: spacing.xs,
     textAlign: 'center',
+    lineHeight: 24,
   },
   divider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.12)',
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    marginBottom: spacing.lg,
+  },
+  goldDivider: {
+    height: 1,
+    backgroundColor: colors.gold,
     marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
     marginBottom: spacing.lg,
@@ -264,6 +276,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginBottom: 4,
   },
+  accordionRowActive: {
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(212,176,96,0.08)',
+  },
   accordionLeft: {
     flex: 1,
     alignItems: 'center',
@@ -278,6 +294,9 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#FFFFFF',
     textAlign: 'center',
+  },
+  questionActive: {
+    color: colors.gold,
   },
   selectionSummary: {
     fontFamily: 'CormorantGaramond_600SemiBold',
@@ -297,70 +316,46 @@ const styles = StyleSheet.create({
   pickerWrap: {
     marginTop: spacing.sm,
   },
-  scanButton: {
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: spacing.md,
-    alignItems: 'center',
+  buttonRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
     marginTop: spacing.sm,
   },
-  scanButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    color: '#FFFFFF',
-    fontSize: 15,
-  },
-  uploadButton: {
+  buttonHalf: {
+    flex: 1,
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: colors.gold,
     borderRadius: 14,
-    padding: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
-    marginTop: spacing.sm,
   },
-  uploadButtonText: {
+  buttonHalfText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    color: '#FFFFFF',
-    fontSize: 15,
+    color: colors.gold,
+    fontSize: 14,
+    textAlign: 'center',
   },
   historyButton: {
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 14,
+    padding: spacing.md,
     alignItems: 'center',
-    marginTop: spacing.lg,
-    marginBottom: spacing.sm,
+    marginTop: spacing.sm,
   },
   historyButtonText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    color: colors.textMuted,
+    color: colors.gold,
     fontSize: 14,
-    textDecorationLine: 'underline',
+    textAlign: 'center',
   },
   profileNote: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.35)',
-    marginTop: spacing.sm,
-    textAlign: 'center',
-  },
-  toggleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: spacing.sm,
-    gap: spacing.md,
-  },
-  toggleLeft: {
-    flex: 1,
-  },
-  toggleLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 15,
+    fontSize: 16,
     color: '#FFFFFF',
-  },
-  toggleSub: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 13,
-    color: 'rgba(255,255,255,0.45)',
-    marginTop: 2,
-    lineHeight: 18,
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    lineHeight: 24,
   },
 });

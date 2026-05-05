@@ -1,28 +1,40 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Alert, ActivityIndicator, Switch } from 'react-native';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
 import { supabase } from '../src/api/supabase';
 import { colors, spacing } from '../src/constants/theme';
 
-const PREMIUM_FEATURES = [
-  'Unlimited wine list scans',
-  'Full cellar management & tracking',
-  'Chef recipe pairings',
-  'Priority AI recommendations',
-  'Exclusive vintage & critic reports',
-];
-
 export default function AccountScreen() {
   const { session } = useAuth();
   const [emailChangeOpen, setEmailChangeOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
+  const [usernameOpen, setUsernameOpen] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [usernameSaving, setUsernameSaving] = useState(false);
+
+  const currentUsername = session?.user.user_metadata?.display_name ?? '—';
+  const [notifyWindow, setNotifyWindow] = useState<boolean>(
+    session?.user.user_metadata?.notify_drinking_window ?? false
+  );
+  const [notifyDecline, setNotifyDecline] = useState<boolean>(
+    session?.user.user_metadata?.notify_decline ?? false
+  );
+
+  async function updateNotifySetting(key: string, value: boolean) {
+    await supabase.auth.updateUser({ data: { [key]: value } });
+  }
 
   function toggleEmailChange() {
     setEmailChangeOpen((v) => !v);
     setNewEmail('');
+  }
+
+  function toggleUsernameChange() {
+    setUsernameOpen((v) => !v);
+    setNewUsername(currentUsername);
   }
 
   async function handleEmailChange() {
@@ -39,16 +51,51 @@ export default function AccountScreen() {
     } else {
       setEmailChangeOpen(false);
       setNewEmail('');
-      Alert.alert(
-        'Check both inboxes',
-        'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.',
-      );
+      Alert.alert('Check both inboxes', 'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.');
+    }
+  }
+
+  async function handleUsernameChange() {
+    if (!newUsername.trim()) return;
+    setUsernameSaving(true);
+    const { error } = await supabase.auth.updateUser({
+      data: { display_name: newUsername.trim() },
+    });
+    setUsernameSaving(false);
+    if (error) {
+      Alert.alert('Unable to update username', error.message);
+    } else {
+      setUsernameOpen(false);
+      setNewUsername('');
     }
   }
 
   async function handleSignOut() {
     await supabase.auth.signOut();
     router.replace('/(auth)/sign-in');
+  }
+
+  async function handleDeleteAccount() {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your data including your cellar, preferences and chosen wines. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: async () => {
+            const { error } = await supabase.functions.invoke('delete-account');
+            if (error) {
+              Alert.alert('Error', 'Could not delete your account. Please try again or contact support.');
+            } else {
+              await supabase.auth.signOut();
+              router.replace('/(auth)/sign-in');
+            }
+          },
+        },
+      ],
+    );
   }
 
   return (
@@ -59,15 +106,52 @@ export default function AccountScreen() {
 
       <Text style={styles.heading}>Account</Text>
 
+      {/* Username */}
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Username</Text>
+        <Text style={styles.valueText}>{currentUsername}</Text>
+        {!usernameOpen ? (
+          <TouchableOpacity onPress={toggleUsernameChange} style={styles.changeButton}>
+            <Text style={styles.changeLink}>Change username</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.changeWrap}>
+            <TextInput
+              style={styles.input}
+              placeholder="New username"
+              placeholderTextColor={colors.textMuted}
+              value={newUsername}
+              onChangeText={setNewUsername}
+              autoCapitalize="words"
+              autoFocus
+            />
+            <View style={styles.changeRow}>
+              <TouchableOpacity onPress={toggleUsernameChange}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmButton} onPress={handleUsernameChange} disabled={usernameSaving}>
+                {usernameSaving
+                  ? <ActivityIndicator color={colors.background} size="small" />
+                  : <Text style={styles.confirmButtonText}>Save</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Email */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Email</Text>
-        <Text style={styles.emailText}>{session?.user.email}</Text>
+        <Text style={styles.valueText}>{session?.user.email}</Text>
         {!emailChangeOpen ? (
-          <TouchableOpacity onPress={toggleEmailChange} style={styles.changeEmailButton}>
+          <TouchableOpacity onPress={toggleEmailChange} style={styles.changeButton}>
             <Text style={styles.changeLink}>Change email address</Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.emailChangeWrap}>
+          <View style={styles.changeWrap}>
             <TextInput
               style={styles.input}
               placeholder="New email address"
@@ -78,7 +162,7 @@ export default function AccountScreen() {
               keyboardType="email-address"
               autoFocus
             />
-            <View style={styles.emailChangeRow}>
+            <View style={styles.changeRow}>
               <TouchableOpacity onPress={toggleEmailChange}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -95,32 +179,49 @@ export default function AccountScreen() {
 
       <View style={styles.divider} />
 
+      {/* Early access message */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Plan</Text>
-        <View style={styles.planRow}>
-          <Text style={styles.planName}>Free</Text>
-          <View style={styles.planBadge}>
-            <Text style={styles.planBadgeText}>CURRENT PLAN</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.upgradeCard}>
-        <Text style={styles.upgradeHeading}>Vinster Premium</Text>
-        <Text style={styles.upgradeBody}>Unlock the full Vinster experience.</Text>
-        {PREMIUM_FEATURES.map((f) => (
-          <Text key={f} style={styles.featureItem}>· {f}</Text>
-        ))}
-        <TouchableOpacity
-          style={styles.upgradeButton}
-          onPress={() => Alert.alert('Coming Soon', 'Premium subscriptions are coming soon. We\'ll notify you when they launch.')}
-        >
-          <Text style={styles.upgradeButtonText}>Upgrade to Premium</Text>
-        </TouchableOpacity>
+        <Text style={styles.earlyAccessText}>You're one of the first 10,000 users — thank you for being here! Your subscription is on us.</Text>
       </View>
 
       <View style={styles.divider} />
 
+      {/* Account Settings */}
+      <View style={styles.section}>
+        <Text style={styles.settingsHeading}>Your Account Settings</Text>
+
+        <View style={styles.settingRow}>
+          <Text style={styles.settingLabel}>Email me when my wines are approaching their drinking windows</Text>
+          <Switch
+            value={notifyWindow}
+            onValueChange={(v) => {
+              setNotifyWindow(v);
+              updateNotifySetting('notify_drinking_window', v);
+            }}
+            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+
+        <View style={styles.settingDivider} />
+
+        <View style={styles.settingRow}>
+          <Text style={styles.settingLabel}>Email me when my wines are approaching decline</Text>
+          <Switch
+            value={notifyDecline}
+            onValueChange={(v) => {
+              setNotifyDecline(v);
+              updateNotifySetting('notify_decline', v);
+            }}
+            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Sign Out */}
       <TouchableOpacity
         style={styles.signOutButton}
         onPress={() =>
@@ -132,6 +233,12 @@ export default function AccountScreen() {
       >
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
+
+      {/* Delete Account */}
+      <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
+        <Text style={styles.deleteText}>Delete Account</Text>
+      </TouchableOpacity>
+
     </ScrollView>
   );
 }
@@ -144,26 +251,23 @@ const styles = StyleSheet.create({
   heading: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xxl },
   section: { marginBottom: spacing.lg },
   sectionTitle: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
-  emailText: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, marginBottom: spacing.sm },
-  changeEmailButton: { marginTop: spacing.xs },
-  changeLink: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.burgundy, textDecorationLine: 'underline' },
-  emailChangeWrap: { marginTop: spacing.sm },
+  valueText: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, marginBottom: spacing.sm },
+  changeButton: { marginTop: spacing.xs },
+  changeLink: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', textDecorationLine: 'underline' },
+  changeWrap: { marginTop: spacing.sm },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
-  emailChangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
+  changeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
   cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
-  confirmButton: { backgroundColor: colors.burgundy, borderRadius: 8, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, minWidth: 80, alignItems: 'center' },
-  confirmButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.background },
+  confirmButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, minWidth: 80, alignItems: 'center' },
+  confirmButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF' },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
-  planRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  planName: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  planBadge: { borderWidth: 1, borderColor: colors.border, borderRadius: 4, paddingHorizontal: spacing.sm, paddingVertical: 2 },
-  planBadgeText: { fontSize: 10, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, letterSpacing: 0.5 },
-  upgradeCard: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.xl, marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.border },
-  upgradeHeading: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: spacing.xs },
-  upgradeBody: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.md, lineHeight: 20 },
-  featureItem: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, marginBottom: spacing.xs, lineHeight: 22 },
-  upgradeButton: { backgroundColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
-  upgradeButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.background },
-  signOutButton: { padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  signOutText: { color: colors.error, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold' },
+  earlyAccessText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, lineHeight: 26 },
+  signOutButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.md },
+  signOutText: { color: '#FFFFFF', fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold' },
+  deleteButton: { alignItems: 'center', paddingVertical: spacing.sm },
+  deleteText: { color: colors.error, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', textDecorationLine: 'underline' },
+  settingsHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.lg },
+  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  settingLabel: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 22 },
+  settingDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
 });

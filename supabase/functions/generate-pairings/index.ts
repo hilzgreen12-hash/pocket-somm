@@ -28,6 +28,16 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
     constraints.push(`Additional allergen/restriction to avoid: ${customAllergen.trim()}`);
   }
 
+  const dietaryNote = filters.dietaryNote as string | undefined;
+  if (dietaryNote?.trim()) {
+    constraints.push(`Additional dietary note from user: ${dietaryNote.trim()} — treat this as a strict constraint across all three recipes.`);
+  }
+
+  const difficulty = filters.difficulty as string | undefined;
+  const difficultyBlock = difficulty
+    ? `\nRecipe Difficulty: ${difficulty} — all three recipes must match this difficulty level. "Super Simple" means minimal ingredients and steps, ready in under 30 minutes. "Easy to Moderate" means accessible home cooking with some technique. "Challenging" means restaurant-quality dishes requiring skill and precision. "Very Technical" means advanced culinary techniques such as sous vide, fermentation, complex sauces, or multi-stage preparations.\n`
+    : '';
+
   const constraintBlock = constraints.length > 0
     ? `\nDietary & Allergen Constraints (STRICT — all three recipes must comply):\n${constraints.map((c) => `- ${c}`).join('\n')}\n`
     : '';
@@ -38,7 +48,7 @@ Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}
+${constraintBlock}${difficultyBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:

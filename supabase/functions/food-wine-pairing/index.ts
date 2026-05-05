@@ -2,15 +2,19 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-function buildCellarPrompt(dish: string, wines: Record<string, string | null>[]): string {
+function buildCellarPrompt(dish: string, wines: Record<string, string | null>[], difficulty?: string): string {
   const wineList = wines.map((w, i) =>
     `${i + 1}. ${w.wine_name}${w.producer ? ` by ${w.producer}` : ''}${w.region ? `, ${w.region}` : ''}${w.vintage ? ` (${w.vintage})` : ''}${w.grape_variety ? ` — ${w.grape_variety}` : ''} [status: ${w.drinking_window_status}] [id: ${w.id}]`
   ).join('\n');
 
+  const difficultyBlock = difficulty
+    ? `\nRecipe Difficulty Preference: ${difficulty} — if you include any recipe tips or serving suggestions, keep them appropriate to this level.\n`
+    : '';
+
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know which wine from their cellar to open.
 
 Dish: ${dish}
-
+${difficultyBlock}
 Their cellar:
 ${wineList}
 
@@ -31,11 +35,15 @@ Return ONLY valid JSON with this structure:
 Return raw JSON only. No markdown. No explanation.`;
 }
 
-function buildGeneralPrompt(dish: string): string {
+function buildGeneralPrompt(dish: string, difficulty?: string): string {
+  const difficultyBlock = difficulty
+    ? `\nRecipe Difficulty Preference: ${difficulty} — if you include any recipe tips or serving suggestions, keep them appropriate to this level.\n`
+    : '';
+
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know what style of wine to buy.
 
 Dish: ${dish}
-
+${difficultyBlock}
 Recommend the single best wine style to complement this dish. Be specific — name the grape variety and region, not just a broad colour.
 
 Return ONLY valid JSON with this structure:
@@ -53,11 +61,11 @@ Return raw JSON only. No markdown. No explanation.`;
 
 Deno.serve(async (req) => {
   try {
-    const { dish, mode, cellarWines } = await req.json();
+    const { dish, mode, cellarWines, difficulty } = await req.json();
 
     const prompt = mode === 'cellar'
-      ? buildCellarPrompt(dish, cellarWines ?? [])
-      : buildGeneralPrompt(dish);
+      ? buildCellarPrompt(dish, cellarWines ?? [], difficulty)
+      : buildGeneralPrompt(dish, difficulty);
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',

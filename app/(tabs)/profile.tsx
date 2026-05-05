@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -30,46 +30,64 @@ export default function ProfileTab() {
   }
 
   return (
-    <View style={[styles.container, { paddingTop }]}>
-      <View style={styles.hero}>
-        <Text style={styles.title}>Your Profile</Text>
-        <Text style={styles.subtitle}>Set and review your profile settings. These will be the parameters that Vinster uses when making its wine list recommendations and recipe pairings for you.</Text>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+
+      <Text style={styles.title}>Your Profile</Text>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>Vinster uses your profile settings as its default guide when making recommendations for you. Be as specific or open as you like — remember you will also be prompted to confirm certain settings with each individual search. If there is an occasion when you want to override your profile settings you must do so in this tab before you search.</Text>
       </View>
 
-      <View style={styles.actions}>
-        <TouchableOpacity style={styles.whiteBubble} onPress={() => router.push('/profile/wine')}>
-          <Text style={styles.whiteBubbleText}>Wine Profile</Text>
-        </TouchableOpacity>
+      <View style={styles.divider} />
 
-        <TouchableOpacity style={styles.whiteBubble} onPress={() => router.push('/profile/recipe')}>
-          <Text style={styles.whiteBubbleText}>Recipe Profile</Text>
-        </TouchableOpacity>
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>Set your wine preferences to give Vinster strict parameters when making recommendations for you from wine lists or recommending a style for wine and food pairing recommendations.</Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/profile/wine')}>
+            <Text style={styles.buttonText}>Your Wine Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/wines/chosen')}>
+            <Text style={styles.buttonText}>Your Chosen Wines</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        <TouchableOpacity style={styles.whiteBubble} onPress={() => router.push('/wines/chosen')}>
-          <Text style={styles.whiteBubbleText}>Your Chosen Wines</Text>
-        </TouchableOpacity>
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <Text style={styles.sectionDesc}>Set your food preferences along with dietary needs for Vinster to use as strict parameters when it's suggesting food pairings and recommending recipes for you.</Text>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/profile/recipe')}>
+            <Text style={styles.buttonText}>Your Recipe Profile</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/recipes/chosen')}>
+            <Text style={styles.buttonText}>Your Chosen Recipes</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <TabFooter />
-    </View>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, paddingHorizontal: spacing.xl },
-  hero: { alignItems: 'center', flex: 1, justifyContent: 'center' },
-  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5 },
-  subtitle: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, textAlign: 'center' },
-  actions: { gap: spacing.sm },
-  whiteBubble: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  whiteBubbleText: { fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', fontSize: 17 },
+  container: { flex: 1, backgroundColor: colors.background },
+  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
+  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  whiteBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  whiteBubbleText: { fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, fontSize: 17 },
   guestContainer: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingBottom: 60, backgroundColor: colors.background },
   guestHero: { alignItems: 'center' },
-  guestTitle: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5, marginBottom: spacing.sm, textAlign: 'center' },
-  guestBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
+  guestTitle: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, marginBottom: spacing.sm, textAlign: 'center' },
+  guestBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginBottom: spacing.xl },
   guestActions: { width: '100%', gap: spacing.sm },
-  guestSecondary: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  guestSecondaryText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  guestSecondary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  guestSecondaryText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  buttonRow: { flexDirection: 'row', gap: spacing.xs },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
 });

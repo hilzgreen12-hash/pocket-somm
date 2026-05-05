@@ -6,6 +6,18 @@ export async function getCellarWines(userId: string): Promise<CellarWine[]> {
     .from('cellar_wines')
     .select('*')
     .eq('user_id', userId)
+    .eq('is_wishlist', false)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function getWishListWines(userId: string): Promise<CellarWine[]> {
+  const { data, error } = await supabase
+    .from('cellar_wines')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_wishlist', true)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];

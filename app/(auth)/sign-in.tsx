@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, typography, spacing } from '../../src/constants/theme';
@@ -8,13 +8,24 @@ export default function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSignIn() {
+    setError('');
+    if (!email.trim() || !password) {
+      setError('Please enter your email and password.');
+      return;
+    }
     setLoading(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setLoading(false);
-    if (error) {
-      Alert.alert('Sign in failed', error.message);
+    if (signInError) {
+      if (signInError.message.toLowerCase().includes('email not confirmed')) {
+        setError('Please confirm your email address before signing in. Check your inbox.');
+      } else {
+        setError(signInError.message);
+      }
     } else {
       router.replace('/(tabs)/scan');
     }
@@ -33,13 +44,20 @@ export default function SignIn() {
         autoCapitalize="none"
         keyboardType="email-address"
       />
-      <TextInput
-        style={styles.input}
-        placeholder="Password"
-        value={password}
-        onChangeText={setPassword}
-        secureTextEntry
-      />
+      <View style={styles.passwordRow}>
+        <TextInput
+          style={styles.passwordInput}
+          placeholder="Password"
+          value={password}
+          onChangeText={setPassword}
+          secureTextEntry={!showPassword}
+        />
+        <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword((v) => !v)}>
+          <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
+        </TouchableOpacity>
+      </View>
+
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
       <TouchableOpacity style={styles.button} onPress={handleSignIn} disabled={loading}>
         <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
@@ -48,6 +66,10 @@ export default function SignIn() {
       <TouchableOpacity style={styles.guestButton} onPress={() => router.replace('/(tabs)/scan')}>
         <Text style={styles.guestText}>Continue without account</Text>
       </TouchableOpacity>
+
+      <Link href="/(auth)/forgot-password" style={styles.link}>
+        Forgot your password?
+      </Link>
 
       <Link href="/(auth)/sign-up" style={styles.link}>
         Don't have an account? Sign up
@@ -66,7 +88,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontFamily: 'CormorantGaramond_700Bold',
-    color: colors.burgundy,
+    color: '#FFFFFF',
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
@@ -79,12 +101,39 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: 'rgba(255,255,255,0.3)',
     borderRadius: 8,
     padding: spacing.md,
     marginBottom: spacing.md,
     fontSize: 16,
-    backgroundColor: colors.surface,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.text,
+    backgroundColor: 'transparent',
+  },
+  passwordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.3)',
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    marginBottom: spacing.md,
+  },
+  passwordInput: {
+    flex: 1,
+    padding: spacing.md,
+    fontSize: 16,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.text,
+  },
+  eyeButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  eyeText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 13,
+    color: colors.textMuted,
   },
   button: {
     borderWidth: 1,
@@ -112,8 +161,15 @@ const styles = StyleSheet.create({
   link: {
     fontFamily: 'CormorantGaramond_400Regular',
     textAlign: 'center',
-    color: colors.burgundy,
+    color: '#FFFFFF',
     marginTop: spacing.lg,
     fontSize: 14,
+  },
+  errorText: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    color: colors.error,
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
   },
 });

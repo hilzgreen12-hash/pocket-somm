@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
-import { useRackStore } from '../../src/stores/rackStore';
 import { colors, spacing } from '../../src/constants/theme';
 
-export default function AddWineScreen() {
-  const { addWine } = useCellar();
+export default function AddToWishListScreen() {
+  const { addWine } = useWishList();
   const { session } = useAuth();
-  const { setPendingWineId } = useRackStore();
 
   const [wineName, setWineName] = useState('');
   const [producer, setProducer] = useState('');
@@ -26,7 +24,7 @@ export default function AddWineScreen() {
     if (!session?.user.id) return;
     setSaving(true);
     try {
-      const saved = await addWine.mutateAsync({
+      await addWine.mutateAsync({
         user_id: session.user.id,
         wine_name: wineName.trim(),
         producer: producer.trim() || null,
@@ -43,21 +41,9 @@ export default function AddWineScreen() {
         grape_variety: null,
         label_image_path: null,
         user_notes: null,
+        is_wishlist: true,
       });
-      Alert.alert(
-        'Added to cellar',
-        'Would you like to place this wine in a rack?',
-        [
-          { text: 'Not now', onPress: () => router.back() },
-          {
-            text: 'Add to Rack',
-            onPress: () => {
-              setPendingWineId(saved.id);
-              router.replace('/cellar/racks');
-            },
-          },
-        ]
-      );
+      router.back();
     } catch {
       Alert.alert('Error', 'Could not save wine. Please try again.');
     } finally {
@@ -137,8 +123,8 @@ export default function AddWineScreen() {
         disabled={saving}
       >
         {saving
-          ? <ActivityIndicator color={colors.gold} />
-          : <Text style={styles.saveButtonText}>Save to Cellar</Text>
+          ? <ActivityIndicator color={colors.background} />
+          : <Text style={styles.saveButtonText}>Add to Wish List</Text>
         }
       </TouchableOpacity>
     </ScrollView>
@@ -151,8 +137,8 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xl },
   heading: { fontSize: 30, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
-  scanButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.xl },
-  scanButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  scanButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.xl },
+  scanButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dividerText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },

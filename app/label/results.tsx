@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { assignSlot } from '../../src/api/racks';
@@ -32,9 +32,11 @@ export default function LabelResultsScreen() {
   const { wineDetailsConfirmed, intelligence, reset } = useLabelStore();
   const { session } = useAuth();
   const { addWine } = useCellar();
+  const { addWine: addToWishList } = useWishList();
   const { pendingSlot, setPendingSlot } = useRackStore();
 
   const [addingToCellar, setAddingToCellar] = useState(false);
+  const [addingToWishList, setAddingToWishList] = useState(false);
   const [quantity, setQuantity] = useState('1');
   const [storageLocation, setStorageLocation] = useState('');
   const [orientation, setOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
@@ -54,27 +56,47 @@ export default function LabelResultsScreen() {
   const wine = wineDetailsConfirmed;
   const intel = intelligence;
 
+  function buildWinePayload(userId: string) {
+    return {
+      user_id: userId,
+      wine_name: wine.wineName ?? wine.producer,
+      producer: wine.producer,
+      region: wine.region,
+      vintage: wine.vintage,
+      quantity: parseInt(quantity) || 1,
+      storage_location: pendingSlot ? orientation : (storageLocation.trim() || null),
+      date_received: new Date().toISOString().split('T')[0],
+      critic_score: intel.criticScore,
+      drinking_window_from: intel.drinkingWindowFrom,
+      drinking_window_to: intel.drinkingWindowTo,
+      drinking_window_status: intel.drinkingWindowStatus,
+      tasting_notes: intel.tastingNotes,
+      grape_variety: intel.grapeVariety,
+      label_image_path: null,
+      user_notes: null,
+      is_wishlist: false,
+    };
+  }
+
+  async function handleAddToWishList() {
+    if (!session?.user.id) return;
+    setSaving(true);
+    try {
+      await addToWishList.mutateAsync({ ...buildWinePayload(session.user.id), is_wishlist: true });
+      setAddingToWishList(false);
+      Alert.alert('Added to Wish List', `${wine.wineName ?? wine.producer} has been saved to your wish list.`);
+    } catch {
+      Alert.alert('Error', 'Could not save to wish list. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleAddToCellar() {
     if (!session?.user.id) return;
     setSaving(true);
     try {
-      const saved = await addWine.mutateAsync({
-        user_id: session.user.id,
-        wine_name: wine.wineName ?? wine.producer,
-        producer: wine.producer,
-        region: wine.region,
-        vintage: wine.vintage,
-        quantity: parseInt(quantity) || 1,
-        storage_location: pendingSlot ? orientation : (storageLocation.trim() || null),
-        date_received: new Date().toISOString().split('T')[0],
-        critic_score: intel.criticScore,
-        drinking_window_from: intel.drinkingWindowFrom,
-        drinking_window_to: intel.drinkingWindowTo,
-        drinking_window_status: intel.drinkingWindowStatus,
-        tasting_notes: intel.tastingNotes,
-        grape_variety: intel.grapeVariety,
-        label_image_path: null,
-      });
+      const saved = await addWine.mutateAsync(buildWinePayload(session.user.id));
 
       if (pendingSlot) {
         await assignSlot(pendingSlot.rackId, pendingSlot.row, pendingSlot.col, saved.id);
@@ -121,14 +143,37 @@ export default function LabelResultsScreen() {
         <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
       </View>
 
-      <TouchableOpacity style={styles.cellarButton} onPress={() => setAddingToCellar(true)}>
-        <Text style={styles.cellarButtonText}>Add to Cellar</Text>
-      </TouchableOpacity>
-
+      <View style={styles.actionRow}>
+        <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToCellar(true)}>
+          <Text style={styles.actionButtonText}>Add to Cellar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToWishList(true)}>
+          <Text style={styles.actionButtonText}>Add to Wish List</Text>
+        </TouchableOpacity>
+      </View>
 
       <TouchableOpacity style={styles.scanAgainButton} onPress={() => { reset(); router.replace('/(tabs)/label'); }}>
         <Text style={styles.scanAgainText}>Scan Another Label</Text>
       </TouchableOpacity>
+
+      <Modal visible={addingToWishList} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Add to Wish List</Text>
+            <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
+            <TouchableOpacity
+              style={[styles.button, saving && styles.buttonDisabled]}
+              onPress={handleAddToWishList}
+              disabled={saving}
+            >
+              <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save to Wish List'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => setAddingToWishList(false)}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={addingToCellar} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -199,7 +244,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
-  linkText: { color: colors.burgundy, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
+  linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   producer: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   wineName: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, marginTop: 2 },
@@ -214,8 +259,9 @@ const styles = StyleSheet.create({
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   tastingNotes: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22 },
-  cellarButton: { margin: spacing.xl, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
-  cellarButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.xl, marginTop: spacing.xl },
+  actionButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
+  actionButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
   scanAgainButton: { margin: spacing.xl, alignItems: 'center' },
   scanAgainText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
@@ -231,7 +277,7 @@ const styles = StyleSheet.create({
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
   orientationRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   orientationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
-  orientationBtnActive: { borderColor: colors.burgundy, backgroundColor: colors.burgundy + '22' },
+  orientationBtnActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
   orientationText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
-  orientationTextActive: { color: colors.burgundy },
+  orientationTextActive: { color: colors.gold },
 });

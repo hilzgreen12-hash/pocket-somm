@@ -11,7 +11,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.burgundy,
+        tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { borderTopColor: colors.border, backgroundColor: colors.background },
         tabBarLabelStyle: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 11 },
@@ -22,6 +22,7 @@ export default function TabsLayout() {
       <Tabs.Screen name="cellar" options={{ title: 'Cellar', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
+      <Tabs.Screen name="welcome" options={{ href: null }} />
       <Tabs.Screen name="label" options={{ href: null }} />
       <Tabs.Screen name="history" options={{ href: null }} />
     </Tabs>

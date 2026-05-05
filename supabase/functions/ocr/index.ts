@@ -36,6 +36,10 @@ function stripHtml(html: string): string {
 }
 
 Deno.serve(async (req) => {
+  if (!req.headers.get('Authorization')) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+  }
+
   try {
     const body = await req.json();
     const { imageBase64, url } = body;
@@ -47,6 +51,13 @@ Deno.serve(async (req) => {
     let response;
 
     if (url) {
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(url); } catch {
+        return new Response(JSON.stringify({ error: 'Invalid URL' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
+      if (parsedUrl.protocol !== 'https:') {
+        return new Response(JSON.stringify({ error: 'Only https:// URLs are supported' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+      }
       // Fetch and strip the webpage
       const pageRes = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (!pageRes.ok) throw new Error(`Failed to fetch URL: ${pageRes.status}`);
@@ -81,7 +92,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
 
     // Extract JSON object from response regardless of surrounding text
     const match = text.match(/\{[\s\S]*\}/);

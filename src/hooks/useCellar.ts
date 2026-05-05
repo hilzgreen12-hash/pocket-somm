@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getCellarWines, addCellarWine, updateCellarWine, deleteCellarWine, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
+import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, deleteCellarWine, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
 import type { CellarWine } from '../types/wine';
 
 export function useCellar() {
@@ -46,4 +46,37 @@ export function useCellar() {
   });
 
   return { wines, isLoading, shares, addWine, updateWine, deleteWine, share, removeShare };
+}
+
+export function useWishList() {
+  const { session } = useAuth();
+  const userId = session?.user.id ?? '';
+  const qc = useQueryClient();
+
+  const { data: wines = [], isLoading } = useQuery({
+    queryKey: ['wishlist', userId],
+    queryFn: () => getWishListWines(userId),
+    enabled: !!userId,
+  });
+
+  const addWine = useMutation({
+    mutationFn: (wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>) =>
+      addCellarWine({ ...wine, is_wishlist: true }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wishlist', userId] }),
+  });
+
+  const deleteWine = useMutation({
+    mutationFn: (id: string) => deleteCellarWine(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wishlist', userId] }),
+  });
+
+  const moveTocellar = useMutation({
+    mutationFn: (id: string) => updateCellarWine(id, { is_wishlist: false }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['wishlist', userId] });
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+    },
+  });
+
+  return { wines, isLoading, addWine, deleteWine, moveTocellar };
 }
