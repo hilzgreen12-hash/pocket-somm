@@ -84,6 +84,8 @@ export default function ScanTab() {
       dislikedRegions: savedPreferences?.dislikedRegions ?? [],
       dislikedGrapes: savedPreferences?.dislikedGrapes ?? [],
       topScoringMode,
+      profileWineTypes: savedPreferences?.wineTypes ?? [],
+      profileStyleProfiles: savedPreferences?.styleProfiles ?? [],
     };
   }
 

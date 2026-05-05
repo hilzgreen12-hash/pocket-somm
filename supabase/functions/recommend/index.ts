@@ -128,6 +128,8 @@ Deno.serve(async (req) => {
       excludeWines,
       topScoringMode,
       _strictDiversity,
+      profileWineTypes,
+      profileStyleProfiles,
     } = await req.json();
 
     const colourLabels: Record<string, string> = {
@@ -136,7 +138,9 @@ Deno.serve(async (req) => {
 
     const colourLine = wineTypes?.length
       ? `HARD RULE — COLOUR: Only recommend ${wineTypes.map((t: string) => colourLabels[t] ?? t).join(' or ')} wines. Exclude all other colours absolutely.`
-      : 'No colour restriction — recommend the best option regardless of colour.';
+      : profileWineTypes?.length
+        ? `SOFT PREFERENCE — COLOUR: The diner generally prefers ${profileWineTypes.map((t: string) => colourLabels[t] ?? t).join(' and ')} wines. Weight these positively in your ranking but do not exclude other colours if they score significantly higher on critic score, vintage, or value.`
+        : 'No colour restriction — recommend the best option regardless of colour.';
 
     const budgetLine = budget
       ? `HARD RULE — BUDGET: The diner's maximum budget is £${budget} per bottle. Exclude every wine priced above £${budget} on the menu. This is absolute.`
@@ -155,10 +159,12 @@ TOP SCORING MODE — ACTIVE:
 The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the grape diversity rule. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, topPickReasons, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
 ` : '';
 
+    const mergedStyleProfiles = [...new Set([...(styleProfiles ?? []), ...(profileStyleProfiles ?? [])])];
+
     const userContext = `
 Diner preferences:
-- Colour: ${wineTypes?.length ? wineTypes.join(', ') : 'No preference'}
-- Style profiles: ${styleProfiles?.length ? styleProfiles.join(', ') : 'No preference — prioritise quality and value'}
+- Colour: ${wineTypes?.length ? wineTypes.join(', ') : profileWineTypes?.length ? `${profileWineTypes.join(', ')} (soft preference — do not exclude other colours)` : 'No preference'}
+- Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.join(', ') : 'No preference — prioritise quality and value'}
 - Budget: up to £${budget ?? 'unlimited'} per bottle on the menu
 - Food pairing: ${foodPairing || 'Not specified'}
 - Favourite regions (prioritise these): ${favouriteRegions?.length ? favouriteRegions.join(', ') : 'None specified'}
