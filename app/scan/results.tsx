@@ -120,7 +120,7 @@ export default function ResultsScreen() {
                     )}
                   </View>
                   <Text style={styles.wineName}>
-                    {wine.name}{wine.appellation ? `, ${wine.appellation}` : ''}
+                    {wine.vintage ? `${wine.vintage} ` : ''}{wine.name}{wine.appellation ? `, ${wine.appellation}` : ''}
                   </Text>
                   <Text style={styles.wineProducer}>
                     {wine.producer}{wine.region ? ` · ${wine.region}` : ''}{wine.grape ? ` · ${wine.grape}` : ''}
