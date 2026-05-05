@@ -123,8 +123,8 @@ export default function ScanTab() {
 
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
-        <Text style={styles.subtitle}>Set your preferences then scan or upload a wine list to receive deep AI generated wine recommendations.</Text>
-        <Text style={styles.profileNote}>Your profile preferences (regions, grapes, dietary) are always applied. Wine type and style reset to Any for each new scan.</Text>
+        <Text style={styles.subtitle}>Set your preferences then scan or upload a wine list to receive tailored wine recommendations.</Text>
+        <Text style={styles.profileNote}>Your selections below will override your wine profile preferences while your profile dislikes remain hard rules.</Text>
       </View>
 
       <View style={styles.body}>
