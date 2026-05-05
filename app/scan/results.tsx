@@ -166,7 +166,7 @@ export default function ResultsScreen() {
                   }}
                 >
                   <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
-                    {chosenIndexes.has(i) ? '✓ Added to Your Chosen Wines' : 'I ordered this'}
+                    {chosenIndexes.has(i) ? '✓ Added to Your Chosen Wines' : 'Review This Wine'}
                   </Text>
                 </TouchableOpacity>
               )}
