@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
@@ -33,6 +35,23 @@ export default function ResultsScreen() {
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   const [restaurantReviewVisible, setRestaurantReviewVisible] = useState(false);
+  const [restaurantName, setRestaurantName] = useState('');
+  const [editingRestaurant, setEditingRestaurant] = useState(false);
+  const qc = useQueryClient();
+
+  // Pre-fill restaurant name from GPS once autoSave completes
+  useEffect(() => {
+    const detected = autoSave.data?.[0]?.restaurantName;
+    if (detected && !restaurantName) setRestaurantName(detected);
+  }, [autoSave.data]);
+
+  async function handleSaveRestaurant() {
+    setEditingRestaurant(false);
+    const sid = autoSave.data?.[0]?.sessionId;
+    if (!sid) return;
+    await supabase.from('scan_sessions').update({ restaurant_name: restaurantName.trim() || null }).eq('id', sid);
+    qc.invalidateQueries({ queryKey: ['scan-archive'] });
+  }
 
   useEffect(() => {
     if (recommendation && extractedWines && !hasSaved.current) {
@@ -112,6 +131,34 @@ export default function ResultsScreen() {
           <Text style={styles.summary}>{recommendation.summary}</Text>
         ) : null}
       </View>
+
+      {/* Dining location — editable on fresh scans */}
+      {!isFromHistory && (
+        <TouchableOpacity
+          style={styles.locationRow}
+          onPress={() => setEditingRestaurant(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.locationPin}>📍</Text>
+          {editingRestaurant ? (
+            <TextInput
+              style={styles.locationInput}
+              value={restaurantName}
+              onChangeText={setRestaurantName}
+              placeholder="Restaurant name"
+              placeholderTextColor="rgba(255,255,255,0.30)"
+              autoFocus
+              onBlur={handleSaveRestaurant}
+              onSubmitEditing={handleSaveRestaurant}
+              returnKeyType="done"
+            />
+          ) : (
+            <Text style={styles.locationText}>
+              {restaurantName || 'Add restaurant name'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      )}
 
       {/* Wine accordions */}
       <View style={styles.list}>
@@ -324,6 +371,30 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: 'rgba(255,255,255,0.70)',
     lineHeight: 24,
+  },
+  locationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.md,
+    gap: 6,
+  },
+  locationPin: {
+    fontSize: 14,
+  },
+  locationText: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.55)',
+  },
+  locationInput: {
+    flex: 1,
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 15,
+    color: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.30)',
+    paddingVertical: 2,
   },
   list: {
     paddingHorizontal: spacing.md,
