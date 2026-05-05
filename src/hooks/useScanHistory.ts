@@ -1,6 +1,6 @@
-import { useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import * as Location from 'expo-location';
 import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
@@ -14,6 +14,18 @@ export interface ScanHistoryItem {
   extractedWines: ExtractedWine[];
   recommendation: RecommendationResponse;
   savedToAccount: boolean;
+  city?: string | null;
+  sessionId?: string;
+}
+
+export interface ScanArchiveItem {
+  id: string;
+  capturedAt: string;
+  extractedWines: ExtractedWine[];
+  recommendation: RecommendationResponse;
+  city: string | null;
+  restaurantName: string | null;
+  restaurantNote: string | null;
 }
 
 async function readLocal(): Promise<ScanHistoryItem[]> {
@@ -38,55 +50,86 @@ export function useScanHistory() {
     queryFn: readLocal,
   });
 
+  const { data: archive = [], isLoading: archiveLoading } = useQuery<ScanArchiveItem[]>({
+    queryKey: ['scan-archive', session?.user.id],
+    enabled: !!session,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('scan_sessions')
+        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note')
+        .eq('user_id', session!.user.id)
+        .order('captured_at', { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((row: any) => ({
+        id: row.id,
+        capturedAt: row.captured_at,
+        extractedWines: row.extracted_wines as ExtractedWine[],
+        recommendation: row.recommendation as RecommendationResponse,
+        city: row.city ?? null,
+        restaurantName: row.restaurant_name ?? null,
+        restaurantNote: row.restaurant_note ?? null,
+      }));
+    },
+  });
+
   const autoSave = useMutation({
     mutationFn: async ({ extractedWines, recommendation }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse }) => {
       const now = new Date().toISOString();
+
+      let city: string | null = null;
+      let latitude: number | null = null;
+      let longitude: number | null = null;
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status === 'granted') {
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+          latitude = pos.coords.latitude;
+          longitude = pos.coords.longitude;
+          const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+          if (geo) city = geo.city ?? geo.subregion ?? geo.region ?? null;
+        }
+      } catch { /* location unavailable */ }
+
+      let sessionId: string | undefined;
+      if (session) {
+        const { data: inserted } = await supabase
+          .from('scan_sessions')
+          .insert({
+            user_id: session.user.id,
+            captured_at: now,
+            extracted_wines: extractedWines,
+            recommendation,
+            city,
+            latitude,
+            longitude,
+            restaurant_name: null,
+            image_path: null,
+            preferences_snapshot: null,
+          })
+          .select('id')
+          .single();
+        sessionId = inserted?.id;
+      }
+
       const newItem: ScanHistoryItem = {
         id: Date.now().toString(),
         savedAt: now,
         extractedWines,
         recommendation,
         savedToAccount: !!session,
+        city,
+        sessionId,
       };
       const existing = await readLocal();
       const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
       await writeLocal(updated);
-
-      if (session) {
-        await supabase.from('scan_sessions').insert({
-          user_id: session.user.id,
-          captured_at: now,
-          extracted_wines: extractedWines,
-          recommendation,
-          restaurant_name: null,
-          image_path: null,
-          preferences_snapshot: null,
-        });
-      }
-
       return updated;
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['scan-history'] }),
-  });
-
-  const saveToAccount = useMutation({
-    mutationFn: async (item: ScanHistoryItem) => {
-      if (!session) throw new Error('Not signed in');
-      await supabase.from('scan_history').insert({
-        user_id: session.user.id,
-        extracted_wines: item.extractedWines,
-        recommendation: item.recommendation,
-        scanned_at: item.savedAt,
-      });
-      const existing = await readLocal();
-      const updated = existing.map((h) =>
-        h.id === item.id ? { ...h, savedToAccount: true } : h
-      );
-      await writeLocal(updated);
-      return updated;
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['scan-history'] });
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
     },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['scan-history'] }),
   });
 
-  return { history, autoSave, saveToAccount };
+  return { history, archive, archiveLoading, autoSave };
 }

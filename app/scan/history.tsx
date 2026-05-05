@@ -1,9 +1,10 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
+import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -11,14 +12,14 @@ function formatDate(iso: string) {
 }
 
 export default function ScanHistoryScreen() {
-  const { history, saveToAccount } = useScanHistory();
+  const { archive, archiveLoading } = useScanHistory();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { session } = useAuth();
 
-  function handleView(item: typeof history[0]) {
+  function handleView(item: ScanArchiveItem) {
     setExtractedWines(item.extractedWines);
     setRecommendation(item.recommendation);
-    router.push('/scan/results?fromHistory=true');
+    router.push(`/scan/results?fromHistory=true&sessionId=${item.id}`);
   }
 
   return (
@@ -27,51 +28,50 @@ export default function ScanHistoryScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Previous Scans</Text>
+        <Text style={styles.title}>Your Archive</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {history.length === 0 ? (
+      {!session ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No scans yet</Text>
-          <Text style={styles.emptyBody}>Your last 3 wine list scans will appear here automatically.</Text>
+          <Text style={styles.emptyTitle}>Sign in to view your archive</Text>
+          <Text style={styles.emptyBody}>Your archive saves every wine list scan and recommendation automatically.</Text>
+          <TouchableOpacity style={styles.signInButton} onPress={() => router.push('/(auth)/sign-in')}>
+            <Text style={styles.signInButtonText}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+      ) : archiveLoading ? (
+        <View style={styles.empty}>
+          <ActivityIndicator color={colors.gold} />
+        </View>
+      ) : archive.length === 0 ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>No archive yet</Text>
+          <Text style={styles.emptyBody}>Your wine list scans will appear here automatically after each search.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-          {history.map((item, i) => (
+          {archive.map((item) => (
             <View key={item.id} style={styles.card}>
-              <View style={styles.cardHeader}>
-                <Text style={styles.cardDate}>{formatDate(item.savedAt)}</Text>
-                {item.savedToAccount && (
-                  <Text style={styles.savedBadge}>Saved</Text>
-                )}
+              <View style={styles.cardMeta}>
+                <Text style={styles.cardDate}>{formatDate(item.capturedAt)}</Text>
+                {item.city ? <Text style={styles.cardLocation}>{item.city}</Text> : null}
               </View>
 
-              <Text style={styles.cardWines}>
-                {item.extractedWines.length} wines scanned
+              {item.restaurantName ? (
+                <Text style={styles.cardRestaurant}>{item.restaurantName}</Text>
+              ) : null}
+
+              <Text style={styles.cardTopPick}>
+                Top pick: {item.recommendation.wines[0]?.name ?? '—'}
+                {item.recommendation.wines[0]?.vintage ? ` ${item.recommendation.wines[0].vintage}` : ''}
               </Text>
 
-              <Text style={styles.cardRecs}>
-                Top pick: {item.recommendation.wines[0]?.name ?? '—'}{item.recommendation.wines[0]?.vintage ? ` ${item.recommendation.wines[0].vintage}` : ''}
-              </Text>
+              <Text style={styles.cardCount}>{item.extractedWines.length} wines on list</Text>
 
-              <View style={styles.cardActions}>
-                <TouchableOpacity style={styles.viewButton} onPress={() => handleView(item)}>
-                  <Text style={styles.viewButtonText}>View Results</Text>
-                </TouchableOpacity>
-
-                {session && !item.savedToAccount && (
-                  <TouchableOpacity
-                    style={styles.saveButton}
-                    onPress={() => saveToAccount.mutate(item)}
-                    disabled={saveToAccount.isPending}
-                  >
-                    <Text style={styles.saveButtonText}>
-                      {saveToAccount.isPending ? 'Saving…' : 'Save to Account'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              <TouchableOpacity style={styles.viewButton} onPress={() => handleView(item)}>
+                <Text style={styles.viewButtonText}>View Results</Text>
+              </TouchableOpacity>
             </View>
           ))}
         </ScrollView>
@@ -82,21 +82,30 @@ export default function ScanHistoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: {
+    paddingTop: 70,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
   title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
-  emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg },
-  cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
+  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
+  emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  signInButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl },
+  signInButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
+  cardMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   cardDate: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  savedBadge: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardWines: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xs },
-  cardRecs: { fontSize: 17, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, marginBottom: spacing.md },
-  cardActions: { flexDirection: 'row', gap: spacing.sm },
-  viewButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
+  cardLocation: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
+  cardRestaurant: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  cardTopPick: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
+  cardCount: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xs },
+  viewButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
   viewButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
-  saveButton: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
-  saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
 });
