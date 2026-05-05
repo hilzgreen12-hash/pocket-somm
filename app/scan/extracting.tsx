@@ -48,7 +48,7 @@ function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | 
   const favourited = filtered.filter(isFavourite);
   const others = filtered.filter((w) => !isFavourite(w));
 
-  return [...favourited, ...others].slice(0, 25);
+  return [...favourited, ...others].slice(0, 50);
 }
 
 type Stage = 'reading' | 'recommending' | 'error';
