@@ -141,20 +141,20 @@ export function ChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
             />
 
             <Text style={styles.sectionLabel}>Your score (optional)</Text>
-            <View style={styles.scoreRow}>
-              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => (
-                <TouchableOpacity
-                  key={n}
-                  style={[styles.scoreBtn, userScore === n && styles.scoreBtnActive]}
-                  onPress={() => setUserScore(userScore === n ? null : n)}
-                >
-                  <Text style={[styles.scoreBtnText, userScore === n && styles.scoreBtnTextActive]}>
-                    {n}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-            <Text style={styles.scoreHint}>out of 10</Text>
+            <TextInput
+              style={[styles.input, styles.scoreInput]}
+              value={userScore != null ? String(userScore) : ''}
+              onChangeText={(text) => {
+                if (text === '') { setUserScore(null); return; }
+                const n = parseInt(text, 10);
+                if (!isNaN(n)) setUserScore(Math.min(100, Math.max(1, n)));
+              }}
+              placeholder="e.g. 88"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+              maxLength={3}
+            />
+            <Text style={styles.scoreHint}>out of 100</Text>
 
             <TouchableOpacity
               style={styles.saveButton}
@@ -254,32 +254,8 @@ const styles = StyleSheet.create({
     minHeight: 90,
     marginBottom: spacing.md,
   },
-  scoreRow: {
-    flexDirection: 'row',
-    gap: 6,
-    flexWrap: 'wrap',
+  scoreInput: {
     marginBottom: 4,
-  },
-  scoreBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreBtnActive: {
-    borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.15)',
-  },
-  scoreBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 15,
-    color: colors.textMuted,
-  },
-  scoreBtnTextActive: {
-    color: colors.gold,
   },
   scoreHint: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
