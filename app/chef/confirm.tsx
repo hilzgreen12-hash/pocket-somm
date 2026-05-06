@@ -50,11 +50,14 @@ export default function ChefConfirmScreen() {
 
     try {
       const filters = {
-        dietary: (preferences?.dietaryPreference as any) ?? null,
-        allergens: (preferences?.allergens as any) ?? [],
-        customAllergen: (preferences?.customAllergen as any) ?? '',
+        dietary: (preferences?.dietaryNeeds?.[0] ?? null) as any,
+        allergens: (preferences?.allergyRisks ?? []) as any,
+        customAllergen: '',
         dietaryNote: dietaryNote.trim() || null,
         difficulty: difficulty || null,
+        specificConcerns: preferences?.specificConcerns?.trim() || null,
+        regionalPreferences: preferences?.regionalPreferences ?? [],
+        nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
       };
       const pairings = await generatePairings(confirmed, filters);
       setPairings(pairings);

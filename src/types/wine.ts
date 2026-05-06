@@ -98,6 +98,9 @@ export interface DietaryFilters {
   dietary: DietaryPreference | null;
   allergens: AllergenFilter[];
   customAllergen: string;
+  specificConcerns?: string | null;
+  regionalPreferences?: string[];
+  nutritionalPreferences?: string[];
 }
 
 // Cellar types
