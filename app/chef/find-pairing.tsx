@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -20,6 +21,7 @@ export default function FindPairingScreen() {
 
   const [dish, setDishLocal] = useState('');
   const [flavours, setFlavours] = useState('');
+  const [stylePreference, setStylePreference] = useState<string | null>(null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
@@ -44,7 +46,8 @@ export default function FindPairingScreen() {
     }
 
     setLoading(true);
-    const fullDish = flavours.trim() ? `${dish.trim()}. Key flavours/ingredients: ${flavours.trim()}` : dish.trim();
+    const baseDish = flavours.trim() ? `${dish.trim()}. Key flavours/ingredients: ${flavours.trim()}` : dish.trim();
+    const fullDish = stylePreference ? `${baseDish}. Wine colour/style preference: ${stylePreference}` : baseDish;
     setDish(fullDish);
     setMode(mode);
 
@@ -66,6 +69,15 @@ export default function FindPairingScreen() {
       } else {
         setGeneralResult(result.recommendations as GeneralRecommendation[], result.summary);
       }
+
+      await AsyncStorage.setItem('vinster_last_pairing', JSON.stringify({
+        dish: fullDish,
+        mode,
+        cellarResult: mode === 'cellar' ? result.recommendations : null,
+        generalResult: mode === 'general' ? result.recommendations : null,
+        generalSummary: mode === 'general' ? (result.summary ?? null) : null,
+      }));
+
       router.push('/chef/pairing-results');
     } catch {
       Alert.alert('Error', 'Could not find a pairing. Please try again.');
@@ -143,6 +155,23 @@ export default function FindPairingScreen() {
         </TouchableOpacity>
       </View>
 
+      <Text style={styles.label}>Any specific style preference?</Text>
+      <View style={styles.styleGrid}>
+        {['Any', 'White', 'Red', 'Rosé', 'Sparkling', 'Fortified'].map((s) => {
+          const val = s === 'Any' ? null : s;
+          const active = stylePreference === val;
+          return (
+            <TouchableOpacity
+              key={s}
+              style={[styles.styleBtn, active && styles.styleBtnActive]}
+              onPress={() => setStylePreference(val)}
+            >
+              <Text style={[styles.styleBtnText, active && styles.styleBtnTextActive]}>{s}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <TouchableOpacity style={styles.button} onPress={() => handleFind()}>
         <Text style={styles.buttonText}>Find Pairing</Text>
       </TouchableOpacity>
@@ -187,6 +216,11 @@ const styles = StyleSheet.create({
   toggleTextActive: { color: colors.gold },
   toggleSub: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
   toggleSubActive: { color: colors.gold },
+  styleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%', justifyContent: 'center' },
+  styleBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
+  styleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
+  styleBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.textMuted },
+  styleBtnTextActive: { color: colors.gold },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
 });

@@ -214,7 +214,7 @@ export default function ResultsScreen() {
                   }}
                 >
                   <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
-                    {chosenIndexes.has(i) ? '✓ Added to Your Wine Archive' : 'Review This Wine'}
+                    {chosenIndexes.has(i) ? '✓ Added to Your Wine Reviews' : 'Review This Wine'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -287,6 +287,7 @@ export default function ResultsScreen() {
         visible={chosenModalWine !== null}
         initialRestaurantName={isFromHistory ? (historyRestaurant ?? null) : (restaurantName || null)}
         initialCity={isFromHistory ? (historyCity ?? null) : (autoSave.data?.[0]?.city ?? null)}
+        showReturnToArchive={isFromHistory}
         onClose={() => setChosenModalWine(null)}
         onSaved={() => {
           const idx = recommendation!.wines.indexOf(chosenModalWine!);

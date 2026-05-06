@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -57,9 +58,16 @@ export default function ScanTab() {
 
   const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [hasLastSearch, setHasLastSearch] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [signInPromptShown, setSignInPromptShown] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
+
+  useFocusEffect(useCallback(() => {
+    AsyncStorage.getItem('vinster_scan_history').then((raw) => {
+      try { setHasLastSearch(!!(raw && JSON.parse(raw).length)); } catch { /* ignore */ }
+    });
+  }, []));
 
   useEffect(() => {
     if (savedPreferences && !prefsLoaded) {
@@ -244,7 +252,11 @@ export default function ScanTab() {
           <TouchableOpacity style={styles.archiveButton} onPress={() => router.push('/scan/history')}>
             <Text style={styles.archiveButtonText}>View Archive</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.archiveButton} onPress={handleViewLastSearch}>
+          <TouchableOpacity
+            style={[styles.archiveButton, !hasLastSearch && { opacity: 0.35 }]}
+            onPress={handleViewLastSearch}
+            disabled={!hasLastSearch}
+          >
             <Text style={styles.archiveButtonText}>View Last Search</Text>
           </TouchableOpacity>
         </View>

@@ -1,15 +1,64 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import { router } from 'expo-router';
+import { useState, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router, useFocusEffect } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
-  const { setImage, setWineDetails, setError } = useLabelStore();
+  const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, pairings, wineDetailsConfirmed } = useLabelStore();
+  const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
+  const [hasStoredPairing, setHasStoredPairing] = useState(false);
+  const [hasLastLabelSearch, setHasLastLabelSearch] = useState(false);
+
+  const hasLastPairing = !!(generalResult || cellarResult || hasStoredPairing);
+
+  useFocusEffect(useCallback(() => {
+    AsyncStorage.getItem('vinster_last_pairing').then((raw) => setHasStoredPairing(!!raw));
+    AsyncStorage.getItem('vinster_chef_history').then((raw) => {
+      try { setHasLastLabelSearch(!!(raw && JSON.parse(raw).length)); } catch { /* ignore */ }
+    });
+  }, []));
+
+  async function handleViewLastPairing() {
+    if (generalResult || cellarResult) {
+      router.push('/chef/pairing-results');
+      return;
+    }
+    try {
+      const raw = await AsyncStorage.getItem('vinster_last_pairing');
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      setDish(saved.dish);
+      setMode(saved.mode);
+      if (saved.mode === 'cellar') setCellarResult(saved.cellarResult);
+      else setGeneralResult(saved.generalResult, saved.generalSummary);
+      router.push('/chef/pairing-results');
+    } catch { /* nothing to restore */ }
+  }
+
+  async function handleViewLastLabelSearch() {
+    if (wineDetailsConfirmed && pairings.length) {
+      router.push('/chef/results');
+      return;
+    }
+    try {
+      const raw = await AsyncStorage.getItem('vinster_chef_history');
+      if (!raw) return;
+      const history = JSON.parse(raw);
+      if (!history.length) return;
+      const last = history[0];
+      setWineDetailsConfirmed(last.wine);
+      setPairings(last.pairings);
+      router.push('/chef/results');
+    } catch { /* nothing to restore */ }
+  }
 
   async function handleUpload() {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -50,9 +99,18 @@ export default function ChefTab() {
         <Text style={styles.sectionDesc}>
           Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
         </Text>
-        <TouchableOpacity style={styles.button} onPress={() => router.push('/chef/find-pairing')}>
-          <Text style={styles.buttonText}>Find a Wine Pairing</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/find-pairing')}>
+            <Text style={styles.buttonText}>Find a Wine Pairing</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.buttonHalf, !hasLastPairing && styles.buttonHalfDim]}
+            onPress={handleViewLastPairing}
+            disabled={!hasLastPairing}
+          >
+            <Text style={styles.buttonText}>View Last Search</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.divider} />
@@ -67,6 +125,18 @@ export default function ChefTab() {
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleUpload}>
             <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/label-archive')}>
+            <Text style={styles.buttonText}>View Archive</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.buttonHalf, !hasLastLabelSearch && styles.buttonHalfDim]}
+            onPress={handleViewLastLabelSearch}
+            disabled={!hasLastLabelSearch}
+          >
+            <Text style={styles.buttonText}>View Last Search</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -86,5 +156,6 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonHalfDim: { opacity: 0.35 },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
 });

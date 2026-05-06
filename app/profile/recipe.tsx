@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: colors.text },
   selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: 'rgba(255,255,255,0.40)', marginBottom: spacing.sm },
   pickerWrap: { marginTop: spacing.sm },
-  saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
-  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: '#FFFFFF' },
+  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
+  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
 });

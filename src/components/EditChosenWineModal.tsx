@@ -3,61 +3,49 @@ import {
   Modal, View, Text, TextInput, TouchableOpacity,
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
-import { router } from 'expo-router';
 import { useChosenWines } from '../hooks/useChosenWines';
-import { useAuth } from '../hooks/useAuth';
 import { colors, spacing } from '../constants/theme';
-import type { WineRecommendation } from '../types/wine';
+import type { ChosenWine } from '../types/wine';
 
 interface Props {
-  wine: WineRecommendation | null;
+  wine: ChosenWine | null;
   visible: boolean;
-  initialRestaurantName?: string | null;
-  initialCity?: string | null;
-  showReturnToArchive?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function ChosenWineModal({ wine, visible, initialRestaurantName, initialCity, showReturnToArchive, onClose, onSaved }: Props) {
-  const { session } = useAuth();
-  const { save } = useChosenWines();
+export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
+  const { update } = useChosenWines();
 
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
   const [tastingNote, setTastingNote] = useState('');
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (visible) {
-      setRestaurant(initialRestaurantName ?? '');
-      setCity(initialCity ?? '');
-      setTastingNote('');
-      setOtherObservations('');
-      setUserScore(null);
-      setSaved(false);
+    if (visible && wine) {
+      setRestaurant(wine.restaurant_name ?? '');
+      setCity(wine.city ?? '');
+      setTastingNote(wine.tasting_note ?? '');
+      setOtherObservations(wine.other_observations ?? '');
+      setUserScore(wine.user_score ?? null);
     }
-  }, [visible, initialRestaurantName, initialCity]);
+  }, [visible, wine]);
 
   async function handleSave() {
-    if (!wine || !session) return;
-    await save.mutateAsync({
-      wine,
-      restaurantName: restaurant,
-      city,
-      tastingNote,
-      otherObservations,
-      userScore,
+    if (!wine) return;
+    await update.mutateAsync({
+      id: wine.id,
+      input: { restaurantName: restaurant, city, tastingNote, otherObservations, userScore },
     });
-    setSaved(true);
     onSaved();
+    onClose();
   }
 
   if (!wine) return null;
 
-  const wineName = wine.vintage ? `${wine.vintage} ${wine.name}` : wine.name;
+  const wineName = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -135,32 +123,15 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
             />
             <Text style={styles.scoreHint}>out of 100</Text>
 
-            {saved ? (
-              <View style={styles.savedRow}>
-                <Text style={styles.savedText}>Saved — </Text>
-                <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
-                  <Text style={styles.savedLink}>View Wine Reviews</Text>
-                </TouchableOpacity>
-                {showReturnToArchive && (
-                  <>
-                    <Text style={styles.savedText}> · </Text>
-                    <TouchableOpacity onPress={() => { onClose(); router.push('/scan/history'); }}>
-                      <Text style={styles.savedLink}>Return to List Archive</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSave}
-                disabled={save.isPending}
-              >
-                <Text style={styles.saveButtonText}>
-                  {save.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
-                </Text>
-              </TouchableOpacity>
-            )}
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSave}
+              disabled={update.isPending}
+            >
+              <Text style={styles.saveButtonText}>
+                {update.isPending ? 'Saving…' : 'Save Changes'}
+              </Text>
+            </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
@@ -248,24 +219,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: colors.textMuted,
     marginBottom: spacing.lg,
-  },
-  savedRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-    marginBottom: spacing.sm,
-  },
-  savedText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 16,
-    color: colors.gold,
-  },
-  savedLink: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 16,
-    color: colors.gold,
-    textDecorationLine: 'underline',
   },
   saveButton: {
     borderWidth: 1,

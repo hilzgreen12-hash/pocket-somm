@@ -63,7 +63,7 @@ export interface WineDetailsComplete {
   region: string;
   wineName: string | null;
   vintage: string;
-  colour?: 'red' | 'white' | 'rosé' | 'sparkling' | null;
+  style?: string | null;
 }
 
 export interface WineIntelligence {

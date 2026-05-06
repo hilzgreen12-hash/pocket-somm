@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
@@ -18,7 +19,7 @@ export default function ChefConfirmScreen() {
   const [region, setRegion] = useState(wineDetails?.region ?? '');
   const [wineName, setWineName] = useState(wineDetails?.wineName ?? '');
   const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
-  const [colour, setColour] = useState<'red' | 'white' | 'rosé' | 'sparkling' | null>(null);
+  const [style, setStyle] = useState('');
   const [dietaryNote, setDietaryNote] = useState('');
   const [difficulty, setDifficulty] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +42,7 @@ export default function ChefConfirmScreen() {
       region: region.trim(),
       wineName: wineName.trim() || null,
       vintage: vintage.trim() || 'NV',
-      colour,
+      style: style.trim() || null,
     };
 
     setLoading(true);
@@ -57,6 +58,14 @@ export default function ChefConfirmScreen() {
       };
       const pairings = await generatePairings(confirmed, filters);
       setPairings(pairings);
+
+      try {
+        const raw = await AsyncStorage.getItem('vinster_chef_history');
+        const history = raw ? JSON.parse(raw) : [];
+        history.unshift({ id: Date.now().toString(), timestamp: new Date().toISOString(), wine: confirmed, pairings });
+        await AsyncStorage.setItem('vinster_chef_history', JSON.stringify(history.slice(0, 30)));
+      } catch { /* non-critical */ }
+
       router.replace('/chef/results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
@@ -89,6 +98,10 @@ export default function ChefConfirmScreen() {
       <TextInput style={styles.input} value={region} onChangeText={setRegion}
         placeholder="e.g. Margaux, Bordeaux" placeholderTextColor={colors.textMuted} />
 
+      <Text style={styles.label}>Style (optional)</Text>
+      <TextInput style={styles.input} value={style} onChangeText={setStyle}
+        placeholder="e.g. Red, White, Rosé, Sparkling" placeholderTextColor={colors.textMuted} />
+
       <Text style={styles.label}>Wine Name (optional)</Text>
       <TextInput style={styles.input} value={wineName} onChangeText={setWineName}
         placeholder="e.g. Reserve, Cuvée Prestige" placeholderTextColor={colors.textMuted} />
@@ -97,21 +110,6 @@ export default function ChefConfirmScreen() {
       <TextInput style={styles.input} value={vintage} onChangeText={setVintage}
         placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted}
         keyboardType="default" maxLength={4} />
-
-      <Text style={styles.label}>This wine is (optional)</Text>
-      <View style={styles.colourRow}>
-        {(['red', 'white', 'rosé', 'sparkling'] as const).map((c) => (
-          <TouchableOpacity
-            key={c}
-            style={[styles.colourBtn, colour === c && styles.colourBtnActive]}
-            onPress={() => setColour(colour === c ? null : c)}
-          >
-            <Text style={[styles.colourBtnText, colour === c && styles.colourBtnTextActive]}>
-              {c.charAt(0).toUpperCase() + c.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
 
       <View style={styles.sectionDivider} />
 
@@ -163,11 +161,6 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xl, lineHeight: 20 },
   label: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
-  colourRow: { flexDirection: 'row', gap: spacing.xs, marginBottom: spacing.md },
-  colourBtn: { flex: 1, borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, alignItems: 'center' },
-  colourBtnActive: { borderColor: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.10)' },
-  colourBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted },
-  colourBtnTextActive: { color: '#FFFFFF' },
   sectionDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
   difficultyBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
