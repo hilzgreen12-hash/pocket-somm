@@ -17,7 +17,7 @@ export default function Index() {
 
   // Signed-in users
   if (session) {
-    if (!prefsError && preferences === null) return <Redirect href="/(tabs)/welcome" />;
+    if (!prefsError && !preferences) return <Redirect href="/(tabs)/welcome" />;
     return <Redirect href="/(tabs)/scan" />;
   }
 
