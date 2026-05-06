@@ -2,11 +2,18 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { generatePairings } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
+import type { WineDetailsComplete } from '../../src/types/wine';
 
 function todayISO() {
   return new Date().toISOString().split('T')[0];
@@ -29,10 +36,13 @@ const STATUS_LABELS: Record<string, string> = {
 };
 
 export default function CellarWineDetail() {
+  useKeepAwake();
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
   const { session } = useAuth();
   const { wines, updateWine } = useCellar();
   const { racks } = useRacks();
+  const { preferences } = usePreferences();
+  const { setWineDetailsConfirmed, setPairings, setError } = useLabelStore();
   const qc = useQueryClient();
   const wine = wines.find((w) => w.id === wineId);
 
@@ -57,6 +67,8 @@ export default function CellarWineDetail() {
   const [removeDate, setRemoveDate] = useState(todayISO());
   const [removing, setRemoving] = useState(false);
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
+
+  const [findingPairings, setFindingPairings] = useState(false);
 
   if (!wine) {
     return (
@@ -167,6 +179,56 @@ export default function CellarWineDetail() {
     }
   }
 
+  async function handleFindPairings() {
+    if (!wine) return;
+    const confirmed: WineDetailsComplete = {
+      producer: wine.producer || '',
+      region: wine.region || '',
+      wineName: wine.wine_name || null,
+      vintage: wine.vintage || 'NV',
+      style: null,
+    };
+
+    setFindingPairings(true);
+    setWineDetailsConfirmed(confirmed);
+
+    try {
+      const filters = {
+        dietary: (preferences?.dietaryPreference as any) ?? null,
+        allergens: (preferences?.allergens as any) ?? [],
+        customAllergen: (preferences?.customAllergen as any) ?? '',
+        dietaryNote: null,
+        difficulty: null,
+      };
+      const pairings = await generatePairings(confirmed, filters);
+      setPairings(pairings);
+
+      try {
+        const raw = await AsyncStorage.getItem('vinster_chef_history');
+        const history = raw ? JSON.parse(raw) : [];
+        history.unshift({ id: Date.now().toString(), timestamp: new Date().toISOString(), wine: confirmed, pairings });
+        await AsyncStorage.setItem('vinster_chef_history', JSON.stringify(history.slice(0, 30)));
+      } catch { /* non-critical */ }
+
+      router.push('/chef/results');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate pairings');
+      Alert.alert('Error', 'Could not generate pairings. Please try again.');
+    } finally {
+      setFindingPairings(false);
+    }
+  }
+
+  if (findingPairings) {
+    return (
+      <SearchProgress
+        title="Crafting your pairings…"
+        subtitle="Vinster needs up to a minute for your result"
+        body="Our sommelier is selecting three chef-inspired dishes to complement your wine"
+      />
+    );
+  }
+
   const windowColor = STATUS_COLORS[wine.drinking_window_status] ?? colors.textMuted;
   const windowLabel = STATUS_LABELS[wine.drinking_window_status] ?? 'Unknown';
 
@@ -207,6 +269,10 @@ export default function CellarWineDetail() {
           <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
         </View>
       )}
+
+      <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
+        <Text style={styles.chefBtnText}>Chef, find me a food pairing for this wine</Text>
+      </TouchableOpacity>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -367,4 +433,6 @@ const styles = StyleSheet.create({
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
+  chefBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
+  chefBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
 });
