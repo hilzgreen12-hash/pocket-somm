@@ -9,6 +9,7 @@ import * as Font from 'expo-font';
 import * as Linking from 'expo-linking';
 import { supabase } from '../src/api/supabase';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import { ErrorBoundary } from '../src/components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -51,6 +52,7 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <Stack screenOptions={{ headerShown: false }}>
@@ -94,6 +96,7 @@ export default function RootLayout() {
           <StatusBar style="light" />
         </AuthProvider>
       </QueryClientProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }
