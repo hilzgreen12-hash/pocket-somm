@@ -1,7 +1,6 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
-import { useState, useCallback } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -14,17 +13,6 @@ export default function ChefTab() {
   const paddingTop = Math.max(60, height * 0.13);
   const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, pairings, wineDetailsConfirmed } = useLabelStore();
   const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
-  const [hasStoredPairing, setHasStoredPairing] = useState(false);
-  const [hasLastLabelSearch, setHasLastLabelSearch] = useState(false);
-
-  const hasLastPairing = !!(generalResult || cellarResult || hasStoredPairing);
-
-  useFocusEffect(useCallback(() => {
-    AsyncStorage.getItem('vinster_last_pairing').then((raw) => setHasStoredPairing(!!raw));
-    AsyncStorage.getItem('vinster_chef_history').then((raw) => {
-      try { setHasLastLabelSearch(!!(raw && JSON.parse(raw).length)); } catch { /* ignore */ }
-    });
-  }, []));
 
   async function handleViewLastPairing() {
     if (generalResult || cellarResult) {
@@ -33,14 +21,19 @@ export default function ChefTab() {
     }
     try {
       const raw = await AsyncStorage.getItem('vinster_last_pairing');
-      if (!raw) return;
+      if (!raw) {
+        Alert.alert('No previous search', 'Once you search for a wine pairing, you can come back here to revisit it.');
+        return;
+      }
       const saved = JSON.parse(raw);
       setDish(saved.dish);
       setMode(saved.mode);
       if (saved.mode === 'cellar') setCellarResult(saved.cellarResult);
       else setGeneralResult(saved.generalResult, saved.generalSummary);
       router.push('/chef/pairing-results');
-    } catch { /* nothing to restore */ }
+    } catch {
+      Alert.alert('Could not load previous search', 'Please try a fresh search instead.');
+    }
   }
 
   async function handleViewLastLabelSearch() {
@@ -50,14 +43,18 @@ export default function ChefTab() {
     }
     try {
       const raw = await AsyncStorage.getItem('vinster_chef_history');
-      if (!raw) return;
-      const history = JSON.parse(raw);
-      if (!history.length) return;
+      const history = raw ? JSON.parse(raw) : [];
+      if (!history.length) {
+        Alert.alert('No previous search', 'Once you scan a label and get pairings, you can come back here to revisit them.');
+        return;
+      }
       const last = history[0];
       setWineDetailsConfirmed(last.wine);
       setPairings(last.pairings);
       router.push('/chef/results');
-    } catch { /* nothing to restore */ }
+    } catch {
+      Alert.alert('Could not load previous search', 'Please try a fresh search instead.');
+    }
   }
 
   async function handleUpload() {
@@ -103,11 +100,7 @@ export default function ChefTab() {
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/find-pairing')}>
             <Text style={styles.buttonText}>Find a Wine Pairing</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.buttonHalf, !hasLastPairing && styles.buttonHalfDim]}
-            onPress={handleViewLastPairing}
-            disabled={!hasLastPairing}
-          >
+          <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastPairing}>
             <Text style={styles.buttonText}>View Last Search</Text>
           </TouchableOpacity>
         </View>
@@ -131,11 +124,7 @@ export default function ChefTab() {
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/label-archive')}>
             <Text style={styles.buttonText}>View Archive</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.buttonHalf, !hasLastLabelSearch && styles.buttonHalfDim]}
-            onPress={handleViewLastLabelSearch}
-            disabled={!hasLastLabelSearch}
-          >
+          <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastLabelSearch}>
             <Text style={styles.buttonText}>View Last Search</Text>
           </TouchableOpacity>
         </View>
@@ -156,6 +145,5 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
-  buttonHalfDim: { opacity: 0.35 },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
 });
