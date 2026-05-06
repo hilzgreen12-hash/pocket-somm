@@ -65,6 +65,14 @@ export async function importCellarDocument(base64Image: string): Promise<{ wines
   return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
 }
 
+export async function generatePersonality(category: 'wine' | 'recipe' | 'restaurant', payload: {
+  preferences?: Record<string, unknown> | null;
+  wines?: Array<{ producer: string | null; wine_name: string; vintage: string | null; region: string | null }>;
+  restaurants?: Array<{ name: string | null; city: string | null; food: number | null; service: number | null; wineList: number | null; overall: number | null; note: string | null }>;
+}): Promise<{ text: string }> {
+  return invokeFunction('personality', { category, ...payload }) as Promise<{ text: string }>;
+}
+
 export async function findFoodWinePairing(
   dish: string,
   mode: 'cellar' | 'general',

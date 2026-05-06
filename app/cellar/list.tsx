@@ -145,9 +145,6 @@ export default function CellarListScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Cellar List</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity onPress={() => router.push('/cellar/archive')}>
-            <Text style={styles.headerLinkMuted}>Archive</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={() => setAddListOpen(true)}>
             <Text style={styles.headerLink}>Add List</Text>
           </TouchableOpacity>

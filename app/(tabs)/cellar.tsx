@@ -221,8 +221,8 @@ export default function CellarTab() {
           <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/cellar/wishlist'))}>
             <Text style={styles.buttonText}>View Wish List</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/cellar/notes'))}>
-            <Text style={styles.buttonText}>View Cellar Wine Notes</Text>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/cellar/archive'))}>
+            <Text style={styles.buttonText}>View Archived Wines</Text>
           </TouchableOpacity>
         </View>
       </View>

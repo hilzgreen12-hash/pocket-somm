@@ -1,16 +1,18 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, Modal } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { generatePairings, getWineIntelligence } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
+import { addCellarWineRemoval, listCellarWineRemovals, updateCellarWineRemoval } from '../../src/api/cellar';
+import { supabase } from '../../src/api/supabase';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
 import { formatCurrency } from '../../src/constants/currency';
@@ -36,6 +38,66 @@ const STATUS_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
+function RemovalRow({ removal, onSaved }: { removal: { id: string; removed_at: string; count: number; note: string | null }; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(removal.note ?? '');
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await updateCellarWineRemoval(removal.id, { note: draft.trim() || null });
+      setEditing(false);
+      onSaved();
+    } catch {
+      Alert.alert('Could not save', 'Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const dateLabel = new Date(removal.removed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+  return (
+    <View style={styles.removalRow}>
+      <View style={styles.removalHeader}>
+        <Text style={styles.removalCount}>{removal.count} {removal.count === 1 ? 'bottle' : 'bottles'}</Text>
+        <Text style={styles.removalDate}>{dateLabel}</Text>
+      </View>
+      {editing ? (
+        <>
+          <TextInput
+            style={[styles.input, styles.removalInput]}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder="Add a note for this removal — occasion, who you were with…"
+            placeholderTextColor={colors.textMuted}
+            multiline
+            numberOfLines={3}
+            textAlignVertical="top"
+            autoFocus
+          />
+          <View style={styles.noteActions}>
+            <TouchableOpacity onPress={() => { setEditing(false); setDraft(removal.note ?? ''); }}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.saveBtn, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
+              <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Note'}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      ) : (
+        <>
+          {removal.note ? <Text style={styles.removalNoteText}>{removal.note}</Text> : null}
+          <TouchableOpacity onPress={() => setEditing(true)}>
+            <Text style={styles.editLink}>{removal.note ? 'Edit Note' : 'Add Note'}</Text>
+          </TouchableOpacity>
+        </>
+      )}
+    </View>
+  );
+}
+
 export default function CellarWineDetail() {
   useKeepAwake();
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
@@ -45,7 +107,15 @@ export default function CellarWineDetail() {
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed, setPairings, setError } = useLabelStore();
   const qc = useQueryClient();
-  const wine = wines.find((w) => w.id === wineId);
+  const { wines: archivedWines } = useArchive();
+  const wine = wines.find((w) => w.id === wineId) ?? archivedWines.find((w) => w.id === wineId);
+  const isArchived = !!wine?.archived_at;
+
+  const { data: removals = [] } = useQuery({
+    queryKey: ['cellar-removals', wineId],
+    queryFn: () => listCellarWineRemovals(wineId!),
+    enabled: !!wineId,
+  });
 
   const rackIds = racks.map((r) => r.id);
   const { data: slotAssignments = [] } = useQuery({
@@ -68,6 +138,7 @@ export default function CellarWineDetail() {
   const [removeDate, setRemoveDate] = useState(todayISO());
   const [removing, setRemoving] = useState(false);
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
+  const [removeStep, setRemoveStep] = useState<'idle' | 'confirm' | 'success'>('idle');
 
   const [findingPairings, setFindingPairings] = useState(false);
 
@@ -125,10 +196,10 @@ export default function CellarWineDetail() {
     }
   }
 
-  async function handleRemoveBottles() {
+  async function handleArchiveWine() {
     const count = parseInt(removeCount) || 0;
     if (count < 1) {
-      Alert.alert('Invalid', 'Enter at least 1 bottle to remove.');
+      Alert.alert('Invalid', 'Enter at least 1 bottle to archive.');
       return;
     }
     if (count > wine!.quantity) {
@@ -142,6 +213,16 @@ export default function CellarWineDetail() {
 
     setRemoving(true);
     try {
+      // Log the structured removal event regardless of partial vs full —
+      // these power the Removal History block on the wine card and the
+      // Cellar Archive view.
+      await addCellarWineRemoval({
+        cellarWineId: wine!.id,
+        removedAt: removeDate,
+        count,
+      });
+      qc.invalidateQueries({ queryKey: ['cellar-removals', wine!.id] });
+
       if (newQuantity === 0) {
         await updateWine.mutateAsync({
           id: wine!.id,
@@ -249,6 +330,29 @@ export default function CellarWineDetail() {
     }
   }
 
+  async function handleRemoveWine() {
+    // Hard delete: removes the wine record entirely from cellar_wines and
+    // clears any rack slots referencing it. Triggered after the user has
+    // confirmed in the styled confirm modal.
+    if (!wine) return;
+    setRemoving(true);
+    try {
+      await clearWineFromRacks(wine.id);
+      const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      setRemoveStep('success');
+    } catch {
+      setRemoveStep('idle');
+      Alert.alert('Could not remove', 'Please try again.');
+    } finally {
+      setRemoving(false);
+    }
+  }
+
   async function handleRefreshEstimate() {
     if (!wine) return;
     setRefreshingValue(true);
@@ -334,16 +438,21 @@ export default function CellarWineDetail() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
-        <Text style={styles.backText}>Back</Text>
+        <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>
 
       <View style={styles.header}>
-        <Text style={styles.wineName}>{wine.wine_name || wine.producer}</Text>
-        {wine.producer && wine.wine_name?.trim().toLowerCase() !== wine.producer?.trim().toLowerCase() && (
-          <Text style={styles.producer}>{wine.producer}</Text>
-        )}
-        <Text style={styles.detail}>{[wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
-        {wine.grape_variety && <Text style={styles.grape}>{wine.grape_variety}</Text>}
+        <Text style={styles.headerLine}>
+          {(() => {
+            const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+            const parts = sameName
+              ? [wine.producer, wine.vintage]
+              : [wine.producer, wine.wine_name, wine.vintage];
+            return parts.filter(Boolean).join(' · ');
+          })()}
+        </Text>
+        {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
+        {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
       </View>
 
       {wine.critic_score !== null && (
@@ -578,7 +687,7 @@ export default function CellarWineDetail() {
             </View>
 
             <View style={styles.removeBlock}>
-              <Text style={styles.removeHeading}>Remove Bottles</Text>
+              <Text style={styles.removeHeading}>Archive or Remove</Text>
 
               <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
               <TextInput
@@ -601,10 +710,18 @@ export default function CellarWineDetail() {
 
               <TouchableOpacity
                 style={[styles.removeBtn, removing && styles.buttonDisabled]}
-                onPress={handleRemoveBottles}
+                onPress={handleArchiveWine}
                 disabled={removing}
               >
-                <Text style={styles.removeBtnText}>{removing ? 'Removing…' : 'Remove from Cellar'}</Text>
+                <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
+                onPress={() => setRemoveStep('confirm')}
+                disabled={removing}
+              >
+                <Text style={styles.removeWineBtnText}>Remove Wine</Text>
               </TouchableOpacity>
 
               {rackRemovalMsg && (
@@ -614,6 +731,60 @@ export default function CellarWineDetail() {
           </>
         )}
       </View>
+
+      {removals.length > 0 && (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{isArchived ? 'Archived' : 'Removal History'}</Text>
+            {isArchived && wine.archived_at && (
+              <Text style={styles.archivedAt}>{new Date(wine.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+            )}
+          </View>
+          {removals.map((ev) => (
+            <RemovalRow key={ev.id} removal={ev} onSaved={() => qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] })} />
+          ))}
+        </View>
+      )}
+
+      <Modal
+        visible={removeStep !== 'idle'}
+        transparent
+        animationType="fade"
+        onRequestClose={() => removeStep === 'success' ? null : setRemoveStep('idle')}
+      >
+        <View style={styles.removeModalOverlay}>
+          <View style={styles.removeModalSheet}>
+            {removeStep === 'confirm' ? (
+              <>
+                <Text style={styles.removeModalTitle}>Remove this wine?</Text>
+                <Text style={styles.removeModalBody}>
+                  This will permanently delete {wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''} from your record. This can't be undone.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.removeModalConfirmBtn, removing && styles.buttonDisabled]}
+                  onPress={handleRemoveWine}
+                  disabled={removing}
+                >
+                  <Text style={styles.removeModalConfirmText}>{removing ? 'Removing…' : 'Remove permanently'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setRemoveStep('idle')} style={styles.removeModalCancel}>
+                  <Text style={styles.removeModalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.removeModalTitle}>Wine has been deleted from your record</Text>
+                <TouchableOpacity
+                  style={styles.removeModalOkBtn}
+                  onPress={() => { setRemoveStep('idle'); router.back(); }}
+                >
+                  <Text style={styles.removeModalOkText}>OK</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -623,12 +794,11 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
-  backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
   backText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  wineName: { fontSize: 26, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  producer: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
-  detail: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: spacing.xs },
+  headerLine: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 28 },
+  region: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4 },
   grape: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: 2 },
   tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -658,6 +828,25 @@ const styles = StyleSheet.create({
   removeHeading: { fontSize: 15, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  removeWineBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  removeWineBtnText: { color: colors.error, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  archivedAt: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
+  removalRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  removalHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 },
+  removalCount: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  removalDate: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
+  removalNoteText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 20, marginBottom: 4 },
+  removalInput: { minHeight: 70, textAlignVertical: 'top' },
+  removeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  removeModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  removeModalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm, lineHeight: 28 },
+  removeModalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  removeModalConfirmBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  removeModalConfirmText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.error },
+  removeModalCancel: { alignItems: 'center', paddingVertical: spacing.sm },
+  removeModalCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted },
+  removeModalOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  removeModalOkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   chefBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },

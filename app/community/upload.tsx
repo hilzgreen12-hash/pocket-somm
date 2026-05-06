@@ -49,16 +49,33 @@ export default function CommunityUploadScreen() {
   // Build source rows per category
   const sourceRows: SourceRow[] = useMemo(() => {
     if (key === 'wine') {
-      return chosenWines.map((w) => ({
-        sourceTable: 'chosen_wines',
-        sourceId: w.id,
-        title: `${w.vintage ? `${w.vintage} ` : ''}${w.wine_name}`,
-        subtitle: [w.producer, w.region].filter(Boolean).join(' · ') || null,
-        rating: w.user_score ?? null,
-        body: [w.tasting_note, w.other_observations].filter(Boolean).join('\n\n') || null,
-        metadata: { restaurant_name: w.restaurant_name, city: w.city, grape: w.grape },
-        capturedAt: w.chosen_at,
-      }));
+      return chosenWines.map((w) => {
+        // Header line: Producer · Wine Name · Vintage (deduped if producer
+        // and wine name are the same). Region drops to the subtitle so the
+        // community feed cards match the wine-card convention everywhere.
+        const sameName = (w.wine_name ?? '').trim().toLowerCase() === (w.producer ?? '').trim().toLowerCase();
+        const v = w.vintage != null ? String(w.vintage) : null;
+        const headerParts = sameName ? [w.producer, v] : [w.producer, w.wine_name, v];
+        const headerLine = headerParts.filter((p) => p && String(p).trim().length > 0).join(' · ');
+        return {
+          sourceTable: 'chosen_wines',
+          sourceId: w.id,
+          title: headerLine,
+          subtitle: w.region ?? null,
+          rating: w.user_score ?? null,
+          body: [w.tasting_note, w.other_observations].filter(Boolean).join('\n\n') || null,
+          metadata: {
+            producer: w.producer,
+            wine_name: w.wine_name,
+            vintage: v,
+            region: w.region,
+            restaurant_name: w.restaurant_name,
+            city: w.city,
+            grape: w.grape,
+          },
+          capturedAt: w.chosen_at,
+        };
+      });
     }
     if (key === 'restaurant') {
       return archive

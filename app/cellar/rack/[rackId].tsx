@@ -1,19 +1,14 @@
 import { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, useWindowDimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
-import { useAuth } from '../../../src/hooks/useAuth';
-import { clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
+import { assignSlot, clearSlot } from '../../../src/api/racks';
 import { colors, spacing } from '../../../src/constants/theme';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
 import * as ScreenOrientation from 'expo-screen-orientation';
-
-function todayISO() {
-  return new Date().toISOString().split('T')[0];
-}
 
 const STATUS_COLORS: Record<string, string> = {
   too_young: '#6DBF8A',
@@ -29,25 +24,21 @@ function truncate(str: string, max: number) {
 
 export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
-  const { session } = useAuth();
-  const { slots, isLoading, assign, clear } = useRack(rackId);
+  const { slots, isLoading, assign } = useRack(rackId);
   const { racks } = useRacks();
-  const { wines, updateWine } = useCellar();
+  // useCellar still needed for the auto-heal that runs on mount; the hook
+  // also keeps the cellar query warm so navigating to the wine detail card
+  // is instant (no second fetch).
+  useCellar();
   const { width } = useWindowDimensions();
   const qc = useQueryClient();
 
   const { setPendingSlot, pendingWineId, setPendingWineId } = useRackStore();
-  const [selected, setSelected] = useState<{ row: number; col: number } | null>(null);
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const [userNote, setUserNote] = useState('');
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLandscape, setIsLandscape] = useState(false);
-  const [removeCount, setRemoveCount] = useState('1');
-  const [removeDate, setRemoveDate] = useState(todayISO());
-  const [removing, setRemoving] = useState(false);
-  const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
-  const [noteSavedMsg, setNoteSavedMsg] = useState<string | null>(null);
+  const [moving, setMoving] = useState<{ row: number; col: number; wineId: string; wineName: string } | null>(null);
+  const [movingMsg, setMovingMsg] = useState<string | null>(null);
 
   // Unlock landscape for this screen; restore portrait on leave
   useEffect(() => {
@@ -100,16 +91,23 @@ export default function RackGridScreen() {
   const gridFitsScreen = naturalSlotSize >= 20;
 
   function openSlot(row: number, col: number) {
+    // If we're in the middle of a move, treat this tap as the drop target.
+    if (moving) {
+      // Tapping the source slot itself cancels the move.
+      if (moving.row === row && moving.col === col) {
+        setMoving(null);
+        setMovingMsg(null);
+        return;
+      }
+      handleDrop(row, col);
+      return;
+    }
     const slot = slotMap[`${row},${col}`];
     const wine = slot?.wine as CellarWine | null | undefined;
     if (wine) {
-      setUserNote(wine.user_notes ?? '');
-      setRemoveCount('1');
-      setRemoveDate(todayISO());
-      setRackRemovalMsg(null);
-      setNoteSavedMsg(null);
-      setSelected({ row, col });
-      setPickerOpen(true);
+      // Navigate to the same wine detail card that Cellar List uses, so
+      // there's a single source of truth for the wine UI.
+      router.push(`/cellar/${wine.id}` as any);
     } else if (pendingWineId) {
       assign.mutate({ row, col, wineId: pendingWineId });
       setPendingWineId(null);
@@ -119,92 +117,35 @@ export default function RackGridScreen() {
     }
   }
 
-  const selectedSlot = selected ? slotMap[`${selected.row},${selected.col}`] : null;
-  const assignedWine = selectedSlot?.wine as CellarWine | null | undefined;
-
-  function handleSaveNote() {
-    if (!selected || !assignedWine) return;
-    // Optimistic: surface confirmation instantly so the user doesn't wait
-    // on the network round-trip. The mutation runs in the background and
-    // surfaces an Alert only if it actually fails.
-    setNoteSavedMsg('Note saved to your cellar');
-    setTimeout(() => setNoteSavedMsg(null), 2500);
-    updateWine.mutate(
-      { id: assignedWine.id, updates: { user_notes: userNote.trim() || null } },
-      {
-        onSuccess: () => qc.invalidateQueries({ queryKey: ['rack-slots', rackId] }),
-        onError: () => {
-          setNoteSavedMsg(null);
-          Alert.alert('Could not save', 'Your note didn\'t save. Please try again.');
-        },
-      }
-    );
+  function pickUpSlot(row: number, col: number) {
+    const slot = slotMap[`${row},${col}`];
+    const wine = slot?.wine as CellarWine | null | undefined;
+    if (!wine || !slot?.cellar_wine_id) return;
+    setMoving({ row, col, wineId: slot.cellar_wine_id, wineName: wine.wine_name });
+    setMovingMsg(`Moving ${wine.wine_name} — tap a slot to place, or tap the source slot to cancel`);
   }
 
-  function handleClear() {
-    if (!selected) return;
-    clear.mutate({ row: selected.row, col: selected.col });
-    setPickerOpen(false);
-    setSelected(null);
-  }
-
-  async function handleRemoveBottlesFromSlot() {
-    if (!assignedWine) return;
-    const count = parseInt(removeCount) || 0;
-    if (count < 1) {
-      Alert.alert('Invalid', 'Enter at least 1 bottle to remove.');
-      return;
-    }
-    if (count > assignedWine.quantity) {
-      Alert.alert('Invalid', `You only have ${assignedWine.quantity} bottle${assignedWine.quantity === 1 ? '' : 's'}.`);
-      return;
-    }
-
-    const newQuantity = assignedWine.quantity - count;
-    const removalNote = `${removeDate}: removed ${count} bottle${count === 1 ? '' : 's'}`;
-    const updatedNotes = assignedWine.user_notes ? `${assignedWine.user_notes}\n${removalNote}` : removalNote;
-
-    setRemoving(true);
+  async function handleDrop(toRow: number, toCol: number) {
+    if (!moving) return;
+    const sourceWine = moving.wineId;
+    const destSlot = slotMap[`${toRow},${toCol}`];
+    const destWine = destSlot?.cellar_wine_id ?? null;
+    setMoving(null);
+    setMovingMsg(null);
     try {
-      if (newQuantity === 0) {
-        await updateWine.mutateAsync({
-          id: assignedWine.id,
-          updates: {
-            quantity: 0,
-            archived_at: `${removeDate}T12:00:00.000Z`,
-            user_notes: updatedNotes,
-          },
-        });
-        await clearWineFromRacks(assignedWine.id);
-        if (session?.user.id) {
-          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-        }
-        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-        qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-        setPickerOpen(false);
-        setSelected(null);
-        Alert.alert('Removed from cellar', 'This wine has also been removed from your live cellar rack.');
+      if (destWine) {
+        // Swap: source <- dest's wine, dest <- source's wine
+        await assignSlot(rackId, moving.row, moving.col, destWine);
+        await assignSlot(rackId, toRow, toCol, sourceWine);
       } else {
-        await updateWine.mutateAsync({
-          id: assignedWine.id,
-          updates: { quantity: newQuantity, user_notes: updatedNotes },
-        });
-        const slotsRemoved = await removeSlotsForWine(assignedWine.id, count);
-        qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-        if (slotsRemoved > 0) {
-          qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-          setRackRemovalMsg(
-            `${slotsRemoved} bottle${slotsRemoved === 1 ? '' : 's'} also removed from your live cellar rack.`
-          );
-        } else {
-          setRackRemovalMsg(null);
-        }
-        setRemoveCount('1');
+        // Move into empty slot: clear source, assign dest
+        await assignSlot(rackId, toRow, toCol, sourceWine);
+        await clearSlot(rackId, moving.row, moving.col);
       }
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
     } catch {
-      Alert.alert('Error', 'Could not record removal. Please try again.');
-    } finally {
-      setRemoving(false);
+      Alert.alert('Move failed', 'Could not move the wine. Please try again.');
     }
   }
 
@@ -271,6 +212,14 @@ export default function RackGridScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        {moving && movingMsg && (
+          <View style={styles.movingBanner}>
+            <Text style={styles.movingBannerText} numberOfLines={2}>{movingMsg}</Text>
+            <TouchableOpacity onPress={() => { setMoving(null); setMovingMsg(null); }}>
+              <Text style={styles.movingCancelLink}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
         {/* Rack grid — horizontally scrollable for wide racks */}
         {!gridFitsScreen && (
           <Text style={styles.scrollHint}>← Scroll to see full rack →</Text>
@@ -291,6 +240,7 @@ export default function RackGridScreen() {
                   const status = wine?.drinking_window_status ?? null;
                   const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
                   const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
+                  const isMovingSource = !!moving && moving.row === row && moving.col === col;
                   return (
                     <TouchableOpacity
                       key={col}
@@ -302,8 +252,11 @@ export default function RackGridScreen() {
                           : styles.slotEmpty,
                         isHighlighted && styles.slotHighlighted,
                         isDimmed && styles.slotDimmed,
+                        isMovingSource && styles.slotMovingSource,
                       ]}
                       onPress={() => openSlot(row, col)}
+                      onLongPress={() => pickUpSlot(row, col)}
+                      delayLongPress={400}
                     >
                       {wine ? (
                         <Text style={[styles.slotText, isHighlighted && styles.slotTextHighlighted]} numberOfLines={2}>
@@ -324,7 +277,7 @@ export default function RackGridScreen() {
         {winesInRack.length > 0 && (
           <View style={styles.wineList}>
             <Text style={styles.wineListHeading}>Wines in this rack</Text>
-            <Text style={styles.wineListHint}>Tap a wine to highlight its position</Text>
+            <Text style={styles.wineListHint}>Tap a wine to highlight its position. Long-press a slot in the rack to move it.</Text>
 
             <View style={styles.searchRow}>
               <TextInput
@@ -373,100 +326,6 @@ export default function RackGridScreen() {
         )}
       </ScrollView>
 
-      <Modal visible={pickerOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <ScrollView style={styles.modalContent} contentContainerStyle={{ paddingBottom: 40 }}>
-            {assignedWine && (
-              <>
-                <Text style={styles.modalTitle}>{assignedWine.wine_name}</Text>
-                {assignedWine.producer && <Text style={styles.modalProducer}>{assignedWine.producer}</Text>}
-                <Text style={styles.modalSub}>
-                  {[assignedWine.region, assignedWine.vintage].filter(Boolean).join(' · ')}
-                </Text>
-
-                {assignedWine.critic_score !== null && (
-                  <View style={styles.scoreRow}>
-                    <Text style={styles.scoreLabel}>Critic Score</Text>
-                    <Text style={styles.scoreValue}>{assignedWine.critic_score}</Text>
-                  </View>
-                )}
-
-                {(assignedWine.drinking_window_from || assignedWine.drinking_window_to) && (
-                  <View style={styles.scoreRow}>
-                    <Text style={styles.scoreLabel}>Drinking Window</Text>
-                    <Text style={styles.scoreValue}>
-                      {assignedWine.drinking_window_from}–{assignedWine.drinking_window_to}
-                    </Text>
-                  </View>
-                )}
-
-                {assignedWine.tasting_notes && (
-                  <Text style={styles.tastingNotes}>{assignedWine.tasting_notes}</Text>
-                )}
-
-                <Text style={styles.noteLabel}>Your Note</Text>
-                <TextInput
-                  style={styles.noteInput}
-                  value={userNote}
-                  onChangeText={setUserNote}
-                  placeholder="Add a personal note…"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  numberOfLines={3}
-                  textAlignVertical="top"
-                />
-
-                <TouchableOpacity style={styles.saveNoteButton} onPress={handleSaveNote}>
-                  <Text style={styles.saveNoteText}>Save Note</Text>
-                </TouchableOpacity>
-
-                {noteSavedMsg && (
-                  <View style={styles.savedBanner}>
-                    <Text style={styles.savedBannerText}>{noteSavedMsg}</Text>
-                  </View>
-                )}
-
-                <Text style={styles.removeHeading}>Remove Bottles</Text>
-                <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={removeCount}
-                  onChangeText={setRemoveCount}
-                  keyboardType="number-pad"
-                  placeholder="1"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <Text style={styles.fieldLabel}>Date removed</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={removeDate}
-                  onChangeText={setRemoveDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <TouchableOpacity
-                  style={[styles.saveNoteButton, removing && { opacity: 0.6 }]}
-                  onPress={handleRemoveBottlesFromSlot}
-                  disabled={removing}
-                >
-                  <Text style={styles.saveNoteText}>{removing ? 'Removing…' : 'Remove from Cellar'}</Text>
-                </TouchableOpacity>
-                {rackRemovalMsg && (
-                  <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
-                )}
-
-                <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
-                  <Text style={styles.clearButtonText}>Clear this slot only</Text>
-                </TouchableOpacity>
-              </>
-            )}
-
-            <TouchableOpacity style={styles.cancelButton} onPress={() => { setPickerOpen(false); setSelected(null); }}>
-              <Text style={styles.cancelText}>Back</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -480,6 +339,10 @@ const styles = StyleSheet.create({
   rotateBtn: { alignItems: 'flex-end', width: 80 },
   rotateBtnText: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   scrollHint: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingBottom: spacing.xs },
+  slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
+  movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
+  movingBannerText: { flex: 1, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, lineHeight: 18 },
+  movingCancelLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textDecorationLine: 'underline' },
   legend: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },

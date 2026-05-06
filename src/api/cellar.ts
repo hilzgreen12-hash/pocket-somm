@@ -13,6 +13,51 @@ export async function getCellarWines(userId: string): Promise<CellarWine[]> {
   return data ?? [];
 }
 
+// ----- Removal events (cellar_wine_removals) -----
+
+export interface CellarWineRemoval {
+  id: string;
+  user_id: string;
+  cellar_wine_id: string;
+  removed_at: string;
+  count: number;
+  note: string | null;
+  created_at: string;
+}
+
+export async function listCellarWineRemovals(cellarWineId: string): Promise<CellarWineRemoval[]> {
+  const { data, error } = await supabase
+    .from('cellar_wine_removals')
+    .select('*')
+    .eq('cellar_wine_id', cellarWineId)
+    .order('removed_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as CellarWineRemoval[];
+}
+
+export async function addCellarWineRemoval(input: { cellarWineId: string; removedAt: string; count: number; note?: string | null }): Promise<CellarWineRemoval> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Sign in required');
+  const { data, error } = await supabase
+    .from('cellar_wine_removals')
+    .insert({
+      user_id: user.id,
+      cellar_wine_id: input.cellarWineId,
+      removed_at: input.removedAt,
+      count: input.count,
+      note: input.note ?? null,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as CellarWineRemoval;
+}
+
+export async function updateCellarWineRemoval(id: string, updates: { note?: string | null }): Promise<void> {
+  const { error } = await supabase.from('cellar_wine_removals').update(updates).eq('id', id);
+  if (error) throw error;
+}
+
 // Heal data inconsistency: if a wine is currently assigned to a rack_slot, it
 // is by definition part of the user's live cellar. Older versions of the app
 // occasionally left wines flagged is_wishlist=true or archived_at non-null
