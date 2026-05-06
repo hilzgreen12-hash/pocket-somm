@@ -89,140 +89,6 @@ export default function WineProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setWineStyleOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Colour Preference <Text style={styles.questionMuted}>(select up to 4)</Text></Text>
-          </TouchableOpacity>
-          {!wineStyleOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.wineTypes ?? []).length > 0
-                ? (preferences?.wineTypes ?? []).map((t) => WINE_TYPE_LABELS[t]).join(', ')
-                : 'I like them all'}
-            </Text>
-          )}
-          {wineStyleOpen && (
-            <View style={styles.pickerWrap}>
-              <WineTypePicker
-                selected={(preferences?.wineTypes ?? []) as WineType[]}
-                onChange={(v) => updatePreferences({ wineTypes: v })}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setRegionalOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Regional Preference <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!regionalOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.favouriteRegions ?? []).length > 0
-                ? (preferences?.favouriteRegions ?? []).join(', ')
-                : 'I like them all'}
-            </Text>
-          )}
-          {regionalOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={WINE_REGIONS}
-                selected={preferences?.favouriteRegions ?? []}
-                onChange={(v) => updatePreferences({ favouriteRegions: v })}
-                max={5}
-                listMode
-                allOptionLabel="I like them all"
-              />
-              <View style={styles.customRow}>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Other — type a region"
-                  placeholderTextColor="rgba(255,255,255,0.30)"
-                  value={customRegion}
-                  onChangeText={setCustomRegion}
-                  onSubmitEditing={handleAddCustomRegion}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity
-                  style={[styles.customAdd, (!customRegion.trim() || (preferences?.favouriteRegions ?? []).length >= 5) && { opacity: 0.35 }]}
-                  onPress={handleAddCustomRegion}
-                  disabled={!customRegion.trim() || (preferences?.favouriteRegions ?? []).length >= 5}
-                >
-                  <Text style={styles.customAddText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setVarietalOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Varietal Preferences <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!varietalOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.favouriteGrapes ?? []).length > 0
-                ? (preferences?.favouriteGrapes ?? []).join(', ')
-                : 'I like them all'}
-            </Text>
-          )}
-          {varietalOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={GRAPE_VARIETIES}
-                selected={preferences?.favouriteGrapes ?? []}
-                onChange={(v) => updatePreferences({ favouriteGrapes: v })}
-                max={5}
-                listMode
-                allOptionLabel="I like them all"
-              />
-              <View style={styles.customRow}>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Other — type a variety"
-                  placeholderTextColor="rgba(255,255,255,0.30)"
-                  value={customGrape}
-                  onChangeText={setCustomGrape}
-                  onSubmitEditing={handleAddCustomGrape}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity
-                  style={[styles.customAdd, (!customGrape.trim() || (preferences?.favouriteGrapes ?? []).length >= 5) && { opacity: 0.35 }]}
-                  onPress={handleAddCustomGrape}
-                  disabled={!customGrape.trim() || (preferences?.favouriteGrapes ?? []).length >= 5}
-                >
-                  <Text style={styles.customAddText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setCharacteristicsOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Style Preference <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!characteristicsOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.styleProfiles ?? []).length > 0
-                ? (preferences?.styleProfiles ?? [])
-                    .map((id) => STYLE_PROFILES.find((s) => s.id === id)?.label ?? id)
-                    .join(', ')
-                : 'I like them all'}
-            </Text>
-          )}
-          {characteristicsOpen && (
-            <View style={styles.pickerWrap}>
-              <StylePicker
-                selected={preferences?.styleProfiles ?? []}
-                onChange={(profiles) => updatePreferences({ styleProfiles: profiles })}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
           <TouchableOpacity onPress={() => toggle(setRegionalDislikesOpen)} activeOpacity={0.7} style={styles.questionRow}>
             <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
             <Text style={styles.question}>Regional Dislikes <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
@@ -321,6 +187,145 @@ export default function WineProfileScreen() {
           />
         </View>
 
+        <View style={styles.softDivider}>
+          <Text style={styles.softHeading}>Soft Preferences</Text>
+          <Text style={styles.softSubheading}>Vinster will lean toward these but not enforce them strictly. You can override these per-search.</Text>
+        </View>
+
+        <View style={styles.section}>
+          <TouchableOpacity onPress={() => toggle(setWineStyleOpen)} activeOpacity={0.7} style={styles.questionRow}>
+            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
+            <Text style={styles.question}>Colour Preference <Text style={styles.questionMuted}>(select up to 4)</Text></Text>
+          </TouchableOpacity>
+          {!wineStyleOpen && (
+            <Text style={styles.selectionSummary}>
+              {(preferences?.wineTypes ?? []).length > 0
+                ? (preferences?.wineTypes ?? []).map((t) => WINE_TYPE_LABELS[t]).join(', ')
+                : 'I like them all'}
+            </Text>
+          )}
+          {wineStyleOpen && (
+            <View style={styles.pickerWrap}>
+              <WineTypePicker
+                selected={(preferences?.wineTypes ?? []) as WineType[]}
+                onChange={(v) => updatePreferences({ wineTypes: v })}
+              />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <TouchableOpacity onPress={() => toggle(setRegionalOpen)} activeOpacity={0.7} style={styles.questionRow}>
+            <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.45)" />
+            <Text style={styles.question}>Regional Preference <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
+          </TouchableOpacity>
+          {!regionalOpen && (
+            <Text style={styles.selectionSummary}>
+              {(preferences?.favouriteRegions ?? []).length > 0
+                ? (preferences?.favouriteRegions ?? []).join(', ')
+                : 'I like them all'}
+            </Text>
+          )}
+          {regionalOpen && (
+            <View style={styles.pickerWrap}>
+              <ChipPicker
+                options={WINE_REGIONS}
+                selected={preferences?.favouriteRegions ?? []}
+                onChange={(v) => updatePreferences({ favouriteRegions: v })}
+                max={5}
+                listMode
+                allOptionLabel="I like them all"
+              />
+              <View style={styles.customRow}>
+                <TextInput
+                  style={styles.customInput}
+                  placeholder="Other — type a region"
+                  placeholderTextColor="rgba(255,255,255,0.30)"
+                  value={customRegion}
+                  onChangeText={setCustomRegion}
+                  onSubmitEditing={handleAddCustomRegion}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  style={[styles.customAdd, (!customRegion.trim() || (preferences?.favouriteRegions ?? []).length >= 5) && { opacity: 0.35 }]}
+                  onPress={handleAddCustomRegion}
+                  disabled={!customRegion.trim() || (preferences?.favouriteRegions ?? []).length >= 5}
+                >
+                  <Text style={styles.customAddText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <TouchableOpacity onPress={() => toggle(setVarietalOpen)} activeOpacity={0.7} style={styles.questionRow}>
+            <Ionicons name="leaf-outline" size={16} color="rgba(255,255,255,0.45)" />
+            <Text style={styles.question}>Varietal Preferences <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
+          </TouchableOpacity>
+          {!varietalOpen && (
+            <Text style={styles.selectionSummary}>
+              {(preferences?.favouriteGrapes ?? []).length > 0
+                ? (preferences?.favouriteGrapes ?? []).join(', ')
+                : 'I like them all'}
+            </Text>
+          )}
+          {varietalOpen && (
+            <View style={styles.pickerWrap}>
+              <ChipPicker
+                options={GRAPE_VARIETIES}
+                selected={preferences?.favouriteGrapes ?? []}
+                onChange={(v) => updatePreferences({ favouriteGrapes: v })}
+                max={5}
+                listMode
+                allOptionLabel="I like them all"
+              />
+              <View style={styles.customRow}>
+                <TextInput
+                  style={styles.customInput}
+                  placeholder="Other — type a variety"
+                  placeholderTextColor="rgba(255,255,255,0.30)"
+                  value={customGrape}
+                  onChangeText={setCustomGrape}
+                  onSubmitEditing={handleAddCustomGrape}
+                  returnKeyType="done"
+                />
+                <TouchableOpacity
+                  style={[styles.customAdd, (!customGrape.trim() || (preferences?.favouriteGrapes ?? []).length >= 5) && { opacity: 0.35 }]}
+                  onPress={handleAddCustomGrape}
+                  disabled={!customGrape.trim() || (preferences?.favouriteGrapes ?? []).length >= 5}
+                >
+                  <Text style={styles.customAddText}>Add</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <TouchableOpacity onPress={() => toggle(setCharacteristicsOpen)} activeOpacity={0.7} style={styles.questionRow}>
+            <Ionicons name="wine-outline" size={16} color="rgba(255,255,255,0.45)" />
+            <Text style={styles.question}>Style Preference <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
+          </TouchableOpacity>
+          {!characteristicsOpen && (
+            <Text style={styles.selectionSummary}>
+              {(preferences?.styleProfiles ?? []).length > 0
+                ? (preferences?.styleProfiles ?? [])
+                    .map((id) => STYLE_PROFILES.find((s) => s.id === id)?.label ?? id)
+                    .join(', ')
+                : 'I like them all'}
+            </Text>
+          )}
+          {characteristicsOpen && (
+            <View style={styles.pickerWrap}>
+              <StylePicker
+                selected={preferences?.styleProfiles ?? []}
+                onChange={(profiles) => updatePreferences({ styleProfiles: profiles })}
+              />
+            </View>
+          )}
+        </View>
+
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveButtonText}>Save Wine Profile</Text>
         </TouchableOpacity>
@@ -351,4 +356,7 @@ const styles = StyleSheet.create({
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
+  softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
+  softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
+  softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
 });

@@ -69,9 +69,10 @@ export default function ProfileTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
+        <Text style={styles.sectionDesc}>Look back at the restaurants where you've used Vinster — and your notes on them.</Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/account')}>
-            <Text style={styles.buttonText}>Account Settings</Text>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/restaurants/reviews')}>
+            <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
           </TouchableOpacity>
         </View>
       </View>

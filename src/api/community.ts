@@ -96,3 +96,100 @@ export async function addComment(comment: {
   if (error) throw error;
   return data;
 }
+
+// ----- Community Reviews (wine / recipe / restaurant) -----
+
+export type CommunityCategory = 'wine' | 'recipe' | 'restaurant';
+
+export interface CommunityReview {
+  id: string;
+  user_id: string;
+  display_name: string | null;
+  category: CommunityCategory;
+  source_table: string | null;
+  source_id: string | null;
+  title: string;
+  subtitle: string | null;
+  rating: number | null;
+  body: string | null;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface CommunityReviewInput {
+  category: CommunityCategory;
+  source_table?: string | null;
+  source_id?: string | null;
+  title: string;
+  subtitle?: string | null;
+  rating?: number | null;
+  body?: string | null;
+  metadata?: Record<string, unknown>;
+}
+
+export async function listCommunityReviews(category: CommunityCategory, limit = 50): Promise<CommunityReview[]> {
+  const { data, error } = await supabase
+    .from('community_reviews')
+    .select('*')
+    .eq('category', category)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as CommunityReview[];
+}
+
+export async function searchCommunityReviews(category: CommunityCategory, query: string, limit = 50): Promise<CommunityReview[]> {
+  const term = query.trim();
+  if (!term) return listCommunityReviews(category, limit);
+  const safe = term.replace(/[%,]/g, '');
+  const { data, error } = await supabase
+    .from('community_reviews')
+    .select('*')
+    .eq('category', category)
+    .or(`title.ilike.%${safe}%,subtitle.ilike.%${safe}%,body.ilike.%${safe}%`)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data ?? []) as CommunityReview[];
+}
+
+export async function listMyCommunityUploads(category: CommunityCategory): Promise<CommunityReview[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const { data, error } = await supabase
+    .from('community_reviews')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('category', category)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return (data ?? []) as CommunityReview[];
+}
+
+export async function publishCommunityReview(input: CommunityReviewInput, displayName: string | null): Promise<CommunityReview> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error('Sign in required to publish');
+  const { data, error } = await supabase
+    .from('community_reviews')
+    .insert({
+      user_id: user.id,
+      display_name: displayName,
+      category: input.category,
+      source_table: input.source_table ?? null,
+      source_id: input.source_id ?? null,
+      title: input.title,
+      subtitle: input.subtitle ?? null,
+      rating: input.rating ?? null,
+      body: input.body ?? null,
+      metadata: input.metadata ?? {},
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data as CommunityReview;
+}
+
+export async function unpublishCommunityReview(id: string): Promise<void> {
+  const { error } = await supabase.from('community_reviews').delete().eq('id', id);
+  if (error) throw error;
+}

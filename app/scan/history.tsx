@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useAuth } from '../../src/hooks/useAuth';
+import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 
@@ -15,6 +17,7 @@ export default function ScanHistoryScreen() {
   const { archive, archiveLoading } = useScanHistory();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { session } = useAuth();
+  const [reviewing, setReviewing] = useState<ScanArchiveItem | null>(null);
 
   function handleView(item: ScanArchiveItem) {
     setExtractedWines(item.extractedWines);
@@ -72,12 +75,28 @@ export default function ScanHistoryScreen() {
 
               <Text style={styles.cardCount}>{item.extractedWines.length} wines on list</Text>
 
-              <TouchableOpacity style={styles.viewButton} onPress={() => handleView(item)}>
-                <Text style={styles.viewButtonText}>View Results</Text>
-              </TouchableOpacity>
+              <View style={styles.actionRow}>
+                <TouchableOpacity style={styles.actionButton} onPress={() => handleView(item)}>
+                  <Text style={styles.actionButtonText}>View Results</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.actionButton} onPress={() => setReviewing(item)}>
+                  <Text style={styles.actionButtonText}>Review Restaurant</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           ))}
         </ScrollView>
+      )}
+
+      {reviewing && (
+        <RestaurantReviewModal
+          visible
+          sessionId={reviewing.id}
+          initialName={reviewing.restaurantName}
+          initialNote={reviewing.restaurantNote}
+          onClose={() => setReviewing(null)}
+          onSaved={() => setReviewing(null)}
+        />
       )}
     </View>
   );
@@ -109,6 +128,7 @@ const styles = StyleSheet.create({
   cardRestaurant: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
   cardTopPick: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   cardCount: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xs },
-  viewButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
-  viewButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  actionButton: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  actionButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
 });

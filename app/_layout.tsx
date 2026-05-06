@@ -90,6 +90,11 @@ export default function RootLayout() {
             <Stack.Screen name="profile/recipe" />
             <Stack.Screen name="wines/chosen" />
             <Stack.Screen name="recipes/chosen" />
+            <Stack.Screen name="restaurants/reviews" />
+            <Stack.Screen name="community/[category]" />
+            <Stack.Screen name="community/upload" />
+            <Stack.Screen name="community/view" />
+            <Stack.Screen name="community/search" />
             <Stack.Screen name="account" />
             <Stack.Screen name="about" />
           </Stack>
