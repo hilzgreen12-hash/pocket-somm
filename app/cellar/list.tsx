@@ -1,10 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, SectionList, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
+import { useAuth } from '../../src/hooks/useAuth';
 import { getSlotAssignments } from '../../src/api/racks';
+import { repairRackedWines } from '../../src/api/cellar';
 import { colors, spacing } from '../../src/constants/theme';
 import { formatCurrency } from '../../src/constants/currency';
 import type { CellarWine } from '../../src/types/wine';
@@ -33,11 +35,25 @@ function WineRow({ wine }: { wine: CellarWine }) {
 }
 
 export default function CellarListScreen() {
+  const { session } = useAuth();
   const { wines, isLoading } = useCellar();
   const { racks, create: createList } = useRacks();
+  const qc = useQueryClient();
   const [addListOpen, setAddListOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Heal any wines stuck with stale flags but still assigned to a rack.
+  // See repairRackedWines in src/api/cellar.ts for the why.
+  useEffect(() => {
+    if (!session?.user.id) return;
+    repairRackedWines(session.user.id).then((fixed) => {
+      if (fixed > 0) {
+        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+        qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      }
+    });
+  }, [session?.user.id]);
 
   const rackIds = racks.map((r) => r.id);
 
@@ -54,15 +70,15 @@ export default function CellarListScreen() {
     if (rack) wineToRack[slot.cellar_wine_id] = rack.name;
   }
 
-  // Build sections: one per rack (in rack creation order), then unassigned
+  // Build sections: one per rack (in rack creation order, newest first), then
+  // unassigned. Empty racks are intentionally included so the user can see
+  // their racks listed and tap through to add wines.
   const assignedIds = new Set(Object.keys(wineToRack));
   const sections: { title: string; rackId: string | null; data: CellarWine[] }[] = [];
 
   for (const rack of [...racks].reverse()) {
     const rackWines = wines.filter((w) => wineToRack[w.id] === rack.name);
-    if (rackWines.length > 0) {
-      sections.push({ title: rack.name, rackId: rack.id, data: rackWines });
-    }
+    sections.push({ title: rack.name, rackId: rack.id, data: rackWines });
   }
 
   const unassigned = wines.filter((w) => !assignedIds.has(w.id));
@@ -164,7 +180,7 @@ export default function CellarListScreen() {
         </>
       )}
 
-      {wines.length === 0 ? (
+      {wines.length === 0 && racks.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Your cellar is empty</Text>
           <Text style={styles.emptyBody}>Go back and scan a wine label to start tracking your collection.</Text>
@@ -186,6 +202,13 @@ export default function CellarListScreen() {
                 </TouchableOpacity>
               )}
             </View>
+          )}
+          renderSectionFooter={({ section }) => (
+            section.data.length === 0 && section.rackId ? (
+              <TouchableOpacity onPress={() => router.push(`/cellar/rack/${section.rackId}`)} style={styles.emptyRackHint}>
+                <Text style={styles.emptyRackHintText}>No wines in this rack yet — tap to add</Text>
+              </TouchableOpacity>
+            ) : null
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={{ paddingBottom: 80 }}
@@ -249,6 +272,8 @@ const styles = StyleSheet.create({
   rowStatus: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   rowQty: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
   separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
+  emptyRackHint: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, alignItems: 'flex-start' },
+  emptyRackHintText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },

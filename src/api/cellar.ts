@@ -13,6 +13,47 @@ export async function getCellarWines(userId: string): Promise<CellarWine[]> {
   return data ?? [];
 }
 
+// Heal data inconsistency: if a wine is currently assigned to a rack_slot, it
+// is by definition part of the user's live cellar. Older versions of the app
+// occasionally left wines flagged is_wishlist=true or archived_at non-null
+// while still referenced from a slot — those wines showed in the rack view
+// but were excluded from getCellarWines, View Cellar Wine Notes, etc.
+// This function clears those flags for any wine currently in any of the
+// user's racks. It's idempotent (no-op when nothing's wrong) and safe to call
+// on every cellar list mount.
+export async function repairRackedWines(userId: string): Promise<number> {
+  const { data: assignments, error: assignErr } = await supabase
+    .from('rack_slots')
+    .select('cellar_wine_id, wine_racks!inner(user_id)')
+    .eq('wine_racks.user_id', userId)
+    .not('cellar_wine_id', 'is', null);
+  if (assignErr) return 0;
+
+  const wineIds = Array.from(new Set(((assignments ?? []) as any[]).map((r) => r.cellar_wine_id))).filter(Boolean) as string[];
+  if (wineIds.length === 0) return 0;
+
+  let fixed = 0;
+  // Reset wishlist flag on racked wines that are wrongly flagged.
+  const { data: wlFixed } = await supabase
+    .from('cellar_wines')
+    .update({ is_wishlist: false })
+    .in('id', wineIds)
+    .eq('is_wishlist', true)
+    .select('id');
+  fixed += (wlFixed ?? []).length;
+
+  // Restore archived flag on racked wines that are wrongly archived.
+  const { data: arFixed } = await supabase
+    .from('cellar_wines')
+    .update({ archived_at: null })
+    .in('id', wineIds)
+    .not('archived_at', 'is', null)
+    .select('id');
+  fixed += (arFixed ?? []).length;
+
+  return fixed;
+}
+
 export async function archiveCellarWine(id: string): Promise<void> {
   const { error } = await supabase
     .from('cellar_wines')
