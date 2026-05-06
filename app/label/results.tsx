@@ -5,7 +5,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
-import { assignSlot } from '../../src/api/racks';
+import { assignSlots } from '../../src/api/racks';
 import { colors, spacing } from '../../src/constants/theme';
 
 function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
@@ -56,6 +56,28 @@ export default function LabelResultsScreen() {
   const wine = wineDetailsConfirmed;
   const intel = intelligence;
 
+  function computeSlots(
+    startRow: number, startCol: number,
+    totalRows: number, totalCols: number,
+    count: number, orient: 'Horizontal' | 'Vertical'
+  ): Array<{ row: number; col: number }> {
+    const result: Array<{ row: number; col: number }> = [];
+    let row = startRow;
+    let col = startCol;
+    for (let i = 0; i < count; i++) {
+      if (row >= totalRows || col >= totalCols) break;
+      result.push({ row, col });
+      if (orient === 'Horizontal') {
+        col++;
+        if (col >= totalCols) { col = 0; row++; }
+      } else {
+        row++;
+        if (row >= totalRows) { row = 0; col++; }
+      }
+    }
+    return result;
+  }
+
   function buildWinePayload(userId: string) {
     return {
       user_id: userId,
@@ -99,7 +121,13 @@ export default function LabelResultsScreen() {
       const saved = await addWine.mutateAsync(buildWinePayload(session.user.id));
 
       if (pendingSlot) {
-        await assignSlot(pendingSlot.rackId, pendingSlot.row, pendingSlot.col, saved.id);
+        const slots = computeSlots(
+          pendingSlot.row, pendingSlot.col,
+          pendingSlot.rows, pendingSlot.cols,
+          parseInt(quantity) || 1,
+          orientation
+        );
+        await assignSlots(pendingSlot.rackId, slots, saved.id);
         setPendingSlot(null);
         setAddingToCellar(false);
         reset();
