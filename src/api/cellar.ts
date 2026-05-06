@@ -7,7 +7,28 @@ export async function getCellarWines(userId: string): Promise<CellarWine[]> {
     .select('*')
     .eq('user_id', userId)
     .eq('is_wishlist', false)
+    .is('archived_at', null)
     .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function archiveCellarWine(id: string): Promise<void> {
+  const { error } = await supabase
+    .from('cellar_wines')
+    .update({ archived_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
+  const { data, error } = await supabase
+    .from('cellar_wines')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_wishlist', false)
+    .not('archived_at', 'is', null)
+    .order('archived_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
 }

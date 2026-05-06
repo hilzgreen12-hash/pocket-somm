@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useChosenWines } from '../hooks/useChosenWines';
+import { useWishList } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { colors, spacing } from '../constants/theme';
 import type { WineRecommendation } from '../types/wine';
@@ -22,6 +23,7 @@ interface Props {
 export function ChosenWineModal({ wine, visible, initialRestaurantName, initialCity, showReturnToArchive, onClose, onSaved }: Props) {
   const { session } = useAuth();
   const { save } = useChosenWines();
+  const { addWine: addToWishList } = useWishList();
 
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
@@ -29,6 +31,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
   const [saved, setSaved] = useState(false);
+  const [wishlistAdded, setWishlistAdded] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -38,6 +41,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
       setOtherObservations('');
       setUserScore(null);
       setSaved(false);
+      setWishlistAdded(false);
     }
   }, [visible, initialRestaurantName, initialCity]);
 
@@ -53,6 +57,31 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
     });
     setSaved(true);
     onSaved();
+  }
+
+  async function handleAddToWishList() {
+    if (!wine || !session) return;
+    const location = [restaurant.trim(), city.trim()].filter(Boolean).join(', ');
+    await addToWishList.mutateAsync({
+      user_id: session.user.id,
+      wine_name: wine.name,
+      producer: wine.producer,
+      region: wine.region ?? null,
+      vintage: wine.vintage ? String(wine.vintage) : null,
+      quantity: 1,
+      storage_location: null,
+      date_received: new Date().toISOString().split('T')[0],
+      critic_score: wine.criticScore ?? null,
+      drinking_window_from: wine.drinkingWindow?.from ?? null,
+      drinking_window_to: wine.drinkingWindow?.to ?? null,
+      drinking_window_status: 'unknown',
+      tasting_notes: tastingNote.trim() || null,
+      grape_variety: wine.grape ?? null,
+      label_image_path: null,
+      user_notes: location || null,
+      is_wishlist: true,
+    });
+    setWishlistAdded(true);
   }
 
   if (!wine) return null;
@@ -158,6 +187,25 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
               >
                 <Text style={styles.saveButtonText}>
                   {save.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {wishlistAdded ? (
+              <View style={styles.savedRow}>
+                <Text style={styles.savedText}>Added to Wish List — </Text>
+                <TouchableOpacity onPress={() => { onClose(); router.push('/cellar/wishlist'); }}>
+                  <Text style={styles.savedLink}>View Wish List</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={styles.wishlistButton}
+                onPress={handleAddToWishList}
+                disabled={addToWishList.isPending || !session}
+              >
+                <Text style={styles.wishlistButtonText}>
+                  {addToWishList.isPending ? 'Adding…' : 'Add to Cellar Wish List'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -279,6 +327,19 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
     color: colors.gold,
+  },
+  wishlistButton: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    padding: spacing.md,
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  wishlistButtonText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+    color: colors.textMuted,
   },
   cancelButton: {
     alignItems: 'center',

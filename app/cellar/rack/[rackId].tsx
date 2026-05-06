@@ -1,8 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, useWindowDimensions, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useRack } from '../../../src/hooks/useRacks';
-import { useRacks } from '../../../src/hooks/useRacks';
+import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { colors, spacing } from '../../../src/constants/theme';
@@ -24,14 +23,15 @@ export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
   const { slots, isLoading, assign, clear } = useRack(rackId);
   const { racks } = useRacks();
-  const { wines } = useCellar();
+  const { wines, updateWine } = useCellar();
   const { width } = useWindowDimensions();
 
   const { setPendingSlot, pendingWineId, setPendingWineId } = useRackStore();
-  const { updateWine } = useCellar();
   const [selected, setSelected] = useState<{ row: number; col: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [userNote, setUserNote] = useState('');
+  const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const rack = racks.find((r) => r.id === rackId);
 
@@ -39,6 +39,25 @@ export default function RackGridScreen() {
     const map: Record<string, RackSlot> = {};
     slots.forEach((s) => { map[`${s.row_index},${s.col_index}`] = s; });
     return map;
+  }, [slots]);
+
+  // Build unique wine list from slots, preserving slot positions for highlight
+  const winesInRack = useMemo(() => {
+    const map = new Map<string, { wine: CellarWine; count: number }>();
+    slots.forEach((s) => {
+      const wine = s.wine as CellarWine | null | undefined;
+      if (wine && s.cellar_wine_id) {
+        const existing = map.get(s.cellar_wine_id);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          map.set(s.cellar_wine_id, { wine, count: 1 });
+        }
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.wine.wine_name.localeCompare(b.wine.wine_name)
+    );
   }, [slots]);
 
   const PADDING = spacing.xl * 2;
@@ -62,6 +81,9 @@ export default function RackGridScreen() {
     }
   }
 
+  const selectedSlot = selected ? slotMap[`${selected.row},${selected.col}`] : null;
+  const assignedWine = selectedSlot?.wine as CellarWine | null | undefined;
+
   function handleSaveNote() {
     if (!selected || !assignedWine) return;
     updateWine.mutate({ id: assignedWine.id, updates: { user_notes: userNote.trim() || null } });
@@ -76,6 +98,30 @@ export default function RackGridScreen() {
     setSelected(null);
   }
 
+  function toggleHighlight(wineId: string) {
+    setHighlightedWineId((prev) => (prev === wineId ? null : wineId));
+  }
+
+  const filteredWines = useMemo(() => {
+    if (!searchQuery.trim()) return winesInRack;
+    const q = searchQuery.toLowerCase();
+    return winesInRack.filter(({ wine }) =>
+      wine.wine_name.toLowerCase().includes(q) ||
+      (wine.producer ?? '').toLowerCase().includes(q) ||
+      (wine.region ?? '').toLowerCase().includes(q) ||
+      (wine.vintage ?? '').toString().includes(q)
+    );
+  }, [winesInRack, searchQuery]);
+
+  // Auto-highlight when search narrows to a single result; clear when search is cleared
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setHighlightedWineId(null);
+    } else if (filteredWines.length === 1) {
+      setHighlightedWineId(filteredWines[0].wine.id);
+    }
+  }, [filteredWines, searchQuery]);
+
   if (isLoading || !rack) {
     return (
       <View style={styles.center}>
@@ -83,9 +129,6 @@ export default function RackGridScreen() {
       </View>
     );
   }
-
-  const selectedSlot = selected ? slotMap[`${selected.row},${selected.col}`] : null;
-  const assignedWine = selectedSlot?.wine as CellarWine | null | undefined;
 
   return (
     <View style={styles.container}>
@@ -106,35 +149,96 @@ export default function RackGridScreen() {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={[styles.grid, { padding: spacing.xl }]}>
-        {Array.from({ length: rack.rows }, (_, row) => (
-          <View key={row} style={[styles.gridRow, { gap: GAP, marginBottom: GAP }]}>
-            {Array.from({ length: rack.cols }, (_, col) => {
-              const slot = slotMap[`${row},${col}`];
-              const wine = slot?.wine as CellarWine | null | undefined;
-              const status = wine?.drinking_window_status ?? null;
+      <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        {/* Rack grid */}
+        <View style={{ padding: spacing.xl }}>
+          {Array.from({ length: rack.rows }, (_, row) => (
+            <View key={row} style={[styles.gridRow, { gap: GAP, marginBottom: GAP }]}>
+              {Array.from({ length: rack.cols }, (_, col) => {
+                const slot = slotMap[`${row},${col}`];
+                const wine = slot?.wine as CellarWine | null | undefined;
+                const status = wine?.drinking_window_status ?? null;
+                const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
+                const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
+                return (
+                  <TouchableOpacity
+                    key={col}
+                    style={[
+                      styles.slot,
+                      { width: slotSize, height: slotSize },
+                      wine
+                        ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] }
+                        : styles.slotEmpty,
+                      isHighlighted && styles.slotHighlighted,
+                      isDimmed && styles.slotDimmed,
+                    ]}
+                    onPress={() => openSlot(row, col)}
+                  >
+                    {wine ? (
+                      <Text style={[styles.slotText, isHighlighted && styles.slotTextHighlighted]} numberOfLines={2}>
+                        {truncate(wine.wine_name, 12)}{wine.vintage ? `\n${wine.vintage}` : ''}
+                      </Text>
+                    ) : (
+                      <Text style={styles.slotPlus}>+</Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          ))}
+        </View>
+
+        {/* Wine list */}
+        {winesInRack.length > 0 && (
+          <View style={styles.wineList}>
+            <Text style={styles.wineListHeading}>Wines in this rack</Text>
+            <Text style={styles.wineListHint}>Tap a wine to highlight its position</Text>
+
+            <View style={styles.searchRow}>
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search wines…"
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+                  <Text style={styles.searchClearText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {filteredWines.length === 0 && (
+              <Text style={styles.searchNoResults}>No wines match "{searchQuery}"</Text>
+            )}
+
+            {filteredWines.map(({ wine, count }) => {
+              const active = highlightedWineId === wine.id;
               return (
                 <TouchableOpacity
-                  key={col}
-                  style={[
-                    styles.slot,
-                    { width: slotSize, height: slotSize },
-                    wine ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] } : styles.slotEmpty,
-                  ]}
-                  onPress={() => openSlot(row, col)}
+                  key={wine.id}
+                  style={[styles.wineRow, active && styles.wineRowActive]}
+                  onPress={() => toggleHighlight(wine.id)}
                 >
-                  {wine ? (
-                    <Text style={styles.slotText} numberOfLines={2}>
-                      {truncate(wine.wine_name, 12)}{wine.vintage ? `\n${wine.vintage}` : ''}
+                  <View style={styles.wineRowMain}>
+                    <Text style={[styles.wineRowName, active && styles.wineRowNameActive]}>
+                      {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
                     </Text>
-                  ) : (
-                    <Text style={styles.slotPlus}>+</Text>
-                  )}
+                    <Text style={styles.wineRowDetail}>
+                      {[wine.producer, wine.region].filter(Boolean).join(' · ')}
+                    </Text>
+                  </View>
+                  <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
+                    {count} {count === 1 ? 'bottle' : 'bottles'}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
-        ))}
+        )}
       </ScrollView>
 
       <Modal visible={pickerOpen} transparent animationType="slide">
@@ -211,12 +315,30 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  grid: {},
   gridRow: { flexDirection: 'row' },
   slot: { borderRadius: 4, borderWidth: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
   slotEmpty: { borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'transparent' },
+  slotHighlighted: { borderColor: '#FFFFFF', borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
+  slotDimmed: { opacity: 0.25 },
   slotText: { fontSize: 8, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'center', lineHeight: 10 },
+  slotTextHighlighted: { color: '#FFFFFF' },
   slotPlus: { fontSize: 14, color: 'rgba(255,255,255,0.20)', fontFamily: 'CormorantGaramond_400Regular' },
+  wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
+  wineListHeading: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
+  wineListHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.md },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
+  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text },
+  searchClear: { paddingLeft: spacing.sm, paddingVertical: spacing.sm },
+  searchClearText: { fontSize: 13, color: colors.textMuted },
+  searchNoResults: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
+  wineRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  wineRowActive: { borderBottomColor: colors.gold },
+  wineRowMain: { flex: 1 },
+  wineRowName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  wineRowNameActive: { color: colors.gold },
+  wineRowDetail: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
+  wineRowCount: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  wineRowCountActive: { color: colors.gold },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, maxHeight: '80%' },
   modalTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 2 },
@@ -228,11 +350,10 @@ const styles = StyleSheet.create({
   tastingNotes: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20, paddingVertical: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border },
   noteLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
   noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background, minHeight: 72, marginBottom: spacing.md },
-  saveNoteButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  saveNoteText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
-  clearButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.sm, alignItems: 'center', marginBottom: spacing.md },
-  clearButtonText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
+  saveNoteButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
+  saveNoteText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  clearButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, alignItems: 'center', marginBottom: spacing.md },
+  clearButtonText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   cancelButton: { alignItems: 'center', marginTop: spacing.sm },
   cancelText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-
 });

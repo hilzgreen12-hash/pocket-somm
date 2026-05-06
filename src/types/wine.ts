@@ -120,6 +120,7 @@ export interface CellarWine {
   label_image_path: string | null;
   user_notes: string | null;
   is_wishlist: boolean;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }
