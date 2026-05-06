@@ -8,6 +8,7 @@ import { AuthProvider } from '../src/hooks/useAuth';
 import * as Font from 'expo-font';
 import * as Linking from 'expo-linking';
 import { supabase } from '../src/api/supabase';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -20,6 +21,10 @@ export default function RootLayout() {
     CormorantGaramond_600SemiBold: require('@expo-google-fonts/cormorant-garamond/600SemiBold/CormorantGaramond_600SemiBold.ttf'),
     CormorantGaramond_700Bold: require('@expo-google-fonts/cormorant-garamond/700Bold/CormorantGaramond_700Bold.ttf'),
   });
+
+  useEffect(() => {
+    ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded) {
