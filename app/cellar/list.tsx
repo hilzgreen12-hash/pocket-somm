@@ -32,7 +32,6 @@ function WineRow({ wine }: { wine: CellarWine }) {
 }
 
 export default function CellarListScreen() {
-  const { session } = useAuth();
   const { wines, isLoading } = useCellar();
   const { racks, create: createList } = useRacks();
   const [addListOpen, setAddListOpen] = useState(false);
@@ -98,7 +97,7 @@ export default function CellarListScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Cellar List</Text>
