@@ -40,7 +40,6 @@ export default function CellarWineDetail() {
 
   const [editing, setEditing] = useState(false);
   const [quantity, setQuantity] = useState(String(wine?.quantity ?? 1));
-  const [location, setLocation] = useState(wine?.storage_location ?? '');
   const [saving, setSaving] = useState(false);
 
   const [editingNote, setEditingNote] = useState(false);
@@ -63,10 +62,7 @@ export default function CellarWineDetail() {
     try {
       await updateWine.mutateAsync({
         id: wine!.id,
-        updates: {
-          quantity: parseInt(quantity) || 1,
-          storage_location: location.trim() || null,
-        },
+        updates: { quantity: parseInt(quantity) || 1 },
       });
       setEditing(false);
     } catch {
@@ -218,14 +214,6 @@ export default function CellarWineDetail() {
               keyboardType="number-pad"
               placeholderTextColor={colors.textMuted}
             />
-            <Text style={styles.fieldLabel}>Storage location</Text>
-            <TextInput
-              style={styles.input}
-              value={location}
-              onChangeText={setLocation}
-              placeholder="e.g. Rack A, Shelf 2"
-              placeholderTextColor={colors.textMuted}
-            />
             <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
               <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>
@@ -234,16 +222,10 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           </>
         ) : (
-          <>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Bottles</Text>
-              <Text style={styles.infoValue}>{wine.quantity}</Text>
-            </View>
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Location</Text>
-              <Text style={styles.infoValue}>{wine.storage_location ?? '—'}</Text>
-            </View>
-          </>
+          <View style={styles.infoRow}>
+            <Text style={styles.infoLabel}>Bottles</Text>
+            <Text style={styles.infoValue}>{wine.quantity}</Text>
+          </View>
         )}
       </View>
 
