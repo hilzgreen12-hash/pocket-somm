@@ -4,6 +4,8 @@ export interface PendingSlot {
   rackId: string;
   row: number;
   col: number;
+  rows: number;
+  cols: number;
 }
 
 interface RackStore {

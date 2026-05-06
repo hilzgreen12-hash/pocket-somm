@@ -96,7 +96,7 @@ export default function RackGridScreen() {
       assign.mutate({ row, col, wineId: pendingWineId });
       setPendingWineId(null);
     } else {
-      setPendingSlot({ rackId, row, col });
+      setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols });
       router.push('/label/camera');
     }
   }

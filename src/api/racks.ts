@@ -61,6 +61,24 @@ export async function assignSlot(rackId: string, rowIndex: number, colIndex: num
   if (error) throw error;
 }
 
+export async function assignSlots(
+  rackId: string,
+  slots: Array<{ row: number; col: number }>,
+  cellarWineId: string
+): Promise<void> {
+  if (slots.length === 0) return;
+  const rows = slots.map((s) => ({
+    rack_id: rackId,
+    row_index: s.row,
+    col_index: s.col,
+    cellar_wine_id: cellarWineId,
+  }));
+  const { error } = await supabase
+    .from('rack_slots')
+    .upsert(rows, { onConflict: 'rack_id,row_index,col_index' });
+  if (error) throw error;
+}
+
 export async function getSlotAssignments(rackIds: string[]): Promise<{ rack_id: string; cellar_wine_id: string }[]> {
   if (rackIds.length === 0) return [];
   const { data, error } = await supabase
