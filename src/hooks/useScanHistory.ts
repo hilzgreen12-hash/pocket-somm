@@ -27,6 +27,10 @@ export interface ScanArchiveItem {
   city: string | null;
   restaurantName: string | null;
   restaurantNote: string | null;
+  ratingFood: number | null;
+  ratingService: number | null;
+  ratingWineList: number | null;
+  ratingOverall: number | null;
 }
 
 async function readLocal(): Promise<ScanHistoryItem[]> {
@@ -57,7 +61,7 @@ export function useScanHistory() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('scan_sessions')
-        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note')
+        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note, rating_food, rating_service, rating_wine_list, rating_overall')
         .eq('user_id', session!.user.id)
         .order('captured_at', { ascending: false });
       if (error) throw error;
@@ -69,6 +73,10 @@ export function useScanHistory() {
         city: row.city ?? null,
         restaurantName: row.restaurant_name ?? null,
         restaurantNote: row.restaurant_note ?? null,
+        ratingFood: row.rating_food ?? null,
+        ratingService: row.rating_service ?? null,
+        ratingWineList: row.rating_wine_list ?? null,
+        ratingOverall: row.rating_overall ?? null,
       }));
     },
   });

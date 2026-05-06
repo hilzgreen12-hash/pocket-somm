@@ -19,14 +19,16 @@ Deno.serve(async (req) => {
             },
             {
               type: 'text',
-              text: `You are a wine cellar assistant. This image shows a cellar document — it may be a spreadsheet, printed list, handwritten notes, or any format listing wines.
+              text: `You are a wine cellar assistant. This image shows a cellar-related document — it could be a spreadsheet, a printed inventory list, handwritten notes, a wine merchant's receipt, an invoice from a wholesaler or retailer, or a screenshot of any of these. Be tolerant of formatting and ignore non-wine items (e.g. delivery fees, gift bags, taxes).
 
 Extract every wine entry you can identify. For each wine, extract:
 - wine_name: the wine name (e.g. "Château Margaux", "Barolo", "Chablis Premier Cru")
 - producer: the producer or château name (may be the same as wine_name if not separate)
 - region: the region or appellation (e.g. "Bordeaux", "Burgundy", "Barossa Valley")
 - vintage: the year as a string (e.g. "2018"), or null if not shown
-- quantity: number of bottles as an integer (default 1 if not specified)
+- quantity: number of bottles as an integer (default 1 if not specified — typical for receipts where quantity is listed in a column)
+- purchase_price: per-bottle price as a number if shown on the document (receipts and invoices usually show this), or null. If the document shows a line-total (price × quantity), divide to get the per-bottle price. Strip currency symbols.
+- currency: ISO 4217 code if you can determine it from the document (£→GBP, $→USD, €→EUR, etc.), or null.
 
 Return ONLY valid JSON with this structure:
 {
@@ -36,7 +38,9 @@ Return ONLY valid JSON with this structure:
       "producer": "...",
       "region": "...",
       "vintage": "...",
-      "quantity": 1
+      "quantity": 1,
+      "purchase_price": 45.00,
+      "currency": "GBP"
     }
   ]
 }

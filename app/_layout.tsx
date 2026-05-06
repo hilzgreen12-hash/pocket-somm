@@ -13,7 +13,22 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
-const queryClient = new QueryClient();
+// React Query defaults tuned for a mobile app where most data (cellar
+// inventory, racks, profile prefs, scan history) doesn't change without the
+// user explicitly mutating it. Mutations still invalidate keys directly so
+// fresh writes are reflected immediately; this just stops every screen
+// re-mount from triggering an unnecessary refetch.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 60_000,           // treat data as fresh for 60s — no eager refetch
+      gcTime: 5 * 60_000,          // keep cache for 5 min after last subscriber unmounts
+      refetchOnWindowFocus: false, // don't refetch when app regains focus
+      refetchOnReconnect: true,    // do refetch when network comes back
+      retry: 1,                    // a single retry on failure (default 3 was overkill)
+    },
+  },
+});
 
 export default function RootLayout() {
   const [fontsLoaded, fontError] = Font.useFonts({

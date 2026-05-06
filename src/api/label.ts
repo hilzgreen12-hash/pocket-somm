@@ -51,8 +51,18 @@ export async function generatePairings(wine: WineDetailsComplete, filters: Dieta
   return data.pairings;
 }
 
-export async function importCellarDocument(base64Image: string): Promise<{ wines: { wine_name: string; producer: string; region: string; vintage: string | null; quantity: number }[] }> {
-  return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: { wine_name: string; producer: string; region: string; vintage: string | null; quantity: number }[] }>;
+export interface ImportedCellarWine {
+  wine_name: string;
+  producer: string;
+  region: string;
+  vintage: string | null;
+  quantity: number;
+  purchase_price?: number | null;
+  currency?: string | null;
+}
+
+export async function importCellarDocument(base64Image: string): Promise<{ wines: ImportedCellarWine[] }> {
+  return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
 }
 
 export async function findFoodWinePairing(

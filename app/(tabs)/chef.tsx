@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Alert } from 'react-native';
+import { useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -8,11 +9,14 @@ import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
+interface AppMessage { title: string; body: string; }
+
 export default function ChefTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
   const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, pairings, wineDetailsConfirmed } = useLabelStore();
   const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
+  const [message, setMessage] = useState<AppMessage | null>(null);
 
   async function handleViewLastPairing() {
     if (generalResult || cellarResult) {
@@ -22,7 +26,7 @@ export default function ChefTab() {
     try {
       const raw = await AsyncStorage.getItem('vinster_last_pairing');
       if (!raw) {
-        Alert.alert('No previous search', 'Once you search for a wine pairing, you can come back here to revisit it.');
+        setMessage({ title: 'No previous search', body: 'Once you search for a wine pairing, you can come back here to revisit it.' });
         return;
       }
       const saved = JSON.parse(raw);
@@ -32,7 +36,7 @@ export default function ChefTab() {
       else setGeneralResult(saved.generalResult, saved.generalSummary);
       router.push('/chef/pairing-results');
     } catch {
-      Alert.alert('Could not load previous search', 'Please try a fresh search instead.');
+      setMessage({ title: 'Could not load previous search', body: 'Please try a fresh search instead.' });
     }
   }
 
@@ -45,7 +49,7 @@ export default function ChefTab() {
       const raw = await AsyncStorage.getItem('vinster_chef_history');
       const history = raw ? JSON.parse(raw) : [];
       if (!history.length) {
-        Alert.alert('No previous search', 'Once you scan a label and get pairings, you can come back here to revisit them.');
+        setMessage({ title: 'No previous search', body: 'Once you scan a label and get pairings, you can come back here to revisit them.' });
         return;
       }
       const last = history[0];
@@ -53,7 +57,7 @@ export default function ChefTab() {
       setPairings(last.pairings);
       router.push('/chef/results');
     } catch {
-      Alert.alert('Could not load previous search', 'Please try a fresh search instead.');
+      setMessage({ title: 'Could not load previous search', body: 'Please try a fresh search instead.' });
     }
   }
 
@@ -131,6 +135,18 @@ export default function ChefTab() {
       </View>
 
       <TabFooter />
+
+      <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>{message?.title}</Text>
+            <Text style={styles.modalBody}>{message?.body}</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setMessage(null)}>
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -146,4 +162,10 @@ const styles = StyleSheet.create({
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
+  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
 });

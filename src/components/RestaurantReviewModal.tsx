@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
+import { StarRating } from './StarRating';
 import { colors, spacing } from '../constants/theme';
 
 interface Props {
@@ -12,14 +13,19 @@ interface Props {
   sessionId: string;
   initialName?: string | null;
   initialNote?: string | null;
+  initialRatings?: { food: number | null; service: number | null; wineList: number | null; overall: number | null } | null;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function RestaurantReviewModal({ visible, sessionId, initialName, initialNote, onClose, onSaved }: Props) {
+export function RestaurantReviewModal({ visible, sessionId, initialName, initialNote, initialRatings, onClose, onSaved }: Props) {
   const qc = useQueryClient();
   const [name, setName] = useState(initialName ?? '');
   const [note, setNote] = useState(initialNote ?? '');
+  const [food, setFood] = useState<number | null>(initialRatings?.food ?? null);
+  const [service, setService] = useState<number | null>(initialRatings?.service ?? null);
+  const [wineList, setWineList] = useState<number | null>(initialRatings?.wineList ?? null);
+  const [overall, setOverall] = useState<number | null>(initialRatings?.overall ?? null);
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
@@ -27,7 +33,14 @@ export function RestaurantReviewModal({ visible, sessionId, initialName, initial
     try {
       await supabase
         .from('scan_sessions')
-        .update({ restaurant_name: name.trim() || null, restaurant_note: note.trim() || null })
+        .update({
+          restaurant_name: name.trim() || null,
+          restaurant_note: note.trim() || null,
+          rating_food: food,
+          rating_service: service,
+          rating_wine_list: wineList,
+          rating_overall: overall,
+        })
         .eq('id', sessionId);
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       onSaved();
@@ -54,6 +67,26 @@ export function RestaurantReviewModal({ visible, sessionId, initialName, initial
               placeholder="e.g. The Ledbury"
               placeholderTextColor={colors.textMuted}
             />
+
+            <Text style={styles.fieldLabel}>Ratings</Text>
+            <View style={styles.ratingsBlock}>
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingLabel}>Food</Text>
+                <StarRating value={food} onChange={setFood} />
+              </View>
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingLabel}>Service</Text>
+                <StarRating value={service} onChange={setService} />
+              </View>
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingLabel}>Wine list</Text>
+                <StarRating value={wineList} onChange={setWineList} />
+              </View>
+              <View style={styles.ratingRow}>
+                <Text style={styles.ratingLabel}>Overall</Text>
+                <StarRating value={overall} onChange={setOverall} />
+              </View>
+            </View>
 
             <Text style={styles.fieldLabel}>Your review</Text>
             <TextInput
@@ -129,6 +162,24 @@ const styles = StyleSheet.create({
   noteInput: {
     minHeight: 110,
     marginBottom: spacing.lg,
+  },
+  ratingsBlock: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 10,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    gap: spacing.sm,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  ratingLabel: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 15,
+    color: colors.text,
   },
   saveButton: {
     borderWidth: 1,

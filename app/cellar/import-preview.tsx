@@ -4,9 +4,14 @@ import { router } from 'expo-router';
 import { useCellarImportStore, type ImportedWine } from '../../src/stores/cellarImportStore';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { formatCurrency } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 
 function WineCard({ wine, index, onRemove }: { wine: ImportedWine; index: number; onRemove: () => void }) {
+  const priceLine = wine.purchase_price != null
+    ? `Paid ${formatCurrency(Number(wine.purchase_price), wine.currency, { decimals: 2 })}`
+    : null;
   return (
     <View style={styles.card}>
       <View style={styles.cardMain}>
@@ -17,6 +22,7 @@ function WineCard({ wine, index, onRemove }: { wine: ImportedWine; index: number
         <Text style={styles.cardDetail}>
           {[wine.region, wine.vintage].filter(Boolean).join(' · ')}
           {wine.quantity > 1 ? ` · ${wine.quantity} bottles` : ''}
+          {priceLine ? ` · ${priceLine}` : ''}
         </Text>
       </View>
       <TouchableOpacity onPress={onRemove} style={styles.removeBtn}>
@@ -30,6 +36,7 @@ export default function ImportPreviewScreen() {
   const { wines, removeWine, reset } = useCellarImportStore();
   const { addWine } = useCellar();
   const { session } = useAuth();
+  const { preferences } = usePreferences();
   const [saving, setSaving] = useState(false);
 
   async function handleImportAll() {
@@ -39,6 +46,7 @@ export default function ImportPreviewScreen() {
       return;
     }
     setSaving(true);
+    const fallbackCurrency = preferences?.defaultCurrency ?? 'GBP';
     try {
       await Promise.all(
         wines.map((w) =>
@@ -58,7 +66,9 @@ export default function ImportPreviewScreen() {
             tasting_notes: null,
             grape_variety: null,
             label_image_path: null,
-          })
+            purchase_price: w.purchase_price ?? null,
+            purchase_price_currency: w.purchase_price != null ? (w.currency ?? fallbackCurrency) : null,
+          } as any)
         )
       );
       reset();
