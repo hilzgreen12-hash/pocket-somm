@@ -4,11 +4,22 @@ import { useQuery } from '@tanstack/react-query';
 import { format } from 'date-fns';
 import { supabase } from '../../src/api/supabase';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useScanStore } from '../../src/stores/scanStore';
 import { colors, spacing, typography } from '../../src/constants/theme';
 import type { ScanSession } from '../../src/types/scan';
 
 export default function HistoryTab() {
   const { session } = useAuth();
+  const { setExtractedWines, setRecommendation } = useScanStore();
+
+  function handleOpen(item: ScanSession) {
+    setExtractedWines(item.extracted_wines as any);
+    setRecommendation(item.recommendation as any);
+    const params = new URLSearchParams({ fromHistory: 'true', sessionId: item.id });
+    if (item.restaurant_name) params.set('restaurant', item.restaurant_name);
+    if (item.city) params.set('city', item.city);
+    router.push(`/scan/results?${params.toString()}`);
+  }
 
   const { data: sessions, isLoading, isError } = useQuery({
     queryKey: ['scan-sessions', session?.user.id],
@@ -70,7 +81,7 @@ export default function HistoryTab() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: spacing.xl }}
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <TouchableOpacity style={styles.card} onPress={() => handleOpen(item)} activeOpacity={0.7}>
             <Text style={styles.cardDate}>
               {format(new Date(item.captured_at), 'd MMM yyyy · h:mm a')}
             </Text>
@@ -80,7 +91,7 @@ export default function HistoryTab() {
             {item.recommendation?.wines?.[0] && (
               <Text style={styles.cardWine}>{item.recommendation.wines[0].name}</Text>
             )}
-          </View>
+          </TouchableOpacity>
         )}
       />
     </View>

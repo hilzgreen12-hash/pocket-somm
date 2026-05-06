@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { View, StyleSheet, Dimensions, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -20,6 +20,7 @@ export default function ChefCameraScreen() {
 
   async function handleCapture() {
     if (!cameraRef.current) return;
+    try {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
@@ -73,6 +74,10 @@ export default function ChefCameraScreen() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
       router.push('/chef/confirm');
+    }
+    } catch (err) {
+      console.error('[ChefCamera] Capture failed:', err);
+      Alert.alert('Camera error', 'Could not capture the photo. Please try again.');
     }
   }
 
