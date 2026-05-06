@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
@@ -29,6 +30,7 @@ export default function ResultsScreen() {
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
   const { autoSave } = useScanHistory();
   const { session } = useAuth();
+  const { preferences: userPrefs } = usePreferences();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const [isGenerating, setIsGenerating] = useState(false);
   const hasSaved = useRef(false);
@@ -69,6 +71,7 @@ export default function ResultsScreen() {
         wines: extractedWines.slice(0, 80),
         ...preferences,
         excludeWines,
+        currency: userPrefs?.defaultCurrency ?? 'GBP',
       });
       setRecommendation(newRec);
       setOpenIndex(0);

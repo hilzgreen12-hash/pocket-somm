@@ -9,10 +9,11 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings } from '../../src/api/label';
+import { generatePairings, getWineIntelligence } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
+import { formatCurrency } from '../../src/constants/currency';
 import type { WineDetailsComplete } from '../../src/types/wine';
 
 function todayISO() {
@@ -69,6 +70,11 @@ export default function CellarWineDetail() {
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
 
   const [findingPairings, setFindingPairings] = useState(false);
+
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [purchasePriceDraft, setPurchasePriceDraft] = useState(wine?.purchase_price != null ? String(wine.purchase_price) : '');
+  const [savingPrice, setSavingPrice] = useState(false);
+  const [refreshingValue, setRefreshingValue] = useState(false);
 
   if (!wine) {
     return (
@@ -179,6 +185,59 @@ export default function CellarWineDetail() {
     }
   }
 
+  async function handleSavePrice() {
+    const trimmed = purchasePriceDraft.trim();
+    const parsed = trimmed ? Number(trimmed) : null;
+    if (trimmed && (parsed === null || Number.isNaN(parsed) || parsed < 0)) {
+      Alert.alert('Invalid', 'Enter a positive number for the purchase price.');
+      return;
+    }
+    setSavingPrice(true);
+    try {
+      await updateWine.mutateAsync({
+        id: wine!.id,
+        updates: {
+          purchase_price: parsed,
+          // Stamp the user's current currency only on first entry; preserve
+          // existing currency on subsequent edits so historical prices stay
+          // in their original currency.
+          ...(wine!.purchase_price_currency ? {} : { purchase_price_currency: preferences?.defaultCurrency ?? 'GBP' }),
+        },
+      });
+      setEditingPrice(false);
+    } catch {
+      Alert.alert('Error', 'Could not save purchase price.');
+    } finally {
+      setSavingPrice(false);
+    }
+  }
+
+  async function handleRefreshEstimate() {
+    if (!wine) return;
+    setRefreshingValue(true);
+    const currency = preferences?.defaultCurrency ?? 'GBP';
+    try {
+      const intel = await getWineIntelligence({
+        producer: wine.producer ?? '',
+        region: wine.region ?? '',
+        wineName: wine.wine_name || null,
+        vintage: wine.vintage || 'NV',
+      } as any, currency);
+      await updateWine.mutateAsync({
+        id: wine.id,
+        updates: {
+          estimated_value: intel.estimatedValue,
+          estimated_value_currency: currency,
+          estimated_value_at: new Date().toISOString(),
+        },
+      });
+    } catch {
+      Alert.alert('Could not refresh', 'Vinster couldn\'t generate an estimate right now. Please try again.');
+    } finally {
+      setRefreshingValue(false);
+    }
+  }
+
   async function handleFindPairings() {
     if (!wine) return;
     const confirmed: WineDetailsComplete = {
@@ -264,6 +323,55 @@ export default function CellarWineDetail() {
           {wine.drinking_window_from && wine.drinking_window_to && (
             <Text style={styles.infoSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
           )}
+        </View>
+      </View>
+
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLabel}>Purchase Price</Text>
+        {editingPrice ? (
+          <View style={styles.priceEditRow}>
+            <TextInput
+              style={styles.priceInput}
+              value={purchasePriceDraft}
+              onChangeText={setPurchasePriceDraft}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={[styles.priceSaveBtn, savingPrice && { opacity: 0.5 }]}
+              onPress={handleSavePrice}
+              disabled={savingPrice}
+            >
+              <Text style={styles.priceSaveBtnText}>{savingPrice ? '…' : 'Save'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
+              <Text style={styles.priceCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity onPress={() => setEditingPrice(true)} style={styles.priceDisplay}>
+            <Text style={[styles.infoValue, wine.purchase_price == null && { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' }]}>
+              {wine.purchase_price != null ? formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 2 }) : 'Tap to add'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.infoRow}>
+        <Text style={styles.infoLabel}>Estimated Value</Text>
+        <View style={styles.estimateDisplay}>
+          {refreshingValue ? (
+            <Text style={[styles.infoValue, { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' }]}>Estimating…</Text>
+          ) : wine.estimated_value != null ? (
+            <Text style={styles.infoValue}>{formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}</Text>
+          ) : (
+            <Text style={[styles.infoValue, { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' }]}>—</Text>
+          )}
+          <TouchableOpacity onPress={handleRefreshEstimate} disabled={refreshingValue}>
+            <Text style={styles.estimateRefreshLink}>{wine.estimated_value != null ? 'Refresh' : 'Get estimate'}</Text>
+          </TouchableOpacity>
         </View>
       </View>
 
@@ -438,4 +546,12 @@ const styles = StyleSheet.create({
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   chefBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  priceDisplay: { alignItems: 'flex-end' },
+  priceEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  priceInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 6, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minWidth: 90, textAlign: 'right' },
+  priceSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.sm },
+  priceSaveBtnText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  priceCancelText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  estimateDisplay: { alignItems: 'flex-end' },
+  estimateRefreshLink: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: 2 },
 });

@@ -3,11 +3,14 @@ import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Alert,
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
+import { usePreferences } from '../src/hooks/usePreferences';
 import { supabase } from '../src/api/supabase';
+import { CURRENCIES } from '../src/constants/currency';
 import { colors, spacing } from '../src/constants/theme';
 
 export default function AccountScreen() {
   const { session } = useAuth();
+  const { preferences, updatePreferences } = usePreferences();
   const [emailChangeOpen, setEmailChangeOpen] = useState(false);
   const [newEmail, setNewEmail] = useState('');
   const [emailSaving, setEmailSaving] = useState(false);
@@ -190,6 +193,30 @@ export default function AccountScreen() {
       <View style={styles.section}>
         <Text style={styles.settingsHeading}>Your Account Settings</Text>
 
+        <View style={styles.currencyBlock}>
+          <Text style={styles.settingLabel}>Currency</Text>
+          <Text style={styles.currencyHint}>Used throughout your cellar, prices, and budget. Change it any time — useful when you're travelling.</Text>
+          <View style={styles.currencyChips}>
+            {CURRENCIES.map((c) => {
+              const active = (preferences?.defaultCurrency ?? 'GBP') === c.code;
+              return (
+                <TouchableOpacity
+                  key={c.code}
+                  style={[styles.currencyChip, active && styles.currencyChipActive]}
+                  onPress={() => updatePreferences({ defaultCurrency: c.code })}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.currencyChipText, active && styles.currencyChipTextActive]}>
+                    {c.symbol} {c.code}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
+
+        <View style={styles.settingDivider} />
+
         <View style={styles.settingRow}>
           <Text style={styles.settingLabel}>Email me when my wines are approaching their drinking windows</Text>
           <Switch
@@ -270,4 +297,11 @@ const styles = StyleSheet.create({
   settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
   settingLabel: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 22 },
   settingDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  currencyBlock: { marginBottom: spacing.sm },
+  currencyHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2, marginBottom: spacing.sm, lineHeight: 18 },
+  currencyChips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginTop: spacing.xs },
+  currencyChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
+  currencyChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
+  currencyChipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.textMuted },
+  currencyChipTextActive: { color: colors.gold },
 });

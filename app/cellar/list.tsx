@@ -6,6 +6,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { getSlotAssignments } from '../../src/api/racks';
 import { colors, spacing } from '../../src/constants/theme';
+import { formatCurrency } from '../../src/constants/currency';
 import type { CellarWine } from '../../src/types/wine';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -72,6 +73,27 @@ export default function CellarListScreen() {
   const totalBottles = wines.reduce((sum, w) => sum + w.quantity, 0);
   const peakNow = wines.filter((w) => w.drinking_window_status === 'peak').length;
 
+  // Group totals by currency so wines stored under different currencies don't
+  // get summed together silently.
+  const purchaseByCurrency: Record<string, number> = {};
+  const valueByCurrency: Record<string, number> = {};
+  for (const w of wines) {
+    if (w.purchase_price != null) {
+      const code = (w.purchase_price_currency ?? 'GBP').toUpperCase();
+      purchaseByCurrency[code] = (purchaseByCurrency[code] ?? 0) + Number(w.purchase_price) * w.quantity;
+    }
+    if (w.estimated_value != null) {
+      const code = (w.estimated_value_currency ?? 'GBP').toUpperCase();
+      valueByCurrency[code] = (valueByCurrency[code] ?? 0) + Number(w.estimated_value) * w.quantity;
+    }
+  }
+  const fmtTotals = (totals: Record<string, number>) =>
+    Object.entries(totals)
+      .map(([code, amt]) => formatCurrency(amt, code, { decimals: 0 }))
+      .join(' · ');
+  const purchaseTotal = fmtTotals(purchaseByCurrency);
+  const valueTotal = fmtTotals(valueByCurrency);
+
   async function handleAddList() {
     if (!newListName.trim()) return;
     setSaving(true);
@@ -112,20 +134,34 @@ export default function CellarListScreen() {
       </View>
 
       {wines.length > 0 && (
-        <View style={styles.statsRow}>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{totalBottles}</Text>
-            <Text style={styles.statLabel}>Bottles</Text>
+        <>
+          <View style={styles.statsRow}>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{totalBottles}</Text>
+              <Text style={styles.statLabel}>Bottles</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{peakNow}</Text>
+              <Text style={styles.statLabel}>Peak Now</Text>
+            </View>
+            <View style={styles.stat}>
+              <Text style={styles.statValue}>{wines.length}</Text>
+              <Text style={styles.statLabel}>Wines</Text>
+            </View>
           </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{peakNow}</Text>
-            <Text style={styles.statLabel}>Peak Now</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={styles.statValue}>{wines.length}</Text>
-            <Text style={styles.statLabel}>Wines</Text>
-          </View>
-        </View>
+          {(purchaseTotal || valueTotal) && (
+            <View style={styles.statsRow}>
+              <View style={styles.stat}>
+                <Text style={styles.statValueSmall}>{purchaseTotal || '—'}</Text>
+                <Text style={styles.statLabel}>Spent</Text>
+              </View>
+              <View style={styles.stat}>
+                <Text style={styles.statValueSmall}>{valueTotal || '—'}</Text>
+                <Text style={styles.statLabel}>Est. Value</Text>
+              </View>
+            </View>
+          )}
+        </>
       )}
 
       {wines.length === 0 ? (
@@ -200,6 +236,7 @@ const styles = StyleSheet.create({
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
   statValue: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
+  statValueSmall: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, textAlign: 'center' },
   statLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xs, backgroundColor: colors.background },
   sectionTitle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },

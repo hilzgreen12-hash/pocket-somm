@@ -73,6 +73,7 @@ export interface WineIntelligence {
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
   grapeVariety: string | null;
   tastingNotes: string;
+  estimatedValue: number | null;
 }
 
 export interface Recipe {
@@ -124,6 +125,10 @@ export interface CellarWine {
   user_notes: string | null;
   is_wishlist: boolean;
   archived_at: string | null;
+  purchase_price: number | null;
+  estimated_value: number | null;
+  estimated_value_currency: string | null;
+  estimated_value_at: string | null;
   created_at: string;
   updated_at: string;
 }

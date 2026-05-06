@@ -129,7 +129,12 @@ Deno.serve(async (req) => {
       topScoringMode,
       profileWineTypes,
       profileStyleProfiles,
+      currency,
     } = await req.json();
+
+    const cur = (currency ?? 'GBP').toString().toUpperCase();
+    const symMap: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', NZD: 'NZ$', JPY: '¥', CHF: 'Fr', HKD: 'HK$', SGD: 'S$' };
+    const sym = symMap[cur] ?? cur + ' ';
 
     const colourLabels: Record<string, string> = {
       red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling',
@@ -142,7 +147,7 @@ Deno.serve(async (req) => {
         : 'No colour restriction — recommend the best option regardless of colour.';
 
     const budgetLine = budget
-      ? `HARD RULE — BUDGET: The diner's maximum budget is £${budget} per bottle. Exclude every wine priced above £${budget} on the menu. This is absolute.`
+      ? `HARD RULE — BUDGET: The diner's maximum budget is ${sym}${budget} per bottle (currency: ${cur}). Exclude every wine priced above ${sym}${budget} on the menu. Treat all menu prices as being in ${cur}. This is absolute.`
       : '';
 
     const dislikedRegionsLine = dislikedRegions?.length
@@ -168,7 +173,7 @@ Today's date: ${today} — use this as the anchor when assessing every wine's dr
 Diner preferences:
 - Colour: ${wineTypes?.length ? wineTypes.join(', ') : profileWineTypes?.length ? `${profileWineTypes.join(', ')} (soft preference — do not exclude other colours)` : 'No preference'}
 - Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.join(', ') : 'No preference — prioritise quality and value'}
-- Budget: up to £${budget ?? 'unlimited'} per bottle on the menu
+- Budget: up to ${sym}${budget ?? 'unlimited'} per bottle on the menu (${cur})
 - Food pairing: ${foodPairing || 'Not specified'}
 - Favourite regions (prioritise these): ${favouriteRegions?.length ? favouriteRegions.join(', ') : 'None specified'}
 - Favourite grapes (prioritise these): ${favouriteGrapes?.length ? favouriteGrapes.join(', ') : 'None specified'}

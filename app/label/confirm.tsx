@@ -42,7 +42,7 @@ export default function LabelConfirmScreen() {
     setWineDetailsConfirmed(confirmed);
 
     try {
-      const intel = await getWineIntelligence(confirmed);
+      const intel = await getWineIntelligence(confirmed, preferences?.defaultCurrency ?? 'GBP');
       setIntelligence(intel);
       router.replace('/label/results');
     } catch (err) {

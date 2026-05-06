@@ -225,7 +225,7 @@ export default function ScanTab() {
         <View style={styles.section}>
           <View style={styles.bubbleWrap}>
             <Text style={styles.question}>Budget?</Text>
-            <BudgetSlider value={budget} onChange={setBudget} />
+            <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} />
           </View>
         </View>
 

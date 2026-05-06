@@ -5,6 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { assignSlots } from '../../src/api/racks';
 import { colors, spacing } from '../../src/constants/theme';
@@ -35,7 +36,9 @@ export default function LabelResultsScreen() {
   const { addWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
   const { pendingSlot, setPendingSlot } = useRackStore();
+  const { preferences } = usePreferences();
   const qc = useQueryClient();
+  const userCurrency = preferences?.defaultCurrency ?? 'GBP';
 
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
@@ -99,6 +102,10 @@ export default function LabelResultsScreen() {
       label_image_path: null,
       user_notes: null,
       is_wishlist: false,
+      estimated_value: intel.estimatedValue,
+      estimated_value_currency: userCurrency,
+      estimated_value_at: intel.estimatedValue != null ? new Date().toISOString() : null,
+      purchase_price_currency: userCurrency,
     };
   }
 
