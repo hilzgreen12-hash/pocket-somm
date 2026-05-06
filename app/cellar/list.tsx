@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { View, Text, SectionList, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -84,21 +84,15 @@ export default function CellarListScreen() {
     ? wines.filter((w) => w.drinking_window_status === statusFilter)
     : wines;
 
-  // Build sections: one per rack (in rack creation order, newest first), then
-  // unassigned. Empty racks are intentionally included so the user can see
-  // their racks listed and tap through to add wines.
+  // Each rack becomes a single summary row. Unassigned wines are kept inline
+  // on this page (rendered in their own block below the rack rows) so the
+  // user can see them and is prompted to organise them into a list.
   const assignedIds = new Set(Object.keys(wineToRack));
-  const sections: { title: string; rackId: string | null; data: CellarWine[] }[] = [];
-
-  for (const rack of [...racks].reverse()) {
+  const rackSummaries = [...racks].reverse().map((rack) => {
     const rackWines = visibleWines.filter((w) => wineToRack[w.id] === rack.name);
-    sections.push({ title: rack.name, rackId: rack.id, data: rackWines });
-  }
-
-  const unassigned = visibleWines.filter((w) => !assignedIds.has(w.id));
-  if (unassigned.length > 0) {
-    sections.push({ title: racks.length > 0 ? 'Unassigned' : 'All Wines', rackId: null, data: unassigned });
-  }
+    return { rack, wines: rackWines };
+  });
+  const unassignedWines = visibleWines.filter((w) => !assignedIds.has(w.id));
 
   // Group totals by currency so wines stored under different currencies don't
   // get summed together silently.
@@ -224,31 +218,49 @@ export default function CellarListScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <SectionList
-          sections={sections}
-          keyExtractor={(w) => w.id}
-          renderItem={({ item }) => <WineRow wine={item} />}
-          renderSectionHeader={({ section }) => (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              {section.rackId && (
-                <TouchableOpacity onPress={() => router.push(`/cellar/rack/${section.rackId}`)}>
-                  <Text style={styles.sectionLink}>View Live Rack →</Text>
-                </TouchableOpacity>
-              )}
+        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+          {rackSummaries.map(({ rack, wines: rackWines }) => {
+            const wineCount = rackWines.length;
+            const bottleCount = rackWines.reduce((sum, w) => sum + w.quantity, 0);
+            return (
+              <TouchableOpacity
+                key={rack.id}
+                style={styles.summaryRow}
+                onPress={() => router.push(`/cellar/rack/${rack.id}`)}
+                activeOpacity={0.7}
+              >
+                <View style={styles.summaryMain}>
+                  <Text style={styles.summaryTitle}>{rack.name}</Text>
+                  <Text style={styles.summarySubtitle}>
+                    {wineCount === 0
+                      ? (statusFilter ? `No ${statusFilter === 'peak' ? 'peak' : 'declining'} wines` : 'Empty — tap to add')
+                      : statusFilter
+                        ? `${wineCount} ${statusFilter === 'peak' ? 'peak' : 'declining'} ${wineCount === 1 ? 'wine' : 'wines'} · ${bottleCount} ${bottleCount === 1 ? 'bottle' : 'bottles'}`
+                        : `${wineCount} ${wineCount === 1 ? 'wine' : 'wines'} · ${bottleCount} ${bottleCount === 1 ? 'bottle' : 'bottles'}`}
+                  </Text>
+                </View>
+                <Text style={styles.summaryArrow}>→</Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {unassignedWines.length > 0 && (
+            <View style={styles.unassignedBlock}>
+              <Text style={styles.unassignedHeader}>Unassigned wines</Text>
+              <TouchableOpacity onPress={() => setAddListOpen(true)} style={styles.unassignedPrompt}>
+                <Text style={styles.unassignedPromptText}>
+                  These wines aren't in a list yet. Tap to create one and give them a home.
+                </Text>
+              </TouchableOpacity>
+              {unassignedWines.map((wine, idx) => (
+                <View key={wine.id}>
+                  {idx > 0 && <View style={styles.separator} />}
+                  <WineRow wine={wine} />
+                </View>
+              ))}
             </View>
           )}
-          renderSectionFooter={({ section }) => (
-            section.data.length === 0 && section.rackId && !statusFilter ? (
-              <TouchableOpacity onPress={() => router.push(`/cellar/rack/${section.rackId}`)} style={styles.emptyRackHint}>
-                <Text style={styles.emptyRackHintText}>No wines in this rack yet — tap to add</Text>
-              </TouchableOpacity>
-            ) : null
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          contentContainerStyle={{ paddingBottom: 80 }}
-          stickySectionHeadersEnabled={false}
-        />
+        </ScrollView>
       )}
 
       <Modal visible={addListOpen} transparent animationType="slide" onRequestClose={() => setAddListOpen(false)}>
@@ -315,6 +327,15 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
   emptyRackHint: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, alignItems: 'flex-start' },
   emptyRackHintText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
+  summaryRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryMain: { flex: 1 },
+  summaryTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3 },
+  summarySubtitle: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 4 },
+  summaryArrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
+  unassignedBlock: { marginTop: spacing.lg, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
+  unassignedHeader: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  unassignedPrompt: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  unassignedPromptText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 18 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
