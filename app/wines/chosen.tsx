@@ -20,9 +20,28 @@ export default function ChosenWinesScreen() {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines: cellarWines } = useCellar();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
+  const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
 
   const cellarNotes = cellarWines.filter((w) => w.user_notes && w.user_notes.trim().length > 0);
   const hasAnything = chosenWines.length > 0 || cellarNotes.length > 0;
+
+  const sortedChosen = [...chosenWines].sort((a, b) => {
+    if (sortBy === 'score') {
+      const ar = a.user_score ?? -1;
+      const br = b.user_score ?? -1;
+      if (ar !== br) return br - ar;
+    }
+    return new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime();
+  });
+
+  const sortedCellar = [...cellarNotes].sort((a, b) => {
+    if (sortBy === 'score') {
+      const ar = a.review_score ?? -1;
+      const br = b.review_score ?? -1;
+      if (ar !== br) return br - ar;
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
 
   return (
     <View style={styles.container}>
@@ -50,10 +69,27 @@ export default function ChosenWinesScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+          <View style={styles.sortRow}>
+            <Text style={styles.sortLabel}>Sort:</Text>
+            <TouchableOpacity
+              style={[styles.sortChip, sortBy === 'date' && styles.sortChipActive]}
+              onPress={() => setSortBy('date')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, sortBy === 'date' && styles.sortChipTextActive]}>Date</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortChip, sortBy === 'score' && styles.sortChipActive]}
+              onPress={() => setSortBy('score')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, sortBy === 'score' && styles.sortChipTextActive]}>Top rated</Text>
+            </TouchableOpacity>
+          </View>
           {chosenWines.length > 0 && (
             <Text style={styles.sectionHeading}>From restaurants</Text>
           )}
-          {chosenWines.map((wine) => (
+          {sortedChosen.map((wine) => (
             <TouchableOpacity key={wine.id} style={styles.cardCompact} onPress={() => setEditingWine(wine)} activeOpacity={0.7}>
               <View style={styles.cardCompactRow}>
                 <Text style={styles.wineNameCompact} numberOfLines={1}>
@@ -76,7 +112,7 @@ export default function ChosenWinesScreen() {
             <Text style={styles.sectionHeading}>From your cellar</Text>
           )}
 
-          {cellarNotes.map((wine) => (
+          {sortedCellar.map((wine) => (
             <TouchableOpacity key={wine.id} style={styles.cardCompact} onPress={() => router.push(`/cellar/${wine.id}`)} activeOpacity={0.7}>
               <View style={styles.cardCompactRow}>
                 <Text style={styles.wineNameCompact} numberOfLines={1}>
@@ -121,4 +157,10 @@ const styles = StyleSheet.create({
   scoreCompact: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   sectionHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xs },
+  sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  sortLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: spacing.xs },
+  sortChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 16, paddingVertical: 4, paddingHorizontal: spacing.md },
+  sortChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
+  sortChipText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  sortChipTextActive: { color: colors.gold },
 });

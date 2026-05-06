@@ -3,11 +3,54 @@ import { useState } from 'react';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel, importCellarDocument } from '../../src/api/label';
-import { useCellarImportStore } from '../../src/stores/cellarImportStore';
+import { useCellarImportStore, type ImportedWine } from '../../src/stores/cellarImportStore';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
+
+// Minimal CSV parser — handles standard comma-separated values with optional
+// double-quoted fields containing commas or escaped quotes. Doesn't try to be
+// RFC-4180 perfect; good enough for the kinds of cellar exports users
+// generate from Numbers / Excel / Google Sheets.
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = '';
+  let inQuotes = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { cell += '"'; i++; } else { inQuotes = false; }
+      } else {
+        cell += c;
+      }
+    } else {
+      if (c === '"') inQuotes = true;
+      else if (c === ',') { row.push(cell); cell = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (cell !== '' || row.length > 0) { row.push(cell); rows.push(row); row = []; cell = ''; }
+        if (c === '\r' && text[i + 1] === '\n') i++;
+      } else {
+        cell += c;
+      }
+    }
+  }
+  if (cell !== '' || row.length > 0) { row.push(cell); rows.push(row); }
+  return rows;
+}
+
+function findCol(headers: string[], aliases: string[]): number {
+  const norm = headers.map((h) => h.trim().toLowerCase().replace(/[\s_-]+/g, ''));
+  for (const a of aliases) {
+    const idx = norm.indexOf(a.toLowerCase().replace(/[\s_-]+/g, ''));
+    if (idx >= 0) return idx;
+  }
+  return -1;
+}
 
 function requireAuth(session: ReturnType<typeof useAuth>['session'], action: () => void) {
   if (!session) {
@@ -40,6 +83,72 @@ export default function CellarTab() {
       router.push('/cellar/import-preview');
     } catch (err) {
       Alert.alert('Error', 'Could not read the document. Please try again.');
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  async function handleImportSpreadsheet() {
+    const pick = await DocumentPicker.getDocumentAsync({
+      type: ['text/csv', 'text/comma-separated-values', 'application/csv', 'text/plain', '*/*'],
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (pick.canceled || !pick.assets?.[0]) return;
+    const file = pick.assets[0];
+    setImporting(true);
+    try {
+      const text = await FileSystem.readAsStringAsync(file.uri);
+      const rows = parseCSV(text);
+      if (rows.length < 2) {
+        Alert.alert('Empty file', 'Vinster couldn\'t find any rows in that spreadsheet.');
+        return;
+      }
+      const headers = rows[0];
+      const nameIdx     = findCol(headers, ['wine_name', 'wine name', 'wine', 'name']);
+      const producerIdx = findCol(headers, ['producer', 'estate', 'chateau', 'château', 'winery']);
+      const regionIdx   = findCol(headers, ['region', 'appellation', 'origin']);
+      const vintageIdx  = findCol(headers, ['vintage', 'year']);
+      const qtyIdx      = findCol(headers, ['quantity', 'qty', 'bottles', 'count']);
+      const priceIdx    = findCol(headers, ['price', 'purchase_price', 'cost', 'paid']);
+      const currencyIdx = findCol(headers, ['currency', 'ccy']);
+
+      if (nameIdx < 0 && producerIdx < 0) {
+        Alert.alert(
+          'Columns not recognised',
+          'Vinster looks for columns named wine, producer, region, vintage, quantity, price, currency. Add a header row that uses one of those names and try again.'
+        );
+        return;
+      }
+
+      const wines: ImportedWine[] = rows.slice(1)
+        .filter((r) => r.some((c) => c.trim().length > 0))
+        .map((r) => {
+          const get = (i: number) => (i >= 0 && i < r.length ? r[i].trim() : '');
+          const name = get(nameIdx) || get(producerIdx);
+          const producer = get(producerIdx) || get(nameIdx);
+          const priceRaw = get(priceIdx).replace(/[^0-9.]/g, '');
+          const qtyRaw = get(qtyIdx).replace(/[^0-9]/g, '');
+          return {
+            wine_name: name,
+            producer,
+            region: get(regionIdx),
+            vintage: get(vintageIdx) || null,
+            quantity: qtyRaw ? Math.max(1, parseInt(qtyRaw, 10) || 1) : 1,
+            purchase_price: priceRaw ? Number(priceRaw) : null,
+            currency: get(currencyIdx).toUpperCase() || null,
+          };
+        })
+        .filter((w) => w.wine_name);
+
+      if (wines.length === 0) {
+        Alert.alert('No wines found', 'No usable rows in that spreadsheet.');
+        return;
+      }
+      setWines(wines);
+      router.push('/cellar/import-preview');
+    } catch (err) {
+      Alert.alert('Couldn\'t read file', 'Vinster expects a comma-separated CSV file with a header row. Try saving from Numbers/Excel as CSV.');
     } finally {
       setImporting(false);
     }
@@ -123,11 +232,16 @@ export default function CellarTab() {
       {/* Section 3 — Import */}
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>
-          Import your cellar documents so that Vinster can add wines to your collection.
+          Import wines into your cellar from a photo (printed inventory, receipt, invoice) or a spreadsheet (CSV with columns: wine, producer, region, vintage, quantity, price).
         </Text>
-        <TouchableOpacity style={styles.button} onPress={() => requireAuth(session, handleImportDocument)}>
-          <Text style={styles.buttonText}>Import Cellar Document</Text>
-        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, handleImportDocument)}>
+            <Text style={styles.buttonText}>Photo / Receipt</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, handleImportSpreadsheet)}>
+            <Text style={styles.buttonText}>Upload Spreadsheet</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <TabFooter />

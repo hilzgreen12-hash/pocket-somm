@@ -23,6 +23,7 @@ export default function ScanHistoryScreen() {
     setExtractedWines(item.extractedWines);
     setRecommendation(item.recommendation);
     const params = new URLSearchParams({ fromHistory: 'true', sessionId: item.id });
+    if (item.capturedAt) params.set('date', item.capturedAt);
     if (item.restaurantName) params.set('restaurant', item.restaurantName);
     if (item.city) params.set('city', item.city);
     router.push(`/scan/results?${params.toString()}`);
@@ -94,6 +95,12 @@ export default function ScanHistoryScreen() {
           sessionId={reviewing.id}
           initialName={reviewing.restaurantName}
           initialNote={reviewing.restaurantNote}
+          initialRatings={{
+            food: reviewing.ratingFood,
+            service: reviewing.ratingService,
+            wineList: reviewing.ratingWineList,
+            overall: reviewing.ratingOverall,
+          }}
           onClose={() => setReviewing(null)}
           onSaved={() => setReviewing(null)}
         />

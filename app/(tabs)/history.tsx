@@ -16,6 +16,7 @@ export default function HistoryTab() {
     setExtractedWines(item.extracted_wines as any);
     setRecommendation(item.recommendation as any);
     const params = new URLSearchParams({ fromHistory: 'true', sessionId: item.id });
+    if (item.captured_at) params.set('date', item.captured_at);
     if (item.restaurant_name) params.set('restaurant', item.restaurant_name);
     if (item.city) params.set('city', item.city);
     router.push(`/scan/results?${params.toString()}`);

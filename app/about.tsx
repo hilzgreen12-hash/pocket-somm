@@ -1,6 +1,8 @@
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { colors, spacing } from '../src/constants/theme';
+
+const FEEDBACK_EMAIL = 'tellme@vinterapp.com';
 
 const SECTIONS = [
   {
@@ -49,6 +51,16 @@ export default function AboutScreen() {
           <Text style={styles.sectionBody}>{s.body}</Text>
         </View>
       ))}
+
+      <View style={styles.feedbackSection}>
+        <Text style={styles.feedbackHeading}>Get in touch</Text>
+        <Text style={styles.feedbackBody}>
+          We'd love to hear from you — send feedback to{' '}
+          <Text style={styles.feedbackLink} onPress={() => Linking.openURL(`mailto:${FEEDBACK_EMAIL}`)}>
+            {FEEDBACK_EMAIL}
+          </Text>
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -63,4 +75,8 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.xl, paddingBottom: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   sectionBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 24 },
+  feedbackSection: { marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
+  feedbackHeading: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: spacing.xs, letterSpacing: 0.5 },
+  feedbackBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 24 },
+  feedbackLink: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', textDecorationLine: 'underline' },
 });

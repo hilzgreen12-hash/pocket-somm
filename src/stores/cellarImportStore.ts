@@ -6,6 +6,8 @@ export interface ImportedWine {
   region: string;
   vintage: string | null;
   quantity: number;
+  purchase_price?: number | null;
+  currency?: string | null;
 }
 
 interface CellarImportStore {

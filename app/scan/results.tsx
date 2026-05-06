@@ -25,7 +25,7 @@ if (Platform.OS === 'android') {
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
 export default function ResultsScreen() {
-  const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string }>();
+  const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
   const { autoSave } = useScanHistory();
@@ -103,6 +103,17 @@ export default function ResultsScreen() {
 
   const noVintages = recommendation.wines.every((w) => !w.vintage);
 
+  // Build a date + location stamp shown at the top of the page. For fresh
+  // scans the date defaults to "now"; for history loads it comes from the
+  // URL param. Location is restaurant + city when known.
+  const stampDateSource = historyDate ?? autoSave.data?.[0]?.savedAt ?? null;
+  const stampDate = stampDateSource
+    ? new Date(stampDateSource).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  const stampRestaurant = historyRestaurant ?? autoSave.data?.[0]?.restaurantName ?? restaurantName ?? null;
+  const stampCity = historyCity ?? autoSave.data?.[0]?.city ?? null;
+  const stampLocation = [stampRestaurant, stampCity].filter(Boolean).join(' · ');
+
   function toggleWine(i: number) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setOpenIndex(openIndex === i ? null : i);
@@ -117,6 +128,12 @@ export default function ResultsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
             <Text style={styles.backLink}>Back</Text>
           </TouchableOpacity>
+        )}
+        {(stampDate || stampLocation) && (
+          <View style={styles.stampRow}>
+            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
+            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+          </View>
         )}
         <Text style={styles.heading}>Vinster{'\n'}Recommends</Text>
         {recommendation.topScoringMode && (
@@ -331,6 +348,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
+  },
+  stampRow: {
+    alignItems: 'center',
+    marginBottom: spacing.md,
+    gap: 2,
+  },
+  stampDate: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 13,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  stampLocation: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
   },
   heading: {
     fontFamily: 'CormorantGaramond_600SemiBold',

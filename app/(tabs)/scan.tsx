@@ -134,7 +134,11 @@ export default function ScanTab() {
       const last = items[0];
       setExtractedWines(last.extractedWines);
       setRecommendation(last.recommendation);
-      router.push('/scan/results?fromHistory=true');
+      const params = new URLSearchParams({ fromHistory: 'true' });
+      if (last.savedAt) params.set('date', last.savedAt);
+      if (last.restaurantName) params.set('restaurant', last.restaurantName);
+      if (last.city) params.set('city', last.city);
+      router.push(`/scan/results?${params.toString()}`);
     } catch { /* no history available */ }
   }
 
