@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useRacks } from '../../src/hooks/useRacks';
+import { getSlotAssignments } from '../../src/api/racks';
 import { colors, spacing } from '../../src/constants/theme';
 
 const STATUS_COLORS: Record<string, string> = {
@@ -23,12 +26,26 @@ const STATUS_LABELS: Record<string, string> = {
 export default function CellarWineDetail() {
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
   const { wines, updateWine, deleteWine } = useCellar();
+  const { racks } = useRacks();
   const wine = wines.find((w) => w.id === wineId);
+
+  const rackIds = racks.map((r) => r.id);
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+  const wineSlot = slotAssignments.find((s) => s.cellar_wine_id === wineId);
+  const wineRack = wineSlot ? racks.find((r) => r.id === wineSlot.rack_id) ?? null : null;
 
   const [editing, setEditing] = useState(false);
   const [quantity, setQuantity] = useState(String(wine?.quantity ?? 1));
   const [location, setLocation] = useState(wine?.storage_location ?? '');
   const [saving, setSaving] = useState(false);
+
+  const [editingNote, setEditingNote] = useState(false);
+  const [noteText, setNoteText] = useState(wine?.user_notes ?? '');
+  const [savingNote, setSavingNote] = useState(false);
 
   if (!wine) {
     return (
@@ -56,6 +73,21 @@ export default function CellarWineDetail() {
       Alert.alert('Error', 'Could not save changes.');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSaveNote() {
+    setSavingNote(true);
+    try {
+      await updateWine.mutateAsync({
+        id: wine!.id,
+        updates: { user_notes: noteText.trim() || null },
+      });
+      setEditingNote(false);
+    } catch {
+      Alert.alert('Error', 'Could not save note.');
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -87,7 +119,9 @@ export default function CellarWineDetail() {
 
       <View style={styles.header}>
         <Text style={styles.producer}>{wine.producer}</Text>
-        <Text style={styles.wineName}>{wine.wine_name}</Text>
+        {wine.wine_name?.trim().toLowerCase() !== wine.producer?.trim().toLowerCase() && (
+          <Text style={styles.wineName}>{wine.wine_name}</Text>
+        )}
         <Text style={styles.detail}>{wine.region} · {wine.vintage ?? '—'}</Text>
         {wine.grape_variety && <Text style={styles.grape}>{wine.grape_variety}</Text>}
       </View>
@@ -123,12 +157,55 @@ export default function CellarWineDetail() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>In My Cellar</Text>
-          {!editing && (
-            <TouchableOpacity onPress={() => setEditing(true)}>
-              <Text style={styles.editLink}>Edit</Text>
+          <Text style={styles.sectionTitle}>Notes</Text>
+          {!editingNote && (
+            <TouchableOpacity onPress={() => setEditingNote(true)}>
+              <Text style={styles.editLink}>{wine.user_notes ? 'Edit Note' : 'Add Note'}</Text>
             </TouchableOpacity>
           )}
+        </View>
+        {editingNote ? (
+          <>
+            <TextInput
+              style={[styles.input, styles.noteInput]}
+              value={noteText}
+              onChangeText={setNoteText}
+              placeholder="Add a personal note about this wine…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.noteActions}>
+              <TouchableOpacity onPress={() => { setEditingNote(false); setNoteText(wine.user_notes ?? ''); }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, savingNote && styles.buttonDisabled]} onPress={handleSaveNote} disabled={savingNote}>
+                <Text style={styles.saveBtnText}>{savingNote ? 'Saving…' : 'Save Note'}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : wine.user_notes ? (
+          <Text style={styles.noteText}>{wine.user_notes}</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>{wineRack ? `In my ${wineRack.name}` : 'In My Cellar'}</Text>
+          <View style={styles.headerActions}>
+            {wineRack && !editing && (
+              <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
+                <Text style={styles.editLink}>View in Rack →</Text>
+              </TouchableOpacity>
+            )}
+            {!editing && (
+              <TouchableOpacity onPress={() => setEditing(true)}>
+                <Text style={styles.editLink}>Edit</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         {editing ? (
@@ -207,4 +284,10 @@ const styles = StyleSheet.create({
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
   deleteButton: { margin: spacing.xl, alignItems: 'center' },
   deleteText: { color: colors.error, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  noteText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 22 },
+  noteInput: { minHeight: 90, textAlignVertical: 'top' },
+  noteActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
+  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
+  saveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
 });
