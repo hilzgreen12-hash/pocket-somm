@@ -40,7 +40,6 @@ export default function RackGridScreen() {
   const [selected, setSelected] = useState<{ row: number; col: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [userNote, setUserNote] = useState('');
-  const [savingNote, setSavingNote] = useState(false);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLandscape, setIsLandscape] = useState(false);
@@ -48,6 +47,7 @@ export default function RackGridScreen() {
   const [removeDate, setRemoveDate] = useState(todayISO());
   const [removing, setRemoving] = useState(false);
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
+  const [noteSavedMsg, setNoteSavedMsg] = useState<string | null>(null);
 
   // Unlock landscape for this screen; restore portrait on leave
   useEffect(() => {
@@ -107,6 +107,7 @@ export default function RackGridScreen() {
       setRemoveCount('1');
       setRemoveDate(todayISO());
       setRackRemovalMsg(null);
+      setNoteSavedMsg(null);
       setSelected({ row, col });
       setPickerOpen(true);
     } else if (pendingWineId) {
@@ -121,21 +122,23 @@ export default function RackGridScreen() {
   const selectedSlot = selected ? slotMap[`${selected.row},${selected.col}`] : null;
   const assignedWine = selectedSlot?.wine as CellarWine | null | undefined;
 
-  async function handleSaveNote() {
+  function handleSaveNote() {
     if (!selected || !assignedWine) return;
-    setSavingNote(true);
-    try {
-      await updateWine.mutateAsync({
-        id: assignedWine.id,
-        updates: { user_notes: userNote.trim() || null },
-      });
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      Alert.alert('Note Saved');
-    } catch {
-      Alert.alert('Error', 'Could not save note. Please try again.');
-    } finally {
-      setSavingNote(false);
-    }
+    // Optimistic: surface confirmation instantly so the user doesn't wait
+    // on the network round-trip. The mutation runs in the background and
+    // surfaces an Alert only if it actually fails.
+    setNoteSavedMsg('Note saved to your cellar');
+    setTimeout(() => setNoteSavedMsg(null), 2500);
+    updateWine.mutate(
+      { id: assignedWine.id, updates: { user_notes: userNote.trim() || null } },
+      {
+        onSuccess: () => qc.invalidateQueries({ queryKey: ['rack-slots', rackId] }),
+        onError: () => {
+          setNoteSavedMsg(null);
+          Alert.alert('Could not save', 'Your note didn\'t save. Please try again.');
+        },
+      }
+    );
   }
 
   function handleClear() {
@@ -413,13 +416,15 @@ export default function RackGridScreen() {
                   textAlignVertical="top"
                 />
 
-                <TouchableOpacity
-                  style={[styles.saveNoteButton, savingNote && { opacity: 0.6 }]}
-                  onPress={handleSaveNote}
-                  disabled={savingNote}
-                >
-                  <Text style={styles.saveNoteText}>{savingNote ? 'Saving…' : 'Save Note'}</Text>
+                <TouchableOpacity style={styles.saveNoteButton} onPress={handleSaveNote}>
+                  <Text style={styles.saveNoteText}>Save Note</Text>
                 </TouchableOpacity>
+
+                {noteSavedMsg && (
+                  <View style={styles.savedBanner}>
+                    <Text style={styles.savedBannerText}>{noteSavedMsg}</Text>
+                  </View>
+                )}
 
                 <Text style={styles.removeHeading}>Remove Bottles</Text>
                 <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
@@ -524,4 +529,6 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background, marginBottom: spacing.md },
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
+  savedBanner: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.sm, alignItems: 'center' },
+  savedBannerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, letterSpacing: 0.3 },
 });
