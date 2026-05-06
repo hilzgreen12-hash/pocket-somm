@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, deleteCellarWine, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
+import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, deleteCellarWine, archiveCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
 import type { CellarWine } from '../types/wine';
 
 export function useCellar() {
@@ -31,8 +31,11 @@ export function useCellar() {
   });
 
   const deleteWine = useMutation({
-    mutationFn: (id: string) => deleteCellarWine(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar', userId] }),
+    mutationFn: (id: string) => archiveCellarWine(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
+    },
   });
 
   const share = useMutation({
@@ -65,6 +68,12 @@ export function useWishList() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wishlist', userId] }),
   });
 
+  const updateWine = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: Partial<CellarWine> }) =>
+      updateCellarWine(id, updates),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['wishlist', userId] }),
+  });
+
   const deleteWine = useMutation({
     mutationFn: (id: string) => deleteCellarWine(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['wishlist', userId] }),
@@ -78,5 +87,25 @@ export function useWishList() {
     },
   });
 
-  return { wines, isLoading, addWine, deleteWine, moveTocellar };
+  return { wines, isLoading, addWine, updateWine, deleteWine, moveTocellar };
+}
+
+export function useArchive() {
+  const { session } = useAuth();
+  const userId = session?.user.id ?? '';
+  const qc = useQueryClient();
+
+  const { data: wines = [], isLoading } = useQuery({
+    queryKey: ['cellar-archive', userId],
+    queryFn: () => getArchivedWines(userId),
+    enabled: !!userId,
+  });
+
+  const updateNote = useMutation({
+    mutationFn: ({ id, note }: { id: string; note: string }) =>
+      updateCellarWine(id, { user_notes: note || null }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-archive', userId] }),
+  });
+
+  return { wines, isLoading, updateNote };
 }

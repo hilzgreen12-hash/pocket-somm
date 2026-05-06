@@ -62,7 +62,7 @@ export default function FindPairingScreen() {
         drinking_window_status: w.drinking_window_status,
       }));
 
-      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined, undefined, wines.length > 0 ? (savedPreferences as unknown as Record<string, unknown>) : null) as any;
+      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined, undefined, mode === 'general' && savedPreferences ? (savedPreferences as unknown as Record<string, unknown>) : null) as any;
 
       if (mode === 'cellar') {
         setCellarResult(result.recommendations as CellarRecommendation[]);

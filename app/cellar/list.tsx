@@ -1,17 +1,12 @@
 import { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, SectionList, TouchableOpacity, StyleSheet, Modal, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useRacks } from '../../src/hooks/useRacks';
+import { getSlotAssignments } from '../../src/api/racks';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
-
-const STATUS_COLORS: Record<string, string> = {
-  too_young: colors.gold,
-  approaching: colors.gold,
-  peak: colors.gold,
-  declining: colors.gold,
-  unknown: colors.gold,
-};
 
 const STATUS_LABELS: Record<string, string> = {
   too_young: 'Too Young',
@@ -26,12 +21,10 @@ function WineRow({ wine }: { wine: CellarWine }) {
     <TouchableOpacity style={styles.row} onPress={() => router.push(`/cellar/${wine.id}`)}>
       <View style={styles.rowMain}>
         <Text style={styles.rowName} numberOfLines={1}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
-        <Text style={styles.rowDetail} numberOfLines={1}>{wine.producer} · {wine.region}</Text>
+        <Text style={styles.rowDetail} numberOfLines={1}>{[wine.producer, wine.region].filter(Boolean).join(' · ')}</Text>
       </View>
       <View style={styles.rowRight}>
-        <Text style={[styles.rowStatus, { color: STATUS_COLORS[wine.drinking_window_status] ?? colors.textMuted }]}>
-          {STATUS_LABELS[wine.drinking_window_status] ?? '—'}
-        </Text>
+        <Text style={styles.rowStatus}>{STATUS_LABELS[wine.drinking_window_status] ?? '—'}</Text>
         <Text style={styles.rowQty}>{wine.quantity} btl</Text>
       </View>
     </TouchableOpacity>
@@ -39,27 +32,60 @@ function WineRow({ wine }: { wine: CellarWine }) {
 }
 
 export default function CellarListScreen() {
-  const { wines, isLoading, shares, share, removeShare } = useCellar();
-  const [sharingOpen, setSharingOpen] = useState(false);
-  const [shareEmail, setShareEmail] = useState('');
-  const [sharing, setSharing] = useState(false);
+  const { session } = useAuth();
+  const { wines, isLoading } = useCellar();
+  const { racks, create: createList } = useRacks();
+  const [addListOpen, setAddListOpen] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [saving, setSaving] = useState(false);
 
-  async function handleShare() {
-    if (!shareEmail.trim()) return;
-    setSharing(true);
-    try {
-      await share.mutateAsync(shareEmail.trim());
-      setShareEmail('');
-      Alert.alert('Shared', `Your cellar has been shared with ${shareEmail.trim()}.`);
-    } catch {
-      Alert.alert('Error', 'Could not share cellar. Check the email address and try again.');
-    } finally {
-      setSharing(false);
+  const rackIds = racks.map((r) => r.id);
+
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+
+  // Build wine-id → rack-name lookup
+  const wineToRack: Record<string, string> = {};
+  for (const slot of slotAssignments) {
+    const rack = racks.find((r) => r.id === slot.rack_id);
+    if (rack) wineToRack[slot.cellar_wine_id] = rack.name;
+  }
+
+  // Build sections: one per rack (in rack creation order), then unassigned
+  const assignedIds = new Set(Object.keys(wineToRack));
+  const sections: { title: string; rackId: string | null; data: CellarWine[] }[] = [];
+
+  for (const rack of [...racks].reverse()) {
+    const rackWines = wines.filter((w) => wineToRack[w.id] === rack.name);
+    if (rackWines.length > 0) {
+      sections.push({ title: rack.name, rackId: rack.id, data: rackWines });
     }
+  }
+
+  const unassigned = wines.filter((w) => !assignedIds.has(w.id));
+  if (unassigned.length > 0) {
+    sections.push({ title: racks.length > 0 ? 'Unassigned' : 'All Wines', rackId: null, data: unassigned });
   }
 
   const totalBottles = wines.reduce((sum, w) => sum + w.quantity, 0);
   const peakNow = wines.filter((w) => w.drinking_window_status === 'peak').length;
+
+  async function handleAddList() {
+    if (!newListName.trim()) return;
+    setSaving(true);
+    try {
+      await createList.mutateAsync({ name: newListName.trim(), rows: 1, cols: 50 });
+      setNewListName('');
+      setAddListOpen(false);
+    } catch {
+      Alert.alert('Error', 'Could not create list. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (isLoading) {
     return (
@@ -75,16 +101,13 @@ export default function CellarListScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>My Cellar</Text>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={() => router.push('/cellar/add')}>
-            <Text style={styles.headerLink}>Add</Text>
+        <Text style={styles.title}>Cellar List</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity onPress={() => router.push('/cellar/archive')}>
+            <Text style={styles.headerLinkMuted}>Archive</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => router.push('/cellar/racks')}>
-            <Text style={styles.headerLink}>Racks</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSharingOpen(true)}>
-            <Text style={styles.shareLink}>Share</Text>
+          <TouchableOpacity onPress={() => setAddListOpen(true)}>
+            <Text style={styles.headerLink}>Add List</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -115,54 +138,52 @@ export default function CellarListScreen() {
           </TouchableOpacity>
         </View>
       ) : (
-        <FlatList
-          data={wines}
+        <SectionList
+          sections={sections}
           keyExtractor={(w) => w.id}
           renderItem={({ item }) => <WineRow wine={item} />}
+          renderSectionHeader={({ section }) => (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              {section.rackId && (
+                <TouchableOpacity onPress={() => router.push(`/cellar/rack/${section.rackId}`)}>
+                  <Text style={styles.sectionLink}>View Live Rack →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={{ paddingBottom: 80 }}
+          stickySectionHeadersEnabled={false}
         />
       )}
 
-      <Modal visible={sharingOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+      <Modal visible={addListOpen} transparent animationType="slide" onRequestClose={() => setAddListOpen(false)}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Share Cellar</Text>
-            <Text style={styles.modalBody}>Enter the email address of the person you want to share your cellar with. They will be able to view (but not edit) your collection.</Text>
+            <Text style={styles.modalTitle}>Add List</Text>
+            <Text style={styles.modalBody}>Give your list a name — for example "Drinking Soon", "Cellar Reserve", or "Gifts".</Text>
 
             <TextInput
               style={styles.modalInput}
-              value={shareEmail}
-              onChangeText={setShareEmail}
-              placeholder="Email address"
+              value={newListName}
+              onChangeText={setNewListName}
+              placeholder="List name"
               placeholderTextColor={colors.textMuted}
-              keyboardType="email-address"
-              autoCapitalize="none"
+              autoFocus
+              onSubmitEditing={handleAddList}
+              returnKeyType="done"
             />
 
-            <TouchableOpacity style={[styles.button, sharing && styles.buttonDisabled]} onPress={handleShare} disabled={sharing}>
-              <Text style={styles.buttonText}>{sharing ? 'Sharing…' : 'Share'}</Text>
+            <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleAddList} disabled={saving}>
+              <Text style={styles.buttonText}>{saving ? 'Creating…' : 'Create List'}</Text>
             </TouchableOpacity>
 
-            {shares.length > 0 && (
-              <View style={styles.shareList}>
-                <Text style={styles.shareListTitle}>Shared with</Text>
-                {shares.map((s) => (
-                  <View key={s.shared_with_email} style={styles.shareItem}>
-                    <Text style={styles.shareEmail}>{s.shared_with_email}</Text>
-                    <TouchableOpacity onPress={() => removeShare.mutate(s.shared_with_email)}>
-                      <Text style={styles.removeShare}>Remove</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
-              </View>
-            )}
-
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setSharingOpen(false)}>
-              <Text style={styles.cancelText}>Close</Text>
+            <TouchableOpacity style={styles.cancelButton} onPress={() => { setAddListOpen(false); setNewListName(''); }}>
+              <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -172,43 +193,39 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backButton: {},
   backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headerLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
-  shareLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  headerLinkMuted: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
   statValue: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
   statLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xs, backgroundColor: colors.background },
+  sectionTitle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
+  sectionLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   rowMain: { flex: 1, marginRight: spacing.md },
   rowName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
   rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
-  rowVintage: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textSubtle, marginTop: 2 },
   rowRight: { alignItems: 'flex-end' },
-  rowStatus: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold' },
+  rowStatus: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   rowQty: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
   separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
-  emptyButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
-  emptyButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  emptyButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
+  emptyButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48 },
   modalTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.xs },
   modalBody: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 20, marginBottom: spacing.lg },
   modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
-  shareList: { marginTop: spacing.lg },
-  shareListTitle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  shareItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
-  shareEmail: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text },
-  removeShare: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.error },
+  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   cancelButton: { alignItems: 'center', marginTop: spacing.lg },
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
 });

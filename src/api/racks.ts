@@ -61,6 +61,17 @@ export async function assignSlot(rackId: string, rowIndex: number, colIndex: num
   if (error) throw error;
 }
 
+export async function getSlotAssignments(rackIds: string[]): Promise<{ rack_id: string; cellar_wine_id: string }[]> {
+  if (rackIds.length === 0) return [];
+  const { data, error } = await supabase
+    .from('rack_slots')
+    .select('rack_id, cellar_wine_id')
+    .in('rack_id', rackIds)
+    .not('cellar_wine_id', 'is', null);
+  if (error) throw error;
+  return data ?? [];
+}
+
 export async function clearSlot(rackId: string, rowIndex: number, colIndex: number): Promise<void> {
   const { error } = await supabase
     .from('rack_slots')
