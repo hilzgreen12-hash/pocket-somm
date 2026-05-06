@@ -171,7 +171,7 @@ export default function WishListScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Wish List</Text>
         <TouchableOpacity onPress={() => router.push('/cellar/add-to-wishlist')}>
-          <Text style={styles.addText}>Add A Wine</Text>
+          <Text style={styles.addText}>+ Add</Text>
         </TouchableOpacity>
       </View>
 
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
   title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  addText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, width: 60, textAlign: 'right' },
+  addText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, width: 60, textAlign: 'right' },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg },
   cardTop: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm },
   wineName: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 2 },
