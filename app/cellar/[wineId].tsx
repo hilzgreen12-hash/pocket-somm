@@ -76,6 +76,12 @@ export default function CellarWineDetail() {
   const [savingPrice, setSavingPrice] = useState(false);
   const [refreshingValue, setRefreshingValue] = useState(false);
 
+  const [reviewExpanded, setReviewExpanded] = useState(false);
+  const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
+  const [reviewLocationDraft, setReviewLocationDraft] = useState(wine?.review_location ?? '');
+  const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? '');
+  const [savingReview, setSavingReview] = useState(false);
+
   if (!wine) {
     return (
       <View style={styles.center}>
@@ -209,6 +215,37 @@ export default function CellarWineDetail() {
       Alert.alert('Error', 'Could not save purchase price.');
     } finally {
       setSavingPrice(false);
+    }
+  }
+
+  async function handleSaveReview() {
+    const scoreTrim = reviewScoreDraft.trim();
+    const locationTrim = reviewLocationDraft.trim();
+    const dateTrim = reviewDateDraft.trim();
+    let parsedScore: number | null = null;
+    if (scoreTrim) {
+      const n = Number(scoreTrim);
+      if (!Number.isFinite(n) || n < 0 || n > 100) {
+        Alert.alert('Invalid score', 'Enter a score between 0 and 100.');
+        return;
+      }
+      parsedScore = Math.round(n);
+    }
+    setSavingReview(true);
+    try {
+      await updateWine.mutateAsync({
+        id: wine!.id,
+        updates: {
+          review_score: parsedScore,
+          review_location: locationTrim || null,
+          review_date: dateTrim || null,
+        },
+      });
+      setReviewExpanded(false);
+    } catch {
+      Alert.alert('Could not save review', 'Please try again.');
+    } finally {
+      setSavingReview(false);
     }
   }
 
@@ -418,6 +455,84 @@ export default function CellarWineDetail() {
           </>
         ) : wine.user_notes ? (
           <Text style={styles.noteText}>{wine.user_notes}</Text>
+        ) : null}
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Your Review</Text>
+          {!reviewExpanded && (
+            <TouchableOpacity onPress={() => setReviewExpanded(true)}>
+              <Text style={styles.editLink}>
+                {wine.review_score != null || wine.review_location || wine.review_date ? 'Edit Review' : 'Add Review'}
+              </Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {reviewExpanded ? (
+          <>
+            <Text style={styles.fieldLabel}>Score (0–100)</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewScoreDraft}
+              onChangeText={setReviewScoreDraft}
+              keyboardType="number-pad"
+              placeholder="e.g. 92"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+            />
+            <Text style={styles.fieldLabel}>Where did you drink it?</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewLocationDraft}
+              onChangeText={setReviewLocationDraft}
+              placeholder="Restaurant, home, friend's place…"
+              placeholderTextColor={colors.textMuted}
+            />
+            <Text style={styles.fieldLabel}>When did you drink it?</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewDateDraft}
+              onChangeText={setReviewDateDraft}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textMuted}
+            />
+            <View style={styles.noteActions}>
+              <TouchableOpacity onPress={() => {
+                setReviewExpanded(false);
+                setReviewScoreDraft(wine.review_score != null ? String(wine.review_score) : '');
+                setReviewLocationDraft(wine.review_location ?? '');
+                setReviewDateDraft(wine.review_date ?? '');
+              }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, savingReview && styles.buttonDisabled]} onPress={handleSaveReview} disabled={savingReview}>
+                <Text style={styles.saveBtnText}>{savingReview ? 'Saving…' : 'Save Review'}</Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        ) : (wine.review_score != null || wine.review_location || wine.review_date) ? (
+          <View>
+            {wine.review_score != null && (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Score</Text>
+                <Text style={styles.infoValue}>{wine.review_score}</Text>
+              </View>
+            )}
+            {wine.review_location ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Where</Text>
+                <Text style={styles.infoValue}>{wine.review_location}</Text>
+              </View>
+            ) : null}
+            {wine.review_date ? (
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>When</Text>
+                <Text style={styles.infoValue}>{wine.review_date}</Text>
+              </View>
+            ) : null}
+          </View>
         ) : null}
       </View>
 
