@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
-import { getSlotAssignments } from '../../src/api/racks';
+import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { colors, spacing } from '../../src/constants/theme';
+
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
 
 const STATUS_COLORS: Record<string, string> = {
   too_young: colors.warning,
@@ -25,8 +30,10 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function CellarWineDetail() {
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
-  const { wines, updateWine, deleteWine } = useCellar();
+  const { session } = useAuth();
+  const { wines, updateWine } = useCellar();
   const { racks } = useRacks();
+  const qc = useQueryClient();
   const wine = wines.find((w) => w.id === wineId);
 
   const rackIds = racks.map((r) => r.id);
@@ -45,6 +52,11 @@ export default function CellarWineDetail() {
   const [editingNote, setEditingNote] = useState(false);
   const [noteText, setNoteText] = useState(wine?.user_notes ?? '');
   const [savingNote, setSavingNote] = useState(false);
+
+  const [removeCount, setRemoveCount] = useState('1');
+  const [removeDate, setRemoveDate] = useState(todayISO());
+  const [removing, setRemoving] = useState(false);
+  const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
 
   if (!wine) {
     return (
@@ -87,21 +99,70 @@ export default function CellarWineDetail() {
     }
   }
 
-  function confirmDelete() {
-    Alert.alert(
-      'Remove from cellar',
-      `Remove ${wine!.wine_name} from your cellar?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove', style: 'destructive',
-          onPress: async () => {
-            await deleteWine.mutateAsync(wine!.id);
-            router.back();
+  async function handleRemoveBottles() {
+    const count = parseInt(removeCount) || 0;
+    if (count < 1) {
+      Alert.alert('Invalid', 'Enter at least 1 bottle to remove.');
+      return;
+    }
+    if (count > wine!.quantity) {
+      Alert.alert('Invalid', `You only have ${wine!.quantity} bottle${wine!.quantity === 1 ? '' : 's'}.`);
+      return;
+    }
+
+    const newQuantity = wine!.quantity - count;
+    const removalNote = `${removeDate}: removed ${count} bottle${count === 1 ? '' : 's'}`;
+    const updatedNotes = wine!.user_notes ? `${wine!.user_notes}\n${removalNote}` : removalNote;
+
+    setRemoving(true);
+    try {
+      if (newQuantity === 0) {
+        await updateWine.mutateAsync({
+          id: wine!.id,
+          updates: {
+            quantity: 0,
+            archived_at: `${removeDate}T12:00:00.000Z`,
+            user_notes: updatedNotes,
           },
-        },
-      ]
-    );
+        });
+        await clearWineFromRacks(wine!.id);
+        if (session?.user.id) {
+          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+        }
+        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+        qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        if (wineRack) {
+          Alert.alert(
+            'Removed from cellar',
+            'This wine has also been removed from your live cellar rack.',
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+        } else {
+          router.back();
+        }
+      } else {
+        await updateWine.mutateAsync({
+          id: wine!.id,
+          updates: { quantity: newQuantity, user_notes: updatedNotes },
+        });
+        const slotsRemoved = await removeSlotsForWine(wine!.id, count);
+        if (slotsRemoved > 0) {
+          qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+          qc.invalidateQueries({ queryKey: ['rack-slots'] });
+          setRackRemovalMsg(
+            `${slotsRemoved} bottle${slotsRemoved === 1 ? '' : 's'} also removed from your live cellar rack.`
+          );
+        } else {
+          setRackRemovalMsg(null);
+        }
+        setRemoveCount('1');
+        setNoteText(updatedNotes);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not record removal. Please try again.');
+    } finally {
+      setRemoving(false);
+    }
   }
 
   const windowColor = STATUS_COLORS[wine.drinking_window_status] ?? colors.textMuted;
@@ -222,16 +283,49 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           </>
         ) : (
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Bottles</Text>
-            <Text style={styles.infoValue}>{wine.quantity}</Text>
-          </View>
+          <>
+            <View style={styles.bottlesRow}>
+              <Text style={styles.infoLabel}>Bottles</Text>
+              <Text style={styles.infoValue}>{wine.quantity}</Text>
+            </View>
+
+            <View style={styles.removeBlock}>
+              <Text style={styles.removeHeading}>Remove Bottles</Text>
+
+              <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
+              <TextInput
+                style={styles.input}
+                value={removeCount}
+                onChangeText={setRemoveCount}
+                keyboardType="number-pad"
+                placeholder="1"
+                placeholderTextColor={colors.textMuted}
+              />
+
+              <Text style={styles.fieldLabel}>Date removed</Text>
+              <TextInput
+                style={styles.input}
+                value={removeDate}
+                onChangeText={setRemoveDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textMuted}
+              />
+
+              <TouchableOpacity
+                style={[styles.removeBtn, removing && styles.buttonDisabled]}
+                onPress={handleRemoveBottles}
+                disabled={removing}
+              >
+                <Text style={styles.removeBtnText}>{removing ? 'Removing…' : 'Remove from Cellar'}</Text>
+              </TouchableOpacity>
+
+              {rackRemovalMsg && (
+                <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
+              )}
+            </View>
+          </>
         )}
       </View>
-
-      <TouchableOpacity style={styles.deleteButton} onPress={confirmDelete}>
-        <Text style={styles.deleteText}>Remove from Cellar</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
@@ -264,12 +358,16 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   cancelButton: { alignItems: 'center', marginTop: spacing.md },
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
-  deleteButton: { margin: spacing.xl, alignItems: 'center' },
-  deleteText: { color: colors.error, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   noteText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 22 },
   noteInput: { minHeight: 90, textAlignVertical: 'top' },
   noteActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
   saveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  bottlesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  removeBlock: { paddingTop: spacing.sm },
+  removeHeading: { fontSize: 15, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
+  removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
+  removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
 });

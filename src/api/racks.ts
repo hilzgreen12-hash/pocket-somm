@@ -99,3 +99,25 @@ export async function clearSlot(rackId: string, rowIndex: number, colIndex: numb
     .eq('col_index', colIndex);
   if (error) throw error;
 }
+
+export async function clearWineFromRacks(cellarWineId: string): Promise<void> {
+  const { error } = await supabase.from('rack_slots').delete().eq('cellar_wine_id', cellarWineId);
+  if (error) throw error;
+}
+
+export async function removeSlotsForWine(cellarWineId: string, count: number): Promise<number> {
+  if (count <= 0) return 0;
+  const { data, error } = await supabase
+    .from('rack_slots')
+    .select('id')
+    .eq('cellar_wine_id', cellarWineId)
+    .order('row_index', { ascending: false })
+    .order('col_index', { ascending: false })
+    .limit(count);
+  if (error) throw error;
+  if (!data || data.length === 0) return 0;
+  const ids = data.map((s) => s.id);
+  const { error: delErr } = await supabase.from('rack_slots').delete().in('id', ids);
+  if (delErr) throw delErr;
+  return ids.length;
+}
