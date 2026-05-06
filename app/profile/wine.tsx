@@ -348,7 +348,7 @@ const styles = StyleSheet.create({
   customInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 15 },
   customAdd: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   customAddText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.text },
-  saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
-  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: '#FFFFFF' },
+  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
+  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
 });

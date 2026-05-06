@@ -5,7 +5,7 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 function buildPrompt(wine: Record<string, string | null>, filters: Record<string, unknown>): string {
   const vintageStr = wine.vintage === 'NV' ? 'Non-Vintage (NV)' : wine.vintage;
   const wineNameStr = wine.wineName ? `\n- Wine Name: ${wine.wineName}` : '';
-  const colourStr = wine.colour ? `\n- Colour: ${wine.colour} (confirmed by user — treat this as definitive)` : '';
+  const colourStr = wine.style ? `\n- Style: ${wine.style} (confirmed by user — treat this as definitive)` : '';
 
   const constraints: string[] = [];
   const dietary = filters.dietary as string | undefined;

@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   },
   nextButton: {
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: colors.gold,
     borderRadius: 12,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.xl,
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   nextText: {
-    color: '#fff',
+    color: colors.gold,
     fontFamily: 'CormorantGaramond_700Bold',
     fontSize: 16,
   },

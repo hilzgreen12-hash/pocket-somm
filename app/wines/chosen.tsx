@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChosenWine } from '../../src/types/wine';
 
@@ -15,14 +17,22 @@ function locationLine(wine: ChosenWine): string {
 
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading } = useChosenWines();
+  const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
 
   return (
     <View style={styles.container}>
+      <EditChosenWineModal
+        wine={editingWine}
+        visible={!!editingWine}
+        onClose={() => setEditingWine(null)}
+        onSaved={() => setEditingWine(null)}
+      />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wine Archive</Text>
+        <Text style={styles.title}>Your Wine Reviews</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -94,6 +104,10 @@ export default function ChosenWinesScreen() {
                 </Text>
               ) : null}
 
+              <TouchableOpacity style={styles.editButton} onPress={() => setEditingWine(wine)}>
+                <Text style={styles.editButtonText}>Edit Review</Text>
+              </TouchableOpacity>
+
             </View>
           ))}
         </ScrollView>
@@ -141,4 +155,6 @@ const styles = StyleSheet.create({
   criticScore: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 4 },
   drinkingStatus: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
   vintage: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2, lineHeight: 18 },
+  editButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
+  editButtonText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
 });

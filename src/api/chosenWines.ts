@@ -35,6 +35,24 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
   });
 }
 
+export interface UpdateChosenWineInput {
+  restaurantName: string;
+  city: string;
+  tastingNote: string;
+  otherObservations: string;
+  userScore: number | null;
+}
+
+export async function updateChosenWine(id: string, input: UpdateChosenWineInput): Promise<void> {
+  await supabase.from('chosen_wines').update({
+    restaurant_name: input.restaurantName || null,
+    city: input.city || null,
+    tasting_note: input.tastingNote || null,
+    other_observations: input.otherObservations || null,
+    user_score: input.userScore,
+  }).eq('id', id);
+}
+
 export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
   const { data, error } = await supabase
     .from('chosen_wines')

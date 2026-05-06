@@ -69,8 +69,8 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xxl, lineHeight: 24 },
   input: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: 'transparent' },
   errorText: { fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.error, fontSize: 14, textAlign: 'center', marginBottom: spacing.sm },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   backButton: { padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   backText: { fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, fontSize: 14 },
 });

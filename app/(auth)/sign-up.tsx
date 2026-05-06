@@ -133,14 +133,14 @@ const styles = StyleSheet.create({
   },
   button: {
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: colors.gold,
     borderRadius: 8,
     padding: spacing.md,
     alignItems: 'center',
     marginTop: spacing.sm,
   },
   buttonText: {
-    color: colors.text,
+    color: colors.gold,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
   },
