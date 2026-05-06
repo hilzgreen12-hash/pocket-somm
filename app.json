@@ -3,7 +3,7 @@
     "name": "Vinster",
     "slug": "pocket-som",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "scheme": "vinster",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -36,7 +36,8 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "expo-font"
+      "expo-font",
+      "expo-screen-orientation"
     ],
     "extra": {
       "router": {},

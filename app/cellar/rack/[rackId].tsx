@@ -6,6 +6,7 @@ import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { colors, spacing } from '../../../src/constants/theme';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 const STATUS_COLORS: Record<string, string> = {
   too_young: '#6DBF8A',
@@ -32,6 +33,21 @@ export default function RackGridScreen() {
   const [userNote, setUserNote] = useState('');
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  // Unlock landscape for this screen; restore portrait on leave
+  useEffect(() => {
+    ScreenOrientation.unlockAsync().catch(() => {});
+    const sub = ScreenOrientation.addOrientationChangeListener((e) => {
+      const landscape = e.orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
+        e.orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
+      setIsLandscape(landscape);
+    });
+    return () => {
+      ScreenOrientation.removeOrientationChangeListener(sub);
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, []);
 
   const rack = racks.find((r) => r.id === rackId);
 
@@ -63,7 +79,11 @@ export default function RackGridScreen() {
   const PADDING = spacing.xl * 2;
   const GAP = 4;
   const cols = rack?.cols ?? 1;
-  const slotSize = Math.max(36, Math.floor((width - PADDING - GAP * (cols - 1)) / cols));
+  // Natural size fills the screen width; minimum 20pt so slots remain tappable.
+  // For wide racks the grid scrolls horizontally — no overflow clipping.
+  const naturalSlotSize = Math.floor((width - PADDING - GAP * (cols - 1)) / cols);
+  const slotSize = Math.max(20, naturalSlotSize);
+  const gridFitsScreen = naturalSlotSize >= 20;
 
   function openSlot(row: number, col: number) {
     const slot = slotMap[`${row},${col}`];
@@ -137,7 +157,18 @@ export default function RackGridScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
-        <Text style={styles.dims}>{rack.rows}×{rack.cols}</Text>
+        <TouchableOpacity
+          style={styles.rotateBtn}
+          onPress={() => {
+            if (isLandscape) {
+              ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+            } else {
+              ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
+            }
+          }}
+        >
+          <Text style={styles.rotateBtnText}>{isLandscape ? '↺ Portrait' : '↻ Landscape'}</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.legend}>
@@ -150,43 +181,54 @@ export default function RackGridScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* Rack grid */}
-        <View style={{ padding: spacing.xl }}>
-          {Array.from({ length: rack.rows }, (_, row) => (
-            <View key={row} style={[styles.gridRow, { gap: GAP, marginBottom: GAP }]}>
-              {Array.from({ length: rack.cols }, (_, col) => {
-                const slot = slotMap[`${row},${col}`];
-                const wine = slot?.wine as CellarWine | null | undefined;
-                const status = wine?.drinking_window_status ?? null;
-                const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
-                const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
-                return (
-                  <TouchableOpacity
-                    key={col}
-                    style={[
-                      styles.slot,
-                      { width: slotSize, height: slotSize },
-                      wine
-                        ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] }
-                        : styles.slotEmpty,
-                      isHighlighted && styles.slotHighlighted,
-                      isDimmed && styles.slotDimmed,
-                    ]}
-                    onPress={() => openSlot(row, col)}
-                  >
-                    {wine ? (
-                      <Text style={[styles.slotText, isHighlighted && styles.slotTextHighlighted]} numberOfLines={2}>
-                        {truncate(wine.wine_name, 12)}{wine.vintage ? `\n${wine.vintage}` : ''}
-                      </Text>
-                    ) : (
-                      <Text style={styles.slotPlus}>+</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
-        </View>
+        {/* Rack grid — horizontally scrollable for wide racks */}
+        {!gridFitsScreen && (
+          <Text style={styles.scrollHint}>← Scroll to see full rack →</Text>
+        )}
+        <ScrollView
+          horizontal
+          scrollEnabled={!gridFitsScreen}
+          showsHorizontalScrollIndicator={!gridFitsScreen}
+          contentContainerStyle={{ padding: spacing.xl }}
+          bounces={false}
+        >
+          <View>
+            {Array.from({ length: rack.rows }, (_, row) => (
+              <View key={row} style={[styles.gridRow, { gap: GAP, marginBottom: GAP }]}>
+                {Array.from({ length: rack.cols }, (_, col) => {
+                  const slot = slotMap[`${row},${col}`];
+                  const wine = slot?.wine as CellarWine | null | undefined;
+                  const status = wine?.drinking_window_status ?? null;
+                  const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
+                  const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
+                  return (
+                    <TouchableOpacity
+                      key={col}
+                      style={[
+                        styles.slot,
+                        { width: slotSize, height: slotSize },
+                        wine
+                          ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] }
+                          : styles.slotEmpty,
+                        isHighlighted && styles.slotHighlighted,
+                        isDimmed && styles.slotDimmed,
+                      ]}
+                      onPress={() => openSlot(row, col)}
+                    >
+                      {wine ? (
+                        <Text style={[styles.slotText, isHighlighted && styles.slotTextHighlighted]} numberOfLines={2}>
+                          {truncate(wine.wine_name, 12)}{wine.vintage ? `\n${wine.vintage}` : ''}
+                        </Text>
+                      ) : (
+                        <Text style={styles.slotPlus}>+</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            ))}
+          </View>
+        </ScrollView>
 
         {/* Wine list */}
         {winesInRack.length > 0 && (
@@ -310,7 +352,9 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 50 },
   title: { flex: 1, fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'center', letterSpacing: 1 },
-  dims: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 50, textAlign: 'right' },
+  rotateBtn: { alignItems: 'flex-end', width: 80 },
+  rotateBtnText: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  scrollHint: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingBottom: spacing.xs },
   legend: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
