@@ -126,9 +126,13 @@ export interface CellarWine {
   is_wishlist: boolean;
   archived_at: string | null;
   purchase_price: number | null;
+  purchase_price_currency: string | null;
   estimated_value: number | null;
   estimated_value_currency: string | null;
   estimated_value_at: string | null;
+  review_score: number | null;
+  review_location: string | null;
+  review_date: string | null;
   created_at: string;
   updated_at: string;
 }

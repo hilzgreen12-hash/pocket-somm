@@ -1,75 +1,66 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { colors, spacing } from '../../src/constants/theme';
+import { formatCurrency } from '../../src/constants/currency';
 import type { CellarWine } from '../../src/types/wine';
 
-function NoteCard({ wine, onSaveNote }: {
-  wine: CellarWine;
-  onSaveNote: (id: string, note: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [noteText, setNoteText] = useState(wine.tasting_notes ?? '');
+function formatDate(iso: string | null) {
+  if (!iso) return null;
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
-  function handleSave() {
-    onSaveNote(wine.id, noteText);
-    setEditing(false);
-  }
+function hasReviewData(w: CellarWine): boolean {
+  return !!(w.user_notes?.trim() || w.review_score != null || w.review_location?.trim() || w.review_date);
+}
 
+function ReviewCard({ wine, onPress }: { wine: CellarWine; onPress: () => void }) {
   return (
-    <View style={styles.card}>
-      <Text style={styles.wineName}>
-        {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
-      </Text>
-      <Text style={styles.wineDetail}>
-        {[wine.producer, wine.region].filter(Boolean).join(' · ')}
-      </Text>
-
-      {editing ? (
-        <View style={styles.editBlock}>
-          <TextInput
-            style={styles.noteInput}
-            value={noteText}
-            onChangeText={setNoteText}
-            placeholder="Your tasting note…"
-            placeholderTextColor={colors.textMuted}
-            multiline
-            numberOfLines={4}
-            textAlignVertical="top"
-            autoFocus
-          />
-          <View style={styles.editActions}>
-            <TouchableOpacity onPress={() => { setEditing(false); setNoteText(wine.tasting_notes ?? ''); }}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.saveBtn} onPress={handleSave}>
-              <Text style={styles.saveBtnText}>Save Note</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      ) : (
-        <View style={styles.noteBlock}>
-          {wine.tasting_notes ? (
-            <Text style={styles.noteText}>{wine.tasting_notes}</Text>
-          ) : (
-            <Text style={styles.notePlaceholder}>No tasting note yet</Text>
-          )}
-          <TouchableOpacity onPress={() => setEditing(true)}>
-            <Text style={styles.editLink}>{wine.tasting_notes ? 'Edit Note' : 'Add Note'}</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
+    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+      <View style={styles.cardTopRow}>
+        <Text style={styles.wineName} numberOfLines={1}>
+          {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
+        </Text>
+        {wine.review_score != null && (
+          <Text style={styles.score}>{wine.review_score}</Text>
+        )}
+      </View>
+      <View style={styles.metaRow}>
+        {wine.review_date ? <Text style={styles.metaText}>{formatDate(wine.review_date)}</Text> : null}
+        {wine.review_date && wine.review_location ? <Text style={styles.metaText}> · </Text> : null}
+        {wine.review_location ? <Text style={styles.metaText} numberOfLines={1}>{wine.review_location}</Text> : null}
+        {wine.purchase_price != null ? (
+          <Text style={styles.metaText} numberOfLines={1}>
+            {(wine.review_date || wine.review_location) ? ' · ' : ''}Paid {formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 0 })}
+          </Text>
+        ) : null}
+      </View>
+      {wine.user_notes ? (
+        <Text style={styles.noteText} numberOfLines={3}>{wine.user_notes}</Text>
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
 export default function CellarNotesScreen() {
-  const { wines, isLoading, updateWine } = useCellar();
+  const { wines, isLoading } = useCellar();
+  const [query, setQuery] = useState('');
 
-  function handleSaveNote(id: string, note: string) {
-    updateWine.mutate({ id, updates: { tasting_notes: note.trim() || null } });
-  }
+  const reviewed = useMemo(() => wines.filter(hasReviewData), [wines]);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return reviewed;
+    const numeric = Number(q);
+    return reviewed.filter((w) => {
+      if (w.wine_name?.toLowerCase().includes(q)) return true;
+      if (w.producer?.toLowerCase().includes(q)) return true;
+      if (w.review_location?.toLowerCase().includes(q)) return true;
+      if (Number.isFinite(numeric) && w.review_score != null && Math.abs(w.review_score - numeric) <= 2) return true;
+      return false;
+    });
+  }, [reviewed, query]);
 
   if (isLoading) {
     return (
@@ -89,17 +80,44 @@ export default function CellarNotesScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {wines.length === 0 ? (
+      {reviewed.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No wines in your cellar</Text>
-          <Text style={styles.emptyBody}>Add wines to your cellar and your tasting notes will appear here.</Text>
+          <Text style={styles.emptyTitle}>No reviews yet</Text>
+          <Text style={styles.emptyBody}>
+            Open any wine in your cellar to add a personal review — your note, score (out of 100), where and when you drank it. Reviewed wines will appear here.
+          </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          {wines.map((wine) => (
-            <NoteCard key={wine.id} wine={wine} onSaveNote={handleSaveNote} />
-          ))}
-        </ScrollView>
+        <>
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search by wine, restaurant, or score…"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              clearButtonMode="while-editing"
+              returnKeyType="search"
+            />
+          </View>
+          {filtered.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyBody}>No reviews match "{query}".</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingBottom: 80, paddingTop: spacing.sm }}>
+              {filtered.map((wine) => (
+                <ReviewCard
+                  key={wine.id}
+                  wine={wine}
+                  onPress={() => router.push(`/cellar/${wine.id}`)}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </>
       )}
     </View>
   );
@@ -110,21 +128,17 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
-  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg },
-  wineName: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 2 },
-  wineDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.sm },
-  noteBlock: { borderLeftWidth: 2, borderLeftColor: colors.border, paddingLeft: spacing.sm },
-  noteText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 22, marginBottom: 4 },
-  notePlaceholder: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: 4 },
-  editLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  editBlock: {},
-  noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 90, textAlignVertical: 'top', marginBottom: spacing.sm },
-  editActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md },
-  cancelText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
-  saveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
+  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
+  searchRow: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  searchInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
+  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  card: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  cardTopRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
+  wineName: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  score: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
+  metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', marginTop: 2 },
+  metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  noteText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 20, marginTop: 4 },
 });
