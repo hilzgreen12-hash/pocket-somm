@@ -42,6 +42,7 @@ export default function CellarListScreen() {
   const [addListOpen, setAddListOpen] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [saving, setSaving] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'peak' | 'declining' | null>(null);
 
   // Heal any wines stuck with stale flags but still assigned to a rack.
   // See repairRackedWines in src/api/cellar.ts for the why.
@@ -70,6 +71,19 @@ export default function CellarListScreen() {
     if (rack) wineToRack[slot.cellar_wine_id] = rack.name;
   }
 
+  // Always-on totals (computed from the full set, not the filtered one — so
+  // the stats row always reflects the user's whole cellar regardless of any
+  // active filter).
+  const totalBottles = wines.reduce((sum, w) => sum + w.quantity, 0);
+  const peakNow = wines.filter((w) => w.drinking_window_status === 'peak').length;
+  const declining = wines.filter((w) => w.drinking_window_status === 'declining').length;
+
+  // Apply the active status filter (Peak Now / Declining tap) before building
+  // sections, so the list shows only matching wines under each rack.
+  const visibleWines = statusFilter
+    ? wines.filter((w) => w.drinking_window_status === statusFilter)
+    : wines;
+
   // Build sections: one per rack (in rack creation order, newest first), then
   // unassigned. Empty racks are intentionally included so the user can see
   // their racks listed and tap through to add wines.
@@ -77,17 +91,14 @@ export default function CellarListScreen() {
   const sections: { title: string; rackId: string | null; data: CellarWine[] }[] = [];
 
   for (const rack of [...racks].reverse()) {
-    const rackWines = wines.filter((w) => wineToRack[w.id] === rack.name);
+    const rackWines = visibleWines.filter((w) => wineToRack[w.id] === rack.name);
     sections.push({ title: rack.name, rackId: rack.id, data: rackWines });
   }
 
-  const unassigned = wines.filter((w) => !assignedIds.has(w.id));
+  const unassigned = visibleWines.filter((w) => !assignedIds.has(w.id));
   if (unassigned.length > 0) {
     sections.push({ title: racks.length > 0 ? 'Unassigned' : 'All Wines', rackId: null, data: unassigned });
   }
-
-  const totalBottles = wines.reduce((sum, w) => sum + w.quantity, 0);
-  const peakNow = wines.filter((w) => w.drinking_window_status === 'peak').length;
 
   // Group totals by currency so wines stored under different currencies don't
   // get summed together silently.
@@ -156,10 +167,24 @@ export default function CellarListScreen() {
               <Text style={styles.statValue}>{totalBottles}</Text>
               <Text style={styles.statLabel}>Bottles</Text>
             </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{peakNow}</Text>
-              <Text style={styles.statLabel}>Peak Now</Text>
-            </View>
+            <TouchableOpacity
+              style={[styles.stat, statusFilter === 'peak' && styles.statActive]}
+              onPress={() => setStatusFilter(statusFilter === 'peak' ? null : 'peak')}
+              disabled={peakNow === 0}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.statValue, statusFilter === 'peak' && styles.statValueActive]}>{peakNow}</Text>
+              <Text style={[styles.statLabel, statusFilter === 'peak' && styles.statLabelActive]}>Peak Now</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.stat, statusFilter === 'declining' && styles.statActive]}
+              onPress={() => setStatusFilter(statusFilter === 'declining' ? null : 'declining')}
+              disabled={declining === 0}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.statValue, statusFilter === 'declining' && styles.statValueActive]}>{declining}</Text>
+              <Text style={[styles.statLabel, statusFilter === 'declining' && styles.statLabelActive]}>Declining</Text>
+            </TouchableOpacity>
             <View style={styles.stat}>
               <Text style={styles.statValue}>{wines.length}</Text>
               <Text style={styles.statLabel}>Wines</Text>
@@ -175,6 +200,16 @@ export default function CellarListScreen() {
                 <Text style={styles.statValueSmall}>{valueTotal || '—'}</Text>
                 <Text style={styles.statLabel}>Est. Value</Text>
               </View>
+            </View>
+          )}
+          {statusFilter && (
+            <View style={styles.filterBanner}>
+              <Text style={styles.filterBannerText}>
+                Showing {statusFilter === 'peak' ? 'Peak Now' : 'Declining'} wines only
+              </Text>
+              <TouchableOpacity onPress={() => setStatusFilter(null)}>
+                <Text style={styles.filterClearLink}>Clear filter</Text>
+              </TouchableOpacity>
             </View>
           )}
         </>
@@ -204,7 +239,7 @@ export default function CellarListScreen() {
             </View>
           )}
           renderSectionFooter={({ section }) => (
-            section.data.length === 0 && section.rackId ? (
+            section.data.length === 0 && section.rackId && !statusFilter ? (
               <TouchableOpacity onPress={() => router.push(`/cellar/rack/${section.rackId}`)} style={styles.emptyRackHint}>
                 <Text style={styles.emptyRackHintText}>No wines in this rack yet — tap to add</Text>
               </TouchableOpacity>
@@ -258,8 +293,14 @@ const styles = StyleSheet.create({
   headerLinkMuted: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
-  statValue: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
+  statValue: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
   statValueSmall: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, textAlign: 'center' },
+  statActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  statValueActive: { color: colors.text },
+  statLabelActive: { color: colors.gold },
+  filterBanner: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)', borderBottomWidth: 1, borderBottomColor: colors.border },
+  filterBannerText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold },
+  filterClearLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textDecorationLine: 'underline' },
   statLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xs, backgroundColor: colors.background },
   sectionTitle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
