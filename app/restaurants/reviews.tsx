@@ -165,4 +165,6 @@ const styles = StyleSheet.create({
   sortChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   sortChipText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   sortChipTextActive: { color: colors.gold },
+  personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(212,176,96,0.08)' },
+  personalityButtonText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
 });

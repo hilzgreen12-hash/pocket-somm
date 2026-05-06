@@ -16,6 +16,13 @@ function locationLine(wine: ChosenWine): string {
   return parts.join(', ');
 }
 
+function headerLine(producer: string | null | undefined, wineName: string | null | undefined, vintage: string | number | null | undefined): string {
+  const sameName = (wineName ?? '').trim().toLowerCase() === (producer ?? '').trim().toLowerCase();
+  const v = vintage != null ? String(vintage) : null;
+  const parts = sameName ? [producer, v] : [producer, wineName, v];
+  return parts.filter((p) => p && String(p).trim().length > 0).join(' · ');
+}
+
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines: cellarWines } = useCellar();
@@ -92,13 +99,14 @@ export default function ChosenWinesScreen() {
           {sortedChosen.map((wine) => (
             <TouchableOpacity key={wine.id} style={styles.cardCompact} onPress={() => setEditingWine(wine)} activeOpacity={0.7}>
               <View style={styles.cardCompactRow}>
-                <Text style={styles.wineNameCompact} numberOfLines={1}>
-                  {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
+                <Text style={styles.wineNameCompact} numberOfLines={2}>
+                  {headerLine(wine.producer, wine.wine_name, wine.vintage)}
                 </Text>
                 {wine.user_score != null && (
                   <Text style={styles.scoreCompact}>{wine.user_score}</Text>
                 )}
               </View>
+              {wine.region ? <Text style={styles.regionText} numberOfLines={1}>{wine.region}</Text> : null}
               <View style={styles.cardCompactMetaRow}>
                 <Text style={styles.metaText}>{formatDate(wine.chosen_at)}</Text>
                 {locationLine(wine) ? (
@@ -115,15 +123,16 @@ export default function ChosenWinesScreen() {
           {sortedCellar.map((wine) => (
             <TouchableOpacity key={wine.id} style={styles.cardCompact} onPress={() => router.push(`/cellar/${wine.id}`)} activeOpacity={0.7}>
               <View style={styles.cardCompactRow}>
-                <Text style={styles.wineNameCompact} numberOfLines={1}>
-                  {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
+                <Text style={styles.wineNameCompact} numberOfLines={2}>
+                  {headerLine(wine.producer, wine.wine_name, wine.vintage)}
                 </Text>
+                {wine.review_score != null && (
+                  <Text style={styles.scoreCompact}>{wine.review_score}</Text>
+                )}
               </View>
+              {wine.region ? <Text style={styles.regionText} numberOfLines={1}>{wine.region}</Text> : null}
               <View style={styles.cardCompactMetaRow}>
                 <Text style={styles.metaText}>{formatDate(wine.created_at)}</Text>
-                {wine.producer ? (
-                  <Text style={styles.metaText} numberOfLines={1}> · {wine.producer}</Text>
-                ) : null}
               </View>
             </TouchableOpacity>
           ))}
@@ -153,7 +162,8 @@ const styles = StyleSheet.create({
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
-  wineNameCompact: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  wineNameCompact: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, lineHeight: 22 },
+  regionText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
   scoreCompact: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   sectionHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xs },

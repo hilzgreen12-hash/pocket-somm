@@ -103,6 +103,7 @@ export default function RootLayout() {
             <Stack.Screen name="scan/history" />
             <Stack.Screen name="profile/wine" />
             <Stack.Screen name="profile/recipe" />
+            <Stack.Screen name="profile/personality" />
             <Stack.Screen name="wines/chosen" />
             <Stack.Screen name="recipes/chosen" />
             <Stack.Screen name="restaurants/reviews" />
@@ -110,6 +111,7 @@ export default function RootLayout() {
             <Stack.Screen name="community/upload" />
             <Stack.Screen name="community/view" />
             <Stack.Screen name="community/search" />
+            <Stack.Screen name="community/profile" />
             <Stack.Screen name="account" />
             <Stack.Screen name="about" />
           </Stack>

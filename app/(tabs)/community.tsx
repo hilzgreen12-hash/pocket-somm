@@ -32,6 +32,9 @@ export default function CommunityTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
+        <TouchableOpacity style={styles.button} onPress={() => gated('/community/profile')}>
+          <Text style={styles.buttonText}>Your Community Profile</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={() => gated('/community/recipe')}>
           <Text style={styles.buttonText}>Recipe Reviews</Text>
         </TouchableOpacity>
