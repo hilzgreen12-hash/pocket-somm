@@ -77,6 +77,10 @@ export default function ProfileTab() {
         </View>
       </View>
 
+      <TouchableOpacity onPress={() => router.push('/account')} style={styles.accountLink}>
+        <Text style={styles.accountLinkText}>Account & Settings</Text>
+      </TouchableOpacity>
+
       <TabFooter />
     </ScrollView>
   );
@@ -101,4 +105,6 @@ const styles = StyleSheet.create({
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  accountLink: { alignItems: 'center', paddingVertical: spacing.lg },
+  accountLinkText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, textDecorationLine: 'underline' },
 });

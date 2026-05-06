@@ -1,6 +1,7 @@
 import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { spacing } from '../../constants/theme';
+import { currencySymbol } from '../../constants/currency';
 
 // Build the non-linear value array
 const VALUES: (number | null)[] = [
@@ -33,17 +34,19 @@ function valueToIndex(value: number | null): number {
 interface Props {
   value: number | null;
   onChange: (value: number | null) => void;
+  currency?: string;
 }
 
-export function BudgetSlider({ value, onChange }: Props) {
+export function BudgetSlider({ value, onChange, currency }: Props) {
   const index = valueToIndex(value);
   const current = VALUES[index];
   const atMax = current === null;
+  const sym = currencySymbol(currency);
 
   return (
     <View style={{ width: '100%' }}>
       <Text style={styles.value}>
-        {atMax ? 'No limit' : `Up to £${current}`}
+        {atMax ? 'No limit' : `Up to ${sym}${current}`}
       </Text>
       <Slider
         minimumValue={0}
@@ -56,7 +59,7 @@ export function BudgetSlider({ value, onChange }: Props) {
         thumbTintColor="#FFFFFF"
       />
       <View style={styles.labels}>
-        <Text style={styles.label}>£20</Text>
+        <Text style={styles.label}>{sym}20</Text>
         <Text style={styles.label}>No limit</Text>
       </View>
     </View>

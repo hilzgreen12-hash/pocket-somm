@@ -13,7 +13,7 @@ export function usePreferences() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('style_preferences, default_budget, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks, specific_concerns, regional_preferences, nutritional_preferences')
+        .select('style_preferences, default_budget, default_currency, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks, specific_concerns, regional_preferences, nutritional_preferences')
         .eq('user_id', session!.user.id)
         .single();
       if (error) {
@@ -24,6 +24,7 @@ export function usePreferences() {
         wineTypes: data.default_wine_types ?? [],
         styleProfiles: data.style_preferences ?? [],
         defaultBudget: data.default_budget ?? null,
+        defaultCurrency: data.default_currency ?? 'GBP',
         favouriteRegions: data.favourite_regions ?? [],
         favouriteGrapes: data.favourite_grapes ?? [],
         dislikedRegions: data.disliked_regions ?? [],
@@ -45,6 +46,7 @@ export function usePreferences() {
         ...(updates.wineTypes !== undefined && { default_wine_types: updates.wineTypes }),
         ...(updates.styleProfiles !== undefined && { style_preferences: updates.styleProfiles }),
         ...(updates.defaultBudget !== undefined && { default_budget: updates.defaultBudget }),
+        ...(updates.defaultCurrency !== undefined && { default_currency: updates.defaultCurrency }),
         ...(updates.favouriteRegions !== undefined && { favourite_regions: updates.favouriteRegions }),
         ...(updates.favouriteGrapes !== undefined && { favourite_grapes: updates.favouriteGrapes }),
         ...(updates.dislikedRegions !== undefined && { disliked_regions: updates.dislikedRegions }),

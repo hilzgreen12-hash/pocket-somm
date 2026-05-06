@@ -34,13 +34,14 @@ export async function scanLabel(base64Image: string): Promise<WineDetails> {
   return data;
 }
 
-export async function getWineIntelligence(wine: WineDetailsComplete): Promise<WineIntelligence> {
+export async function getWineIntelligence(wine: WineDetailsComplete, currency: string = 'GBP'): Promise<WineIntelligence> {
   const data = await invokeFunction('wine-intelligence', {
     producer: wine.producer,
     region: wine.region,
     wineName: wine.wineName,
     vintage: wine.vintage,
     colour: wine.colour ?? null,
+    currency,
   }) as WineIntelligence;
   return data;
 }

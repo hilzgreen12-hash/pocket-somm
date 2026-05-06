@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import * as Location from 'expo-location';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
@@ -8,8 +9,40 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { extractWineList } from '../../src/services/ocr';
 import { recommendWines } from '../../src/services/recommender';
 import { colors, spacing } from '../../src/constants/theme';
+import { COUNTRY_TO_CURRENCY } from '../../src/constants/currency';
 import type { ExtractedWine } from '../../src/types/wine';
 import type { UserPreferences } from '../../src/types/preferences';
+
+async function detectLocalCurrency(): Promise<{ currency: string; country: string | null } | null> {
+  try {
+    const { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') return null;
+    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
+    const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+    const iso = geo?.isoCountryCode?.toUpperCase();
+    if (!iso) return null;
+    const currency = COUNTRY_TO_CURRENCY[iso];
+    if (!currency) return null;
+    return { currency, country: geo?.country ?? null };
+  } catch {
+    return null;
+  }
+}
+
+function askUseLocalCurrency(local: string, profile: string, country: string | null): Promise<string> {
+  const where = country ? `in ${country}` : `somewhere using ${local}`;
+  return new Promise((resolve) => {
+    Alert.alert(
+      'Local currency detected',
+      `You appear to be ${where}. Use local currency (${local}) for budget and value guidance on this list?`,
+      [
+        { text: `Keep ${profile}`, onPress: () => resolve(profile), style: 'cancel' },
+        { text: `Use ${local}`, onPress: () => resolve(local) },
+      ],
+      { cancelable: false }
+    );
+  });
+}
 
 function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | undefined): ExtractedWine[] {
   if (!prefs) return wines.slice(0, 80);
@@ -99,7 +132,20 @@ export default function ExtractingScreen() {
 
       setExtractedWines(wines);
 
-      // Step 2: Pre-filter by user profile then recommend
+      // Step 2: Local-currency detection. If we can geolocate the user to a
+      // country whose currency differs from their profile currency, ask
+      // whether they want to apply local currency for this search. Skips
+      // silently when permission is denied or country can't be resolved.
+      const profileCurrency = (userProfile?.defaultCurrency ?? 'GBP').toUpperCase();
+      let scanCurrency = profileCurrency;
+      const detected = await detectLocalCurrency();
+      if (!token.active) return;
+      if (detected && detected.currency !== profileCurrency) {
+        scanCurrency = await askUseLocalCurrency(detected.currency, profileCurrency, detected.country);
+        if (!token.active) return;
+      }
+
+      // Step 3: Pre-filter by user profile then recommend
       setStage('recommending');
       const winesForRecommend = preFilterWines(wines, userProfile);
       const recommendation = await recommendWines({
@@ -114,6 +160,7 @@ export default function ExtractingScreen() {
         dislikedGrapes: preferences.dislikedGrapes,
         profileWineTypes: preferences.profileWineTypes,
         profileStyleProfiles: preferences.profileStyleProfiles,
+        currency: scanCurrency,
       });
 
       if (!token.active) return;

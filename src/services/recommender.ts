@@ -16,6 +16,7 @@ interface RecommendInput {
   topScoringMode?: boolean;
   profileWineTypes?: string[];
   profileStyleProfiles?: string[];
+  currency?: string;
 }
 
 const VintageAssessmentSchema = z.object({

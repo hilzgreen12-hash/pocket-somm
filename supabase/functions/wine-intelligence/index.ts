@@ -4,12 +4,13 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 Deno.serve(async (req) => {
   try {
-    const { producer, region, wineName, vintage, colour } = await req.json();
+    const { producer, region, wineName, vintage, colour, currency } = await req.json();
 
     const vintageStr = vintage === 'NV' ? 'Non-Vintage' : vintage;
     const wineNameStr = wineName ? `\n- Wine Name: ${wineName}` : '';
     const colourStr = colour ? `\n- Colour: ${colour} (confirmed by user — use this to disambiguate if producer makes multiple wines of this name)` : '';
     const currentYear = new Date().getFullYear();
+    const cur = (currency ?? 'GBP').toString().toUpperCase();
 
     const prompt = `You are a wine expert with encyclopaedic knowledge of wines, producers, vintages, and critic scores.
 
@@ -25,7 +26,8 @@ Return ONLY a valid JSON object with exactly this structure:
   "drinkingWindowTo": <4-digit year by which it should ideally be drunk, or null>,
   "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining" | "unknown">,
   "grapeVariety": <primary grape variety or blend, e.g. "Pinot Noir" or "Grenache/Syrah/Mourvèdre">,
-  "tastingNotes": <2-3 sentences describing the wine's character in an elegant sommelier style>
+  "tastingNotes": <2-3 sentences describing the wine's character in an elegant sommelier style>,
+  "estimatedValue": <integer per-bottle retail estimate in ${cur} from typical independent merchants in the relevant market, or null if too obscure to estimate. Account for vintage scarcity, producer reputation, and current market trends. This is a single point estimate, not a range — be honest about uncertainty by returning null rather than guessing wildly. Return the number only — no currency symbol, no decimals>
 }
 
 Base drinking window status on the current year ${currentYear}. Return only the raw JSON — no markdown, no explanation.`;
