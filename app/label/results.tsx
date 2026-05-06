@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Alert } from 'react-native';
 import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -34,6 +35,7 @@ export default function LabelResultsScreen() {
   const { addWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
   const { pendingSlot, setPendingSlot } = useRackStore();
+  const qc = useQueryClient();
 
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
@@ -128,10 +130,16 @@ export default function LabelResultsScreen() {
           orientation
         );
         await assignSlots(pendingSlot.rackId, slots, saved.id);
+        qc.invalidateQueries({ queryKey: ['rack-slots', pendingSlot.rackId] });
+        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         setPendingSlot(null);
         setAddingToCellar(false);
         reset();
-        router.replace(`/cellar/rack/${pendingSlot.rackId}`);
+        // Pop label/camera + label/results off the stack so Back returns to
+        // the cellar list, not back into the scanner. router.replace left the
+        // camera screen lurking underneath, trapping the user in a back-loop.
+        if (router.canGoBack()) router.dismiss(2);
+        else router.replace(`/cellar/rack/${pendingSlot.rackId}`);
         return;
       }
 
