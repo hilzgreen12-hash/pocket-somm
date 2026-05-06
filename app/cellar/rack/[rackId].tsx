@@ -1,12 +1,19 @@
 import { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, useWindowDimensions, ActivityIndicator, Alert } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
+import { useAuth } from '../../../src/hooks/useAuth';
+import { clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { colors, spacing } from '../../../src/constants/theme';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
 import * as ScreenOrientation from 'expo-screen-orientation';
+
+function todayISO() {
+  return new Date().toISOString().split('T')[0];
+}
 
 const STATUS_COLORS: Record<string, string> = {
   too_young: '#6DBF8A',
@@ -22,18 +29,25 @@ function truncate(str: string, max: number) {
 
 export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
+  const { session } = useAuth();
   const { slots, isLoading, assign, clear } = useRack(rackId);
   const { racks } = useRacks();
   const { wines, updateWine } = useCellar();
   const { width } = useWindowDimensions();
+  const qc = useQueryClient();
 
   const { setPendingSlot, pendingWineId, setPendingWineId } = useRackStore();
   const [selected, setSelected] = useState<{ row: number; col: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [userNote, setUserNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLandscape, setIsLandscape] = useState(false);
+  const [removeCount, setRemoveCount] = useState('1');
+  const [removeDate, setRemoveDate] = useState(todayISO());
+  const [removing, setRemoving] = useState(false);
+  const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
 
   // Unlock landscape for this screen; restore portrait on leave
   useEffect(() => {
@@ -90,6 +104,9 @@ export default function RackGridScreen() {
     const wine = slot?.wine as CellarWine | null | undefined;
     if (wine) {
       setUserNote(wine.user_notes ?? '');
+      setRemoveCount('1');
+      setRemoveDate(todayISO());
+      setRackRemovalMsg(null);
       setSelected({ row, col });
       setPickerOpen(true);
     } else if (pendingWineId) {
@@ -104,11 +121,21 @@ export default function RackGridScreen() {
   const selectedSlot = selected ? slotMap[`${selected.row},${selected.col}`] : null;
   const assignedWine = selectedSlot?.wine as CellarWine | null | undefined;
 
-  function handleSaveNote() {
+  async function handleSaveNote() {
     if (!selected || !assignedWine) return;
-    updateWine.mutate({ id: assignedWine.id, updates: { user_notes: userNote.trim() || null } });
-    setPickerOpen(false);
-    setSelected(null);
+    setSavingNote(true);
+    try {
+      await updateWine.mutateAsync({
+        id: assignedWine.id,
+        updates: { user_notes: userNote.trim() || null },
+      });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      Alert.alert('Note Saved');
+    } catch {
+      Alert.alert('Error', 'Could not save note. Please try again.');
+    } finally {
+      setSavingNote(false);
+    }
   }
 
   function handleClear() {
@@ -116,6 +143,66 @@ export default function RackGridScreen() {
     clear.mutate({ row: selected.row, col: selected.col });
     setPickerOpen(false);
     setSelected(null);
+  }
+
+  async function handleRemoveBottlesFromSlot() {
+    if (!assignedWine) return;
+    const count = parseInt(removeCount) || 0;
+    if (count < 1) {
+      Alert.alert('Invalid', 'Enter at least 1 bottle to remove.');
+      return;
+    }
+    if (count > assignedWine.quantity) {
+      Alert.alert('Invalid', `You only have ${assignedWine.quantity} bottle${assignedWine.quantity === 1 ? '' : 's'}.`);
+      return;
+    }
+
+    const newQuantity = assignedWine.quantity - count;
+    const removalNote = `${removeDate}: removed ${count} bottle${count === 1 ? '' : 's'}`;
+    const updatedNotes = assignedWine.user_notes ? `${assignedWine.user_notes}\n${removalNote}` : removalNote;
+
+    setRemoving(true);
+    try {
+      if (newQuantity === 0) {
+        await updateWine.mutateAsync({
+          id: assignedWine.id,
+          updates: {
+            quantity: 0,
+            archived_at: `${removeDate}T12:00:00.000Z`,
+            user_notes: updatedNotes,
+          },
+        });
+        await clearWineFromRacks(assignedWine.id);
+        if (session?.user.id) {
+          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+        }
+        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+        qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+        setPickerOpen(false);
+        setSelected(null);
+        Alert.alert('Removed from cellar', 'This wine has also been removed from your live cellar rack.');
+      } else {
+        await updateWine.mutateAsync({
+          id: assignedWine.id,
+          updates: { quantity: newQuantity, user_notes: updatedNotes },
+        });
+        const slotsRemoved = await removeSlotsForWine(assignedWine.id, count);
+        qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+        if (slotsRemoved > 0) {
+          qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+          setRackRemovalMsg(
+            `${slotsRemoved} bottle${slotsRemoved === 1 ? '' : 's'} also removed from your live cellar rack.`
+          );
+        } else {
+          setRackRemovalMsg(null);
+        }
+        setRemoveCount('1');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not record removal. Please try again.');
+    } finally {
+      setRemoving(false);
+    }
   }
 
   function toggleHighlight(wineId: string) {
@@ -326,12 +413,45 @@ export default function RackGridScreen() {
                   textAlignVertical="top"
                 />
 
-                <TouchableOpacity style={styles.saveNoteButton} onPress={handleSaveNote}>
-                  <Text style={styles.saveNoteText}>Save Note</Text>
+                <TouchableOpacity
+                  style={[styles.saveNoteButton, savingNote && { opacity: 0.6 }]}
+                  onPress={handleSaveNote}
+                  disabled={savingNote}
+                >
+                  <Text style={styles.saveNoteText}>{savingNote ? 'Saving…' : 'Save Note'}</Text>
                 </TouchableOpacity>
 
+                <Text style={styles.removeHeading}>Remove Bottles</Text>
+                <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={removeCount}
+                  onChangeText={setRemoveCount}
+                  keyboardType="number-pad"
+                  placeholder="1"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <Text style={styles.fieldLabel}>Date removed</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  value={removeDate}
+                  onChangeText={setRemoveDate}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <TouchableOpacity
+                  style={[styles.saveNoteButton, removing && { opacity: 0.6 }]}
+                  onPress={handleRemoveBottlesFromSlot}
+                  disabled={removing}
+                >
+                  <Text style={styles.saveNoteText}>{removing ? 'Removing…' : 'Remove from Cellar'}</Text>
+                </TouchableOpacity>
+                {rackRemovalMsg && (
+                  <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
+                )}
+
                 <TouchableOpacity style={styles.clearButton} onPress={handleClear}>
-                  <Text style={styles.clearButtonText}>Remove from slot</Text>
+                  <Text style={styles.clearButtonText}>Clear this slot only</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -400,4 +520,8 @@ const styles = StyleSheet.create({
   clearButtonText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   cancelButton: { alignItems: 'center', marginTop: spacing.sm },
   cancelText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  removeHeading: { fontSize: 15, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginTop: spacing.lg, marginBottom: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
+  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background, marginBottom: spacing.md },
+  rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
 });

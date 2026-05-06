@@ -91,7 +91,9 @@ export default function CellarWineDetail() {
         id: wine!.id,
         updates: { user_notes: noteText.trim() || null },
       });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
       setEditingNote(false);
+      Alert.alert('Note Saved');
     } catch {
       Alert.alert('Error', 'Could not save note.');
     } finally {
@@ -175,11 +177,11 @@ export default function CellarWineDetail() {
       </TouchableOpacity>
 
       <View style={styles.header}>
-        <Text style={styles.producer}>{wine.producer}</Text>
-        {wine.wine_name?.trim().toLowerCase() !== wine.producer?.trim().toLowerCase() && (
-          <Text style={styles.wineName}>{wine.wine_name}</Text>
+        <Text style={styles.wineName}>{wine.wine_name || wine.producer}</Text>
+        {wine.producer && wine.wine_name?.trim().toLowerCase() !== wine.producer?.trim().toLowerCase() && (
+          <Text style={styles.producer}>{wine.producer}</Text>
         )}
-        <Text style={styles.detail}>{wine.region} · {wine.vintage ?? '—'}</Text>
+        <Text style={styles.detail}>{[wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
         {wine.grape_variety && <Text style={styles.grape}>{wine.grape_variety}</Text>}
       </View>
 
@@ -200,14 +202,8 @@ export default function CellarWineDetail() {
         </View>
       </View>
 
-      <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>Date Received</Text>
-        <Text style={styles.infoValue}>{wine.date_received ?? '—'}</Text>
-      </View>
-
       {wine.tasting_notes && (
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Tasting Notes</Text>
+        <View style={styles.tastingBlock}>
           <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
         </View>
       )}
@@ -338,10 +334,11 @@ const styles = StyleSheet.create({
   backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   backText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  producer: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  wineName: { fontSize: 26, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginTop: 2 },
-  detail: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.xs },
+  wineName: { fontSize: 26, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
+  producer: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
+  detail: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: spacing.xs },
   grape: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: 2 },
+  tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   infoValue: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right' },
