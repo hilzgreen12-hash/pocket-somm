@@ -13,7 +13,7 @@ export function usePreferences() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')
-        .select('style_preferences, default_budget, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks')
+        .select('style_preferences, default_budget, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks, specific_concerns, regional_preferences, nutritional_preferences')
         .eq('user_id', session!.user.id)
         .single();
       if (error) {
@@ -30,6 +30,9 @@ export function usePreferences() {
         dislikedGrapes: data.disliked_grapes ?? [],
         dietaryNeeds: data.dietary_needs ?? [],
         allergyRisks: data.allergy_risks ?? [],
+        specificConcerns: data.specific_concerns ?? '',
+        regionalPreferences: data.regional_preferences ?? [],
+        nutritionalPreferences: data.nutritional_preferences ?? [],
       } as UserPreferences;
     },
   });
@@ -48,6 +51,9 @@ export function usePreferences() {
         ...(updates.dislikedGrapes !== undefined && { disliked_grapes: updates.dislikedGrapes }),
         ...(updates.dietaryNeeds !== undefined && { dietary_needs: updates.dietaryNeeds }),
         ...(updates.allergyRisks !== undefined && { allergy_risks: updates.allergyRisks }),
+        ...(updates.specificConcerns !== undefined && { specific_concerns: updates.specificConcerns }),
+        ...(updates.regionalPreferences !== undefined && { regional_preferences: updates.regionalPreferences }),
+        ...(updates.nutritionalPreferences !== undefined && { nutritional_preferences: updates.nutritionalPreferences }),
       });
       if (error) throw new Error(error.message);
     },

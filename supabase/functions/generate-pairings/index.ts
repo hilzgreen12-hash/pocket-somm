@@ -11,21 +11,26 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
   const dietary = filters.dietary as string | undefined;
   const allergens = filters.allergens as string[] | undefined;
   const customAllergen = filters.customAllergen as string | undefined;
+  const specificConcerns = filters.specificConcerns as string | undefined;
 
   if (dietary) {
+    const key = dietary.toString().toLowerCase();
     const labels: Record<string, string> = {
       vegetarian: 'Vegetarian (no meat or fish)',
       pescatarian: 'Pescatarian (no meat; fish and seafood are allowed)',
       carnivore: 'Carnivore (meat-focused; all proteins welcome)',
       vegan: 'Vegan (no animal products whatsoever)',
     };
-    constraints.push(`Dietary preference: ${labels[dietary] ?? dietary}`);
+    constraints.push(`Dietary preference: ${labels[key] ?? dietary}`);
   }
   if (allergens && allergens.length > 0) {
     constraints.push(`Allergen requirements: ${allergens.join(', ')} — all recipes must strictly avoid these.`);
   }
   if (customAllergen?.trim()) {
     constraints.push(`Additional allergen/restriction to avoid: ${customAllergen.trim()}`);
+  }
+  if (specificConcerns?.trim()) {
+    constraints.push(`Specific concerns from user (HARD RULE — must be respected in every recipe): ${specificConcerns.trim()}`);
   }
 
   const dietaryNote = filters.dietaryNote as string | undefined;
@@ -42,13 +47,26 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
     ? `\nDietary & Allergen Constraints (STRICT — all three recipes must comply):\n${constraints.map((c) => `- ${c}`).join('\n')}\n`
     : '';
 
+  const regionalPreferences = filters.regionalPreferences as string[] | undefined;
+  const nutritionalPreferences = filters.nutritionalPreferences as string[] | undefined;
+  const softParts: string[] = [];
+  if (regionalPreferences && regionalPreferences.length > 0) {
+    softParts.push(`Preferred regional cuisines: ${regionalPreferences.join(', ')}. Lean toward these traditions when they suit the wine, but do not force a poor pairing for the sake of cuisine matching.`);
+  }
+  if (nutritionalPreferences && nutritionalPreferences.length > 0) {
+    softParts.push(`Nutritional goals: ${nutritionalPreferences.join(', ')}. Where reasonable, prefer recipes that align with these goals.`);
+  }
+  const softBlock = softParts.length > 0
+    ? `\nSoft Preferences (NUDGES, NOT HARD RULES — pairing quality comes first):\n${softParts.map((s) => `- ${s}`).join('\n')}\n`
+    : '';
+
   return `You are a world-class sommelier and food pairing expert. Analyse this wine and suggest three outstanding dish pairings with full chef-inspired recipes.
 
 Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}${difficultyBlock}
+${constraintBlock}${softBlock}${difficultyBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:
