@@ -136,6 +136,9 @@ export function useScanHistory() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scan-history'] });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      // history tab uses a separate query key; invalidate it too so newly
+      // saved scans appear without an app restart
+      qc.invalidateQueries({ queryKey: ['scan-sessions'] });
     },
   });
 

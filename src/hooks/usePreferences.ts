@@ -64,6 +64,7 @@ export function usePreferences() {
   return {
     preferences,
     updatePreferences: mutation.mutate,
+    updatePreferencesAsync: mutation.mutateAsync,
     isSaving: mutation.isPending,
     prefsLoading,
     prefsError,

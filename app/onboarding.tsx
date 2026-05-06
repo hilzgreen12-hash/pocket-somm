@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { ChipPicker } from '../src/components/preferences/ChipPicker';
 import { StylePicker } from '../src/components/preferences/StylePicker';
@@ -20,7 +20,7 @@ const STEPS = [
 ];
 
 export default function OnboardingScreen() {
-  const { updatePreferences, isSaving } = usePreferences();
+  const { updatePreferencesAsync, isSaving } = usePreferences();
 
   const [step, setStep] = useState(0);
   const [wineTypes, setWineTypes] = useState<WineType[]>([]);
@@ -33,18 +33,22 @@ export default function OnboardingScreen() {
 
   const isLast = step === STEPS.length - 1;
 
-  function handleNext() {
+  async function handleNext() {
     if (isLast) {
-      updatePreferences({
-        wineTypes,
-        styleProfiles,
-        favouriteRegions,
-        favouriteGrapes,
-        dislikedRegions,
-        dislikedGrapes,
-        defaultBudget: budget ?? undefined,
-      });
-      router.replace('/(tabs)/scan');
+      try {
+        await updatePreferencesAsync({
+          wineTypes,
+          styleProfiles,
+          favouriteRegions,
+          favouriteGrapes,
+          dislikedRegions,
+          dislikedGrapes,
+          defaultBudget: budget ?? undefined,
+        });
+        router.replace('/(tabs)/scan');
+      } catch (err) {
+        Alert.alert('Could not save preferences', 'Check your connection and try again.');
+      }
     } else {
       setStep((s) => s + 1);
     }
