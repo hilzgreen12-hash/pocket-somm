@@ -19,7 +19,14 @@ export default function LabelArchiveScreen() {
     setWineDetailsConfirmed(item.wine);
     setPairings(item.pairings);
     setFilters(item.filters ?? null);
-    router.push({ pathname: '/chef/results', params: { fromHistory: 'true' } });
+    router.push({
+      pathname: '/chef/results',
+      params: {
+        fromHistory: 'true',
+        savedAt: item.saved_at,
+        city: item.city ?? '',
+      },
+    });
   }
 
   return (

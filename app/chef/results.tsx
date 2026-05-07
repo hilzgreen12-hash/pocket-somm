@@ -74,7 +74,7 @@ function findCellarMatch(wines: CellarWine[], wine: WineDetailsComplete): Cellar
 }
 
 export default function ChefResultsScreen() {
-  const { fromHistory } = useLocalSearchParams<{ fromHistory?: string }>();
+  const { fromHistory, savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { wineDetailsConfirmed, pairings, filters, reset } = useLabelStore();
   const { wines: cellarWines } = useCellar();
@@ -84,6 +84,13 @@ export default function ChefResultsScreen() {
   const [archiving, setArchiving] = useState(false);
   const [archivedModalOpen, setArchivedModalOpen] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
+  const [renderedAt] = useState(() => new Date().toISOString());
+
+  const stampDateSource = savedAt || renderedAt;
+  const stampDate = stampDateSource
+    ? new Date(stampDateSource).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
+  const stampLocation = (city ?? '').trim() || null;
 
   const cellarMatch = useMemo(
     () => (wineDetailsConfirmed ? findCellarMatch(cellarWines, wineDetailsConfirmed) : null),
@@ -172,6 +179,13 @@ export default function ChefResultsScreen() {
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
 
+      {(stampDate || stampLocation) && (
+        <View style={styles.stampRow}>
+          {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
+          {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+        </View>
+      )}
+
       <View style={styles.header}>
         <Text style={styles.headerLine}>{headerLine}</Text>
         {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
@@ -231,6 +245,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm },
   backLink: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  stampRow: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, gap: 2 },
+  stampDate: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
+  stampLocation: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },

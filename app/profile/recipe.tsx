@@ -180,10 +180,6 @@ export default function RecipeProfileScreen() {
           <Text style={styles.saveButtonText}>Save Recipe Profile</Text>
         </TouchableOpacity>
         {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
-
-        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=recipe' as any)}>
-          <Text style={styles.personalityButtonText}>View Your Recipe Personality</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -203,8 +199,6 @@ const styles = StyleSheet.create({
   selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: 'rgba(255,255,255,0.40)', marginBottom: spacing.sm },
   pickerWrap: { marginTop: spacing.sm },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
-  personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.lg, backgroundColor: 'rgba(212,176,96,0.08)' },
-  personalityButtonText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
   helperText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },

@@ -12,14 +12,12 @@ interface CommunityProfileRow {
   username: string;
   wine_personality: string | null;
   recipe_personality: string | null;
-  restaurant_personality: string | null;
   updated_at: string;
 }
 
 interface PrivateCache {
   last_wine_personality: string | null;
   last_recipe_personality: string | null;
-  last_restaurant_personality: string | null;
 }
 
 export default function CommunityProfileScreen() {
@@ -52,22 +50,19 @@ export default function CommunityProfileScreen() {
     queryFn: async () => {
       const { data } = await supabase
         .from('profiles')
-        .select('last_wine_personality, last_recipe_personality, last_restaurant_personality')
+        .select('last_wine_personality, last_recipe_personality')
         .eq('user_id', session!.user.id)
         .maybeSingle();
-      return (data ?? { last_wine_personality: null, last_recipe_personality: null, last_restaurant_personality: null }) as PrivateCache;
+      return (data ?? { last_wine_personality: null, last_recipe_personality: null }) as PrivateCache;
     },
   });
 
   const [savingWine, setSavingWine] = useState(false);
   const [savingRecipe, setSavingRecipe] = useState(false);
-  const [savingRestaurant, setSavingRestaurant] = useState(false);
 
-  async function publish(field: 'wine_personality' | 'recipe_personality' | 'restaurant_personality', text: string) {
+  async function publish(field: 'wine_personality' | 'recipe_personality', text: string) {
     if (!session?.user.id) return;
-    const setter = field === 'wine_personality' ? setSavingWine
-      : field === 'recipe_personality' ? setSavingRecipe
-      : setSavingRestaurant;
+    const setter = field === 'wine_personality' ? setSavingWine : setSavingRecipe;
     setter(true);
     try {
       const { error } = await supabase.from('community_profiles').upsert({
@@ -85,7 +80,7 @@ export default function CommunityProfileScreen() {
     }
   }
 
-  async function unpublish(field: 'wine_personality' | 'recipe_personality' | 'restaurant_personality') {
+  async function unpublish(field: 'wine_personality' | 'recipe_personality') {
     if (!session?.user.id) return;
     try {
       const { error } = await supabase
@@ -145,26 +140,15 @@ export default function CommunityProfileScreen() {
               generateRoute="/profile/personality?category=wine"
             />
 
-            {/* Recipe personality — generated from Profile, publishable here */}
+            {/* Chef personality — generated from Profile, publishable here */}
             <PersonalityBlock
-              title="Recipe personality"
+              title="Chef personality"
               cachedText={cached?.last_recipe_personality ?? null}
               publishedText={published?.recipe_personality ?? null}
               onPublish={(t) => publish('recipe_personality', t)}
               onUnpublish={() => unpublish('recipe_personality')}
               saving={savingRecipe}
               generateRoute="/profile/personality?category=recipe"
-            />
-
-            {/* Restaurant personality — generated here only */}
-            <PersonalityBlock
-              title="Restaurant personality"
-              cachedText={cached?.last_restaurant_personality ?? null}
-              publishedText={published?.restaurant_personality ?? null}
-              onPublish={(t) => publish('restaurant_personality', t)}
-              onUnpublish={() => unpublish('restaurant_personality')}
-              saving={savingRestaurant}
-              generateRoute="/profile/personality?category=restaurant"
             />
           </>
         )}

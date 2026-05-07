@@ -262,7 +262,7 @@ export default function ScanTab() {
             onPress={handleViewLastSearch}
             disabled={!hasLastSearch}
           >
-            <Text style={styles.archiveButtonText}>View Last Search</Text>
+            <Text style={styles.archiveButtonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
 

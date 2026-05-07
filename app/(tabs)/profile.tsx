@@ -35,46 +35,51 @@ export default function ProfileTab() {
       <Text style={styles.title}>Your Profile</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>Vinster uses your profile settings as its default guide when making recommendations for you. Be as specific or open as you like — remember you will also be prompted to confirm certain settings with each individual search. If there is an occasion when you want to override your profile settings you must do so in this tab before you search.</Text>
+        <Text style={styles.sectionDesc}>Vinster uses your profile preferences as it's default guide when generating recommendations for you — be as specific or open as you like.</Text>
+        <Text style={styles.sectionDesc}>Based on your profile and account history Vinster can generate your gastronomic personalities, enjoy this special feature and share it with friends.</Text>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>Set your wine preferences to give Vinster strict parameters when making recommendations for you from wine lists or recommending a style for wine and food pairing recommendations.</Text>
+        <Text style={styles.subheading}>Wine Profile</Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/profile/wine')}>
-            <Text style={styles.buttonText}>Your Wine Profile</Text>
+            <Text style={styles.buttonText}>Your Wine Preferences</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/wines/chosen')}>
             <Text style={styles.buttonText}>Your Wine Reviews</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/profile/personality?category=wine' as any)}>
+          <Text style={styles.buttonText}>Your Wine Personality</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>Set your food preferences along with dietary needs for Vinster to use as strict parameters when it's suggesting food pairings and recommending recipes for you.</Text>
+        <Text style={styles.subheading}>Chef Profile</Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/profile/recipe')}>
-            <Text style={styles.buttonText}>Your Recipe Profile</Text>
+            <Text style={styles.buttonText}>Your Recipe Preferences</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/recipes/chosen')}>
             <Text style={styles.buttonText}>Your Recipe Reviews</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/profile/personality?category=recipe' as any)}>
+          <Text style={styles.buttonText}>Your Chef Personality</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>Look back at the restaurants where you've used Vinster — and your notes on them.</Text>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/restaurants/reviews')}>
-            <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.sectionDesc}>Look back at the restaurants you've dined in — add your notes and share.</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
+          <Text style={styles.buttonText}>Your Restaurants</Text>
+        </TouchableOpacity>
       </View>
 
       <TabFooter />
@@ -100,5 +105,7 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
 });
