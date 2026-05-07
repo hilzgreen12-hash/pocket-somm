@@ -118,9 +118,9 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Or you've chosen your bottle first?</Text>
+        <Text style={styles.subheading}>Chosen your bottle first?</Text>
         <Text style={styles.sectionDesc}>
-          Choose a bottle then scan or upload a photo of the label to receive deep AI generated, top chef inspired recipe suggestions.
+          Scan or upload a photo of the label to receive deep AI generated, top chef inspired recipe suggestions.
         </Text>
         <TouchableOpacity onPress={handleViewLastLabelSearch}>
           <Text style={styles.lastResultLink}>View last result</Text>
@@ -169,7 +169,7 @@ const styles = StyleSheet.create({
   profileNote: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
+  subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
   sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   lastResultLink: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: 'rgba(255,255,255,0.45)', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },

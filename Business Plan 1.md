@@ -204,6 +204,18 @@ The restaurant scanning use case creates high-frequency, high-intent interaction
 - Network effects begin: a larger community improves rating quality, drives organic acquisition.
 - Explore B2B partnerships (restaurants, hotels, wine merchants).
 
+### Phase 4: Identity & Personalisation (36+ months)
+The Wine and Chef Personality sketches already give every user a distinctive AI-generated character. Phase 4 turns that personality into a tangible, earned identity object the user can wear inside and outside the app.
+
+- **Milestone-unlocked AI avatar.** When a user hits a meaningful engagement milestone — e.g. their personality has evolved three or more times, or they've logged 25+ wine/recipe reviews — Vinster generates a branded portrait icon drawn from their latest personality sketch and unlocks it as their profile avatar. The avatar appears across the app (community feed, share cards, leaderboard rows, header) and is exportable for use outside Vinster (social profile pictures, group chats).
+  - **Why:** Turns the personality from a static artefact into a visual identity. Adds a tangible reward for sustained engagement. Strengthens recognisability in the community feed (network-effect amplifier). Differentiates Vinster from database-driven competitors who can't generate this kind of bespoke output.
+  - **How:** Supabase edge function calls an image model (FLUX via fal.ai at ~$0.01/image, or DALL-E 3 at ~$0.04/image) with the personality title plus a handful of archetype keywords from the sketch body, rendering in a fixed house style ("elegant minimalist line illustration, gold-on-dark, hand-drawn portrait icon"). Generated image lands in a Supabase Storage bucket; the user can request a re-roll once per evolution cycle.
+  - **Tiered unlocks (later iterations):** first avatar at the initial milestone, second style at a higher tier, animated/seasonal variants at the highest tier — each becomes a status signal in the community feed.
+- **Personality-driven personalisation.** Use the personality data to subtly tune recommendation copy, suggested cuisines, and discovery prompts so the app feels increasingly tailored as a user's archive grows.
+- **Avatar-led B2B.** Restaurants partnering with Vinster could use guests' personality avatars in pre-arrival concierge flows ("Welcome back, *Card-Carrying Riesling Romantic*"). Adds a personal touch that's only possible with Vinster's data.
+
+**Success metric**: 30%+ of community-active users opt to publish their avatar within 6 months of launch.
+
 ---
 
 ## 8. Risks & Mitigations

@@ -195,8 +195,8 @@ export default function LabelResultsScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.scanAgainButton} onPress={() => { reset(); router.replace('/(tabs)/label'); }}>
-        <Text style={styles.scanAgainText}>Scan Another Label</Text>
+      <TouchableOpacity style={styles.discardButton} onPress={() => { reset(); router.replace('/(tabs)/cellar'); }}>
+        <Text style={styles.discardText}>Discard</Text>
       </TouchableOpacity>
 
       <Modal visible={addingToWishList} transparent animationType="slide">
@@ -305,8 +305,8 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.xl, marginTop: spacing.xl },
   actionButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   actionButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
-  scanAgainButton: { margin: spacing.xl, alignItems: 'center' },
-  scanAgainText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
+  discardButton: { margin: spacing.xl, alignItems: 'center', paddingVertical: spacing.sm },
+  discardText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, textDecorationLine: 'underline' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48 },
   modalTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.xs },

@@ -94,6 +94,7 @@ export default function RootLayout() {
             <Stack.Screen name="chef/pairing-results" />
             <Stack.Screen name="chef/pairing-archive" />
             <Stack.Screen name="cellar/list" />
+            <Stack.Screen name="cellar/full-list" />
             <Stack.Screen name="cellar/wishlist" />
             <Stack.Screen name="cellar/add-to-wishlist" />
             <Stack.Screen name="cellar/add" />
@@ -107,6 +108,7 @@ export default function RootLayout() {
             <Stack.Screen name="profile/wine" />
             <Stack.Screen name="profile/recipe" />
             <Stack.Screen name="profile/personality" />
+            <Stack.Screen name="profile/personality-archive" />
             <Stack.Screen name="wines/chosen" />
             <Stack.Screen name="recipes/chosen" />
             <Stack.Screen name="restaurants/reviews" />
