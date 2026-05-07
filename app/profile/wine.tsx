@@ -331,10 +331,6 @@ export default function WineProfileScreen() {
           <Text style={styles.saveButtonText}>Save Wine Profile</Text>
         </TouchableOpacity>
         {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
-
-        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=wine' as any)}>
-          <Text style={styles.personalityButtonText}>View Your Wine Personality</Text>
-        </TouchableOpacity>
       </ScrollView>
     </View>
   );
@@ -359,8 +355,6 @@ const styles = StyleSheet.create({
   customAdd: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   customAddText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.text },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
-  personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.lg, backgroundColor: 'rgba(212,176,96,0.08)' },
-  personalityButtonText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },

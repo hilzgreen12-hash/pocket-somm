@@ -34,7 +34,14 @@ export default function ChefTab() {
     setMode(last.mode);
     if (last.mode === 'cellar') setCellarResult(last.cellar_result ?? []);
     else setGeneralResult(last.general_result ?? [], last.general_summary ?? undefined);
-    router.push({ pathname: '/chef/pairing-results', params: { fromHistory: 'true' } });
+    router.push({
+      pathname: '/chef/pairing-results',
+      params: {
+        fromHistory: 'true',
+        savedAt: last.saved_at,
+        city: last.city ?? '',
+      },
+    });
   }
 
   function handleViewLastLabelSearch() {
@@ -50,7 +57,14 @@ export default function ChefTab() {
     setWineDetailsConfirmed(last.wine);
     setPairings(last.pairings);
     setFilters(last.filters ?? null);
-    router.push({ pathname: '/chef/results', params: { fromHistory: 'true' } });
+    router.push({
+      pathname: '/chef/results',
+      params: {
+        fromHistory: 'true',
+        savedAt: last.saved_at,
+        city: last.city ?? '',
+      },
+    });
   }
 
   async function handleUpload() {
@@ -97,7 +111,7 @@ export default function ChefTab() {
             <Text style={styles.buttonText}>Find a Wine Pairing</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastPairing}>
-            <Text style={styles.buttonText}>View Last Search</Text>
+            <Text style={styles.buttonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -117,13 +131,18 @@ export default function ChefTab() {
           </TouchableOpacity>
         </View>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/label-archive')}>
-            <Text style={styles.buttonText}>View Archived Recipes</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastLabelSearch}>
-            <Text style={styles.buttonText}>View Last Search</Text>
+          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={handleViewLastLabelSearch}>
+            <Text style={styles.buttonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/label-archive')}>
+          <Text style={styles.buttonText}>View Archived Recipes</Text>
+        </TouchableOpacity>
       </View>
 
       <TabFooter />
@@ -153,6 +172,7 @@ const styles = StyleSheet.create({
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },

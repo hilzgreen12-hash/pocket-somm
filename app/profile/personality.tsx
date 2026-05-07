@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -12,12 +12,18 @@ import { supabase } from '../../src/api/supabase';
 import { splitPersonality } from '../../src/utils/personalityText';
 import { colors, spacing } from '../../src/constants/theme';
 
-type Category = 'wine' | 'recipe' | 'restaurant';
+type Category = 'wine' | 'recipe';
+
+// Threshold of new content the user needs to add since the last sketch was
+// generated before "I've evolved" unlocks. Set conservatively so users don't
+// regenerate every visit, but reachable within a couple of weeks of regular
+// use.
+const EVOLUTION_THRESHOLD = 5;
 
 export default function PersonalityScreen() {
   useKeepAwake();
   const { category } = useLocalSearchParams<{ category: string }>();
-  const cat: Category = category === 'recipe' ? 'recipe' : category === 'restaurant' ? 'restaurant' : 'wine';
+  const cat: Category = category === 'recipe' ? 'recipe' : 'wine';
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { wines } = useCellar();
@@ -25,21 +31,29 @@ export default function PersonalityScreen() {
   const { archive } = useScanHistory();
 
   const [text, setText] = useState<string | null>(null);
+  const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [publishState, setPublishState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [evolveModalOpen, setEvolveModalOpen] = useState(false);
 
-  // Hydrate from cached value on the user's profile so users don't burn a
-  // call every time they open this screen — they only burn one when they
-  // tap "Not quite me, have another go" or land on it for the first time.
+  // Hydrate cached sketch + last-generated timestamp so we can gate the
+  // "I've evolved" button on whether the user has added enough new material.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (!session?.user.id) return;
-    const column = cat === 'wine' ? 'last_wine_personality'
-      : cat === 'recipe' ? 'last_recipe_personality'
-      : 'last_restaurant_personality';
-    supabase.from('profiles').select(column).eq('user_id', session.user.id).single()
+    const textColumn = cat === 'wine' ? 'last_wine_personality' : 'last_recipe_personality';
+    const tsColumn = cat === 'wine' ? 'last_wine_personality_at' : 'last_recipe_personality_at';
+    supabase
+      .from('profiles')
+      .select(`${textColumn}, ${tsColumn}`)
+      .eq('user_id', session.user.id)
+      .single()
       .then(({ data }) => {
-        if (data && (data as any)[column]) setText((data as any)[column]);
+        if (data) {
+          if ((data as any)[textColumn]) setText((data as any)[textColumn]);
+          if ((data as any)[tsColumn]) setLastGeneratedAt((data as any)[tsColumn]);
+        }
         setHydrated(true);
       });
   }, [session?.user.id, cat]);
@@ -62,7 +76,9 @@ export default function PersonalityScreen() {
             ...(chosenWines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage != null ? String(w.vintage) : null, region: w.region })),
           ].slice(0, 30)
         : undefined;
-      const restaurantData = cat === 'restaurant'
+      // Chef personality also folds in restaurant dining history so the
+      // sketch can riff on what the user actually orders and rates.
+      const restaurantData = cat === 'recipe'
         ? archive
             .filter((a) => (a.restaurantName && a.restaurantName.trim()) || a.ratingOverall != null || a.ratingFood != null)
             .slice(0, 25)
@@ -77,16 +93,21 @@ export default function PersonalityScreen() {
             }))
         : undefined;
       const result = await generatePersonality(cat, {
-        preferences: cat === 'restaurant' ? null : (preferences as unknown as Record<string, unknown>),
+        preferences: preferences as unknown as Record<string, unknown>,
         wines: wineData,
         restaurants: restaurantData,
       });
       setText(result.text);
-      // Cache to private profile so we don't regenerate every visit.
-      const column = cat === 'wine' ? 'last_wine_personality'
-        : cat === 'recipe' ? 'last_recipe_personality'
-        : 'last_restaurant_personality';
-      await supabase.from('profiles').upsert({ user_id: session.user.id, [column]: result.text });
+      setPublishState('idle');
+      const now = new Date().toISOString();
+      setLastGeneratedAt(now);
+      const textColumn = cat === 'wine' ? 'last_wine_personality' : 'last_recipe_personality';
+      const tsColumn = cat === 'wine' ? 'last_wine_personality_at' : 'last_recipe_personality_at';
+      await supabase.from('profiles').upsert({
+        user_id: session.user.id,
+        [textColumn]: result.text,
+        [tsColumn]: now,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate personality.');
     } finally {
@@ -94,18 +115,90 @@ export default function PersonalityScreen() {
     }
   }
 
+  // Count new items the user has added since the saved sketch was generated.
+  // If we never stamped a timestamp (legacy users on a pre-existing sketch),
+  // treat as unlocked so they can regenerate once and seed the timestamp.
+  async function countNewItemsSinceSketch(): Promise<number> {
+    if (!session?.user.id) return 0;
+    if (!lastGeneratedAt) return EVOLUTION_THRESHOLD;
+    const userId = session.user.id;
+    if (cat === 'wine') {
+      const [{ count: c1 }, { count: c2 }] = await Promise.all([
+        supabase.from('cellar_wines').select('id', { count: 'exact', head: true })
+          .eq('user_id', userId).gt('created_at', lastGeneratedAt),
+        supabase.from('chosen_wines').select('id', { count: 'exact', head: true })
+          .eq('user_id', userId).gt('chosen_at', lastGeneratedAt),
+      ]);
+      return (c1 ?? 0) + (c2 ?? 0);
+    }
+    const [{ count: c1 }, { count: c2 }] = await Promise.all([
+      supabase.from('chef_label_sessions').select('id', { count: 'exact', head: true })
+        .eq('user_id', userId).gt('saved_at', lastGeneratedAt),
+      supabase.from('chef_pairing_sessions').select('id', { count: 'exact', head: true })
+        .eq('user_id', userId).gt('saved_at', lastGeneratedAt),
+    ]);
+    return (c1 ?? 0) + (c2 ?? 0);
+  }
+
+  async function handleEvolve() {
+    const newItems = await countNewItemsSinceSketch();
+    if (newItems >= EVOLUTION_THRESHOLD) {
+      generate();
+    } else {
+      setEvolveModalOpen(true);
+    }
+  }
+
+  async function handleUploadToCommunity() {
+    if (!text || !session?.user.id || publishState !== 'idle') return;
+    const username = session.user.user_metadata?.display_name
+      || (session.user.email?.split('@')[0] ?? 'Anonymous');
+    const field = cat === 'wine' ? 'wine_personality' : 'recipe_personality';
+    setPublishState('saving');
+    try {
+      const { error } = await supabase.from('community_profiles').upsert({
+        user_id: session.user.id,
+        username,
+        [field]: text,
+        updated_at: new Date().toISOString(),
+      });
+      if (error) throw error;
+      setPublishState('saved');
+    } catch (err) {
+      setPublishState('idle');
+      Alert.alert('Could not upload', err instanceof Error ? err.message : 'Please try again.');
+    }
+  }
+
+  async function handleShare() {
+    if (!text) return;
+    const { title, body } = splitPersonality(text);
+    const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : 'My Chef Personality, by Vinster';
+    const composed = [heading, title ? `\n${title}` : '', `\n${body}`].filter(Boolean).join('\n');
+    try {
+      await Share.share({ message: composed, title: heading });
+    } catch (err) {
+      Alert.alert('Could not share', err instanceof Error ? err.message : 'Please try again.');
+    }
+  }
+
   return (
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-          <Text style={styles.backText}>← Back</Text>
-        </TouchableOpacity>
+        <View style={styles.topRow}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+            <Text style={styles.backText}>← Back</Text>
+          </TouchableOpacity>
+          {text ? (
+            <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
+              <Text style={styles.shareText}>+ SHARE</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
 
         <View style={styles.intro}>
           <Text style={styles.heading}>{
-            cat === 'wine' ? 'Your Wine Personality'
-            : cat === 'recipe' ? 'Your Recipe Personality'
-            : 'Your Restaurant Personality'
+            cat === 'wine' ? 'Your Wine Personality' : 'Your Chef Personality'
           }</Text>
           <Text style={styles.subheading}>A character sketch through the lens of your profile and your choices so far.</Text>
         </View>
@@ -125,6 +218,10 @@ export default function PersonalityScreen() {
           </View>
         ) : text ? (
           <>
+            <TouchableOpacity style={styles.evolveBtn} onPress={handleEvolve} activeOpacity={0.8}>
+              <Text style={styles.evolveBtnText}>I've evolved, Update my sketch</Text>
+            </TouchableOpacity>
+
             <View style={styles.sketchCard}>
               {(() => {
                 const { title, body } = splitPersonality(text);
@@ -136,20 +233,43 @@ export default function PersonalityScreen() {
                 );
               })()}
             </View>
-            <TouchableOpacity style={styles.regenBtn} onPress={generate}>
-              <Text style={styles.regenBtnText}>Not quite me, have another go</Text>
+
+            <TouchableOpacity
+              style={[styles.uploadBtn, publishState !== 'idle' && styles.uploadBtnDone]}
+              onPress={handleUploadToCommunity}
+              disabled={publishState !== 'idle'}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.uploadBtnText}>
+                {publishState === 'saved' ? 'Uploaded ✓' : publishState === 'saving' ? 'Uploading…' : 'Upload to Community Profile'}
+              </Text>
             </TouchableOpacity>
           </>
         ) : null}
       </ScrollView>
+
+      <Modal visible={evolveModalOpen} transparent animationType="fade" onRequestClose={() => setEvolveModalOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEvolveModalOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Not yet</Text>
+            <Text style={styles.modalBody}>Engage regularly with Vinster to generate an updated personality sketch.</Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setEvolveModalOpen(false)}>
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  backRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  backRow: {},
   backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  shareBtn: { paddingVertical: 4, paddingHorizontal: 8 },
+  shareText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 14, color: colors.gold, letterSpacing: 1 },
   intro: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center', gap: spacing.xs },
   heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 32, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   subheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginTop: spacing.xs },
@@ -159,9 +279,18 @@ const styles = StyleSheet.create({
   errorBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, textAlign: 'center' },
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   retryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
-  sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
+  evolveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
+  evolveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
   sketchTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
   sketchText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 26 },
-  regenBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
-  regenBtnText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted },
+  uploadBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
+  uploadBtnDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  uploadBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
+  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
 });
