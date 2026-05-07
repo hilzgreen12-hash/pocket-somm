@@ -56,6 +56,7 @@ export interface WineDetails {
   region: string | null;
   wineName: string | null;
   vintage: string | null;
+  style: string | null;
 }
 
 export interface WineDetailsComplete {
@@ -99,6 +100,9 @@ export interface DietaryFilters {
   dietary: DietaryPreference | null;
   allergens: AllergenFilter[];
   customAllergen: string;
+  dietaryNote?: string | null;
+  difficulty?: string | null;
+  timeConsideration?: string | null;
   specificConcerns?: string | null;
   regionalPreferences?: string[];
   nutritionalPreferences?: string[];

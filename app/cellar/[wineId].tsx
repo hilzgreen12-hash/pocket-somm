@@ -105,7 +105,7 @@ export default function CellarWineDetail() {
   const { wines, updateWine } = useCellar();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
-  const { setWineDetailsConfirmed, setPairings, setError } = useLabelStore();
+  const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
   const qc = useQueryClient();
   const { wines: archivedWines } = useArchive();
   const wine = wines.find((w) => w.id === wineId) ?? archivedWines.find((w) => w.id === wineId);
@@ -125,10 +125,6 @@ export default function CellarWineDetail() {
   });
   const wineSlot = slotAssignments.find((s) => s.cellar_wine_id === wineId);
   const wineRack = wineSlot ? racks.find((r) => r.id === wineSlot.rack_id) ?? null : null;
-
-  const [editing, setEditing] = useState(false);
-  const [quantity, setQuantity] = useState(String(wine?.quantity ?? 1));
-  const [saving, setSaving] = useState(false);
 
   const [editingNote, setEditingNote] = useState(false);
   const [noteText, setNoteText] = useState(wine?.user_notes ?? '');
@@ -162,21 +158,6 @@ export default function CellarWineDetail() {
         </TouchableOpacity>
       </View>
     );
-  }
-
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await updateWine.mutateAsync({
-        id: wine!.id,
-        updates: { quantity: parseInt(quantity) || 1 },
-      });
-      setEditing(false);
-    } catch {
-      Alert.alert('Error', 'Could not save changes.');
-    } finally {
-      setSaving(false);
-    }
   }
 
   async function handleSaveNote() {
@@ -224,10 +205,12 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['cellar-removals', wine!.id] });
 
       if (newQuantity === 0) {
+        // Archive the row with the actual number removed in this event so the
+        // "Bottles in My Archive" stat on the wine card sums correctly.
         await updateWine.mutateAsync({
           id: wine!.id,
           updates: {
-            quantity: 0,
+            quantity: count,
             archived_at: `${removeDate}T12:00:00.000Z`,
             user_notes: updatedNotes,
           },
@@ -405,14 +388,7 @@ export default function CellarWineDetail() {
       };
       const pairings = await generatePairings(confirmed, filters);
       setPairings(pairings);
-
-      try {
-        const raw = await AsyncStorage.getItem('vinster_chef_history');
-        const history = raw ? JSON.parse(raw) : [];
-        history.unshift({ id: Date.now().toString(), timestamp: new Date().toISOString(), wine: confirmed, pairings });
-        await AsyncStorage.setItem('vinster_chef_history', JSON.stringify(history.slice(0, 30)));
-      } catch { /* non-critical */ }
-
+      setFilters(filters as unknown as Record<string, unknown>);
       router.push('/chef/results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
@@ -435,6 +411,21 @@ export default function CellarWineDetail() {
   const windowColor = STATUS_COLORS[wine.drinking_window_status] ?? colors.textMuted;
   const windowLabel = STATUS_LABELS[wine.drinking_window_status] ?? 'Unknown';
 
+  // Count bottles across all rows (cellar + archive) that match this wine's
+  // identity. Producer + wine name + vintage normalised so 'NV' / null /
+  // case differences don't fragment the count.
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  const matchesIdentity = (w: typeof wine) =>
+    norm(w.producer) === norm(wine.producer) &&
+    norm(w.wine_name) === norm(wine.wine_name) &&
+    norm(w.vintage) === norm(wine.vintage);
+  const bottlesInCellar = wines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  const bottlesInArchive = archivedWines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+
+  function bottleLabel(n: number) {
+    return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
@@ -455,69 +446,78 @@ export default function CellarWineDetail() {
         {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
       </View>
 
-      {wine.critic_score !== null && (
-        <View style={styles.infoRow}>
-          <Text style={styles.infoLabel}>Critic Score</Text>
-          <Text style={styles.infoValue}>{wine.critic_score}</Text>
+      {/* Compact stats grid */}
+      <View style={styles.statsGrid}>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Critic Score</Text>
+          <Text style={styles.statValue}>{wine.critic_score != null ? wine.critic_score : '—'}</Text>
         </View>
-      )}
-
-      <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>Drinking Window</Text>
-        <View>
-          <Text style={[styles.infoValue, { color: windowColor }]}>{windowLabel}</Text>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Drinking Window</Text>
+          <Text style={[styles.statValue, { color: windowColor }]}>{windowLabel}</Text>
           {wine.drinking_window_from && wine.drinking_window_to && (
-            <Text style={styles.infoSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
+            <Text style={styles.statSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
           )}
         </View>
-      </View>
 
-      <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>Purchase Price</Text>
-        {editingPrice ? (
-          <View style={styles.priceEditRow}>
-            <TextInput
-              style={styles.priceInput}
-              value={purchasePriceDraft}
-              onChangeText={setPurchasePriceDraft}
-              keyboardType="decimal-pad"
-              placeholder="0.00"
-              placeholderTextColor={colors.textMuted}
-              autoFocus
-            />
-            <TouchableOpacity
-              style={[styles.priceSaveBtn, savingPrice && { opacity: 0.5 }]}
-              onPress={handleSavePrice}
-              disabled={savingPrice}
-            >
-              <Text style={styles.priceSaveBtnText}>{savingPrice ? '…' : 'Save'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
-              <Text style={styles.priceCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <TouchableOpacity onPress={() => setEditingPrice(true)} style={styles.priceDisplay}>
-            <Text style={[styles.infoValue, wine.purchase_price == null && { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' }]}>
-              {wine.purchase_price != null ? formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 2 }) : 'Tap to add'}
-            </Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      <View style={styles.infoRow}>
-        <Text style={styles.infoLabel}>Estimated Value</Text>
-        <View style={styles.estimateDisplay}>
-          {refreshingValue ? (
-            <Text style={[styles.infoValue, { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' }]}>Estimating…</Text>
-          ) : wine.estimated_value != null ? (
-            <Text style={styles.infoValue}>{formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}</Text>
+        <TouchableOpacity style={styles.statCell} onPress={() => !editingPrice && setEditingPrice(true)} activeOpacity={editingPrice ? 1 : 0.7}>
+          <Text style={styles.statLabel}>Purchase Price</Text>
+          {editingPrice ? (
+            <>
+              <TextInput
+                style={styles.statInput}
+                value={purchasePriceDraft}
+                onChangeText={setPurchasePriceDraft}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+              />
+              <View style={styles.statActions}>
+                <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
+                  <Text style={styles.statCancel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
+                  <Text style={[styles.statAction, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
+                </TouchableOpacity>
+              </View>
+            </>
           ) : (
-            <Text style={[styles.infoValue, { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' }]}>—</Text>
+            <>
+              <Text style={[styles.statValue, wine.purchase_price == null && styles.statValueMuted]}>
+                {wine.purchase_price != null ? formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 2 }) : 'Tap to add'}
+              </Text>
+              {wine.purchase_price != null && <Text style={styles.statAction}>Edit</Text>}
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Estimated Value</Text>
+          {refreshingValue ? (
+            <Text style={[styles.statValue, styles.statValueMuted]}>Estimating…</Text>
+          ) : wine.estimated_value != null ? (
+            <Text style={styles.statValue}>{formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}</Text>
+          ) : (
+            <Text style={[styles.statValue, styles.statValueMuted]}>—</Text>
           )}
           <TouchableOpacity onPress={handleRefreshEstimate} disabled={refreshingValue}>
-            <Text style={styles.estimateRefreshLink}>{wine.estimated_value != null ? 'Refresh' : 'Get estimate'}</Text>
+            <Text style={styles.statAction}>{wine.estimated_value != null ? 'Refresh' : 'Get estimate'}</Text>
           </TouchableOpacity>
+        </View>
+
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Bottles in My Cellar</Text>
+          <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
+          {wineRack && (
+            <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
+              <Text style={styles.statAction}>In {wineRack.name} →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Bottles in My Archive</Text>
+          <Text style={[styles.statValue, bottlesInArchive === 0 && styles.statValueMuted]}>{bottleLabel(bottlesInArchive)}</Text>
         </View>
       </View>
 
@@ -526,46 +526,6 @@ export default function CellarWineDetail() {
           <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
         </View>
       )}
-
-      <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
-        <Text style={styles.chefBtnText}>Chef, find me a food pairing for this wine</Text>
-      </TouchableOpacity>
-
-      <View style={styles.section}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Notes</Text>
-          {!editingNote && (
-            <TouchableOpacity onPress={() => setEditingNote(true)}>
-              <Text style={styles.editLink}>{wine.user_notes ? 'Edit Note' : 'Add Note'}</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {editingNote ? (
-          <>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={noteText}
-              onChangeText={setNoteText}
-              placeholder="Add a personal note about this wine…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.noteActions}>
-              <TouchableOpacity onPress={() => { setEditingNote(false); setNoteText(wine.user_notes ?? ''); }}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, savingNote && styles.buttonDisabled]} onPress={handleSaveNote} disabled={savingNote}>
-                <Text style={styles.saveBtnText}>{savingNote ? 'Saving…' : 'Save Note'}</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        ) : wine.user_notes ? (
-          <Text style={styles.noteText}>{wine.user_notes}</Text>
-        ) : null}
-      </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -647,90 +607,88 @@ export default function CellarWineDetail() {
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{wineRack ? `In my ${wineRack.name}` : 'In My Cellar'}</Text>
-          <View style={styles.headerActions}>
-            {wineRack && !editing && (
-              <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
-                <Text style={styles.editLink}>View in Rack →</Text>
-              </TouchableOpacity>
-            )}
-            {!editing && (
-              <TouchableOpacity onPress={() => setEditing(true)}>
-                <Text style={styles.editLink}>Edit</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={styles.sectionTitle}>Additional Notes</Text>
+          {!editingNote && (
+            <TouchableOpacity onPress={() => setEditingNote(true)}>
+              <Text style={styles.editLink}>{wine.user_notes ? 'Edit Note' : 'Add Note'}</Text>
+            </TouchableOpacity>
+          )}
         </View>
-
-        {editing ? (
+        {editingNote ? (
           <>
-            <Text style={styles.fieldLabel}>Number of bottles</Text>
             <TextInput
-              style={styles.input}
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="number-pad"
+              style={[styles.input, styles.noteInput]}
+              value={noteText}
+              onChangeText={setNoteText}
+              placeholder="Add a personal note about this wine…"
               placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
             />
-            <TouchableOpacity style={[styles.button, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-              <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save'}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setEditing(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <View style={styles.bottlesRow}>
-              <Text style={styles.infoLabel}>Bottles</Text>
-              <Text style={styles.infoValue}>{wine.quantity}</Text>
-            </View>
-
-            <View style={styles.removeBlock}>
-              <Text style={styles.removeHeading}>Archive or Remove</Text>
-
-              <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
-              <TextInput
-                style={styles.input}
-                value={removeCount}
-                onChangeText={setRemoveCount}
-                keyboardType="number-pad"
-                placeholder="1"
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <Text style={styles.fieldLabel}>Date removed</Text>
-              <TextInput
-                style={styles.input}
-                value={removeDate}
-                onChangeText={setRemoveDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <TouchableOpacity
-                style={[styles.removeBtn, removing && styles.buttonDisabled]}
-                onPress={handleArchiveWine}
-                disabled={removing}
-              >
-                <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
+            <View style={styles.noteActions}>
+              <TouchableOpacity onPress={() => { setEditingNote(false); setNoteText(wine.user_notes ?? ''); }}>
+                <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
-                onPress={() => setRemoveStep('confirm')}
-                disabled={removing}
-              >
-                <Text style={styles.removeWineBtnText}>Remove Wine</Text>
+              <TouchableOpacity style={[styles.saveBtn, savingNote && styles.buttonDisabled]} onPress={handleSaveNote} disabled={savingNote}>
+                <Text style={styles.saveBtnText}>{savingNote ? 'Saving…' : 'Save Note'}</Text>
               </TouchableOpacity>
-
-              {rackRemovalMsg && (
-                <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
-              )}
             </View>
           </>
-        )}
+        ) : wine.user_notes ? (
+          <Text style={styles.noteText}>{wine.user_notes}</Text>
+        ) : null}
       </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Archive or Delete Wine</Text>
+
+        <View style={styles.removeBlock}>
+          <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
+          <TextInput
+            style={styles.input}
+            value={removeCount}
+            onChangeText={setRemoveCount}
+            keyboardType="number-pad"
+            placeholder="1"
+            placeholderTextColor={colors.textMuted}
+          />
+
+          <Text style={styles.fieldLabel}>Date removed</Text>
+          <TextInput
+            style={styles.input}
+            value={removeDate}
+            onChangeText={setRemoveDate}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+          />
+
+          <TouchableOpacity
+            style={[styles.removeBtn, removing && styles.buttonDisabled]}
+            onPress={handleArchiveWine}
+            disabled={removing}
+          >
+            <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
+            onPress={() => setRemoveStep('confirm')}
+            disabled={removing}
+          >
+            <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
+          </TouchableOpacity>
+
+          {rackRemovalMsg && (
+            <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
+          )}
+        </View>
+      </View>
+
+      <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
+        <Text style={styles.chefBtnText}>Chef, find me a food pairing for this wine</Text>
+      </TouchableOpacity>
 
       {removals.length > 0 && (
         <View style={styles.section}>
@@ -812,20 +770,14 @@ const styles = StyleSheet.create({
   tastingNotes: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22 },
   fieldLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
-  cancelButton: { alignItems: 'center', marginTop: spacing.md },
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   noteText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 22 },
   noteInput: { minHeight: 90, textAlignVertical: 'top' },
   noteActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
   saveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  bottlesRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   removeBlock: { paddingTop: spacing.sm },
-  removeHeading: { fontSize: 15, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   removeWineBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
@@ -850,12 +802,63 @@ const styles = StyleSheet.create({
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   chefBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
-  priceDisplay: { alignItems: 'flex-end' },
-  priceEditRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  priceInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 6, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minWidth: 90, textAlign: 'right' },
-  priceSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.sm },
-  priceSaveBtnText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  priceCancelText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  estimateDisplay: { alignItems: 'flex-end' },
-  estimateRefreshLink: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: 2 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  statCell: {
+    width: '50%',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 16,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.text,
+    lineHeight: 20,
+  },
+  statValueMuted: {
+    color: colors.textMuted,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+  },
+  statSub: {
+    fontSize: 12,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  statAction: {
+    fontSize: 12,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.gold,
+    marginTop: 4,
+  },
+  statCancel: {
+    fontSize: 12,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.textMuted,
+  },
+  statInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 15,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.text,
+    backgroundColor: colors.surface,
+    marginTop: 2,
+  },
+  statActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 4,
+  },
 });

@@ -14,7 +14,14 @@ function buildWinePrompt(payload: any): string {
 
   const arr = (a: any) => Array.isArray(a) && a.length ? a.join(', ') : 'none specified';
 
-  return `You are Vinster's resident sommelier-as-personality-profiler. Read the wine drinker's profile below and write a short, witty, lovingly observed character sketch — 4–6 short paragraphs, ideally — of them as a wine drinker.
+  return `You are Vinster's resident sommelier-as-personality-profiler. Read the wine drinker's profile below and write a short, witty, lovingly observed character sketch of them as a wine drinker.
+
+OUTPUT FORMAT — required:
+First line: a punchy title for the sketch, prefixed with "# " (markdown H1). Six words or fewer, witty and specific to this person. Examples of the right vibe: "# The Bamboozled Boozer", "# Down Under Drinker", "# Card-Carrying Riesling Romantic", "# The Reluctant Bordeaux Loyalist". Make it memorable; don't reuse the examples.
+Then a blank line.
+Then the body sketch.
+
+HARD LIMIT for the body: 300 words maximum. Aim for 3–4 tight paragraphs. Every sentence must earn its place — cut anything that doesn't add personality, humour, or a sharp observation. Density over breadth.
 
 Tone: warm, dry, gently teasing, never mean. Think a wine merchant who knows the customer well and is fond of them. British sommelier voice, plenty of personality. You can poke fun at recognisable wine-drinker archetypes ("the burgundy chaser", "the new-world adventurer", "the cautious budget bordeaux loyalist") if they fit. Avoid name-dropping famous critics. Don't quote the data verbatim — read between the lines.
 
@@ -51,7 +58,14 @@ function buildRestaurantPrompt(payload: any): string {
         .map((r: any) => `- ${r.name ?? 'Unnamed'}${r.city ? ` (${r.city})` : ''} — Food ${stars(r.food)}, Service ${stars(r.service)}, Wine list ${stars(r.wineList)}, Overall ${stars(r.overall)}${r.note ? ` · "${(r.note as string).slice(0, 120)}"` : ''}`)
         .join('\n');
 
-  return `You are Vinster's resident restaurant-personality-profiler. Read the diner's restaurant review list below and write a short, witty, lovingly observed character sketch — 4–6 short paragraphs, ideally — of them as a restaurant-goer.
+  return `You are Vinster's resident restaurant-personality-profiler. Read the diner's restaurant review list below and write a short, witty, lovingly observed character sketch of them as a restaurant-goer.
+
+OUTPUT FORMAT — required:
+First line: a punchy title for the sketch, prefixed with "# " (markdown H1). Six words or fewer, witty and specific to this person. Examples of the right vibe: "# The Tablecloth Traditionalist", "# Bistro Regular, Capital R", "# Tasting Menu Devotee". Make it memorable; don't reuse the examples.
+Then a blank line.
+Then the body sketch.
+
+HARD LIMIT for the body: 300 words maximum. Aim for 3–4 tight paragraphs. Every sentence must earn its place — cut anything that doesn't add personality, humour, or a sharp observation. Density over breadth.
 
 Tone: warm, dry, gently teasing, never mean. Think a maître d' who knows them well and is fond of them. Plenty of personality. You can riff on recognisable diner archetypes ("the white-tablecloth loyalist", "the neighbourhood bistro regular", "the tasting-menu obsessive") if they fit. Avoid name-dropping famous chefs.
 
@@ -71,7 +85,14 @@ function buildRecipePrompt(payload: any): string {
   const p = payload.preferences ?? {};
   const arr = (a: any) => Array.isArray(a) && a.length ? a.join(', ') : 'none specified';
 
-  return `You are Vinster's resident food-personality-profiler. Read the cook's profile below and write a short, witty, lovingly observed character sketch — 4–6 short paragraphs, ideally — of them as an eater.
+  return `You are Vinster's resident food-personality-profiler. Read the cook's profile below and write a short, witty, lovingly observed character sketch of them as an eater.
+
+OUTPUT FORMAT — required:
+First line: a punchy title for the sketch, prefixed with "# " (markdown H1). Six words or fewer, witty and specific to this person. Examples of the right vibe: "# She Likes It Hot", "# The Reluctant Vegetarian", "# Umami-Chasing Globetrotter". Make it memorable; don't reuse the examples.
+Then a blank line.
+Then the body sketch.
+
+HARD LIMIT for the body: 300 words maximum. Aim for 3–4 tight paragraphs. Every sentence must earn its place — cut anything that doesn't add personality, humour, or a sharp observation. Density over breadth.
 
 Tone: warm, dry, gently teasing, never mean. Think a chef-friend who knows them well and is fond of them. Plenty of personality. You can poke fun at recognisable foodie archetypes ("the cautious cook who wants nothing to surprise them", "the umami-chasing globetrotter", "the protein maxer") if they fit. Avoid name-dropping famous chefs.
 
@@ -101,7 +122,7 @@ Deno.serve(async (req) => {
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 700,
       messages: [{ role: 'user', content: prompt }],
     });
 

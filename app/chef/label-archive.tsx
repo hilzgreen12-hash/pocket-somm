@@ -1,17 +1,10 @@
-import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
-import type { WineDetailsComplete, Pairing } from '../../src/types/wine';
-
-interface ChefHistoryItem {
-  id: string;
-  timestamp: string;
-  wine: WineDetailsComplete;
-  pairings: Pairing[];
-}
+import type { ChefLabelSession } from '../../src/api/chef';
 
 function formatDate(iso: string) {
   const d = new Date(iso);
@@ -19,20 +12,14 @@ function formatDate(iso: string) {
 }
 
 export default function LabelArchiveScreen() {
-  const [history, setHistory] = useState<ChefHistoryItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const { setWineDetailsConfirmed, setPairings } = useLabelStore();
+  const { sessions, isLoading } = useChefLabelHistory();
+  const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
 
-  useEffect(() => {
-    AsyncStorage.getItem('vinster_chef_history')
-      .then((raw) => setHistory(raw ? JSON.parse(raw) : []))
-      .finally(() => setLoading(false));
-  }, []);
-
-  function handleView(item: ChefHistoryItem) {
+  function handleView(item: ChefLabelSession) {
     setWineDetailsConfirmed(item.wine);
     setPairings(item.pairings);
-    router.push('/chef/results');
+    setFilters(item.filters ?? null);
+    router.push({ pathname: '/chef/results', params: { fromHistory: 'true' } });
   }
 
   return (
@@ -45,22 +32,22 @@ export default function LabelArchiveScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {loading ? null : history.length === 0 ? (
+      {isLoading ? null : sessions.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No archive yet</Text>
           <Text style={styles.emptyBody}>
-            Your recipe pairings will appear here automatically after each label scan.
+            After each label scan, tap Save to Archive on the results page to keep that pairing here.
           </Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-          {history.map((item) => {
-            const wineLine = [item.wine.producer, item.wine.wineName].filter(Boolean).join(' — ');
-            const detailLine = [item.wine.region, item.wine.vintage, item.wine.style].filter(Boolean).join(' · ');
+          {sessions.map((item) => {
+            const headerLine = wineHeaderLine(item.wine.producer, item.wine.wineName, item.wine.vintage);
+            const detailLine = [item.wine.region, item.wine.style].filter(Boolean).join(' · ');
             return (
               <View key={item.id} style={styles.card}>
-                <Text style={styles.cardDate}>{formatDate(item.timestamp)}</Text>
-                <Text style={styles.cardWine}>{wineLine}</Text>
+                <Text style={styles.cardDate}>{formatDate(item.saved_at)}</Text>
+                <Text style={styles.cardWine}>{headerLine}</Text>
                 {detailLine ? <Text style={styles.cardDetail}>{detailLine}</Text> : null}
                 <Text style={styles.cardPairings}>
                   {item.pairings.map((p) => p.dishName).join(' · ')}
@@ -95,7 +82,7 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
-  cardDate: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  cardDate: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, textAlign: 'center' },
   cardWine: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   cardDetail: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold },
   cardPairings: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 20, marginBottom: spacing.xs },

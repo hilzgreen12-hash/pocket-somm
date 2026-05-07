@@ -16,14 +16,14 @@ function formatJoinedDate(iso: string | undefined): string {
 export default function AccountScreen() {
   const { session } = useAuth();
   const { preferences, updatePreferences } = usePreferences();
-  const [emailChangeOpen, setEmailChangeOpen] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [emailSaving, setEmailSaving] = useState(false);
-  const [usernameOpen, setUsernameOpen] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [usernameSaving, setUsernameSaving] = useState(false);
+  const currentUsername = session?.user.user_metadata?.display_name ?? '';
+  const currentEmail = session?.user.email ?? '';
 
-  const currentUsername = session?.user.user_metadata?.display_name ?? '—';
+  const [editingIdentity, setEditingIdentity] = useState(false);
+  const [usernameDraft, setUsernameDraft] = useState(currentUsername);
+  const [emailDraft, setEmailDraft] = useState(currentEmail);
+  const [savingIdentity, setSavingIdentity] = useState(false);
+
   const [notifyWindow, setNotifyWindow] = useState<boolean>(
     session?.user.user_metadata?.notify_drinking_window ?? false
   );
@@ -38,46 +38,50 @@ export default function AccountScreen() {
     await supabase.auth.updateUser({ data: { [key]: value } });
   }
 
-  function toggleEmailChange() {
-    setEmailChangeOpen((v) => !v);
-    setNewEmail('');
+  function openIdentityEdit() {
+    setUsernameDraft(currentUsername);
+    setEmailDraft(currentEmail);
+    setEditingIdentity(true);
   }
 
-  function toggleUsernameChange() {
-    setUsernameOpen((v) => !v);
-    setNewUsername(currentUsername);
+  function cancelIdentityEdit() {
+    setUsernameDraft(currentUsername);
+    setEmailDraft(currentEmail);
+    setEditingIdentity(false);
   }
 
-  async function handleEmailChange() {
-    if (!newEmail.trim()) return;
-    setEmailSaving(true);
-    const redirectTo = Linking.createURL('auth/callback');
-    const { error } = await supabase.auth.updateUser(
-      { email: newEmail.trim() },
-      { emailRedirectTo: redirectTo },
-    );
-    setEmailSaving(false);
-    if (error) {
-      Alert.alert('Unable to update email', error.message);
-    } else {
-      setEmailChangeOpen(false);
-      setNewEmail('');
-      Alert.alert('Check both inboxes', 'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.');
+  async function handleIdentitySave() {
+    const usernameTrim = usernameDraft.trim();
+    const emailTrim = emailDraft.trim();
+    const usernameChanged = usernameTrim !== (currentUsername ?? '').trim() && usernameTrim.length > 0;
+    const emailChanged = emailTrim !== currentEmail.trim() && emailTrim.length > 0;
+    if (!usernameChanged && !emailChanged) {
+      setEditingIdentity(false);
+      return;
     }
-  }
-
-  async function handleUsernameChange() {
-    if (!newUsername.trim()) return;
-    setUsernameSaving(true);
-    const { error } = await supabase.auth.updateUser({
-      data: { display_name: newUsername.trim() },
-    });
-    setUsernameSaving(false);
-    if (error) {
-      Alert.alert('Unable to update username', error.message);
-    } else {
-      setUsernameOpen(false);
-      setNewUsername('');
+    setSavingIdentity(true);
+    try {
+      if (usernameChanged) {
+        const { error } = await supabase.auth.updateUser({ data: { display_name: usernameTrim } });
+        if (error) throw new Error(`username: ${error.message}`);
+      }
+      if (emailChanged) {
+        const redirectTo = Linking.createURL('auth/callback');
+        const { error } = await supabase.auth.updateUser(
+          { email: emailTrim },
+          { emailRedirectTo: redirectTo },
+        );
+        if (error) throw new Error(`email: ${error.message}`);
+        Alert.alert(
+          'Check both inboxes',
+          'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.'
+        );
+      }
+      setEditingIdentity(false);
+    } catch (err) {
+      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setSavingIdentity(false);
     }
   }
 
@@ -121,34 +125,56 @@ export default function AccountScreen() {
 
       <Text style={styles.heading}>Account</Text>
 
-      {/* Username */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Username</Text>
-        <Text style={styles.valueText}>{currentUsername}</Text>
-        {!usernameOpen ? (
-          <TouchableOpacity onPress={toggleUsernameChange} style={styles.changeButton}>
-            <Text style={styles.changeLink}>Change username</Text>
+      <Text style={styles.thanks}>You're one of the first 10,000 users — thank you for being here. Your subscription is on us.</Text>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Date joined</Text>
+          <Text style={styles.rowValue}>{formatJoinedDate(session?.user.created_at)}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Username</Text>
+          <Text style={styles.rowValue}>{currentUsername || '—'}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Email</Text>
+          <Text style={[styles.rowValue, styles.rowValueSmall]} numberOfLines={1}>{currentEmail}</Text>
+        </View>
+        {!editingIdentity ? (
+          <TouchableOpacity onPress={openIdentityEdit} style={styles.editLinkBtn}>
+            <Text style={styles.editLinkText}>Edit username or email</Text>
           </TouchableOpacity>
         ) : (
-          <View style={styles.changeWrap}>
+          <View style={styles.editPanel}>
+            <Text style={styles.fieldLabel}>Username</Text>
             <TextInput
               style={styles.input}
-              placeholder="New username"
+              value={usernameDraft}
+              onChangeText={setUsernameDraft}
+              placeholder="Username"
               placeholderTextColor={colors.textMuted}
-              value={newUsername}
-              onChangeText={setNewUsername}
               autoCapitalize="words"
-              autoFocus
             />
-            <View style={styles.changeRow}>
-              <TouchableOpacity onPress={toggleUsernameChange}>
+            <Text style={styles.fieldLabel}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={emailDraft}
+              onChangeText={setEmailDraft}
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              keyboardType="email-address"
+            />
+            <View style={styles.editActions}>
+              <TouchableOpacity onPress={cancelIdentityEdit}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={handleUsernameChange} disabled={usernameSaving}>
-                {usernameSaving
-                  ? <ActivityIndicator color={colors.background} size="small" />
-                  : <Text style={styles.confirmButtonText}>Save</Text>
-                }
+              <TouchableOpacity style={styles.saveBtn} onPress={handleIdentitySave} disabled={savingIdentity}>
+                {savingIdentity
+                  ? <ActivityIndicator color={colors.gold} size="small" />
+                  : <Text style={styles.saveBtnText}>Save</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -157,102 +183,41 @@ export default function AccountScreen() {
 
       <View style={styles.divider} />
 
-      {/* Email */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Email</Text>
-        <Text style={styles.valueText}>{session?.user.email}</Text>
-        {!emailChangeOpen ? (
-          <TouchableOpacity onPress={toggleEmailChange} style={styles.changeButton}>
-            <Text style={styles.changeLink}>Change email address</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.changeWrap}>
-            <TextInput
-              style={styles.input}
-              placeholder="New email address"
-              placeholderTextColor={colors.textMuted}
-              value={newEmail}
-              onChangeText={setNewEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              autoFocus
-            />
-            <View style={styles.changeRow}>
-              <TouchableOpacity onPress={toggleEmailChange}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmButton} onPress={handleEmailChange} disabled={emailSaving}>
-                {emailSaving
-                  ? <ActivityIndicator color={colors.background} size="small" />
-                  : <Text style={styles.confirmButtonText}>Confirm</Text>
-                }
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Email preferences live with Email since they are email notifications */}
-        <View style={styles.emailPrefsBlock}>
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Email me when my wines are approaching their drinking windows</Text>
-            <Switch
-              value={notifyWindow}
-              onValueChange={(v) => {
-                setNotifyWindow(v);
-                updateNotifySetting('notify_drinking_window', v);
-              }}
-              trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
-
-          <View style={styles.settingDivider} />
-
-          <View style={styles.settingRow}>
-            <Text style={styles.settingLabel}>Email me when my wines are approaching decline</Text>
-            <Switch
-              value={notifyDecline}
-              onValueChange={(v) => {
-                setNotifyDecline(v);
-                updateNotifySetting('notify_decline', v);
-              }}
-              trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
-              thumbColor="#FFFFFF"
-            />
-          </View>
+      <View style={styles.block}>
+        <Text style={styles.blockHeading}>Email preferences</Text>
+        <View style={styles.toggleRow}>
+          <Text style={styles.toggleLabel}>When wines approach their drinking window</Text>
+          <Switch
+            value={notifyWindow}
+            onValueChange={(v) => { setNotifyWindow(v); updateNotifySetting('notify_drinking_window', v); }}
+            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
+            thumbColor="#FFFFFF"
+          />
+        </View>
+        <View style={styles.toggleRow}>
+          <Text style={styles.toggleLabel}>When wines are approaching decline</Text>
+          <Switch
+            value={notifyDecline}
+            onValueChange={(v) => { setNotifyDecline(v); updateNotifySetting('notify_decline', v); }}
+            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
+            thumbColor="#FFFFFF"
+          />
         </View>
       </View>
 
       <View style={styles.divider} />
 
-      {/* Date Joined */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Date joined</Text>
-        <Text style={styles.valueText}>{formatJoinedDate(session?.user.created_at)}</Text>
+      <View style={styles.block}>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Currency</Text>
+          <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.rowValueLink}>{currentCurrencyLabel} ▾</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.divider} />
 
-      {/* Currency */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Currency</Text>
-        <Text style={styles.currencyHint}>Used throughout your cellar, prices, and budget. Change it any time — useful when you're travelling.</Text>
-        <TouchableOpacity style={styles.currencyDropdown} onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
-          <Text style={styles.currencyDropdownText}>{currentCurrencyLabel}</Text>
-          <Text style={styles.currencyDropdownArrow}>▾</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Early access message */}
-      <View style={styles.section}>
-        <Text style={styles.earlyAccessText}>You're one of the first 10,000 users — thank you for being here! Your subscription is on us.</Text>
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Sign Out */}
       <TouchableOpacity
         style={styles.signOutButton}
         onPress={() =>
@@ -265,7 +230,6 @@ export default function AccountScreen() {
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
 
-      {/* Delete Account */}
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
         <Text style={styles.deleteText}>Delete Account</Text>
       </TouchableOpacity>
@@ -299,42 +263,40 @@ export default function AccountScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 80, paddingHorizontal: spacing.xl, paddingBottom: 80 },
-  backButton: { marginBottom: spacing.xl },
-  backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.textMuted },
-  heading: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xxl },
-  section: { marginBottom: spacing.lg },
-  sectionTitle: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
-  valueText: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, marginBottom: spacing.sm },
-  changeButton: { marginTop: spacing.xs },
-  changeLink: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', textDecorationLine: 'underline' },
-  changeWrap: { marginTop: spacing.sm },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
-  changeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md },
-  cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
-  confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: spacing.xs, paddingHorizontal: spacing.md, minWidth: 80, alignItems: 'center' },
-  confirmButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.lg },
-  earlyAccessText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, lineHeight: 26 },
-  signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.md },
-  signOutText: { color: colors.gold, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold' },
-  deleteButton: { alignItems: 'center', paddingVertical: spacing.sm },
-  deleteText: { color: colors.error, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', textDecorationLine: 'underline' },
-  settingsHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.lg },
-  settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
-  settingLabel: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 22 },
-  settingDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  currencyHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },
-  currencyDropdown: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
-  currencyDropdownText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text },
-  currencyDropdownArrow: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
+  content: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: 40 },
+  backButton: { marginBottom: spacing.sm, alignSelf: 'flex-start' },
+  backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  heading: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.sm },
+  thanks: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', lineHeight: 20, paddingHorizontal: spacing.md },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  block: { gap: 4 },
+  blockHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  rowLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  rowValue: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
+  rowValueSmall: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular' },
+  rowValueLink: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  editLinkBtn: { alignSelf: 'flex-end', marginTop: 2 },
+  editLinkText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  editPanel: { marginTop: spacing.sm, gap: 4 },
+  fieldLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
+  editActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md, marginTop: 4 },
+  cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted },
+  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md, minWidth: 70, alignItems: 'center' },
+  saveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 4 },
+  toggleLabel: { flex: 1, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 18 },
+  signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginTop: spacing.xs, marginBottom: 6 },
+  signOutText: { color: colors.gold, fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold' },
+  deleteButton: { alignItems: 'center', paddingVertical: 4 },
+  deleteText: { color: colors.error, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', textDecorationLine: 'underline' },
   currencyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   currencySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420, padding: spacing.lg },
   currencySheetTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
@@ -345,5 +307,4 @@ const styles = StyleSheet.create({
   currencyCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold },
   currencyClose: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
   currencyCloseText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted },
-  emailPrefsBlock: { marginTop: spacing.lg, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
 });

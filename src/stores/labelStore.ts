@@ -8,6 +8,7 @@ interface LabelState {
   wineDetailsConfirmed: WineDetailsComplete | null;
   intelligence: WineIntelligence | null;
   pairings: Pairing[];
+  filters: Record<string, unknown> | null;
   stage: 'idle' | 'scanning' | 'confirming' | 'loading' | 'done' | 'error';
   error: string | null;
 
@@ -16,6 +17,7 @@ interface LabelState {
   setWineDetailsConfirmed: (details: WineDetailsComplete) => void;
   setIntelligence: (intel: WineIntelligence) => void;
   setPairings: (pairings: Pairing[]) => void;
+  setFilters: (filters: Record<string, unknown> | null) => void;
   setStage: (stage: LabelState['stage']) => void;
   setError: (message: string) => void;
   reset: () => void;
@@ -28,6 +30,7 @@ export const useLabelStore = create<LabelState>((set) => ({
   wineDetailsConfirmed: null,
   intelligence: null,
   pairings: [],
+  filters: null,
   stage: 'idle',
   error: null,
 
@@ -36,10 +39,11 @@ export const useLabelStore = create<LabelState>((set) => ({
   setWineDetailsConfirmed: (details) => set({ wineDetailsConfirmed: details, stage: 'loading' }),
   setIntelligence: (intel) => set({ intelligence: intel }),
   setPairings: (pairings) => set({ pairings, stage: 'done' }),
+  setFilters: (filters) => set({ filters }),
   setStage: (stage) => set({ stage }),
   setError: (message) => set({ error: message, stage: 'error' }),
   reset: () => set({
     imageUri: null, imageBase64: null, wineDetails: null, wineDetailsConfirmed: null,
-    intelligence: null, pairings: [], stage: 'idle', error: null,
+    intelligence: null, pairings: [], filters: null, stage: 'idle', error: null,
   }),
 }));

@@ -4,8 +4,9 @@ import { router } from 'expo-router';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
-import type { ChosenWine } from '../../src/types/wine';
+import type { ChosenWine, CellarWine } from '../../src/types/wine';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -16,39 +17,43 @@ function locationLine(wine: ChosenWine): string {
   return parts.join(', ');
 }
 
-function headerLine(producer: string | null | undefined, wineName: string | null | undefined, vintage: string | number | null | undefined): string {
-  const sameName = (wineName ?? '').trim().toLowerCase() === (producer ?? '').trim().toLowerCase();
-  const v = vintage != null ? String(vintage) : null;
-  const parts = sameName ? [producer, v] : [producer, wineName, v];
-  return parts.filter((p) => p && String(p).trim().length > 0).join(' · ');
-}
+type ReviewItem =
+  | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
+  | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines: cellarWines } = useCellar();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
+  const [filterBy, setFilterBy] = useState<'all' | 'cellar' | 'restaurant'>('all');
 
-  const cellarNotes = cellarWines.filter((w) => w.user_notes && w.user_notes.trim().length > 0);
-  const hasAnything = chosenWines.length > 0 || cellarNotes.length > 0;
+  // Cellar wines that have ANY user-supplied review content count as a
+  // "cellar review". Mirrors the logic in /cellar/notes.
+  const cellarReviews = cellarWines.filter((w) =>
+    (w.user_notes && w.user_notes.trim().length > 0) ||
+    w.review_score != null ||
+    (w.review_location && w.review_location.trim().length > 0) ||
+    !!w.review_date
+  );
 
-  const sortedChosen = [...chosenWines].sort((a, b) => {
+  const items: ReviewItem[] = [
+    ...chosenWines.map((w): ReviewItem => ({ source: 'restaurant', date: w.chosen_at, score: w.user_score, wine: w })),
+    ...cellarReviews.map((w): ReviewItem => ({ source: 'cellar', date: w.review_date ?? w.created_at, score: w.review_score, wine: w })),
+  ];
+
+  const filtered = filterBy === 'all' ? items : items.filter((i) => i.source === filterBy);
+
+  const sorted = [...filtered].sort((a, b) => {
     if (sortBy === 'score') {
-      const ar = a.user_score ?? -1;
-      const br = b.user_score ?? -1;
+      const ar = a.score ?? -1;
+      const br = b.score ?? -1;
       if (ar !== br) return br - ar;
     }
-    return new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime();
+    return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
-  const sortedCellar = [...cellarNotes].sort((a, b) => {
-    if (sortBy === 'score') {
-      const ar = a.review_score ?? -1;
-      const br = b.review_score ?? -1;
-      if (ar !== br) return br - ar;
-    }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-  });
+  const hasAnything = items.length > 0;
 
   return (
     <View style={styles.container}>
@@ -93,49 +98,69 @@ export default function ChosenWinesScreen() {
               <Text style={[styles.sortChipText, sortBy === 'score' && styles.sortChipTextActive]}>Top rated</Text>
             </TouchableOpacity>
           </View>
-          {chosenWines.length > 0 && (
-            <Text style={styles.sectionHeading}>From restaurants</Text>
-          )}
-          {sortedChosen.map((wine) => (
-            <TouchableOpacity key={wine.id} style={styles.cardCompact} onPress={() => setEditingWine(wine)} activeOpacity={0.7}>
-              <View style={styles.cardCompactRow}>
-                <Text style={styles.wineNameCompact} numberOfLines={2}>
-                  {headerLine(wine.producer, wine.wine_name, wine.vintage)}
-                </Text>
-                {wine.user_score != null && (
-                  <Text style={styles.scoreCompact}>{wine.user_score}</Text>
-                )}
-              </View>
-              {wine.region ? <Text style={styles.regionText} numberOfLines={1}>{wine.region}</Text> : null}
-              <View style={styles.cardCompactMetaRow}>
-                <Text style={styles.metaText}>{formatDate(wine.chosen_at)}</Text>
-                {locationLine(wine) ? (
-                  <Text style={styles.metaText} numberOfLines={1}> · {locationLine(wine)}</Text>
-                ) : null}
-              </View>
+          <View style={styles.sortRow}>
+            <Text style={styles.sortLabel}>Show:</Text>
+            <TouchableOpacity
+              style={[styles.sortChip, filterBy === 'all' && styles.sortChipActive]}
+              onPress={() => setFilterBy('all')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, filterBy === 'all' && styles.sortChipTextActive]}>All</Text>
             </TouchableOpacity>
-          ))}
-
-          {cellarNotes.length > 0 && (
-            <Text style={styles.sectionHeading}>From your cellar</Text>
-          )}
-
-          {sortedCellar.map((wine) => (
-            <TouchableOpacity key={wine.id} style={styles.cardCompact} onPress={() => router.push(`/cellar/${wine.id}`)} activeOpacity={0.7}>
-              <View style={styles.cardCompactRow}>
-                <Text style={styles.wineNameCompact} numberOfLines={2}>
-                  {headerLine(wine.producer, wine.wine_name, wine.vintage)}
-                </Text>
-                {wine.review_score != null && (
-                  <Text style={styles.scoreCompact}>{wine.review_score}</Text>
-                )}
-              </View>
-              {wine.region ? <Text style={styles.regionText} numberOfLines={1}>{wine.region}</Text> : null}
-              <View style={styles.cardCompactMetaRow}>
-                <Text style={styles.metaText}>{formatDate(wine.created_at)}</Text>
-              </View>
+            <TouchableOpacity
+              style={[styles.sortChip, filterBy === 'cellar' && styles.sortChipActive]}
+              onPress={() => setFilterBy('cellar')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, filterBy === 'cellar' && styles.sortChipTextActive]}>Cellar wines</Text>
             </TouchableOpacity>
-          ))}
+            <TouchableOpacity
+              style={[styles.sortChip, filterBy === 'restaurant' && styles.sortChipActive]}
+              onPress={() => setFilterBy('restaurant')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, filterBy === 'restaurant' && styles.sortChipTextActive]}>Restaurant wines</Text>
+            </TouchableOpacity>
+          </View>
+
+          {sorted.length === 0 ? (
+            <View style={styles.emptyFilter}>
+              <Text style={styles.emptyBody}>No reviews match this filter.</Text>
+            </View>
+          ) : (
+            sorted.map((item) => {
+              const w = item.wine;
+              const onPress = item.source === 'restaurant'
+                ? () => setEditingWine(item.wine as ChosenWine)
+                : () => router.push(`/cellar/${(item.wine as CellarWine).id}` as any);
+              const locText = item.source === 'restaurant'
+                ? locationLine(item.wine as ChosenWine)
+                : (item.wine as CellarWine).review_location ?? '';
+              return (
+                <TouchableOpacity
+                  key={`${item.source}-${w.id}`}
+                  style={styles.cardCompact}
+                  onPress={onPress}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.cardCompactRow}>
+                    <Text style={styles.wineNameCompact} numberOfLines={2}>
+                      {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
+                    </Text>
+                    {item.score != null && (
+                      <Text style={styles.scoreCompact}>{item.score}</Text>
+                    )}
+                  </View>
+                  {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
+                  <View style={styles.cardCompactMetaRow}>
+                    <Text style={styles.metaText}>{formatDate(item.date)}</Text>
+                    {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
+                    <Text style={styles.metaText}> · {item.source === 'restaurant' ? 'Restaurant' : 'Cellar'}</Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })
+          )}
         </ScrollView>
       )}
     </View>
@@ -166,7 +191,7 @@ const styles = StyleSheet.create({
   regionText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
   scoreCompact: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  sectionHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.xs },
+  emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
   sortLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: spacing.xs },
   sortChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 16, paddingVertical: 4, paddingHorizontal: spacing.md },

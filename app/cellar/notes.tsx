@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { colors, spacing } from '../../src/constants/theme';
 import { formatCurrency } from '../../src/constants/currency';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import type { CellarWine } from '../../src/types/wine';
 
 function formatDate(iso: string | null) {
@@ -19,13 +20,14 @@ function ReviewCard({ wine, onPress }: { wine: CellarWine; onPress: () => void }
   return (
     <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
       <View style={styles.cardTopRow}>
-        <Text style={styles.wineName} numberOfLines={1}>
-          {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
+        <Text style={styles.wineName} numberOfLines={2}>
+          {wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}
         </Text>
         {wine.review_score != null && (
           <Text style={styles.score}>{wine.review_score}</Text>
         )}
       </View>
+      {wine.region ? <Text style={styles.regionText} numberOfLines={1}>{wine.region}</Text> : null}
       <View style={styles.metaRow}>
         {wine.review_date ? <Text style={styles.metaText}>{formatDate(wine.review_date)}</Text> : null}
         {wine.review_date && wine.review_location ? <Text style={styles.metaText}> · </Text> : null}
@@ -136,7 +138,8 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   cardTopRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  wineName: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  wineName: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, lineHeight: 22 },
+  regionText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
   score: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', marginTop: 2 },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
