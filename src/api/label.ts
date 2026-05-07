@@ -1,22 +1,18 @@
 import * as ImageManipulator from 'expo-image-manipulator';
+import { supabase } from './supabase';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-
+// Use the supabase client so the user's JWT is attached to every edge
+// function call (when signed in). This makes auth checks possible inside the
+// functions and gives us the right identity in logs. Falls back to the anon
+// key automatically when no session exists.
 async function invokeFunction(name: string, body: unknown): Promise<unknown> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/${name}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: ANON_KEY,
-      Authorization: `Bearer ${ANON_KEY}`,
-    },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`${name} error ${res.status}: ${text}`);
-  return JSON.parse(text);
+  const { data, error } = await supabase.functions.invoke(name, { body });
+  if (error) {
+    const message = (error as any)?.message || `${name} error`;
+    throw new Error(`${name}: ${message}`);
+  }
+  return data;
 }
 
 export async function prepareImageBase64(uri: string): Promise<string> {

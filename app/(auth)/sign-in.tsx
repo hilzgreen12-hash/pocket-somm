@@ -27,7 +27,9 @@ export default function SignIn() {
         setError(signInError.message);
       }
     } else {
-      router.replace('/(tabs)/scan');
+      // Route via index.tsx so users with no profile yet land on the
+      // welcome/onboarding flow rather than dropping straight into scan.
+      router.replace('/');
     }
   }
 
