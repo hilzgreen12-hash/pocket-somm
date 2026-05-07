@@ -82,7 +82,11 @@ export default function AccountScreen() {
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      Alert.alert('Could not sign out', error.message);
+      return;
+    }
     router.replace('/(auth)/sign-in');
   }
 

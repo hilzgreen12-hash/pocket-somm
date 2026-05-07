@@ -77,6 +77,7 @@ export default function RootLayout() {
             <Stack.Screen name="welcome-profile" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(auth)/forgot-password" />
+            <Stack.Screen name="auth/callback" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="scan/camera" />
             <Stack.Screen name="scan/preview" />

@@ -58,7 +58,7 @@ export default function WineProfileScreen() {
   function handleAddCustomDislikedRegion() {
     const trimmed = customDislikedRegion.trim();
     const current = preferences?.dislikedRegions ?? [];
-    if (!trimmed || current.includes(trimmed)) return;
+    if (!trimmed || current.includes(trimmed) || current.length >= 5) return;
     updatePreferences({ dislikedRegions: [...current, trimmed] });
     setCustomDislikedRegion('');
   }
@@ -66,7 +66,7 @@ export default function WineProfileScreen() {
   function handleAddCustomDislikedGrape() {
     const trimmed = customDislikedGrape.trim();
     const current = preferences?.dislikedGrapes ?? [];
-    if (!trimmed || current.includes(trimmed)) return;
+    if (!trimmed || current.includes(trimmed) || current.length >= 5) return;
     updatePreferences({ dislikedGrapes: [...current, trimmed] });
     setCustomDislikedGrape('');
   }
@@ -121,9 +121,9 @@ export default function WineProfileScreen() {
                   returnKeyType="done"
                 />
                 <TouchableOpacity
-                  style={[styles.customAdd, !customDislikedRegion.trim() && { opacity: 0.35 }]}
+                  style={[styles.customAdd, (!customDislikedRegion.trim() || (preferences?.dislikedRegions ?? []).length >= 5) && { opacity: 0.35 }]}
                   onPress={handleAddCustomDislikedRegion}
-                  disabled={!customDislikedRegion.trim()}
+                  disabled={!customDislikedRegion.trim() || (preferences?.dislikedRegions ?? []).length >= 5}
                 >
                   <Text style={styles.customAddText}>Add</Text>
                 </TouchableOpacity>
@@ -165,9 +165,9 @@ export default function WineProfileScreen() {
                   returnKeyType="done"
                 />
                 <TouchableOpacity
-                  style={[styles.customAdd, !customDislikedGrape.trim() && { opacity: 0.35 }]}
+                  style={[styles.customAdd, (!customDislikedGrape.trim() || (preferences?.dislikedGrapes ?? []).length >= 5) && { opacity: 0.35 }]}
                   onPress={handleAddCustomDislikedGrape}
-                  disabled={!customDislikedGrape.trim()}
+                  disabled={!customDislikedGrape.trim() || (preferences?.dislikedGrapes ?? []).length >= 5}
                 >
                   <Text style={styles.customAddText}>Add</Text>
                 </TouchableOpacity>
