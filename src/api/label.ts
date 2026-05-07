@@ -36,7 +36,7 @@ export async function getWineIntelligence(wine: WineDetailsComplete, currency: s
     region: wine.region,
     wineName: wine.wineName,
     vintage: wine.vintage,
-    colour: wine.colour ?? null,
+    style: wine.style ?? null,
     currency,
   }) as WineIntelligence;
   return data;

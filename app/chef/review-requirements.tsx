@@ -1,36 +1,42 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
-const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Pescatarian'];
-const ALLERGY_OPTIONS = ['Nut Free', 'Dairy Free', 'Gluten Free'];
-const DIFFICULTY_OPTIONS = ['Super Simple', 'Easy to Moderate', 'Challenging', 'Very Technical'];
+const DIETARY_OPTIONS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian'];
+const ALLERGY_OPTIONS = ['None', 'Nut Free', 'Dairy Free', 'Gluten Free'];
+const DIFFICULTY_OPTIONS = ['Any', 'Super Simple', 'Easy to Moderate', 'Challenging', 'Very Technical'];
 
-const TIME_OPTIONS = [
+const TIME_OPTIONS: { value: string; label: string; sub?: string }[] = [
+  { value: 'any',        label: 'Any' },
   { value: 'under_30',   label: 'Time is of the Essence', sub: 'Under 30 minutes' },
   { value: 'under_1h',   label: 'Easy Breezy',            sub: 'Under 1 hour' },
   { value: 'all_day',    label: "I've got all day",        sub: 'Up to 3 hours' },
   { value: 'low_slow',   label: 'Low & Slow',             sub: '3 hours plus' },
 ];
 
+type DropdownField = 'dietary' | 'allergy' | 'difficulty' | 'time' | null;
+
 export default function ReviewRequirementsScreen() {
   useKeepAwake();
   const { wineDetailsConfirmed, setPairings, setError, setFilters } = useLabelStore();
   const { preferences } = usePreferences();
 
-  const [dietary, setDietary] = useState<string[]>([]);
-  const [allergies, setAllergies] = useState<string[]>([]);
+  const [dietary, setDietary] = useState<string>('None');
+  const [allergy, setAllergy] = useState<string>('None');
   const [specificConcerns, setSpecificConcerns] = useState('');
-  const [difficulty, setDifficulty] = useState<string | null>(null);
-  const [timeChoice, setTimeChoice] = useState<string | null>(null);
+  const [difficulty, setDifficulty] = useState<string>('Any');
+  const [timeChoice, setTimeChoice] = useState<string>('any');
   const [loading, setLoading] = useState(false);
+  const [openDropdown, setOpenDropdown] = useState<DropdownField>(null);
+
+  const timeBlock = TIME_OPTIONS.find((t) => t.value === timeChoice) ?? TIME_OPTIONS[0];
+  const timeDisplay = timeBlock.sub ? `${timeBlock.label} · ${timeBlock.sub}` : timeBlock.label;
 
   async function handleContinue() {
     if (!wineDetailsConfirmed) {
@@ -42,25 +48,28 @@ export default function ReviewRequirementsScreen() {
     try {
       // Combine profile preferences with the per-pairing additions chosen
       // here. Profile values stay the baseline; this screen adds extras for
-      // THIS recipe only.
+      // THIS recipe only. "None" / "Any" act as no-op selections.
       const profileDietary = preferences?.dietaryNeeds ?? [];
       const profileAllergies = preferences?.allergyRisks ?? [];
-      const mergedDietary = Array.from(new Set([...profileDietary, ...dietary]));
-      const mergedAllergies = Array.from(new Set([...profileAllergies, ...allergies]));
+      const dietaryAdds = dietary !== 'None' ? [dietary] : [];
+      const allergyAdds = allergy !== 'None' ? [allergy] : [];
+      const mergedDietary = Array.from(new Set([...profileDietary, ...dietaryAdds]));
+      const mergedAllergies = Array.from(new Set([...profileAllergies, ...allergyAdds]));
       const mergedConcerns = [
         preferences?.specificConcerns?.trim() || '',
         specificConcerns.trim(),
       ].filter(Boolean).join('. ');
 
-      const timeBlock = TIME_OPTIONS.find((t) => t.value === timeChoice);
-      const timeLabel = timeBlock ? `${timeBlock.label} (${timeBlock.sub})` : null;
+      const timeLabel = timeChoice !== 'any' && timeBlock.sub
+        ? `${timeBlock.label} (${timeBlock.sub})`
+        : null;
 
       const filters = {
         dietary: (mergedDietary[0] ?? null) as any,
         allergens: mergedAllergies as any,
         customAllergen: '',
         dietaryNote: null,
-        difficulty: difficulty || null,
+        difficulty: difficulty !== 'Any' ? difficulty : null,
         timeConsideration: timeLabel,
         specificConcerns: mergedConcerns || null,
         regionalPreferences: preferences?.regionalPreferences ?? [],
@@ -90,6 +99,44 @@ export default function ReviewRequirementsScreen() {
     );
   }
 
+  function dropdownConfig(field: DropdownField): { title: string; options: { value: string; label: string; sub?: string }[]; selected: string; onSelect: (v: string) => void } | null {
+    if (field === 'dietary') {
+      return {
+        title: 'Dietary Concerns',
+        options: DIETARY_OPTIONS.map((o) => ({ value: o, label: o })),
+        selected: dietary,
+        onSelect: setDietary,
+      };
+    }
+    if (field === 'allergy') {
+      return {
+        title: 'Allergies',
+        options: ALLERGY_OPTIONS.map((o) => ({ value: o, label: o })),
+        selected: allergy,
+        onSelect: setAllergy,
+      };
+    }
+    if (field === 'difficulty') {
+      return {
+        title: 'Recipe Difficulty',
+        options: DIFFICULTY_OPTIONS.map((o) => ({ value: o, label: o })),
+        selected: difficulty,
+        onSelect: setDifficulty,
+      };
+    }
+    if (field === 'time') {
+      return {
+        title: 'Time Consideration',
+        options: TIME_OPTIONS,
+        selected: timeChoice,
+        onSelect: setTimeChoice,
+      };
+    }
+    return null;
+  }
+
+  const activeDropdown = dropdownConfig(openDropdown);
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <Text style={styles.heading}>Review Recipe Requirements</Text>
@@ -98,22 +145,16 @@ export default function ReviewRequirementsScreen() {
       </Text>
 
       <Text style={styles.label}>Dietary Concerns</Text>
-      <View style={styles.chipWrap}>
-        <ChipPicker
-          options={DIETARY_OPTIONS}
-          selected={dietary}
-          onChange={setDietary}
-        />
-      </View>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('dietary')}>
+        <Text style={styles.selectValue}>{dietary}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
 
       <Text style={styles.label}>Allergies</Text>
-      <View style={styles.chipWrap}>
-        <ChipPicker
-          options={ALLERGY_OPTIONS}
-          selected={allergies}
-          onChange={setAllergies}
-        />
-      </View>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('allergy')}>
+        <Text style={styles.selectValue}>{allergy}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
 
       <Text style={styles.label}>Specific Concerns</Text>
       <TextInput
@@ -128,42 +169,16 @@ export default function ReviewRequirementsScreen() {
       />
 
       <Text style={styles.label}>Recipe Difficulty</Text>
-      <View style={styles.optionGrid}>
-        {DIFFICULTY_OPTIONS.map((opt) => {
-          const active = difficulty === opt;
-          return (
-            <TouchableOpacity
-              key={opt}
-              style={[styles.optionBtn, active && styles.optionBtnActive]}
-              onPress={() => setDifficulty(active ? null : opt)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.optionBtnText, active && styles.optionBtnTextActive]}>{opt}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('difficulty')}>
+        <Text style={styles.selectValue}>{difficulty}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
 
       <Text style={styles.label}>Time Consideration</Text>
-      <View style={styles.timeList}>
-        {TIME_OPTIONS.map((opt) => {
-          const active = timeChoice === opt.value;
-          return (
-            <TouchableOpacity
-              key={opt.value}
-              style={[styles.timeRow, active && styles.timeRowActive]}
-              onPress={() => setTimeChoice(active ? null : opt.value)}
-              activeOpacity={0.7}
-            >
-              <View style={styles.timeRowMain}>
-                <Text style={[styles.timeRowLabel, active && styles.timeRowLabelActive]}>{opt.label}</Text>
-                <Text style={[styles.timeRowSub, active && styles.timeRowSubActive]}>{opt.sub}</Text>
-              </View>
-              {active && <Text style={styles.timeCheck}>✓</Text>}
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('time')}>
+        <Text style={styles.selectValue}>{timeDisplay}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
 
       <TouchableOpacity style={[styles.continueButton, loading && styles.buttonDisabled]} onPress={handleContinue} disabled={loading}>
         <Text style={styles.continueButtonText}>{loading ? 'Crafting pairings…' : 'Get Pairings'}</Text>
@@ -172,6 +187,43 @@ export default function ReviewRequirementsScreen() {
       <TouchableOpacity style={styles.back} onPress={() => router.back()}>
         <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
+
+      <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            {activeDropdown && (
+              <>
+                <Text style={styles.modalTitle}>{activeDropdown.title}</Text>
+                <ScrollView style={{ maxHeight: 360 }}>
+                  {activeDropdown.options.map((opt) => {
+                    const active = activeDropdown.selected === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.modalOption, active && styles.modalOptionActive]}
+                        onPress={() => {
+                          activeDropdown.onSelect(opt.value);
+                          setOpenDropdown(null);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>{opt.label}</Text>
+                          {opt.sub ? <Text style={[styles.modalOptionSub, active && styles.modalOptionSubActive]}>{opt.sub}</Text> : null}
+                        </View>
+                        {active && <Text style={styles.modalOptionCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setOpenDropdown(null)}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </ScrollView>
   );
 }
@@ -181,26 +233,26 @@ const styles = StyleSheet.create({
   content: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: 60 },
   heading: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
   subheading: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
-  label: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
-  chipWrap: { marginBottom: spacing.lg },
+  label: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
-  optionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.lg },
-  optionBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  optionBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  optionBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.textMuted },
-  optionBtnTextActive: { color: colors.gold },
-  timeList: { gap: spacing.xs, marginBottom: spacing.lg },
-  timeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
-  timeRowActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  timeRowMain: { flex: 1 },
-  timeRowLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.text },
-  timeRowLabelActive: { color: colors.gold },
-  timeRowSub: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  timeRowSubActive: { color: colors.gold },
-  timeCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
+  select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  selectValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, flex: 1 },
+  selectArrow: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
   continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   continueButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   back: { alignItems: 'center', paddingVertical: spacing.lg },
   backText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, textDecorationLine: 'underline' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  modalOptionText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text },
+  modalOptionTextActive: { color: colors.gold },
+  modalOptionSub: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  modalOptionSubActive: { color: colors.gold },
+  modalOptionCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
+  modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  modalCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
 });

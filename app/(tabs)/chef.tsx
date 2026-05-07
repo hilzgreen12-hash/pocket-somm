@@ -87,14 +87,12 @@ export default function ChefTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.appName}>Chef</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>
-          Whether you've got a recipe in mind and aren't sure what to drink, or you have chosen your bottle first, let us recommend your pairing.
-        </Text>
         <Text style={styles.sectionDesc}>
           Set your food preferences in your profile to ensure Vinster's recommendations are tailored to your tastes and dietary concerns.
         </Text>
@@ -103,15 +101,16 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
+        <Text style={styles.subheading}>Need a wine for your recipe?</Text>
         <Text style={styles.sectionDesc}>
           Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
         </Text>
+        <TouchableOpacity onPress={handleViewLastPairing}>
+          <Text style={styles.lastResultLink}>View last result</Text>
+        </TouchableOpacity>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/find-pairing')}>
+          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>
             <Text style={styles.buttonText}>Find a Wine Pairing</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastPairing}>
-            <Text style={styles.buttonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -119,20 +118,19 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
+        <Text style={styles.subheading}>Or you've chosen your bottle first?</Text>
         <Text style={styles.sectionDesc}>
           Choose a bottle then scan or upload a photo of the label to receive deep AI generated, top chef inspired recipe suggestions.
         </Text>
+        <TouchableOpacity onPress={handleViewLastLabelSearch}>
+          <Text style={styles.lastResultLink}>View last result</Text>
+        </TouchableOpacity>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/camera')}>
             <Text style={styles.buttonText}>Scan Wine Label</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleUpload}>
             <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={handleViewLastLabelSearch}>
-            <Text style={styles.buttonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -143,9 +141,10 @@ export default function ChefTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/label-archive')}>
           <Text style={styles.buttonText}>View Archived Recipes</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => router.push('/chef/pairing-archive')}>
+          <Text style={styles.buttonText}>View Archived Wine Pairings</Text>
+        </TouchableOpacity>
       </View>
-
-      <TabFooter />
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
@@ -159,6 +158,8 @@ export default function ChefTab() {
         </TouchableOpacity>
       </Modal>
     </ScrollView>
+    <TabFooter />
+    </View>
   );
 }
 
@@ -168,7 +169,9 @@ const styles = StyleSheet.create({
   profileNote: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
   sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  lastResultLink: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: 'rgba(255,255,255,0.45)', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },

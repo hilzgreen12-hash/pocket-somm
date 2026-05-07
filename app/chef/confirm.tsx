@@ -1,12 +1,10 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { colors, spacing } from '../../src/constants/theme';
 import type { WineDetailsComplete } from '../../src/types/wine';
-
-const STYLE_OPTIONS = ['Red', 'White', 'Rosé', 'Sparkling', 'Fortified'];
 
 export default function ChefConfirmScreen() {
   useKeepAwake();
@@ -50,21 +48,9 @@ export default function ChefConfirmScreen() {
         placeholder="e.g. Margaux, Bordeaux" placeholderTextColor={colors.textMuted} />
 
       <Text style={styles.label}>Style</Text>
-      <View style={styles.styleGrid}>
-        {STYLE_OPTIONS.map((opt) => {
-          const active = style === opt;
-          return (
-            <TouchableOpacity
-              key={opt}
-              style={[styles.styleBtn, active && styles.styleBtnActive]}
-              onPress={() => setStyle(opt)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.styleBtnText, active && styles.styleBtnTextActive]}>{opt}</Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+      <TextInput style={styles.input} value={style} onChangeText={setStyle}
+        placeholder="e.g. Red, White, Rosé, Sparkling, Fortified" placeholderTextColor={colors.textMuted}
+        autoCapitalize="words" />
 
       <Text style={styles.label}>Wine Name (optional)</Text>
       <TextInput style={styles.input} value={wineName} onChangeText={setWineName}
@@ -93,11 +79,6 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.xl, lineHeight: 22, textAlign: 'center' },
   label: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
-  styleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.md },
-  styleBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  styleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  styleBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.textMuted },
-  styleBtnTextActive: { color: colors.gold },
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   confirmButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   scanAgain: { alignItems: 'center', paddingVertical: spacing.lg },

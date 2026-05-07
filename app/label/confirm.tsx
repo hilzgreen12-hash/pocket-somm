@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, Switch } from 'react-native';
+import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -17,7 +17,7 @@ export default function LabelConfirmScreen() {
   const [region, setRegion] = useState(wineDetails?.region ?? '');
   const [wineName, setWineName] = useState(wineDetails?.wineName ?? '');
   const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
-  const [colour, setColour] = useState<'red' | 'white' | 'rosé' | 'sparkling' | null>(null);
+  const [style, setStyle] = useState(wineDetails?.style ?? '');
   const [loading, setLoading] = useState(false);
 
   async function handleConfirm() {
@@ -35,7 +35,7 @@ export default function LabelConfirmScreen() {
       region: region.trim(),
       wineName: wineName.trim() || null,
       vintage: vintage.trim(),
-      colour,
+      style: style.trim() || null,
     };
 
     setLoading(true);
@@ -96,20 +96,15 @@ export default function LabelConfirmScreen() {
         maxLength={4}
       />
 
-      <Text style={styles.label}>This wine is (optional)</Text>
-      <View style={styles.colourRow}>
-        {(['red', 'white', 'rosé', 'sparkling'] as const).map((c) => (
-          <TouchableOpacity
-            key={c}
-            style={[styles.colourBtn, colour === c && styles.colourBtnActive]}
-            onPress={() => setColour(colour === c ? null : c)}
-          >
-            <Text style={[styles.colourBtnText, colour === c && styles.colourBtnTextActive]}>
-              {c.charAt(0).toUpperCase() + c.slice(1)}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
+      <Text style={styles.label}>Style</Text>
+      <TextInput
+        style={styles.input}
+        value={style}
+        onChangeText={setStyle}
+        placeholder="e.g. Red, White, Rosé, Sparkling, Fortified"
+        placeholderTextColor={colors.textMuted}
+        autoCapitalize="words"
+      />
 
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
@@ -162,31 +157,6 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_400Regular',
     color: colors.text,
     backgroundColor: colors.surface,
-  },
-  colourRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginBottom: spacing.md,
-  },
-  colourBtn: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 8,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  colourBtnActive: {
-    borderColor: '#FFFFFF',
-    backgroundColor: 'rgba(255,255,255,0.10)',
-  },
-  colourBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 13,
-    color: colors.textMuted,
-  },
-  colourBtnTextActive: {
-    color: '#FFFFFF',
   },
   button: {
     borderWidth: 1,

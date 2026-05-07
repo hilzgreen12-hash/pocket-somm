@@ -30,7 +30,8 @@ export default function ProfileTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.title}>Your Profile</Text>
 
@@ -82,8 +83,9 @@ export default function ProfileTab() {
         </TouchableOpacity>
       </View>
 
-      <TabFooter />
     </ScrollView>
+    <TabFooter />
+    </View>
   );
 }
 
