@@ -1,13 +1,25 @@
 import { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
+import { useCellar } from '../../src/hooks/useCellar';
 import { useRackStore } from '../../src/stores/rackStore';
+import { getSlotAssignments } from '../../src/api/racks';
+import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
 import { colors, spacing } from '../../src/constants/theme';
-import type { WineRack } from '../../src/types/wine';
+import type { WineRack, CellarWine } from '../../src/types/wine';
 
-function RackRow({ rack, onDelete }: { rack: WineRack; onDelete: () => void }) {
+function bottleLabel(n: number) {
+  if (n === 0) return 'Empty';
+  return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
+}
+
+function RackRow({ rack, wines }: { rack: WineRack; wines: CellarWine[] }) {
   const isFridge = rack.storage_type === 'fridge';
+  const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  const blurb = rackHomeToBlurb(rack.id, wines);
+
   return (
     <TouchableOpacity style={styles.row} onPress={() => router.push(`/cellar/rack/${rack.id}`)}>
       <View style={styles.rowMain}>
@@ -15,26 +27,39 @@ function RackRow({ rack, onDelete }: { rack: WineRack; onDelete: () => void }) {
         <Text style={styles.rowDetail}>
           {isFridge ? 'Wine Fridge' : 'Wine Rack'} · {rack.rows} rows · {rack.cols} columns · {rack.rows * rack.cols} slots
         </Text>
+        <Text style={styles.rowBottles}>{bottleLabel(totalBottles)}</Text>
+        <View style={styles.homeToRow}>
+          <Text style={styles.homeToLabel}>Home to</Text>
+          <Text style={styles.homeToBlurb}>{blurb}</Text>
+        </View>
       </View>
-      <TouchableOpacity
-        style={styles.deleteButton}
-        onPress={() =>
-          Alert.alert(`Delete ${isFridge ? 'Fridge' : 'Rack'}`, `Delete "${rack.name}"? This cannot be undone.`, [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: onDelete },
-          ])
-        }
-      >
-        <Text style={styles.deleteText}>Delete</Text>
-      </TouchableOpacity>
+      <Text style={styles.arrow}>→</Text>
     </TouchableOpacity>
   );
 }
 
 export default function RacksScreen() {
-  const { racks, isLoading, remove } = useRacks();
+  const { racks, isLoading } = useRacks();
+  const { wines } = useCellar();
   const { setPendingStorageType } = useRackStore();
   const [typeModalOpen, setTypeModalOpen] = useState(false);
+
+  const rackIds = racks.map((r) => r.id);
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+
+  // Build rack_id → list of wines map
+  const winesByRack: Record<string, CellarWine[]> = {};
+  for (const slot of slotAssignments) {
+    const wine = wines.find((w) => w.id === slot.cellar_wine_id);
+    if (!wine) continue;
+    const list = winesByRack[slot.rack_id] ?? [];
+    list.push(wine);
+    winesByRack[slot.rack_id] = list;
+  }
 
   function handleAddType(type: 'rack' | 'fridge') {
     setPendingStorageType(type);
@@ -75,7 +100,7 @@ export default function RacksScreen() {
           data={racks}
           keyExtractor={(r) => r.id}
           renderItem={({ item }) => (
-            <RackRow rack={item} onDelete={() => remove.mutate(item.id)} />
+            <RackRow rack={item} wines={winesByRack[item.id] ?? []} />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={{ paddingBottom: 80 }}
@@ -115,12 +140,15 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
   addLink: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
   rowMain: { flex: 1 },
-  rowName: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
-  rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
-  deleteButton: { paddingLeft: spacing.md },
-  deleteText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  rowName: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3 },
+  rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 4 },
+  rowBottles: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.xs },
+  homeToRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: spacing.xs, gap: 6 },
+  homeToLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  homeToBlurb: { flex: 1, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 19 },
+  arrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
   separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },

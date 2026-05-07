@@ -4,11 +4,15 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 Deno.serve(async (req) => {
   try {
-    const { producer, region, wineName, vintage, colour, currency } = await req.json();
+    const { producer, region, wineName, vintage, style, colour, currency } = await req.json();
+    // Accept either `style` (new) or `colour` (legacy clients still in flight)
+    const styleValue: string | null = (typeof style === 'string' && style.trim())
+      ? style.trim()
+      : (typeof colour === 'string' && colour.trim() ? colour.trim() : null);
 
     const vintageStr = vintage === 'NV' ? 'Non-Vintage' : vintage;
     const wineNameStr = wineName ? `\n- Wine Name: ${wineName}` : '';
-    const colourStr = colour ? `\n- Colour: ${colour} (confirmed by user — use this to disambiguate if producer makes multiple wines of this name)` : '';
+    const styleStr = styleValue ? `\n- Style: ${styleValue} (confirmed by user — use this to disambiguate if producer makes multiple wines of this name)` : '';
     const currentYear = new Date().getFullYear();
     const cur = (currency ?? 'GBP').toString().toUpperCase();
 
@@ -17,7 +21,7 @@ Deno.serve(async (req) => {
 Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${colourStr}
+- Vintage: ${vintageStr}${styleStr}
 
 Return ONLY a valid JSON object with exactly this structure:
 {

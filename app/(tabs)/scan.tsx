@@ -177,12 +177,12 @@ export default function ScanTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
-        <Text style={styles.subtitle}>Set your preferences then scan or upload a wine list to receive tailored wine recommendations.</Text>
-        <Text style={styles.profileNote}>Your selections below will override your wine profile preferences while your profile dislikes remain hard rules.</Text>
+        <Text style={styles.subtitle}>Set your preferences below, then scan or update a wine list to generate recommendations. Any pre-set dislikes in your profile remain hard rules which you can edit any time.</Text>
       </View>
 
       <View style={styles.body}>
@@ -267,7 +267,6 @@ export default function ScanTab() {
         </View>
 
       </View>
-      <TabFooter />
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -278,6 +277,8 @@ export default function ScanTab() {
       />
 
     </ScrollView>
+    <TabFooter />
+    </View>
   );
 }
 

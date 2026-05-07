@@ -8,7 +8,8 @@ export default function WelcomeTab() {
   const paddingTop = Math.max(60, height * 0.13);
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.title}>Welcome to Vinster</Text>
       <Text style={styles.tagline}>Your personal AI sommelier</Text>
@@ -59,8 +60,9 @@ export default function WelcomeTab() {
         </TouchableOpacity>
       </View>
 
-      <TabFooter />
     </ScrollView>
+    <TabFooter />
+    </View>
   );
 }
 

@@ -21,7 +21,8 @@ export default function CommunityTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.title}>Community</Text>
 
@@ -49,8 +50,6 @@ export default function CommunityTab() {
         </TouchableOpacity>
       </View>
 
-      <TabFooter />
-
       <SignInPromptModal
         visible={!!pendingRoute}
         onDismiss={() => setPendingRoute(null)}
@@ -59,6 +58,8 @@ export default function CommunityTab() {
         onContinue={() => setPendingRoute(null)}
       />
     </ScrollView>
+    <TabFooter />
+    </View>
   );
 }
 

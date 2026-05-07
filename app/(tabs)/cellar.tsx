@@ -171,7 +171,8 @@ export default function CellarTab() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop }}>
+    <View style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       {importing && (
         <View style={styles.importingOverlay}>
@@ -201,7 +202,7 @@ export default function CellarTab() {
             <Text style={styles.buttonText}>Quick Cellar Stats</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(session, () => router.push('/cellar/racks'))}>
-            <Text style={styles.buttonText}>View Wine Cellar</Text>
+            <Text style={styles.buttonText}>View Storage</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.buttonRow}>
@@ -231,8 +232,6 @@ export default function CellarTab() {
         </View>
       </View>
 
-      <TabFooter />
-
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
@@ -257,6 +256,8 @@ export default function CellarTab() {
         </TouchableOpacity>
       </Modal>
     </ScrollView>
+    <TabFooter />
+    </View>
   );
 }
 

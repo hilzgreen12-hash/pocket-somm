@@ -8,10 +8,11 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { ChosenRecipeModal } from '../../src/components/ChosenRecipeModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { Pairing, CellarWine, WineDetailsComplete } from '../../src/types/wine';
 
-function PairingCard({ pairing }: { pairing: Pairing }) {
+function PairingCard({ pairing, onReview }: { pairing: Pairing; onReview: (p: Pairing) => void }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -23,7 +24,7 @@ function PairingCard({ pairing }: { pairing: Pairing }) {
         <Text style={styles.toggle}>{expanded ? 'Hide recipe' : 'Show recipe'}</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity onPress={() => Alert.alert('Recipe reviews coming soon', "Once you've cooked this, you'll be able to score and note it here.")}>
+      <TouchableOpacity onPress={() => onReview(pairing)}>
         <Text style={styles.reviewToggle}>Review Recipe</Text>
       </TouchableOpacity>
 
@@ -85,6 +86,7 @@ export default function ChefResultsScreen() {
   const [archivedModalOpen, setArchivedModalOpen] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
   const [renderedAt] = useState(() => new Date().toISOString());
+  const [reviewingPairing, setReviewingPairing] = useState<Pairing | null>(null);
 
   const stampDateSource = savedAt || renderedAt;
   const stampDate = stampDateSource
@@ -175,7 +177,7 @@ export default function ChefResultsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+      <TouchableOpacity onPress={() => router.replace('/(tabs)/chef')} style={styles.backRow}>
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
 
@@ -204,7 +206,7 @@ export default function ChefResultsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Chef-Inspired Pairings</Text>
-        {pairings.map((p, i) => <PairingCard key={i} pairing={p} />)}
+        {pairings.map((p, i) => <PairingCard key={i} pairing={p} onReview={setReviewingPairing} />)}
       </View>
 
       {!isFromHistory && (
@@ -237,6 +239,14 @@ export default function ChefResultsScreen() {
           </View>
         </View>
       </Modal>
+
+      <ChosenRecipeModal
+        pairing={reviewingPairing}
+        wine={wineDetailsConfirmed}
+        visible={reviewingPairing !== null}
+        onClose={() => setReviewingPairing(null)}
+        onSaved={() => setReviewingPairing(null)}
+      />
     </ScrollView>
   );
 }
