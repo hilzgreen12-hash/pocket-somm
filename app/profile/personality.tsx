@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Alert, Modal } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -10,6 +12,7 @@ import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
 import { splitPersonality } from '../../src/utils/personalityText';
+import { PersonalityShareCard } from '../../src/components/PersonalityShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 
 type Category = 'wine' | 'recipe';
@@ -36,6 +39,7 @@ export default function PersonalityScreen() {
   const [error, setError] = useState<string | null>(null);
   const [publishState, setPublishState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [evolveModalOpen, setEvolveModalOpen] = useState(false);
+  const shareCardRef = useRef<View>(null);
 
   // Hydrate cached sketch + last-generated timestamp so we can gate the
   // "I've evolved" button on whether the user has added enough new material.
@@ -108,6 +112,13 @@ export default function PersonalityScreen() {
         [textColumn]: result.text,
         [tsColumn]: now,
       });
+      // Append to the personality archive so the user can scroll back
+      // through every sketch Vinster has ever drawn for them.
+      await supabase.from('personality_sketches').insert({
+        user_id: session.user.id,
+        category: cat,
+        text: result.text,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate personality.');
     } finally {
@@ -174,9 +185,30 @@ export default function PersonalityScreen() {
     if (!text) return;
     const { title, body } = splitPersonality(text);
     const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : 'My Chef Personality, by Vinster';
-    const composed = [heading, title ? `\n${title}` : '', `\n${body}`].filter(Boolean).join('\n');
+    const caption = [heading, title ? `\n${title}` : ''].filter(Boolean).join('\n');
+
     try {
-      await Share.share({ message: composed, title: heading });
+      // Capture the off-screen branded card as a PNG and hand it to the
+      // native share sheet. Falls back to text-only share if capture fails
+      // or if expo-sharing isn't available on this device.
+      if (shareCardRef.current) {
+        const uri = await captureRef(shareCardRef, {
+          format: 'png',
+          quality: 1,
+          width: 1080,
+          height: 1350,
+          result: 'tmpfile',
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'image/png',
+            dialogTitle: heading,
+            UTI: 'public.png',
+          });
+          return;
+        }
+      }
+      await Share.share({ message: `${caption}\n\n${body}`, title: heading });
     } catch (err) {
       Alert.alert('Could not share', err instanceof Error ? err.message : 'Please try again.');
     }
@@ -244,6 +276,14 @@ export default function PersonalityScreen() {
                 {publishState === 'saved' ? 'Uploaded ✓' : publishState === 'saving' ? 'Uploading…' : 'Upload to Community Profile'}
               </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={() => router.push({ pathname: '/profile/personality-archive', params: { category: cat } })}
+              style={styles.archiveLink}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.archiveLinkText}>Personality Archive →</Text>
+            </TouchableOpacity>
           </>
         ) : null}
       </ScrollView>
@@ -259,6 +299,17 @@ export default function PersonalityScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Off-screen branded share card — sits at native render size so the
+          capture comes out at 1080×1350 regardless of screen size. */}
+      {text ? (
+        <View style={styles.offscreenShareWrap} pointerEvents="none">
+          {(() => {
+            const { title, body } = splitPersonality(text);
+            return <PersonalityShareCard ref={shareCardRef} title={title} body={body} category={cat} />;
+          })()}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -287,6 +338,9 @@ const styles = StyleSheet.create({
   uploadBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   uploadBtnDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
   uploadBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
+  archiveLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  offscreenShareWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },

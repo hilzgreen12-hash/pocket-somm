@@ -181,20 +181,18 @@ export default function CellarTab() {
         </View>
       )}
 
-      <View style={styles.titleRow}>
-        <View style={styles.titleSpacer} />
-        <Text style={styles.title}>Cellar</Text>
-        <TouchableOpacity
-          style={styles.addWineBtn}
-          activeOpacity={0.7}
-          onPress={() => requireAuth(session, () => setAddWineOpen(true))}
-        >
-          <Text style={styles.addWineText}>+ ADD WINE</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.title}>Cellar</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(session, () => setAddWineOpen(true))}>
+          <Text style={styles.buttonText}>Add Wine / Generate Intel</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(session, () => router.push('/cellar/full-list'))}>
+          <Text style={styles.buttonText}>Full Cellar List</Text>
+        </TouchableOpacity>
+
+        <Text style={[styles.sectionDesc, { marginTop: spacing.lg }]}>
           View your cellar stats and your virtual storage racks, edit your cellar.
         </Text>
         <View style={styles.buttonRow}>
@@ -265,17 +263,14 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   importingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', zIndex: 10, gap: spacing.lg },
   importingText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  titleSpacer: { width: 90 },
-  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', flex: 1 },
-  addWineBtn: { width: 90, alignItems: 'flex-end', paddingVertical: 4 },
-  addWineText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 14, color: colors.gold, letterSpacing: 1 },
+  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
