@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -69,14 +68,6 @@ export default function FindPairingScreen() {
       } else {
         setGeneralResult(result.recommendations as GeneralRecommendation[], result.summary);
       }
-
-      await AsyncStorage.setItem('vinster_last_pairing', JSON.stringify({
-        dish: fullDish,
-        mode,
-        cellarResult: mode === 'cellar' ? result.recommendations : null,
-        generalResult: mode === 'general' ? result.recommendations : null,
-        generalSummary: mode === 'general' ? (result.summary ?? null) : null,
-      }));
 
       router.push('/chef/pairing-results');
     } catch {

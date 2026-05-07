@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useWishList } from '../../src/hooks/useCellar';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
@@ -40,11 +41,13 @@ function WishListCard({ wine, onMoveToCellar, onDelete, onUpdateNote, onUpdateLo
       <View style={styles.cardTop}>
         <View style={{ flex: 1 }}>
           <Text style={styles.wineName}>
-            {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
+            {wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}
           </Text>
-          <Text style={styles.wineDetail}>
-            {[wine.producer, wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
-          </Text>
+          {wine.region || wine.grape_variety ? (
+            <Text style={styles.wineDetail}>
+              {[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}
+            </Text>
+          ) : null}
         </View>
       </View>
 

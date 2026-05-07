@@ -9,7 +9,13 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - appellation: specific appellation e.g. "Puligny-Montrachet", "Pauillac" (string, optional)
 - grape: grape variety or blend e.g. "Chardonnay", "Cabernet Sauvignon/Merlot" (string, optional)
 - vintage: 4-digit year as integer, or null if non-vintage (number | null)
-- menuPrice: numeric price as listed on the menu, null if not shown (number | null)
+- menuPrice: numeric price as listed on the menu, null if not shown (number | null).
+  IMPORTANT: many wine lists show two or more prices for the same wine —
+  e.g. by-the-glass alongside by-the-bottle (175ml / 250ml / bottle, or
+  similar pour-size columns). When multiple prices are shown for a single
+  wine, always pick the HIGHEST one — that is the bottle price. Do not
+  return the glass price. If a wine is genuinely glass-only (no bottle
+  listed), return that price.
 - currency: 3-letter currency code, default "GBP" (string)
 
 IMPORTANT: Return ONLY raw valid JSON — no markdown, no code blocks, no backticks, no explanation.
@@ -45,7 +51,7 @@ Deno.serve(async (req) => {
               type: 'image',
               source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
             },
-            { type: 'text', text: 'Extract all wines from this wine list. Return only JSON.' },
+            { type: 'text', text: 'Extract all wines from this wine list. When a wine has multiple prices (glass + bottle, or different pour sizes), use the highest one — the bottle price. Return only JSON.' },
           ],
         },
       ],

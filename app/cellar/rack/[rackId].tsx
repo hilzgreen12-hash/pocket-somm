@@ -6,6 +6,7 @@ import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { assignSlot, clearSlot } from '../../../src/api/racks';
+import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { colors, spacing } from '../../../src/constants/theme';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
 import * as ScreenOrientation from 'expo-screen-orientation';
@@ -309,12 +310,10 @@ export default function RackGridScreen() {
                   onPress={() => toggleHighlight(wine.id)}
                 >
                   <View style={styles.wineRowMain}>
-                    <Text style={[styles.wineRowName, active && styles.wineRowNameActive]}>
-                      {wine.vintage ? `${wine.vintage} ` : ''}{wine.wine_name}
+                    <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>
+                      {wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}
                     </Text>
-                    <Text style={styles.wineRowDetail}>
-                      {[wine.producer, wine.region].filter(Boolean).join(' · ')}
-                    </Text>
+                    {wine.region ? <Text style={styles.wineRowDetail}>{wine.region}</Text> : null}
                   </View>
                   <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
                     {count} {count === 1 ? 'bottle' : 'bottles'}

@@ -82,7 +82,7 @@ export function useScanHistory() {
   });
 
   const autoSave = useMutation({
-    mutationFn: async ({ extractedWines, recommendation }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse }) => {
+    mutationFn: async ({ extractedWines, recommendation, restaurantNameOverride }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantNameOverride?: string | null }) => {
       const now = new Date().toISOString();
 
       let city: string | null = null;
@@ -104,6 +104,13 @@ export function useScanHistory() {
           }
         }
       } catch { /* location unavailable */ }
+
+      // User-typed restaurant name takes precedence over the GPS-derived one
+      // since the user knows the establishment better than reverse geocoding.
+      if (restaurantNameOverride !== undefined && restaurantNameOverride !== null) {
+        const trimmed = restaurantNameOverride.trim();
+        restaurantName = trimmed.length > 0 ? trimmed : restaurantName;
+      }
 
       let sessionId: string | undefined;
       if (session) {

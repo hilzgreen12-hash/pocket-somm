@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
+import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
@@ -14,51 +14,43 @@ interface AppMessage { title: string; body: string; }
 export default function ChefTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
-  const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, pairings, wineDetailsConfirmed } = useLabelStore();
+  const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, setFilters, pairings, wineDetailsConfirmed } = useLabelStore();
   const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
+  const { sessions: labelSessions } = useChefLabelHistory();
+  const { sessions: pairingSessions } = useChefPairingHistory();
   const [message, setMessage] = useState<AppMessage | null>(null);
 
-  async function handleViewLastPairing() {
+  function handleViewLastPairing() {
     if (generalResult || cellarResult) {
       router.push('/chef/pairing-results');
       return;
     }
-    try {
-      const raw = await AsyncStorage.getItem('vinster_last_pairing');
-      if (!raw) {
-        setMessage({ title: 'No previous search', body: 'Once you search for a wine pairing, you can come back here to revisit it.' });
-        return;
-      }
-      const saved = JSON.parse(raw);
-      setDish(saved.dish);
-      setMode(saved.mode);
-      if (saved.mode === 'cellar') setCellarResult(saved.cellarResult);
-      else setGeneralResult(saved.generalResult, saved.generalSummary);
-      router.push('/chef/pairing-results');
-    } catch {
-      setMessage({ title: 'Could not load previous search', body: 'Please try a fresh search instead.' });
+    const last = pairingSessions[0];
+    if (!last) {
+      setMessage({ title: 'No previous search', body: 'Once you save a wine pairing to your archive, you can come back here to revisit it.' });
+      return;
     }
+    setDish(last.dish);
+    setMode(last.mode);
+    if (last.mode === 'cellar') setCellarResult(last.cellar_result ?? []);
+    else setGeneralResult(last.general_result ?? [], last.general_summary ?? undefined);
+    router.push({ pathname: '/chef/pairing-results', params: { fromHistory: 'true' } });
   }
 
-  async function handleViewLastLabelSearch() {
+  function handleViewLastLabelSearch() {
     if (wineDetailsConfirmed && pairings.length) {
       router.push('/chef/results');
       return;
     }
-    try {
-      const raw = await AsyncStorage.getItem('vinster_chef_history');
-      const history = raw ? JSON.parse(raw) : [];
-      if (!history.length) {
-        setMessage({ title: 'No previous search', body: 'Once you scan a label and get pairings, you can come back here to revisit them.' });
-        return;
-      }
-      const last = history[0];
-      setWineDetailsConfirmed(last.wine);
-      setPairings(last.pairings);
-      router.push('/chef/results');
-    } catch {
-      setMessage({ title: 'Could not load previous search', body: 'Please try a fresh search instead.' });
+    const last = labelSessions[0];
+    if (!last) {
+      setMessage({ title: 'No previous search', body: 'Once you save a label scan to your archive, you can come back here to revisit it.' });
+      return;
     }
+    setWineDetailsConfirmed(last.wine);
+    setPairings(last.pairings);
+    setFilters(last.filters ?? null);
+    router.push({ pathname: '/chef/results', params: { fromHistory: 'true' } });
   }
 
   async function handleUpload() {
@@ -126,7 +118,7 @@ export default function ChefTab() {
         </View>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/label-archive')}>
-            <Text style={styles.buttonText}>View Archive</Text>
+            <Text style={styles.buttonText}>View Archived Recipes</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastLabelSearch}>
             <Text style={styles.buttonText}>View Last Search</Text>

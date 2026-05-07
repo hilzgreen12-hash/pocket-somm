@@ -8,10 +8,11 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 2. region: The wine region, appellation, or country of origin
 3. wineName: The specific wine name or cuvée (the individual wine's name, distinct from the producer). Set to null if there is no specific wine name beyond the producer name.
 4. vintage: The vintage year as a 4-digit string (e.g. "2019"), "NV" if the label explicitly states non-vintage, or null if no vintage information is visible.
+5. style: One of "Red", "White", "Rosé", "Sparkling", or "Fortified". This is NOT optional — every wine has a style. If the label doesn't visually state it, infer from the producer, region, appellation, or wine name. Champagne and other traditional-method sparkling wines are "Sparkling". Port, Madeira, Sherry are "Fortified". Use your best judgement; do not return null.
 
-Return ONLY a valid JSON object with exactly these four keys. Set any field to null if you cannot confidently identify it from the label. Do not include any explanation or markdown — only the raw JSON.
+Return ONLY a valid JSON object with exactly these five keys. Set any field other than style to null if you cannot confidently identify it from the label. Do not include any explanation or markdown — only the raw JSON.
 
-Example: {"producer": "Château Margaux", "region": "Margaux, Bordeaux", "wineName": null, "vintage": "2018"}`;
+Example: {"producer": "Château Margaux", "region": "Margaux, Bordeaux", "wineName": null, "vintage": "2018", "style": "Red"}`;
 
 Deno.serve(async (req) => {
   try {
@@ -40,6 +41,7 @@ Deno.serve(async (req) => {
       region: parsed.region ?? null,
       wineName: parsed.wineName ?? null,
       vintage: parsed.vintage ?? null,
+      style: parsed.style ?? null,
     }), { headers: { 'Content-Type': 'application/json' } });
 
   } catch (err) {

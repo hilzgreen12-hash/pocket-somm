@@ -1,7 +1,9 @@
-import { ScrollView, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { useState } from 'react';
+import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { colors, spacing } from '../../src/constants/theme';
 
 function CellarResults({ recommendations, wines }: { recommendations: CellarRecommendation[]; wines: ReturnType<typeof useCellar>['wines'] }) {
@@ -18,6 +20,13 @@ function CellarResults({ recommendations, wines }: { recommendations: CellarReco
               <Text style={styles.tipLabel}>Serving tip</Text>
               <Text style={styles.tipText}>{rec.servingTip}</Text>
             </View>
+            <TouchableOpacity
+              style={styles.selectButton}
+              onPress={() => router.push(`/cellar/${rec.cellarWineId}`)}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.selectButtonText}>Select This Wine</Text>
+            </TouchableOpacity>
           </View>
         );
       })}
@@ -65,12 +74,34 @@ function GeneralResults({ results, summary }: { results: GeneralRecommendation[]
 }
 
 export default function PairingResultsScreen() {
+  const { fromHistory } = useLocalSearchParams<{ fromHistory?: string }>();
+  const isFromHistory = fromHistory === 'true';
   const { dish, mode, cellarResult, generalResult, generalSummary, reset } = useFoodPairingStore();
   const { wines } = useCellar();
+  const { save: savePairingSession } = useChefPairingHistory();
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
 
   function handleBack() {
     reset();
     router.back();
+  }
+
+  async function handleSaveToArchive() {
+    if (saveState !== 'idle' || !dish) return;
+    setSaveState('saving');
+    try {
+      await savePairingSession.mutateAsync({
+        dish,
+        mode,
+        cellarResult: mode === 'cellar' ? (cellarResult ?? null) : null,
+        generalResult: mode === 'general' ? (generalResult ?? null) : null,
+        generalSummary: mode === 'general' ? (generalSummary ?? null) : null,
+      });
+      setSaveState('saved');
+    } catch (err) {
+      setSaveState('idle');
+      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+    }
   }
 
   return (
@@ -87,6 +118,19 @@ export default function PairingResultsScreen() {
       )}
       {mode === 'general' && generalResult && (
         <GeneralResults results={generalResult} summary={generalSummary} />
+      )}
+
+      {!isFromHistory && (
+        <TouchableOpacity
+          style={[styles.saveButton, saveState !== 'idle' && styles.saveButtonDone]}
+          onPress={handleSaveToArchive}
+          disabled={saveState !== 'idle'}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.saveButtonText}>
+            {saveState === 'saved' ? 'Saved ✓' : saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
+          </Text>
+        </TouchableOpacity>
       )}
     </ScrollView>
   );
@@ -114,4 +158,9 @@ const styles = StyleSheet.create({
   detailLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   detailText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 22 },
   exampleItem: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22 },
+  selectButton: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, marginTop: spacing.sm, alignItems: 'center' },
+  selectButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  saveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  saveButtonDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
 });

@@ -9,6 +9,7 @@ import { getSlotAssignments } from '../../src/api/racks';
 import { repairRackedWines } from '../../src/api/cellar';
 import { colors, spacing } from '../../src/constants/theme';
 import { formatCurrency } from '../../src/constants/currency';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import type { CellarWine } from '../../src/types/wine';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -23,8 +24,8 @@ function WineRow({ wine }: { wine: CellarWine }) {
   return (
     <TouchableOpacity style={styles.row} onPress={() => router.push(`/cellar/${wine.id}`)}>
       <View style={styles.rowMain}>
-        <Text style={styles.rowName} numberOfLines={1}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
-        <Text style={styles.rowDetail} numberOfLines={1}>{[wine.producer, wine.region].filter(Boolean).join(' · ')}</Text>
+        <Text style={styles.rowName} numberOfLines={1}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
+        {wine.region ? <Text style={styles.rowDetail} numberOfLines={1}>{wine.region}</Text> : null}
       </View>
       <View style={styles.rowRight}>
         <Text style={styles.rowStatus}>{STATUS_LABELS[wine.drinking_window_status] ?? '—'}</Text>

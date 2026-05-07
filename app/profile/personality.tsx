@@ -9,6 +9,7 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
+import { splitPersonality } from '../../src/utils/personalityText';
 import { colors, spacing } from '../../src/constants/theme';
 
 type Category = 'wine' | 'recipe' | 'restaurant';
@@ -125,7 +126,15 @@ export default function PersonalityScreen() {
         ) : text ? (
           <>
             <View style={styles.sketchCard}>
-              <Text style={styles.sketchText}>{text}</Text>
+              {(() => {
+                const { title, body } = splitPersonality(text);
+                return (
+                  <>
+                    {title ? <Text style={styles.sketchTitle}>{title}</Text> : null}
+                    <Text style={styles.sketchText}>{body}</Text>
+                  </>
+                );
+              })()}
             </View>
             <TouchableOpacity style={styles.regenBtn} onPress={generate}>
               <Text style={styles.regenBtnText}>Not quite me, have another go</Text>
@@ -151,6 +160,7 @@ const styles = StyleSheet.create({
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   retryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
   sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.xl, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
+  sketchTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
   sketchText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 26 },
   regenBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   regenBtnText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted },

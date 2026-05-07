@@ -9,8 +9,10 @@ import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 
 function formatDate(iso: string) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  // Match the stamp format used on /scan/results — long month, lowercased
+  // by the en-GB locale, e.g. "12 May 2026". The cardDate style applies
+  // textTransform: 'uppercase' for the gold stamp look.
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 export default function ScanHistoryScreen() {
@@ -60,14 +62,13 @@ export default function ScanHistoryScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
           {archive.map((item) => (
             <View key={item.id} style={styles.card}>
-              <View style={styles.cardMeta}>
-                <Text style={styles.cardDate}>{formatDate(item.capturedAt)}</Text>
-                {item.city ? <Text style={styles.cardLocation}>{item.city}</Text> : null}
+              <View style={styles.stampRow}>
+                <Text style={styles.stampDate}>{formatDate(item.capturedAt)}</Text>
+                {(() => {
+                  const loc = [item.restaurantName, item.city].filter(Boolean).join(' · ');
+                  return loc ? <Text style={styles.stampLocation}>{loc}</Text> : null;
+                })()}
               </View>
-
-              {item.restaurantName ? (
-                <Text style={styles.cardRestaurant}>{item.restaurantName}</Text>
-              ) : null}
 
               <Text style={styles.cardTopPick}>
                 Top pick: {item.recommendation.wines[0]?.name ?? '—'}
@@ -129,10 +130,9 @@ const styles = StyleSheet.create({
   signInButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl },
   signInButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
-  cardMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  cardDate: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  cardLocation: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
-  cardRestaurant: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  stampRow: { alignItems: 'center', marginBottom: spacing.sm, gap: 2 },
+  stampDate: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
+  stampLocation: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center' },
   cardTopPick: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   cardCount: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xs },
   actionRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },

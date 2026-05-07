@@ -1,20 +1,30 @@
-import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { router } from 'expo-router';
+import { useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Alert } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useCellar } from '../../src/hooks/useCellar';
+import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../src/hooks/useAuth';
+import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
-import type { Pairing } from '../../src/types/wine';
+import type { Pairing, CellarWine, WineDetailsComplete } from '../../src/types/wine';
 
 function PairingCard({ pairing }: { pairing: Pairing }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
     <View style={styles.card}>
-      <TouchableOpacity onPress={() => setExpanded((v) => !v)}>
+      <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.8}>
         <Text style={styles.dishName}>{pairing.dishName}</Text>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
         <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
         <Text style={styles.toggle}>{expanded ? 'Hide recipe' : 'Show recipe'}</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity onPress={() => Alert.alert('Recipe reviews coming soon', "Once you've cooked this, you'll be able to score and note it here.")}>
+        <Text style={styles.reviewToggle}>Review Recipe</Text>
       </TouchableOpacity>
 
       {expanded && (
@@ -37,8 +47,64 @@ function PairingCard({ pairing }: { pairing: Pairing }) {
   );
 }
 
+function findCellarMatch(wines: CellarWine[], wine: WineDetailsComplete): CellarWine | null {
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  const producer = norm(wine.producer);
+  const vintage = norm(wine.vintage);
+  const wineName = norm(wine.wineName);
+  if (!producer) return null;
+
+  // Strongest match: producer + wine name + vintage all align
+  let match = wines.find((w) =>
+    norm(w.producer) === producer &&
+    norm(w.vintage) === vintage &&
+    norm(w.wine_name) === wineName,
+  );
+  if (match) return match;
+
+  // Drop wine name (label wine name is often null/empty)
+  match = wines.find((w) =>
+    norm(w.producer) === producer &&
+    norm(w.vintage) === vintage,
+  );
+  if (match) return match;
+
+  // Producer-only fallback (shouldn't happen often)
+  return wines.find((w) => norm(w.producer) === producer) ?? null;
+}
+
 export default function ChefResultsScreen() {
-  const { wineDetailsConfirmed, pairings, reset } = useLabelStore();
+  const { fromHistory } = useLocalSearchParams<{ fromHistory?: string }>();
+  const isFromHistory = fromHistory === 'true';
+  const { wineDetailsConfirmed, pairings, filters, reset } = useLabelStore();
+  const { wines: cellarWines } = useCellar();
+  const { session } = useAuth();
+  const qc = useQueryClient();
+  const { save: saveLabelSession } = useChefLabelHistory();
+  const [archiving, setArchiving] = useState(false);
+  const [archivedModalOpen, setArchivedModalOpen] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
+
+  const cellarMatch = useMemo(
+    () => (wineDetailsConfirmed ? findCellarMatch(cellarWines, wineDetailsConfirmed) : null),
+    [cellarWines, wineDetailsConfirmed],
+  );
+
+  async function handleSaveToArchive() {
+    if (!wineDetailsConfirmed || saveState !== 'idle') return;
+    setSaveState('saving');
+    try {
+      await saveLabelSession.mutateAsync({
+        wine: wineDetailsConfirmed,
+        filters: filters ?? null,
+        pairings,
+      });
+      setSaveState('saved');
+    } catch (err) {
+      setSaveState('idle');
+      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+    }
+  }
 
   if (!wineDetailsConfirmed || pairings.length === 0) {
     return (
@@ -52,6 +118,53 @@ export default function ChefResultsScreen() {
   }
 
   const wine = wineDetailsConfirmed;
+  const headerLine = wineHeaderLine(wine.producer, wine.wineName, wine.vintage);
+
+  async function handleRemoveFromCellar() {
+    if (!cellarMatch || !session?.user.id) return;
+    setArchiving(true);
+    try {
+      const removedAt = new Date().toISOString();
+      await addCellarWineRemoval({
+        cellarWineId: cellarMatch.id,
+        removedAt,
+        count: 1,
+        note: 'Archived from Chef pairing',
+      });
+
+      if (cellarMatch.quantity <= 1) {
+        // Last bottle — archive the existing row directly.
+        await updateCellarWine(cellarMatch.id, {
+          quantity: 0,
+          archived_at: removedAt,
+        });
+      } else {
+        // Multiple bottles — decrement the live cellar row by one and clone
+        // a separate archived row carrying the single removed bottle so the
+        // user can edit its quantity in the archived area later.
+        await updateCellarWine(cellarMatch.id, { quantity: cellarMatch.quantity - 1 });
+        const { id, created_at, updated_at, ...rest } = cellarMatch;
+        await addCellarWine({
+          ...rest,
+          quantity: 1,
+          archived_at: removedAt,
+          is_wishlist: false,
+        });
+      }
+
+      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['cellar-removals', cellarMatch.id] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+
+      setArchivedModalOpen(true);
+    } catch (err) {
+      Alert.alert('Could not archive', err instanceof Error ? err.message : 'Please try again.');
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
@@ -60,9 +173,19 @@ export default function ChefResultsScreen() {
       </TouchableOpacity>
 
       <View style={styles.header}>
-        <Text style={styles.producer}>{wine.producer}</Text>
-        {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
-        <Text style={styles.detail}>{wine.region}{wine.vintage ? ` · ${wine.vintage}` : ''}</Text>
+        <Text style={styles.headerLine}>{headerLine}</Text>
+        {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
+
+        {cellarMatch && (
+          <TouchableOpacity
+            style={[styles.removeBtn, archiving && styles.removeBtnDisabled]}
+            onPress={handleRemoveFromCellar}
+            disabled={archiving}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.removeBtnText}>{archiving ? 'Archiving…' : 'Remove This Wine From My Cellar'}</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -70,9 +193,36 @@ export default function ChefResultsScreen() {
         {pairings.map((p, i) => <PairingCard key={i} pairing={p} />)}
       </View>
 
+      {!isFromHistory && (
+        <TouchableOpacity
+          style={[styles.saveButton, saveState !== 'idle' && styles.saveButtonDone]}
+          onPress={handleSaveToArchive}
+          disabled={saveState !== 'idle'}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.saveButtonText}>
+            {saveState === 'saved' ? 'Saved ✓' : saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity style={styles.scanAgain} onPress={() => { reset(); router.replace('/(tabs)/chef'); }}>
         <Text style={styles.scanAgainText}>Scan Another Label</Text>
       </TouchableOpacity>
+
+      <Modal visible={archivedModalOpen} transparent animationType="fade" onRequestClose={() => setArchivedModalOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Wine has been Archived</Text>
+            <Text style={styles.modalBody}>
+              One bottle has been moved to your cellar archive. You can update the quantity in the archived wines area if you removed more than one.
+            </Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setArchivedModalOpen(false)}>
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -85,9 +235,11 @@ const styles = StyleSheet.create({
   errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  producer: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  wineName: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, marginTop: 2 },
-  detail: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.xs },
+  headerLine: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.5 },
+  region: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs },
+  removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.md, alignSelf: 'flex-start' },
+  removeBtnDisabled: { opacity: 0.6 },
+  removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14 },
   section: { padding: spacing.xl },
   sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
@@ -95,11 +247,21 @@ const styles = StyleSheet.create({
   chefInspiration: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: 2 },
   pairingNotes: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.sm },
+  reviewToggle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.xs },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   recipeIntro: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
   recipeMeta: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   recipeSection: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   recipeItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
+  saveButton: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  saveButtonDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   scanAgain: { margin: spacing.xl, alignItems: 'center' },
   scanAgainText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
+  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
 });

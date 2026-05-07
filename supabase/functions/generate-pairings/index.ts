@@ -43,6 +43,11 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
     ? `\nRecipe Difficulty: ${difficulty} — all three recipes must match this difficulty level. "Super Simple" means minimal ingredients and steps, ready in under 30 minutes. "Easy to Moderate" means accessible home cooking with some technique. "Challenging" means restaurant-quality dishes requiring skill and precision. "Very Technical" means advanced culinary techniques such as sous vide, fermentation, complex sauces, or multi-stage preparations.\n`
     : '';
 
+  const timeConsideration = filters.timeConsideration as string | undefined;
+  const timeBlock = timeConsideration
+    ? `\nTime Budget (HARD RULE — combined prep + cook time must fit): ${timeConsideration}. The user has chosen this window deliberately; do not propose dishes that exceed it. "Time is of the Essence" = under 30 minutes total. "Easy Breezy" = under 1 hour total. "I've got all day" = up to 3 hours total. "Low & Slow" = 3 hours or more (lean into braises, slow roasts, fermentation, stocks, anything that benefits from extended time).\n`
+    : '';
+
   const constraintBlock = constraints.length > 0
     ? `\nDietary & Allergen Constraints (STRICT — all three recipes must comply):\n${constraints.map((c) => `- ${c}`).join('\n')}\n`
     : '';
@@ -66,7 +71,7 @@ Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}${softBlock}${difficultyBlock}
+${constraintBlock}${softBlock}${difficultyBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:

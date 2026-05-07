@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { supabase } from '../../src/api/supabase';
+import { splitPersonality } from '../../src/utils/personalityText';
 import { colors, spacing } from '../../src/constants/theme';
 
 interface CommunityProfileRow {
@@ -197,7 +198,15 @@ function PersonalityBlock({
       {publishedText ? (
         <View style={styles.publishedCard}>
           <Text style={styles.publishedLabel}>Published</Text>
-          <Text style={styles.publishedText}>{publishedText}</Text>
+          {(() => {
+            const { title, body } = splitPersonality(publishedText);
+            return (
+              <>
+                {title ? <Text style={styles.publishedTitle}>{title}</Text> : null}
+                <Text style={styles.publishedText}>{body}</Text>
+              </>
+            );
+          })()}
         </View>
       ) : (
         <Text style={styles.helper}>Not yet published to the community.</Text>
@@ -208,7 +217,15 @@ function PersonalityBlock({
           {!isLatestPublished && (
             <View style={styles.latestCard}>
               <Text style={styles.latestLabel}>Latest from Vinster</Text>
-              <Text style={styles.latestText}>{cachedText}</Text>
+              {(() => {
+                const { title, body } = splitPersonality(cachedText);
+                return (
+                  <>
+                    {title ? <Text style={styles.latestTitle}>{title}</Text> : null}
+                    <Text style={styles.latestText}>{body}</Text>
+                  </>
+                );
+              })()}
             </View>
           )}
           <TouchableOpacity
@@ -251,9 +268,11 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   publishedCard: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, backgroundColor: 'rgba(212,176,96,0.06)', gap: spacing.xs },
   publishedLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  publishedTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, lineHeight: 24, marginBottom: 2 },
   publishedText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 22 },
   latestCard: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, padding: spacing.md, gap: spacing.xs, marginTop: spacing.sm },
   latestLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  latestTitle: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 22, marginBottom: 2 },
   latestText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 20 },
   publishBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   publishBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },

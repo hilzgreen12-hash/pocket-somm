@@ -39,9 +39,10 @@ export default function ResultsScreen() {
   const [restaurantReviewVisible, setRestaurantReviewVisible] = useState(false);
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
+  const [renderedAt] = useState(() => new Date().toISOString());
   const qc = useQueryClient();
 
-  // Pre-fill restaurant name from GPS once autoSave completes
+  // Pre-fill restaurant name from GPS once the search has been saved
   useEffect(() => {
     const detected = autoSave.data?.[0]?.restaurantName;
     if (detected && !restaurantName) setRestaurantName(detected);
@@ -55,12 +56,14 @@ export default function ResultsScreen() {
     qc.invalidateQueries({ queryKey: ['scan-archive'] });
   }
 
-  useEffect(() => {
-    if (recommendation && extractedWines && !hasSaved.current) {
-      hasSaved.current = true;
-      autoSave.mutate({ extractedWines, recommendation });
-    }
-  }, []);
+  function handleSaveToArchive() {
+    if (!recommendation || !extractedWines || hasSaved.current) return;
+    hasSaved.current = true;
+    autoSave.mutate({ extractedWines, recommendation, restaurantNameOverride: restaurantName });
+  }
+
+  const isSaved = !!autoSave.data;
+  const isSaving = autoSave.isPending;
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
@@ -104,9 +107,9 @@ export default function ResultsScreen() {
   const noVintages = recommendation.wines.every((w) => !w.vintage);
 
   // Build a date + location stamp shown at the top of the page. For fresh
-  // scans the date defaults to "now"; for history loads it comes from the
-  // URL param. Location is restaurant + city when known.
-  const stampDateSource = historyDate ?? autoSave.data?.[0]?.savedAt ?? null;
+  // scans the date defaults to the moment results rendered; once saved it's
+  // refreshed from the saved row. History loads pull from the URL param.
+  const stampDateSource = historyDate ?? autoSave.data?.[0]?.savedAt ?? renderedAt;
   const stampDate = stampDateSource
     ? new Date(stampDateSource).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
@@ -286,6 +289,17 @@ export default function ResultsScreen() {
 
       {!isFromHistory && (
         <>
+          <TouchableOpacity
+            style={[styles.saveButton, (isSaved || isSaving) && styles.saveButtonDone]}
+            onPress={handleSaveToArchive}
+            disabled={isSaved || isSaving}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.saveButtonText, (isSaved || isSaving) && styles.saveButtonTextDone]}>
+              {isSaved ? 'Saved ✓' : isSaving ? 'Saving…' : 'Save to Archive'}
+            </Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.alternativeButton}
             onPress={handleAlternativeList}
@@ -636,15 +650,21 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginTop: spacing.lg,
     borderWidth: 1,
-    borderColor: '#FFFFFF',
+    borderColor: colors.gold,
     borderRadius: 14,
     padding: spacing.md,
     alignItems: 'center',
   },
+  saveButtonDone: {
+    backgroundColor: 'rgba(212,176,96,0.10)',
+  },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: colors.gold,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
+  },
+  saveButtonTextDone: {
+    color: colors.gold,
   },
   savedConfirm: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
