@@ -13,25 +13,35 @@ export default function WelcomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <View style={styles.hero}>
         <Text style={styles.appName}>Vinster</Text>
-        <Text style={styles.tagline}>Your personal sommelier</Text>
+        <Text style={styles.tagline}>Your AI Somm{"\n"}pairs & pours with friends{"\n"}serves a gentle roast</Text>
       </View>
 
       <View style={styles.heroDivider} />
 
       <View style={styles.features}>
         <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Wine List Scanner</Text>
-          <Text style={styles.featureBody}>Scan any wine list and get three personalised recommendations from your AI sommelier — matched to your taste, budget, and the food you're eating.</Text>
+          <Text style={styles.featureTitle}>List</Text>
+          <Text style={styles.featureBody}>Scan a restaurant wine list and I'll generate three recommendations fitted to your taste, your budget, and what you're eating — or spin the wheel and let me drive. Your friends haven't arrived yet — we have time.</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Label Scanner</Text>
-          <Text style={styles.featureBody}>Point your camera at any bottle to identify the wine, see critic scores and drinking windows, get chef-inspired recipes to pair, and add wines to your cellar.</Text>
+          <Text style={styles.featureTitle}>Chef</Text>
+          <Text style={styles.featureBody}>Tell Vinster what you're cooking and it pours you a wine. Scan a bottle and it cooks up three chef-inspired recipes. Two routes, destination gourmet.</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Your Cellar</Text>
-          <Text style={styles.featureBody}>Organise your wine cellar, access useful insight into your collection including drinking windows and values. View as a list or as a virtual wine rack reflecting IRL storage locations.</Text>
+          <Text style={styles.featureTitle}>Cellar</Text>
+          <Text style={styles.featureBody}>Track every bottle: what you paid, what it's worth, when to drink it, where the heck it is in your IRL cellar. We know, so you don't have to.</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.feature}>
+          <Text style={styles.featureTitle}>Community</Text>
+          <Text style={styles.featureBody}>Like-minded gourmands who geek over the same things you do.</Text>
+        </View>
+        <View style={styles.divider} />
+        <View style={styles.feature}>
+          <Text style={styles.featureTitle}>Profile</Text>
+          <Text style={styles.featureBody}>Vinster watches how you drink and what you eat — less creepy than it sounds — and tailors its recommendations as well as sketching an endearing wine and chef roast, sorry, we mean personality (AI glitch, ahem). Publish to friends when you're ready.</Text>
         </View>
       </View>
 
