@@ -74,6 +74,7 @@ export default function RootLayout() {
             <Stack.Screen name="index" />
             <Stack.Screen name="welcome" />
             <Stack.Screen name="onboarding" />
+            <Stack.Screen name="onboarding-tour" />
             <Stack.Screen name="welcome-profile" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="(auth)/forgot-password" />
