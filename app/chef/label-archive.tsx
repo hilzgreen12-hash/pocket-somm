@@ -2,6 +2,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
+import { useAuth } from '../../src/hooks/useAuth';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChefLabelSession } from '../../src/api/chef';
@@ -12,6 +14,7 @@ function formatDate(iso: string) {
 }
 
 export default function LabelArchiveScreen() {
+  const { session } = useAuth();
   const { sessions, isLoading } = useChefLabelHistory();
   const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
 
@@ -39,7 +42,12 @@ export default function LabelArchiveScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {isLoading ? null : sessions.length === 0 ? (
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your archive"
+          body="Save chef-inspired recipe pairings to your archive — sign in to keep them across sessions."
+        />
+      ) : isLoading ? null : sessions.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No archive yet</Text>
           <Text style={styles.emptyBody}>

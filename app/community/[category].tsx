@@ -34,10 +34,7 @@ export default function CommunityCategoryScreen() {
 
         <View style={styles.section}>
           <TouchableOpacity style={styles.button} onPress={() => router.push(`/community/upload?category=${key}`)}>
-            <Text style={styles.buttonText}>Upload your latest reviews</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.button} onPress={() => router.push(`/community/view?category=${key}`)}>
-            <Text style={styles.buttonText}>View latest community reviews</Text>
+            <Text style={styles.buttonText}>Upload your reviews</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.button} onPress={() => router.push(`/community/search?category=${key}`)}>
             <Text style={styles.buttonText}>Search community reviews</Text>

@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useWishList } from '../../src/hooks/useCellar';
+import { useAuth } from '../../src/hooks/useAuth';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
@@ -139,6 +141,7 @@ type ConfirmAction =
   | null;
 
 export default function WishListScreen() {
+  const { session } = useAuth();
   const { wines, isLoading, updateWine, moveTocellar, deleteWine } = useWishList();
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
 
@@ -185,7 +188,12 @@ export default function WishListScreen() {
         </TouchableOpacity>
       </View>
 
-      {wines.length === 0 ? (
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your wish list"
+          body="Save wines you'd like to seek out — sign in to keep your wish list."
+        />
+      ) : wines.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Your wish list is empty</Text>
           <Text style={styles.emptyBody}>When you review a wine recommendation, tap "Add to Cellar Wish List" to save wines you'd like to seek out.</Text>

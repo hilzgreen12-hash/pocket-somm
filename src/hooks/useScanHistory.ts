@@ -46,6 +46,24 @@ async function writeLocal(items: ScanHistoryItem[]) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
 }
 
+// Caches a fresh scan to local AsyncStorage only (no Supabase, no GPS).
+// Fires on result render so View Last Result always works inside the
+// session, regardless of whether the user has tapped Save to Archive.
+export async function cacheScanLocally(input: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantName?: string | null; city?: string | null }) {
+  const newItem: ScanHistoryItem = {
+    id: Date.now().toString(),
+    savedAt: new Date().toISOString(),
+    extractedWines: input.extractedWines,
+    recommendation: input.recommendation,
+    savedToAccount: false,
+    city: input.city ?? null,
+    restaurantName: input.restaurantName ?? null,
+  };
+  const existing = await readLocal();
+  const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
+  await writeLocal(updated);
+}
+
 export function useScanHistory() {
   const { session } = useAuth();
   const qc = useQueryClient();

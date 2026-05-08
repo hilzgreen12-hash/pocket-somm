@@ -4,9 +4,11 @@ import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
 import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
 import type { WineRack, CellarWine } from '../../src/types/wine';
 
@@ -39,6 +41,7 @@ function RackRow({ rack, wines }: { rack: WineRack; wines: CellarWine[] }) {
 }
 
 export default function RacksScreen() {
+  const { session } = useAuth();
   const { racks, isLoading } = useRacks();
   const { wines } = useCellar();
   const { setPendingStorageType } = useRackStore();
@@ -87,7 +90,12 @@ export default function RacksScreen() {
         </TouchableOpacity>
       </View>
 
-      {racks.length === 0 ? (
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your storage"
+          body="Build virtual wine racks that mirror your home storage — sign in to keep them."
+        />
+      ) : racks.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No storage yet</Text>
           <Text style={styles.emptyBody}>Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>

@@ -5,7 +5,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { useScanStore } from '../../src/stores/scanStore';
-import { useScanHistory } from '../../src/hooks/useScanHistory';
+import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { recommendWines } from '../../src/services/recommender';
@@ -47,6 +47,15 @@ export default function ResultsScreen() {
     const detected = autoSave.data?.[0]?.restaurantName;
     if (detected && !restaurantName) setRestaurantName(detected);
   }, [autoSave.data]);
+
+  // Cache fresh scans to local AsyncStorage on render so View Last Result
+  // works in-session even when the user hasn't tapped Save to Archive.
+  // Only fires once per render of a fresh scan (skips history loads).
+  useEffect(() => {
+    if (isFromHistory) return;
+    if (!recommendation || !extractedWines) return;
+    cacheScanLocally({ extractedWines, recommendation, restaurantName: restaurantName || null });
+  }, []);
 
   async function handleSaveRestaurant() {
     setEditingRestaurant(false);

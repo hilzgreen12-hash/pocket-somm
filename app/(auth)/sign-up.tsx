@@ -39,9 +39,9 @@ export default function SignUp() {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>Check your email</Text>
-        <Text style={styles.subtitle}>We've sent a confirmation link to {email}. Please verify your email before signing in.</Text>
-        <TouchableOpacity style={styles.button} onPress={() => router.replace('/(auth)/sign-in')}>
-          <Text style={styles.buttonText}>Go to Sign In</Text>
+        <Text style={styles.subtitle}>We've sent a confirmation link to {email}. Tap it to confirm and we'll bring you straight back into Vinster.</Text>
+        <TouchableOpacity style={styles.skipLink} onPress={() => router.replace('/(tabs)/scan')}>
+          <Text style={styles.skipLinkText}>Continue without my account for now</Text>
         </TouchableOpacity>
       </View>
     );
@@ -143,6 +143,17 @@ const styles = StyleSheet.create({
     color: colors.gold,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
+  },
+  skipLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.lg,
+    marginTop: spacing.lg,
+  },
+  skipLinkText: {
+    color: 'rgba(255,255,255,0.45)',
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   link: {
     fontFamily: 'CormorantGaramond_400Regular',

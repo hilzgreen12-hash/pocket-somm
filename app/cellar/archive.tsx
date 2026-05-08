@@ -1,6 +1,8 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useArchive } from '../../src/hooks/useCellar';
+import { useAuth } from '../../src/hooks/useAuth';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
@@ -28,6 +30,7 @@ function ArchiveCard({ wine, onPress }: { wine: CellarWine; onPress: () => void 
 }
 
 export default function CellarArchiveScreen() {
+  const { session } = useAuth();
   const { wines, isLoading } = useArchive();
 
   if (isLoading) {
@@ -48,7 +51,12 @@ export default function CellarArchiveScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {wines.length === 0 ? (
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your archive"
+          body="Wines you archive from your cellar live here — sign in to access them."
+        />
+      ) : wines.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No archived wines</Text>
           <Text style={styles.emptyBody}>Wines you archive from your cellar will appear here with the date they were removed and the option to add a note for each removal.</Text>

@@ -10,6 +10,8 @@ import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { ChosenRecipeModal } from '../../src/components/ChosenRecipeModal';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { SearchProgress } from '../../src/components/SearchProgress';
+import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import type { Pairing, CellarWine, WineDetailsComplete } from '../../src/types/wine';
 
@@ -78,7 +80,7 @@ function findCellarMatch(wines: CellarWine[], wine: WineDetailsComplete): Cellar
 export default function ChefResultsScreen() {
   const { fromHistory, savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
   const isFromHistory = fromHistory === 'true';
-  const { wineDetailsConfirmed, pairings, filters, reset } = useLabelStore();
+  const { wineDetailsConfirmed, pairings, filters, reset, setPairings, setError } = useLabelStore();
   const { wines: cellarWines } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -89,6 +91,22 @@ export default function ChefResultsScreen() {
   const [renderedAt] = useState(() => new Date().toISOString());
   const [reviewingPairing, setReviewingPairing] = useState<Pairing | null>(null);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+
+  async function handleRegenerate() {
+    if (!wineDetailsConfirmed || regenerating) return;
+    setRegenerating(true);
+    try {
+      const fresh = await generatePairings(wineDetailsConfirmed, (filters ?? {}) as any);
+      setPairings(fresh);
+      setSaveState('idle');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate pairings');
+      Alert.alert('Could not regenerate', 'Please try again in a moment.');
+    } finally {
+      setRegenerating(false);
+    }
+  }
 
   const stampDateSource = savedAt || renderedAt;
   const stampDate = stampDateSource
@@ -181,6 +199,16 @@ export default function ChefResultsScreen() {
     }
   }
 
+  if (regenerating) {
+    return (
+      <SearchProgress
+        title="Crafting your pairings…"
+        subtitle="Vinster needs up to a minute for your result"
+        body="A fresh set of three chef-inspired dishes coming up"
+      />
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity onPress={() => router.replace('/(tabs)/chef')} style={styles.backRow}>
@@ -216,21 +244,23 @@ export default function ChefResultsScreen() {
       </View>
 
       {!isFromHistory && (
-        <TouchableOpacity
-          style={[styles.saveButton, saveState !== 'idle' && styles.saveButtonDone]}
-          onPress={handleSaveToArchive}
-          disabled={saveState !== 'idle'}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.saveButtonText}>
-            {saveState === 'saved' ? 'Saved ✓' : saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
-          </Text>
-        </TouchableOpacity>
-      )}
+        <>
+          <TouchableOpacity style={styles.regenLink} onPress={handleRegenerate} disabled={regenerating}>
+            <Text style={styles.regenLinkText}>Not quite — generate another set of recipes</Text>
+          </TouchableOpacity>
 
-      <TouchableOpacity style={styles.scanAgain} onPress={() => { reset(); router.replace('/(tabs)/chef'); }}>
-        <Text style={styles.scanAgainText}>Scan Another Label</Text>
-      </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.saveButton, saveState !== 'idle' && styles.saveButtonDone]}
+            onPress={handleSaveToArchive}
+            disabled={saveState !== 'idle'}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.saveButtonText}>
+              {saveState === 'saved' ? 'Saved ✓' : saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       <Modal visible={archivedModalOpen} transparent animationType="fade" onRequestClose={() => setArchivedModalOpen(false)}>
         <View style={styles.modalOverlay}>
@@ -297,8 +327,8 @@ const styles = StyleSheet.create({
   saveButton: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   saveButtonDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
   saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
-  scanAgain: { margin: spacing.xl, alignItems: 'center' },
-  scanAgainText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
+  regenLink: { alignItems: 'center', paddingVertical: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm },
+  regenLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
