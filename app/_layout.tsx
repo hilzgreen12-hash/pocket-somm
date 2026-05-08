@@ -49,10 +49,39 @@ export default function RootLayout() {
   }, [fontsLoaded]);
 
   useEffect(() => {
+    // Supabase email-confirm redirects can land here in one of two shapes:
+    //   1. Server-verified flow: vinster://auth/callback#access_token=…&refresh_token=…
+    //      (or the same params as a query string). Supabase has already
+    //      verified the OTP on its server; we just need to install the
+    //      tokens as our session via setSession.
+    //   2. PKCE / client-verify flow: vinster://auth/callback?token_hash=…&type=signup
+    //      Here we redeem the OTP ourselves via verifyOtp.
+    // Earlier code only handled (2), which is why fresh signups were landing
+    // back in the app without a session. This handler now covers both.
     async function handleUrl(url: string) {
       const { queryParams } = Linking.parse(url);
-      const token_hash = queryParams?.token_hash as string | undefined;
-      const type = queryParams?.type as string | undefined;
+
+      // Pull params from both query string AND hash fragment (Supabase
+      // server-redirect uses the fragment by default).
+      const fragmentParams: Record<string, string> = {};
+      const hashIdx = url.indexOf('#');
+      if (hashIdx >= 0) {
+        const hash = url.slice(hashIdx + 1);
+        for (const pair of hash.split('&')) {
+          const [k, v] = pair.split('=');
+          if (k) fragmentParams[decodeURIComponent(k)] = decodeURIComponent(v ?? '');
+        }
+      }
+
+      const access_token = (queryParams?.access_token as string | undefined) ?? fragmentParams.access_token;
+      const refresh_token = (queryParams?.refresh_token as string | undefined) ?? fragmentParams.refresh_token;
+      if (access_token && refresh_token) {
+        await supabase.auth.setSession({ access_token, refresh_token });
+        return;
+      }
+
+      const token_hash = (queryParams?.token_hash as string | undefined) ?? fragmentParams.token_hash;
+      const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
       if (token_hash && type) {
         await supabase.auth.verifyOtp({ token_hash, type: type as any });
       }

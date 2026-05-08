@@ -113,9 +113,14 @@ export default function ScanTab() {
     return false;
   }
 
+  // Dismissing the prompt (tap X or outside) is treated as "ignore the
+  // message and carry on" — the action the user originally tapped still
+  // runs. Sign In / Create Account are the only paths that interrupt.
   function dismissSignInPrompt() {
     setSignInPromptVisible(false);
+    const action = pendingActionRef.current;
     pendingActionRef.current = null;
+    action?.();
   }
 
   function continueWithoutAccount() {

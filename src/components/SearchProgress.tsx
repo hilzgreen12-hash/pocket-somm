@@ -9,6 +9,24 @@ interface Props {
   durationMs?: number;
 }
 
+// Encouraging lines that rotate in as the progress bar fills, so the user
+// sees a bit of personality while Vinster is thinking. The first line is
+// always the prop-supplied title so each flow keeps its context.
+const ENCOURAGEMENT = [
+  'Mustering my notes…',
+  'Halfway there — swirling thoughtfully…',
+  'Polishing the recommendation…',
+  'Almost ready — a final twirl of the glass…',
+];
+
+function pickTitle(initial: string, pct: number): string {
+  if (pct < 22) return initial;
+  if (pct < 45) return ENCOURAGEMENT[0];
+  if (pct < 65) return ENCOURAGEMENT[1];
+  if (pct < 80) return ENCOURAGEMENT[2];
+  return ENCOURAGEMENT[3];
+}
+
 export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Props) {
   const progress = useRef(new Animated.Value(0)).current;
   const [pct, setPct] = useState(0);
@@ -28,6 +46,8 @@ export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Pr
     outputRange: ['0%', '100%'],
   });
 
+  const dynamicTitle = pickTitle(title, pct);
+
   return (
     <View style={styles.container}>
       <Text style={styles.brand}>Vinster</Text>
@@ -39,7 +59,7 @@ export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Pr
         <Text style={styles.percent}>{pct}%</Text>
       </View>
 
-      <Text style={styles.title}>{title}</Text>
+      <Text style={styles.title}>{dynamicTitle}</Text>
       <Text style={styles.timing}>{subtitle}</Text>
       <Text style={styles.body}>{body}</Text>
       <Text style={styles.stayNote}>Please keep this page open</Text>

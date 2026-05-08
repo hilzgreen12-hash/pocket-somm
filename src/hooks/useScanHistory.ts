@@ -114,7 +114,7 @@ export function useScanHistory() {
 
       let sessionId: string | undefined;
       if (session) {
-        const { data: inserted } = await supabase
+        const { data: inserted, error: insertError } = await supabase
           .from('scan_sessions')
           .insert({
             user_id: session.user.id,
@@ -130,6 +130,12 @@ export function useScanHistory() {
           })
           .select('id')
           .single();
+        if (insertError) {
+          // Surface the failure so the UI can fall out of "Saved ✓" — the
+          // local AsyncStorage write below is skipped to avoid a misleading
+          // success state.
+          throw new Error(insertError.message);
+        }
         sessionId = inserted?.id;
       }
 

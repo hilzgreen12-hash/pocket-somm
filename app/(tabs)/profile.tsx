@@ -1,32 +1,23 @@
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { TabFooter } from '../../src/components/TabFooter';
+import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function ProfileTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
   const { session } = useAuth();
+  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 
-  if (!session) {
-    return (
-      <View style={[styles.guestContainer, { paddingTop }]}>
-        <View style={styles.guestHero}>
-          <Text style={styles.guestTitle}>Your Profile</Text>
-          <Text style={styles.guestBody}>Set and review your profile settings. These will be the parameters that Vinster uses when making its wine list recommendations and recipe pairings for you.</Text>
-        </View>
-        <View style={styles.guestActions}>
-          <TouchableOpacity style={styles.button} onPress={() => router.push('/(auth)/sign-in')}>
-            <Text style={styles.buttonText}>Sign In</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.guestSecondary} onPress={() => router.push('/(auth)/sign-up')}>
-            <Text style={styles.guestSecondaryText}>Create Account</Text>
-          </TouchableOpacity>
-          <TabFooter />
-        </View>
-      </View>
-    );
+  function gated(route: string) {
+    if (session) {
+      router.push(route as any);
+    } else {
+      setPendingRoute(route);
+    }
   }
 
   return (
@@ -45,14 +36,14 @@ export default function ProfileTab() {
       <View style={styles.section}>
         <Text style={styles.subheading}>Wine Profile</Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/profile/wine')}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/profile/wine')}>
             <Text style={styles.buttonText}>Your Wine Preferences</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/wines/chosen')}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/wines/chosen')}>
             <Text style={styles.buttonText}>Your Wine Reviews</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/profile/personality?category=wine' as any)}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=wine')}>
           <Text style={styles.buttonText}>Your Wine Personality</Text>
         </TouchableOpacity>
       </View>
@@ -62,14 +53,14 @@ export default function ProfileTab() {
       <View style={styles.section}>
         <Text style={styles.subheading}>Chef Profile</Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/profile/recipe')}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/profile/recipe')}>
             <Text style={styles.buttonText}>Your Recipe Preferences</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/recipes/chosen')}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/recipes/chosen')}>
             <Text style={styles.buttonText}>Your Recipe Reviews</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/profile/personality?category=recipe' as any)}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=recipe')}>
           <Text style={styles.buttonText}>Your Chef Personality</Text>
         </TouchableOpacity>
       </View>
@@ -78,11 +69,18 @@ export default function ProfileTab() {
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Look back at the restaurants you've dined in — add your notes and share.</Text>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/restaurants/reviews')}>
           <Text style={styles.buttonText}>Your Restaurants</Text>
         </TouchableOpacity>
       </View>
 
+      <SignInPromptModal
+        visible={!!pendingRoute}
+        onDismiss={() => setPendingRoute(null)}
+        onSignIn={() => { setPendingRoute(null); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { setPendingRoute(null); router.push('/(auth)/sign-up'); }}
+        onContinue={() => setPendingRoute(null)}
+      />
     </ScrollView>
     <TabFooter />
     </View>
@@ -95,15 +93,6 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  whiteBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  whiteBubbleText: { fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, fontSize: 17 },
-  guestContainer: { flex: 1, justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingBottom: 60, backgroundColor: colors.background },
-  guestHero: { alignItems: 'center' },
-  guestTitle: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, marginBottom: spacing.sm, textAlign: 'center' },
-  guestBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: '#FFFFFF', textAlign: 'center', marginBottom: spacing.xl },
-  guestActions: { width: '100%', gap: spacing.sm },
-  guestSecondary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  guestSecondaryText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
