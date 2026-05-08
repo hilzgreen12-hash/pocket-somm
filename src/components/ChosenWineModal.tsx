@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { router } from 'expo-router';
+import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useWishList } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
@@ -42,6 +43,28 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
       setUserScore(null);
       setSaved(false);
       setWishlistAdded(false);
+
+      // If we don't already have a city (e.g. fresh scan that hasn't been
+      // saved yet), try a quick GPS reverse-geocode to pre-fill it. Best
+      // effort — silent failure if permission is denied or geocoding fails.
+      // The user can edit the field if Vinster's guess is wrong.
+      if (!initialCity || !initialCity.trim()) {
+        (async () => {
+          try {
+            const { status } = await Location.getForegroundPermissionsAsync();
+            if (status !== 'granted') return;
+            const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
+            const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+            const detected = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+            if (detected) {
+              // Only fill if the user hasn't started typing in the meantime.
+              setCity((current) => (current.trim() ? current : detected));
+            }
+          } catch {
+            /* location unavailable */
+          }
+        })();
+      }
     }
   }, [visible, initialRestaurantName, initialCity]);
 
@@ -124,7 +147,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Your tasting note (optional)</Text>
+            <Text style={styles.sectionLabel}>Your tasting note</Text>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={tastingNote}
@@ -136,7 +159,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
               textAlignVertical="top"
             />
 
-            <Text style={styles.sectionLabel}>Other observations (optional)</Text>
+            <Text style={styles.sectionLabel}>Other observations</Text>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={otherObservations}
@@ -148,7 +171,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
               textAlignVertical="top"
             />
 
-            <Text style={styles.sectionLabel}>Your score (optional)</Text>
+            <Text style={styles.sectionLabel}>Your score</Text>
             <TextInput
               style={[styles.input, styles.scoreInput]}
               value={userScore != null ? String(userScore) : ''}

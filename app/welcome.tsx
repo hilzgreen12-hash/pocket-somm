@@ -13,7 +13,7 @@ export default function WelcomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <View style={styles.hero}>
         <Text style={styles.appName}>Vinster</Text>
-        <Text style={styles.tagline}>Your AI Somm{"\n"}pairs & pours with friends{"\n"}serves a gentle roast</Text>
+        <Text style={styles.tagline}>Your AI Somm — learning your tastes and fancies with every use, keeping your gastronomic life organised.</Text>
       </View>
 
       <View style={styles.heroDivider} />
@@ -21,27 +21,27 @@ export default function WelcomeScreen() {
       <View style={styles.features}>
         <View style={styles.feature}>
           <Text style={styles.featureTitle}>List</Text>
-          <Text style={styles.featureBody}>Scan a restaurant wine list and I'll generate three recommendations fitted to your taste, your budget, and what you're eating — or spin the wheel and let me drive. Your friends haven't arrived yet — we have time.</Text>
+          <Text style={styles.featureBody}>Scan a restaurant wine list and I'll generate three recommendations fitted to your taste, your budget, and what you're eating — or spin the wheel and let me guide you.</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.feature}>
           <Text style={styles.featureTitle}>Chef</Text>
-          <Text style={styles.featureBody}>Tell Vinster what you're cooking and it pours you a wine. Scan a bottle and it cooks up three chef-inspired recipes. Two routes, destination gourmet.</Text>
+          <Text style={styles.featureBody}>Tell me what you're cooking and I'll pour you a wine. Scan a bottle and I'll cook up three chef-inspired recipes.{'\n'}Two routes, destination gourmet.</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.feature}>
           <Text style={styles.featureTitle}>Cellar</Text>
-          <Text style={styles.featureBody}>Track every bottle: what you paid, what it's worth, when to drink it, where the heck it is in your IRL cellar. We know, so you don't have to.</Text>
+          <Text style={styles.featureBody}>Track every bottle: what you paid, what it's worth, when to drink it, where the heck it is in your IRL cellar. I know, so you don't have to.</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.feature}>
           <Text style={styles.featureTitle}>Community</Text>
-          <Text style={styles.featureBody}>Like-minded gourmands who geek over the same things you do.</Text>
+          <Text style={styles.featureBody}>Like-minded wine and food lovers who geek out over the same things you do.</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.feature}>
           <Text style={styles.featureTitle}>Profile</Text>
-          <Text style={styles.featureBody}>Vinster watches how you drink and what you eat — less creepy than it sounds — and tailors its recommendations as well as sketching an endearing wine and chef roast, sorry, we mean personality (AI glitch, ahem). Publish to friends when you're ready.</Text>
+          <Text style={styles.featureBody}>Set your preferences to complete your profile and I'll use them to tailor my recommendations to you. After a short while, I'll know you so well I'll draw you up a character sketch you can share.</Text>
         </View>
       </View>
 

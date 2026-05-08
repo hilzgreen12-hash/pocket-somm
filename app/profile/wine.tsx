@@ -4,9 +4,9 @@ import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Layout
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { ChipPicker } from '../../src/components/preferences/ChipPicker';
+import { DropdownMultiSelect } from '../../src/components/preferences/DropdownMultiSelect';
 import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { WineTypePicker, WineType } from '../../src/components/preferences/WineTypePicker';
@@ -21,6 +21,8 @@ const WINE_TYPE_LABELS: Record<string, string> = {
 };
 
 export default function WineProfileScreen() {
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const isOnboarding = onboarding === '1';
   const { preferences, updatePreferences } = usePreferences();
   const [wineStyleOpen, setWineStyleOpen] = useState(false);
   const [regionalOpen, setRegionalOpen] = useState(false);
@@ -84,101 +86,38 @@ export default function WineProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.profileIntro}>
-          <Text style={styles.profileHeading}>Wine Profile</Text>
+          <Text style={styles.profileHeading}>Wine Preferences</Text>
           <Text style={styles.profileBody}>Set your wine preferences so Vinster can generate the best recommendations for you — over time your wine choices will inform our guidance, making our suggestions even more tailored. You can see what we've learned about you so far at the bottom of this page.</Text>
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setRegionalDislikesOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Regional Dislikes <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!regionalDislikesOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.dislikedRegions ?? []).length > 0
-                ? (preferences?.dislikedRegions ?? []).join(', ')
-                : 'None'}
-            </Text>
-          )}
-          {regionalDislikesOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={WINE_REGIONS}
-                selected={preferences?.dislikedRegions ?? []}
-                onChange={(v) => updatePreferences({ dislikedRegions: v })}
-                listMode
-                max={5}
-                allOptionLabel="None"
-              />
-              <View style={styles.customRow}>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Other — type a region"
-                  placeholderTextColor="rgba(255,255,255,0.30)"
-                  value={customDislikedRegion}
-                  onChangeText={setCustomDislikedRegion}
-                  onSubmitEditing={handleAddCustomDislikedRegion}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity
-                  style={[styles.customAdd, (!customDislikedRegion.trim() || (preferences?.dislikedRegions ?? []).length >= 5) && { opacity: 0.35 }]}
-                  onPress={handleAddCustomDislikedRegion}
-                  disabled={!customDislikedRegion.trim() || (preferences?.dislikedRegions ?? []).length >= 5}
-                >
-                  <Text style={styles.customAddText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Regional Dislikes"
+            hint="Select up to 5"
+            options={WINE_REGIONS}
+            selected={preferences?.dislikedRegions ?? []}
+            onChange={(v) => updatePreferences({ dislikedRegions: v })}
+            max={5}
+            noneLabel="None"
+            customAddPlaceholder="Other — type a region"
+          />
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setVarietalDislikesOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Varietal Dislikes <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!varietalDislikesOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.dislikedGrapes ?? []).length > 0
-                ? (preferences?.dislikedGrapes ?? []).join(', ')
-                : 'None'}
-            </Text>
-          )}
-          {varietalDislikesOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={GRAPE_VARIETIES}
-                selected={preferences?.dislikedGrapes ?? []}
-                onChange={(v) => updatePreferences({ dislikedGrapes: v })}
-                listMode
-                max={5}
-                allOptionLabel="None"
-              />
-              <View style={styles.customRow}>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Other — type a variety"
-                  placeholderTextColor="rgba(255,255,255,0.30)"
-                  value={customDislikedGrape}
-                  onChangeText={setCustomDislikedGrape}
-                  onSubmitEditing={handleAddCustomDislikedGrape}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity
-                  style={[styles.customAdd, (!customDislikedGrape.trim() || (preferences?.dislikedGrapes ?? []).length >= 5) && { opacity: 0.35 }]}
-                  onPress={handleAddCustomDislikedGrape}
-                  disabled={!customDislikedGrape.trim() || (preferences?.dislikedGrapes ?? []).length >= 5}
-                >
-                  <Text style={styles.customAddText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Varietal Dislikes"
+            hint="Select up to 5"
+            options={GRAPE_VARIETIES}
+            selected={preferences?.dislikedGrapes ?? []}
+            onChange={(v) => updatePreferences({ dislikedGrapes: v })}
+            max={5}
+            noneLabel="None"
+            customAddPlaceholder="Other — type a variety"
+          />
         </View>
 
         <View style={styles.section}>
           <View style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
             <Text style={styles.question}>Default Budget</Text>
           </View>
           <BudgetSlider
@@ -216,91 +155,29 @@ export default function WineProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setRegionalOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Regional Preference <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!regionalOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.favouriteRegions ?? []).length > 0
-                ? (preferences?.favouriteRegions ?? []).join(', ')
-                : 'I like them all'}
-            </Text>
-          )}
-          {regionalOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={WINE_REGIONS}
-                selected={preferences?.favouriteRegions ?? []}
-                onChange={(v) => updatePreferences({ favouriteRegions: v })}
-                max={5}
-                listMode
-                allOptionLabel="I like them all"
-              />
-              <View style={styles.customRow}>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Other — type a region"
-                  placeholderTextColor="rgba(255,255,255,0.30)"
-                  value={customRegion}
-                  onChangeText={setCustomRegion}
-                  onSubmitEditing={handleAddCustomRegion}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity
-                  style={[styles.customAdd, (!customRegion.trim() || (preferences?.favouriteRegions ?? []).length >= 5) && { opacity: 0.35 }]}
-                  onPress={handleAddCustomRegion}
-                  disabled={!customRegion.trim() || (preferences?.favouriteRegions ?? []).length >= 5}
-                >
-                  <Text style={styles.customAddText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Regional Preference"
+            hint="Select up to 5"
+            options={WINE_REGIONS}
+            selected={preferences?.favouriteRegions ?? []}
+            onChange={(v) => updatePreferences({ favouriteRegions: v })}
+            max={5}
+            noneLabel="I like them all"
+            customAddPlaceholder="Other — type a region"
+          />
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setVarietalOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="leaf-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Varietal Preferences <Text style={styles.questionMuted}>(select up to 5)</Text></Text>
-          </TouchableOpacity>
-          {!varietalOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.favouriteGrapes ?? []).length > 0
-                ? (preferences?.favouriteGrapes ?? []).join(', ')
-                : 'I like them all'}
-            </Text>
-          )}
-          {varietalOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={GRAPE_VARIETIES}
-                selected={preferences?.favouriteGrapes ?? []}
-                onChange={(v) => updatePreferences({ favouriteGrapes: v })}
-                max={5}
-                listMode
-                allOptionLabel="I like them all"
-              />
-              <View style={styles.customRow}>
-                <TextInput
-                  style={styles.customInput}
-                  placeholder="Other — type a variety"
-                  placeholderTextColor="rgba(255,255,255,0.30)"
-                  value={customGrape}
-                  onChangeText={setCustomGrape}
-                  onSubmitEditing={handleAddCustomGrape}
-                  returnKeyType="done"
-                />
-                <TouchableOpacity
-                  style={[styles.customAdd, (!customGrape.trim() || (preferences?.favouriteGrapes ?? []).length >= 5) && { opacity: 0.35 }]}
-                  onPress={handleAddCustomGrape}
-                  disabled={!customGrape.trim() || (preferences?.favouriteGrapes ?? []).length >= 5}
-                >
-                  <Text style={styles.customAddText}>Add</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Varietal Preferences"
+            hint="Select up to 5"
+            options={GRAPE_VARIETIES}
+            selected={preferences?.favouriteGrapes ?? []}
+            onChange={(v) => updatePreferences({ favouriteGrapes: v })}
+            max={5}
+            noneLabel="I like them all"
+            customAddPlaceholder="Other — type a variety"
+          />
         </View>
 
         <View style={styles.section}>
@@ -327,10 +204,29 @@ export default function WineProfileScreen() {
           )}
         </View>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Wine Profile</Text>
-        </TouchableOpacity>
-        {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
+        {isOnboarding ? (
+          <>
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={() => router.replace('/profile/recipe?onboarding=1')}
+            >
+              <Text style={styles.saveButtonText}>Save & Continue</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.skipLink}
+              onPress={() => router.replace('/profile/recipe?onboarding=1')}
+            >
+              <Text style={styles.skipLinkText}>Not now</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              <Text style={styles.saveButtonText}>Save Wine Preferences</Text>
+            </TouchableOpacity>
+            {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -354,9 +250,11 @@ const styles = StyleSheet.create({
   customInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 15 },
   customAdd: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   customAddText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.text },
-  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
+  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
+  skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
+  skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
   softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
   softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 2, textAlign: 'center' },

@@ -83,7 +83,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Your tasting note (optional)</Text>
+            <Text style={styles.sectionLabel}>Your tasting note</Text>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={tastingNote}
@@ -95,7 +95,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               textAlignVertical="top"
             />
 
-            <Text style={styles.sectionLabel}>Other observations (optional)</Text>
+            <Text style={styles.sectionLabel}>Other observations</Text>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={otherObservations}
@@ -107,7 +107,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               textAlignVertical="top"
             />
 
-            <Text style={styles.sectionLabel}>Your score (optional)</Text>
+            <Text style={styles.sectionLabel}>Your score</Text>
             <TextInput
               style={[styles.input, styles.scoreInput]}
               value={userScore != null ? String(userScore) : ''}

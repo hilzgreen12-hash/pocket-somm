@@ -9,6 +9,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { ChosenRecipeModal } from '../../src/components/ChosenRecipeModal';
+import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { Pairing, CellarWine, WineDetailsComplete } from '../../src/types/wine';
 
@@ -87,6 +88,7 @@ export default function ChefResultsScreen() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
   const [renderedAt] = useState(() => new Date().toISOString());
   const [reviewingPairing, setReviewingPairing] = useState<Pairing | null>(null);
+  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
 
   const stampDateSource = savedAt || renderedAt;
   const stampDate = stampDateSource
@@ -101,6 +103,10 @@ export default function ChefResultsScreen() {
 
   async function handleSaveToArchive() {
     if (!wineDetailsConfirmed || saveState !== 'idle') return;
+    if (!session) {
+      setSignInPromptVisible(true);
+      return;
+    }
     setSaveState('saving');
     try {
       await saveLabelSession.mutateAsync({
@@ -246,6 +252,14 @@ export default function ChefResultsScreen() {
         visible={reviewingPairing !== null}
         onClose={() => setReviewingPairing(null)}
         onSaved={() => setReviewingPairing(null)}
+      />
+
+      <SignInPromptModal
+        visible={signInPromptVisible}
+        onDismiss={() => setSignInPromptVisible(false)}
+        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
+        onContinue={() => setSignInPromptVisible(false)}
       />
     </ScrollView>
   );

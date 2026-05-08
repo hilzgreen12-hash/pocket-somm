@@ -7,6 +7,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
+import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
@@ -96,6 +97,7 @@ export default function PairingResultsScreen() {
   const [bottleCount, setBottleCount] = useState('1');
   const [archiving, setArchiving] = useState(false);
   const [archivedSuccess, setArchivedSuccess] = useState<{ count: number; recName: string } | null>(null);
+  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
 
   const stampDateSource = savedAt || renderedAt;
   const stampDate = stampDateSource
@@ -175,6 +177,10 @@ export default function PairingResultsScreen() {
 
   async function handleSaveToArchive() {
     if (saveState !== 'idle' || !dish) return;
+    if (!session) {
+      setSignInPromptVisible(true);
+      return;
+    }
     setSaveState('saving');
     try {
       await savePairingSession.mutateAsync({
@@ -291,6 +297,14 @@ export default function PairingResultsScreen() {
           </View>
         </View>
       </Modal>
+
+      <SignInPromptModal
+        visible={signInPromptVisible}
+        onDismiss={() => setSignInPromptVisible(false)}
+        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
+        onContinue={() => setSignInPromptVisible(false)}
+      />
     </ScrollView>
   );
 }

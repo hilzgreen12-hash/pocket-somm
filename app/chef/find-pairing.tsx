@@ -100,7 +100,16 @@ export default function FindPairingScreen() {
 
       <Text style={styles.profileNote}>
         Vinster will use your wine profile settings to guide its results.{' '}
-        <Text style={styles.profileNoteLink} onPress={() => router.push('/profile/recipe')}>Update profile settings</Text>
+        <Text
+          style={styles.profileNoteLink}
+          onPress={() => {
+            if (!session) {
+              setSignInPromptVisible(true);
+              return;
+            }
+            router.push('/profile/recipe');
+          }}
+        >Update profile settings</Text>
       </Text>
 
       <Text style={styles.label}>What are you cooking?</Text>

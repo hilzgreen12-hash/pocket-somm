@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Alert } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
@@ -59,7 +59,15 @@ export default function ResultsScreen() {
   function handleSaveToArchive() {
     if (!recommendation || !extractedWines || hasSaved.current) return;
     hasSaved.current = true;
-    autoSave.mutate({ extractedWines, recommendation, restaurantNameOverride: restaurantName });
+    autoSave.mutate(
+      { extractedWines, recommendation, restaurantNameOverride: restaurantName },
+      {
+        onError: (err) => {
+          hasSaved.current = false;
+          Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+        },
+      },
+    );
   }
 
   const isSaved = !!autoSave.data;
@@ -127,11 +135,21 @@ export default function ResultsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        {isFromHistory && (
-          <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-            <Text style={styles.backLink}>Back</Text>
-          </TouchableOpacity>
-        )}
+        <TouchableOpacity
+          onPress={() => {
+            if (isFromHistory) {
+              router.back();
+            } else {
+              // Skip the camera/preview/extracting stack on the way back —
+              // jump straight to the List tab.
+              reset();
+              router.replace('/(tabs)/scan');
+            }
+          }}
+          style={styles.backRow}
+        >
+          <Text style={styles.backLink}>Back</Text>
+        </TouchableOpacity>
         {(stampDate || stampLocation) && (
           <View style={styles.stampRow}>
             {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
@@ -287,33 +305,27 @@ export default function ResultsScreen() {
         </TouchableOpacity>
       )}
 
+      {/* Save to Archive is always available — fresh scans show the call-to-
+          action; history loads default to "Saved ✓" so the user has a clear
+          confirmation that the result is in their archive. */}
+      <TouchableOpacity
+        style={[styles.saveButton, (isSaved || isSaving || isFromHistory) && styles.saveButtonDone]}
+        onPress={handleSaveToArchive}
+        disabled={isSaved || isSaving || isFromHistory}
+        activeOpacity={0.8}
+      >
+        <Text style={[styles.saveButtonText, (isSaved || isSaving || isFromHistory) && styles.saveButtonTextDone]}>
+          {(isSaved || isFromHistory) ? 'Saved ✓' : isSaving ? 'Saving…' : 'Save to Archive'}
+        </Text>
+      </TouchableOpacity>
+
       {!isFromHistory && (
-        <>
-          <TouchableOpacity
-            style={[styles.saveButton, (isSaved || isSaving) && styles.saveButtonDone]}
-            onPress={handleSaveToArchive}
-            disabled={isSaved || isSaving}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.saveButtonText, (isSaved || isSaving) && styles.saveButtonTextDone]}>
-              {isSaved ? 'Saved ✓' : isSaving ? 'Saving…' : 'Save to Archive'}
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.alternativeButton}
-            onPress={handleAlternativeList}
-          >
-            <Text style={styles.alternativeText}>Generate An Alternative List</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.newScanButton}
-            onPress={() => { reset(); router.replace('/(tabs)/scan'); }}
-          >
-            <Text style={styles.newScanText}>Start Another Search</Text>
-          </TouchableOpacity>
-        </>
+        <TouchableOpacity
+          style={styles.alternativeButton}
+          onPress={handleAlternativeList}
+        >
+          <Text style={styles.alternativeText}>Generate An Alternative List</Text>
+        </TouchableOpacity>
       )}
 
       <ChosenWineModal

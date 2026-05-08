@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { useWishList } from '../../src/hooks/useCellar';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -133,21 +133,28 @@ function WishListCard({ wine, onMoveToCellar, onDelete, onUpdateNote, onUpdateLo
   );
 }
 
+type ConfirmAction =
+  | { kind: 'move'; id: string }
+  | { kind: 'delete'; id: string }
+  | null;
+
 export default function WishListScreen() {
   const { wines, isLoading, updateWine, moveTocellar, deleteWine } = useWishList();
+  const [confirm, setConfirm] = useState<ConfirmAction>(null);
 
   function handleMoveToCellar(id: string) {
-    Alert.alert('Move to Cellar', 'Add this wine to your cellar?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Add to Cellar', onPress: () => moveTocellar.mutate(id) },
-    ]);
+    setConfirm({ kind: 'move', id });
   }
 
   function handleDelete(id: string) {
-    Alert.alert('Remove', 'Remove this wine from your wish list?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: () => deleteWine.mutate(id) },
-    ]);
+    setConfirm({ kind: 'delete', id });
+  }
+
+  function handleConfirm() {
+    if (!confirm) return;
+    if (confirm.kind === 'move') moveTocellar.mutate(confirm.id);
+    if (confirm.kind === 'delete') deleteWine.mutate(confirm.id);
+    setConfirm(null);
   }
 
   function handleUpdateNote(id: string, note: string) {
@@ -197,6 +204,32 @@ export default function WishListScreen() {
           ))}
         </ScrollView>
       )}
+
+      <Modal visible={!!confirm} transparent animationType="fade" onRequestClose={() => setConfirm(null)}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setConfirm(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
+            <Text style={styles.confirmTitle}>
+              {confirm?.kind === 'move' ? 'Move to cellar?' : 'Remove from wish list?'}
+            </Text>
+            <Text style={styles.confirmBody}>
+              {confirm?.kind === 'move'
+                ? 'Add this wine to your cellar.'
+                : 'This will remove the wine from your wish list. You can add it again any time.'}
+            </Text>
+            <TouchableOpacity
+              style={[styles.confirmButton, confirm?.kind === 'delete' && styles.confirmButtonDanger]}
+              onPress={handleConfirm}
+            >
+              <Text style={[styles.confirmButtonText, confirm?.kind === 'delete' && styles.confirmButtonTextDanger]}>
+                {confirm?.kind === 'move' ? 'Add to Cellar' : 'Remove'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setConfirm(null)} style={styles.confirmCancel}>
+              <Text style={styles.confirmCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -232,4 +265,14 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  confirmTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  confirmBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  confirmButtonDanger: { borderColor: colors.error },
+  confirmButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  confirmButtonTextDanger: { color: colors.error },
+  confirmCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  confirmCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
 });

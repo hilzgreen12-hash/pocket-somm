@@ -4,9 +4,9 @@ import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, Layout
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { ChipPicker } from '../../src/components/preferences/ChipPicker';
+import { DropdownMultiSelect } from '../../src/components/preferences/DropdownMultiSelect';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, spacing } from '../../src/constants/theme';
 
@@ -20,18 +20,11 @@ const REGIONAL_CUISINES = [
 const NUTRITIONAL_OPTIONS = ['Low Calorie', 'High Protein', 'Low Salt', 'High Fibre'];
 
 export default function RecipeProfileScreen() {
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
+  const isOnboarding = onboarding === '1';
   const { preferences, updatePreferences } = usePreferences();
-  const [dietaryOpen, setDietaryOpen] = useState(false);
-  const [allergyOpen, setAllergyOpen] = useState(false);
-  const [regionalOpen, setRegionalOpen] = useState(false);
-  const [nutritionalOpen, setNutritionalOpen] = useState(false);
   const [concernsDraft, setConcernsDraft] = useState(preferences?.specificConcerns ?? '');
   const [saved, setSaved] = useState(false);
-
-  function toggle(setter: React.Dispatch<React.SetStateAction<boolean>>) {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setter((v) => !v);
-  }
 
   useEffect(() => {
     setConcernsDraft(preferences?.specificConcerns ?? '');
@@ -53,56 +46,26 @@ export default function RecipeProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.profileIntro}>
-          <Text style={styles.profileHeading}>Recipe Profile</Text>
+          <Text style={styles.profileHeading}>Recipe Preferences</Text>
           <Text style={styles.profileBody}>Set your recipe preferences so Vinster can generate the best recipe and food pairing recommendations for you — over time your food choices will inform our guidance, making our suggestions even more tailored. You can see what we've learned about you so far at the bottom of this page.</Text>
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setDietaryOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Dietary Needs</Text>
-          </TouchableOpacity>
-          {!dietaryOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.dietaryNeeds ?? []).length > 0
-                ? (preferences?.dietaryNeeds ?? []).join(', ')
-                : 'None selected'}
-            </Text>
-          )}
-          {dietaryOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={['Vegetarian', 'Vegan', 'Pescatarian']}
-                selected={preferences?.dietaryNeeds ?? []}
-                onChange={(v) => updatePreferences({ dietaryNeeds: v })}
-                allOptionLabel="None"
-              />
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Dietary Needs"
+            options={['Vegetarian', 'Vegan', 'Pescatarian']}
+            selected={preferences?.dietaryNeeds ?? []}
+            onChange={(v) => updatePreferences({ dietaryNeeds: v })}
+          />
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setAllergyOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="options-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Allergy Risk</Text>
-          </TouchableOpacity>
-          {!allergyOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.allergyRisks ?? []).length > 0
-                ? (preferences?.allergyRisks ?? []).join(', ')
-                : 'None selected'}
-            </Text>
-          )}
-          {allergyOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={['Nut Free', 'Dairy Free', 'Gluten Free']}
-                selected={preferences?.allergyRisks ?? []}
-                onChange={(v) => updatePreferences({ allergyRisks: v })}
-                allOptionLabel="None"
-              />
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Allergy Risk"
+            options={['Nut Free', 'Dairy Free', 'Gluten Free']}
+            selected={preferences?.allergyRisks ?? []}
+            onChange={(v) => updatePreferences({ allergyRisks: v })}
+          />
         </View>
 
         <View style={styles.section}>
@@ -129,57 +92,48 @@ export default function RecipeProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setRegionalOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="globe-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Regional Preferences</Text>
-          </TouchableOpacity>
-          {!regionalOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.regionalPreferences ?? []).length > 0
-                ? (preferences?.regionalPreferences ?? []).join(', ')
-                : 'None selected'}
-            </Text>
-          )}
-          {regionalOpen && (
-            <View style={styles.pickerWrap}>
-              <Text style={styles.helperText}>Pick up to 5 cuisines you enjoy.</Text>
-              <ChipPicker
-                options={REGIONAL_CUISINES}
-                selected={preferences?.regionalPreferences ?? []}
-                onChange={(v) => updatePreferences({ regionalPreferences: v })}
-                max={5}
-              />
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Regional Preferences"
+            hint="Pick up to 5 cuisines you enjoy."
+            options={REGIONAL_CUISINES}
+            selected={preferences?.regionalPreferences ?? []}
+            onChange={(v) => updatePreferences({ regionalPreferences: v })}
+            max={5}
+          />
         </View>
 
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setNutritionalOpen)} activeOpacity={0.7} style={styles.questionRow}>
-            <Ionicons name="leaf-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Nutritional Preferences</Text>
-          </TouchableOpacity>
-          {!nutritionalOpen && (
-            <Text style={styles.selectionSummary}>
-              {(preferences?.nutritionalPreferences ?? []).length > 0
-                ? (preferences?.nutritionalPreferences ?? []).join(', ')
-                : 'None selected'}
-            </Text>
-          )}
-          {nutritionalOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={NUTRITIONAL_OPTIONS}
-                selected={preferences?.nutritionalPreferences ?? []}
-                onChange={(v) => updatePreferences({ nutritionalPreferences: v })}
-              />
-            </View>
-          )}
+          <DropdownMultiSelect
+            label="Nutritional Preferences"
+            options={NUTRITIONAL_OPTIONS}
+            selected={preferences?.nutritionalPreferences ?? []}
+            onChange={(v) => updatePreferences({ nutritionalPreferences: v })}
+          />
         </View>
 
-        <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Save Recipe Profile</Text>
-        </TouchableOpacity>
-        {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
+        {isOnboarding ? (
+          <>
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={() => router.replace('/(tabs)/scan')}
+            >
+              <Text style={styles.saveButtonText}>Save & Finish</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.skipLink}
+              onPress={() => router.replace('/(tabs)/scan')}
+            >
+              <Text style={styles.skipLinkText}>Not now</Text>
+            </TouchableOpacity>
+          </>
+        ) : (
+          <>
+            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
+              <Text style={styles.saveButtonText}>Save Recipe Preferences</Text>
+            </TouchableOpacity>
+            {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
+          </>
+        )}
       </ScrollView>
     </View>
   );
@@ -198,9 +152,11 @@ const styles = StyleSheet.create({
   question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: colors.text },
   selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: 'rgba(255,255,255,0.40)', marginBottom: spacing.sm },
   pickerWrap: { marginTop: spacing.sm },
-  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
+  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
+  skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
+  skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   helperText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },
   concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },

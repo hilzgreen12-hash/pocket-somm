@@ -161,6 +161,13 @@ export default function LabelResultsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+      <TouchableOpacity
+        style={styles.backRow}
+        onPress={() => { reset(); router.replace('/(tabs)/cellar'); }}
+      >
+        <Text style={styles.backLink}>Back</Text>
+      </TouchableOpacity>
+
       <View style={styles.header}>
         <Text style={styles.producer}>{wine.producer}</Text>
         {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
@@ -288,6 +295,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
+  backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm, alignSelf: 'flex-start' },
+  backLink: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   producer: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   wineName: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, marginTop: 2 },

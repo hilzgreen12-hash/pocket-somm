@@ -2,29 +2,38 @@ import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
-import { usePreferences } from '../src/hooks/usePreferences';
 
 export default function Index() {
   const { session, loading } = useAuth();
-  const { preferences, prefsLoading, prefsError } = usePreferences();
   const [hasLaunched, setHasLaunched] = useState<boolean | null>(null);
   const [tourSeen, setTourSeen] = useState<boolean | null>(null);
 
+  // Read both keys whenever the session changes so a fresh sign-up on a
+  // device that's previously seen the tour still triggers the tour for the
+  // new account. Tour-seen is keyed per user_id.
   useEffect(() => {
-    AsyncStorage.multiGet(['hasLaunched', 'vinster_tour_seen']).then(([launched, tour]) => {
-      setHasLaunched(launched[1] === 'true');
-      setTourSeen(tour[1] === 'true');
-    });
-  }, []);
+    let cancelled = false;
+    (async () => {
+      const [launchedRaw] = await Promise.all([AsyncStorage.getItem('hasLaunched')]);
+      if (cancelled) return;
+      setHasLaunched(launchedRaw === 'true');
 
-  if (loading || hasLaunched === null || tourSeen === null || (session && prefsLoading)) return null;
+      if (session?.user.id) {
+        const tourRaw = await AsyncStorage.getItem(`vinster_tour_seen_${session.user.id}`);
+        if (cancelled) return;
+        setTourSeen(tourRaw === 'true');
+      } else {
+        setTourSeen(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [session?.user.id]);
+
+  if (loading || hasLaunched === null || tourSeen === null) return null;
 
   // Signed-in users
   if (session) {
-    // Show the 3-screen tour once on first signed-in visit before any
-    // preferences setup or main app routing.
     if (!tourSeen) return <Redirect href="/onboarding-tour" />;
-    if (!prefsError && !preferences) return <Redirect href="/(tabs)/welcome" />;
     return <Redirect href="/(tabs)/scan" />;
   }
 
