@@ -3,7 +3,7 @@ export type WineType = 'red' | 'white' | 'rose' | 'sparkling';
 export interface UserPreferences {
   wineTypes: WineType[];
   styleProfiles: string[];
-  defaultBudget: number;
+  defaultBudget: number | null;
   defaultCurrency: string;
   favouriteRegions: string[];
   favouriteGrapes: string[];

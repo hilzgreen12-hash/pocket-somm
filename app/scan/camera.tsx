@@ -12,7 +12,7 @@ export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const { setImage } = useScanStore();
-  const [focusPoint, setFocusPoint] = useState<{ x: number; y: number } | undefined>(undefined);
+  const [autofocus, setAutofocus] = useState<'on' | 'off'>('on');
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);
 
   if (!permission) return <View style={styles.container} />;
@@ -21,9 +21,12 @@ export default function CameraScreen() {
     return <PermissionScreen onRequest={requestPermission} />;
   }
 
-  function handleTap(event: { nativeEvent: { locationX: number; locationY: number } }) {
-    const { locationX: x, locationY: y } = event.nativeEvent;
-    setFocusPoint({ x, y });
+  function handleTap() {
+    // expo-camera's CameraView doesn't expose a "focus at point" API, but
+    // toggling the autofocus prop forces the camera to re-acquire focus.
+    // Brief flicker off → on gives the user a tactile "tap to refocus".
+    setAutofocus('off');
+    setTimeout(() => setAutofocus('on'), 50);
   }
 
   async function handleCapture() {
@@ -109,7 +112,7 @@ export default function CameraScreen() {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing="back"
-        autofocus="on"
+        autofocus={autofocus}
         focusable
         onTouchEnd={handleTap}
       />
