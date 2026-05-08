@@ -4,7 +4,9 @@ import { router } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
+import { useAuth } from '../../src/hooks/useAuth';
 import { getSlotAssignments } from '../../src/api/racks';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
 import { inferCountry } from '../../src/utils/wineCountry';
@@ -25,6 +27,7 @@ const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
 type FilterField = 'rack' | 'country' | 'colour' | 'sort' | null;
 
 export default function FullCellarListScreen() {
+  const { session } = useAuth();
   const { wines, isLoading } = useCellar();
   const { racks } = useRacks();
 
@@ -150,6 +153,14 @@ export default function FullCellarListScreen() {
         <View style={{ width: 40 }} />
       </View>
 
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your cellar"
+          body="Track every bottle in your collection — sign in to see your full cellar list."
+        />
+      ) : (
+        <>
+
       {/* Summary row */}
       <View style={styles.summaryRow}>
         <Text style={styles.summaryText}>
@@ -210,6 +221,8 @@ export default function FullCellarListScreen() {
             );
           })}
         </ScrollView>
+      )}
+        </>
       )}
 
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>

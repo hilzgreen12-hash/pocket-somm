@@ -41,6 +41,9 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
   const difficulty = filters.difficulty as string | undefined;
   const difficultyBlock = difficulty
     ? `\nRecipe Difficulty: ${difficulty} — all three recipes must match this difficulty level. "Super Simple" means minimal ingredients and steps, ready in under 30 minutes. "Easy to Moderate" means accessible home cooking with some technique. "Challenging" means restaurant-quality dishes requiring skill and precision. "Very Technical" means advanced culinary techniques such as sous vide, fermentation, complex sauces, or multi-stage preparations.\n`
+    : `\nRecipe Difficulty: NOT specified by the user. To suit any cook, return three recipes that span DIFFERENT difficulty levels — one Super Simple (minimal ingredients, under 30 minutes), one Easy to Moderate (accessible home cooking with some technique), and one Challenging (restaurant-quality, skill and precision required). The diversity is important so we don't assume the user's level.\n`;
+  const diversityBlock = !difficulty
+    ? '\nIMPORTANT: vary the difficulty across the three recipes. Don\'t cluster all three at the same skill level — give the user genuine choice.\n'
     : '';
 
   const timeConsideration = filters.timeConsideration as string | undefined;
@@ -71,7 +74,7 @@ Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}${softBlock}${difficultyBlock}${timeBlock}
+${constraintBlock}${softBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:

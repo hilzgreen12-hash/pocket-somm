@@ -10,6 +10,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import type { CellarWine } from '../../src/types/wine';
 
 const CONCURRENCY = 3;
@@ -203,7 +204,12 @@ export default function CellarStatsScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {wines.length === 0 ? (
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your stats"
+          body="Cellar statistics live with your account — sign in to see them."
+        />
+      ) : wines.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Your cellar is empty</Text>
           <Text style={styles.emptyBody}>Add a wine to start seeing your cellar statistics.</Text>

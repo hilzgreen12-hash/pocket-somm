@@ -222,9 +222,16 @@ export default function PersonalityScreen() {
             <Text style={styles.backText}>← Back</Text>
           </TouchableOpacity>
           {text ? (
-            <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
-              <Text style={styles.shareText}>+ SHARE</Text>
-            </TouchableOpacity>
+            <View style={styles.topRightStack}>
+              <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
+                <Text style={styles.shareText}>+ SHARE</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleUploadToCommunity} disabled={publishState !== 'idle'} style={styles.postLinkBtn} activeOpacity={0.7}>
+                <Text style={styles.postLinkText}>
+                  {publishState === 'saved' ? 'posted ✓' : publishState === 'saving' ? 'posting…' : 'post to community'}
+                </Text>
+              </TouchableOpacity>
+            </View>
           ) : null}
         </View>
 
@@ -267,17 +274,6 @@ export default function PersonalityScreen() {
             </View>
 
             <TouchableOpacity
-              style={[styles.uploadBtn, publishState !== 'idle' && styles.uploadBtnDone]}
-              onPress={handleUploadToCommunity}
-              disabled={publishState !== 'idle'}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.uploadBtnText}>
-                {publishState === 'saved' ? 'Uploaded ✓' : publishState === 'saving' ? 'Uploading…' : 'Upload to Community Profile'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
               onPress={() => router.push({ pathname: '/profile/personality-archive', params: { category: cat } })}
               style={styles.archiveLink}
               activeOpacity={0.7}
@@ -316,7 +312,10 @@ export default function PersonalityScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  topRightStack: { alignItems: 'flex-end', gap: 4 },
+  postLinkBtn: { paddingVertical: 2, paddingHorizontal: 8 },
+  postLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 12, color: colors.gold, textDecorationLine: 'underline' },
   backRow: {},
   backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   shareBtn: { paddingVertical: 4, paddingHorizontal: 8 },
@@ -335,9 +334,6 @@ const styles = StyleSheet.create({
   sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
   sketchTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
   sketchText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 26 },
-  uploadBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
-  uploadBtnDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  uploadBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
   archiveLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   offscreenShareWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },

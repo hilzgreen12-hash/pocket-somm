@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Alert,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
@@ -70,16 +70,20 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
 
   async function handleSave() {
     if (!wine || !session) return;
-    await save.mutateAsync({
-      wine,
-      restaurantName: restaurant,
-      city,
-      tastingNote,
-      otherObservations,
-      userScore,
-    });
-    setSaved(true);
-    onSaved();
+    try {
+      await save.mutateAsync({
+        wine,
+        restaurantName: restaurant,
+        city,
+        tastingNote,
+        otherObservations,
+        userScore,
+      });
+      setSaved(true);
+      onSaved();
+    } catch (err) {
+      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+    }
   }
 
   async function handleAddToWishList() {

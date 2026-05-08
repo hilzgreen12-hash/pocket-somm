@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,11 +12,6 @@ interface CommunityProfileRow {
   wine_personality: string | null;
   recipe_personality: string | null;
   updated_at: string;
-}
-
-interface PrivateCache {
-  last_wine_personality: string | null;
-  last_recipe_personality: string | null;
 }
 
 export default function CommunityProfileScreen() {
@@ -42,44 +36,6 @@ export default function CommunityProfileScreen() {
     },
   });
 
-  // Pulled from the user's private profile — generated personalities the
-  // user can publish to the community.
-  const { data: cached, isLoading: cacheLoading } = useQuery({
-    queryKey: ['community-personality-cache', session?.user.id],
-    enabled: !!session?.user.id,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('last_wine_personality, last_recipe_personality')
-        .eq('user_id', session!.user.id)
-        .maybeSingle();
-      return (data ?? { last_wine_personality: null, last_recipe_personality: null }) as PrivateCache;
-    },
-  });
-
-  const [savingWine, setSavingWine] = useState(false);
-  const [savingRecipe, setSavingRecipe] = useState(false);
-
-  async function publish(field: 'wine_personality' | 'recipe_personality', text: string) {
-    if (!session?.user.id) return;
-    const setter = field === 'wine_personality' ? setSavingWine : setSavingRecipe;
-    setter(true);
-    try {
-      const { error } = await supabase.from('community_profiles').upsert({
-        user_id: session.user.id,
-        username,
-        [field]: text,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      qc.invalidateQueries({ queryKey: ['community-profile', session.user.id] });
-    } catch (err: any) {
-      Alert.alert('Could not publish', err?.message || 'Please try again.');
-    } finally {
-      setter(false);
-    }
-  }
-
   async function unpublish(field: 'wine_personality' | 'recipe_personality') {
     if (!session?.user.id) return;
     try {
@@ -102,7 +58,7 @@ export default function CommunityProfileScreen() {
     );
   }
 
-  const loading = pubLoading || cacheLoading;
+  const loading = pubLoading;
 
   return (
     <View style={styles.container}>
@@ -113,7 +69,7 @@ export default function CommunityProfileScreen() {
 
         <View style={styles.intro}>
           <Text style={styles.heading}>Your Community Profile</Text>
-          <Text style={styles.subheading}>This is what other Vinster users see when they come across your reviews. Your username is set in Account; your personalities are generated from your profile in Wine Profile and Restaurant Reviews.</Text>
+          <Text style={styles.subheading}>This is what other Vinster users see when they come across your reviews. Your username can be edited in your account and your personality sketches can be uploaded from Your Profile.</Text>
         </View>
 
         {/* Username */}
@@ -129,26 +85,18 @@ export default function CommunityProfileScreen() {
           </View>
         ) : (
           <>
-            {/* Wine personality — generated from Profile, publishable here */}
+            {/* Wine personality — posted from the user's Profile screen */}
             <PersonalityBlock
               title="Wine personality"
-              cachedText={cached?.last_wine_personality ?? null}
               publishedText={published?.wine_personality ?? null}
-              onPublish={(t) => publish('wine_personality', t)}
               onUnpublish={() => unpublish('wine_personality')}
-              saving={savingWine}
-              generateRoute="/profile/personality?category=wine"
             />
 
-            {/* Chef personality — generated from Profile, publishable here */}
+            {/* Chef personality — posted from the user's Profile screen */}
             <PersonalityBlock
               title="Chef personality"
-              cachedText={cached?.last_recipe_personality ?? null}
               publishedText={published?.recipe_personality ?? null}
-              onPublish={(t) => publish('recipe_personality', t)}
               onUnpublish={() => unpublish('recipe_personality')}
-              saving={savingRecipe}
-              generateRoute="/profile/personality?category=recipe"
             />
           </>
         )}
@@ -159,78 +107,36 @@ export default function CommunityProfileScreen() {
 
 function PersonalityBlock({
   title,
-  cachedText,
   publishedText,
-  onPublish,
   onUnpublish,
-  saving,
-  generateRoute,
 }: {
   title: string;
-  cachedText: string | null;
   publishedText: string | null;
-  onPublish: (text: string) => void;
   onUnpublish: () => void;
-  saving: boolean;
-  generateRoute: string;
 }) {
-  const isLatestPublished = !!publishedText && publishedText === cachedText;
   return (
     <View style={styles.section}>
       <Text style={styles.sectionLabel}>{title}</Text>
 
       {publishedText ? (
-        <View style={styles.publishedCard}>
-          <Text style={styles.publishedLabel}>Published</Text>
-          {(() => {
-            const { title, body } = splitPersonality(publishedText);
-            return (
-              <>
-                {title ? <Text style={styles.publishedTitle}>{title}</Text> : null}
-                <Text style={styles.publishedText}>{body}</Text>
-              </>
-            );
-          })()}
-        </View>
-      ) : (
-        <Text style={styles.helper}>Not yet published to the community.</Text>
-      )}
-
-      {cachedText ? (
         <>
-          {!isLatestPublished && (
-            <View style={styles.latestCard}>
-              <Text style={styles.latestLabel}>Latest from Vinster</Text>
-              {(() => {
-                const { title, body } = splitPersonality(cachedText);
-                return (
-                  <>
-                    {title ? <Text style={styles.latestTitle}>{title}</Text> : null}
-                    <Text style={styles.latestText}>{body}</Text>
-                  </>
-                );
-              })()}
-            </View>
-          )}
-          <TouchableOpacity
-            style={[styles.publishBtn, saving && styles.btnDisabled]}
-            onPress={() => onPublish(cachedText)}
-            disabled={saving || isLatestPublished}
-          >
-            <Text style={styles.publishBtnText}>
-              {saving ? 'Publishing…' : isLatestPublished ? 'Already published' : (publishedText ? 'Update with latest' : 'Publish to community')}
-            </Text>
+          <View style={styles.publishedCard}>
+            {(() => {
+              const { title: sketchTitle, body } = splitPersonality(publishedText);
+              return (
+                <>
+                  {sketchTitle ? <Text style={styles.publishedTitle}>{sketchTitle}</Text> : null}
+                  <Text style={styles.publishedText}>{body}</Text>
+                </>
+              );
+            })()}
+          </View>
+          <TouchableOpacity onPress={onUnpublish} style={styles.unpublishBtn}>
+            <Text style={styles.unpublishText}>Delete personality from your community profile</Text>
           </TouchableOpacity>
-          {publishedText && (
-            <TouchableOpacity onPress={onUnpublish} style={styles.unpublishBtn}>
-              <Text style={styles.unpublishText}>Unpublish</Text>
-            </TouchableOpacity>
-          )}
         </>
       ) : (
-        <TouchableOpacity style={styles.generateBtn} onPress={() => router.push(generateRoute as any)}>
-          <Text style={styles.generateBtnText}>Generate it now</Text>
-        </TouchableOpacity>
+        <Text style={styles.helper}>Not yet posted to your community profile. You can post it from Your Profile → Wine/Chef Personality.</Text>
       )}
     </View>
   );

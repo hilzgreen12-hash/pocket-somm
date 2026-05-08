@@ -94,27 +94,27 @@ export default function AccountScreen() {
     router.replace('/(auth)/sign-in');
   }
 
-  async function handleDeleteAccount() {
-    Alert.alert(
-      'Delete Account',
-      'This will permanently delete your account and all your data including your cellar, preferences and chosen wines. This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete Account',
-          style: 'destructive',
-          onPress: async () => {
-            const { error } = await supabase.functions.invoke('delete-account');
-            if (error) {
-              Alert.alert('Error', 'Could not delete your account. Please try again or contact support.');
-            } else {
-              await supabase.auth.signOut();
-              router.replace('/(auth)/sign-in');
-            }
-          },
-        },
-      ],
-    );
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  function handleDeleteAccount() {
+    setDeleteConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
+    setDeleting(true);
+    try {
+      const { error } = await supabase.functions.invoke('delete-account');
+      if (error) {
+        Alert.alert('Error', 'Could not delete your account. Please try again or contact support.');
+        return;
+      }
+      await supabase.auth.signOut();
+      router.replace('/(auth)/sign-in');
+    } finally {
+      setDeleting(false);
+      setDeleteConfirmOpen(false);
+    }
   }
 
   return (
@@ -218,8 +218,17 @@ export default function AccountScreen() {
 
       <View style={styles.divider} />
 
+      {!session && (
+        <TouchableOpacity
+          style={styles.signOutButton}
+          onPress={() => router.push('/(auth)/sign-in')}
+        >
+          <Text style={styles.signOutText}>Sign In</Text>
+        </TouchableOpacity>
+      )}
+
       <TouchableOpacity
-        style={styles.signOutButton}
+        style={[styles.signOutButton, !session && { marginTop: spacing.sm }]}
         onPress={() =>
           Alert.alert('Sign Out', 'Are you sure?', [
             { text: 'Cancel', style: 'cancel' },
@@ -233,6 +242,27 @@ export default function AccountScreen() {
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
         <Text style={styles.deleteText}>Delete Account</Text>
       </TouchableOpacity>
+
+      <Modal visible={deleteConfirmOpen} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteConfirmOpen(false)}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => !deleting && setDeleteConfirmOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
+            <Text style={styles.confirmTitle}>Delete account?</Text>
+            <Text style={styles.confirmBody}>
+              This will permanently delete your account and all your data — cellar, preferences, reviews, personality sketches, everything. There's no undo.
+            </Text>
+            <TouchableOpacity
+              style={[styles.confirmDangerBtn, deleting && styles.confirmDangerBtnDisabled]}
+              onPress={confirmDelete}
+              disabled={deleting}
+            >
+              <Text style={styles.confirmDangerBtnText}>{deleting ? 'Deleting…' : 'Delete permanently'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setDeleteConfirmOpen(false)} style={styles.confirmCancel} disabled={deleting}>
+              <Text style={styles.confirmCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
         <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setCurrencyOpen(false)}>
@@ -296,6 +326,15 @@ const styles = StyleSheet.create({
   signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginTop: spacing.xs, marginBottom: 6 },
   signOutText: { color: colors.gold, fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold' },
   deleteButton: { alignItems: 'center', paddingVertical: 4 },
+  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  confirmTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  confirmBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  confirmDangerBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  confirmDangerBtnDisabled: { opacity: 0.5 },
+  confirmDangerBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.error },
+  confirmCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  confirmCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
   deleteText: { color: colors.error, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', textDecorationLine: 'underline' },
   currencyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   currencySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420, padding: spacing.lg },

@@ -8,7 +8,9 @@ import { colors, spacing } from '../../src/constants/theme';
 
 export default function ProfileTab() {
   const { height } = useWindowDimensions();
-  const paddingTop = Math.max(60, height * 0.13);
+  // Profile content is dense (5 sections + footer) so we lift the header
+  // close to the safe-area to keep everything on one viewport.
+  const paddingTop = Math.max(40, height * 0.05);
   const { session } = useAuth();
   const [pendingRoute, setPendingRoute] = useState<string | null>(null);
 

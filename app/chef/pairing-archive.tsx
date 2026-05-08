@@ -2,6 +2,8 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-nati
 import { router } from 'expo-router';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
+import { useAuth } from '../../src/hooks/useAuth';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChefPairingSession } from '../../src/api/chef';
 
@@ -11,6 +13,7 @@ function formatDate(iso: string) {
 }
 
 export default function PairingArchiveScreen() {
+  const { session } = useAuth();
   const { sessions, isLoading } = useChefPairingHistory();
   const { setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
 
@@ -39,7 +42,12 @@ export default function PairingArchiveScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {isLoading ? null : sessions.length === 0 ? (
+      {!session ? (
+        <ArchiveSignInPrompt
+          title="Sign in to view your archive"
+          body="Save dish-to-wine pairings to your archive — sign in to keep them across sessions."
+        />
+      ) : isLoading ? null : sessions.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No archive yet</Text>
           <Text style={styles.emptyBody}>
