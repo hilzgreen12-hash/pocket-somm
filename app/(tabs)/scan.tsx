@@ -56,12 +56,12 @@ export default function ScanTab() {
       : `${styleProfiles.length} styles selected`
     : 'Any';
 
-  const [prefsLoaded, setPrefsLoaded] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [hasLastSearch, setHasLastSearch] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [signInPromptShown, setSignInPromptShown] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
+  const lastSyncedBudgetRef = useRef<number | null | undefined>(undefined);
 
   useFocusEffect(useCallback(() => {
     AsyncStorage.getItem('vinster_scan_history').then((raw) => {
@@ -69,12 +69,17 @@ export default function ScanTab() {
     });
   }, []));
 
+  // Sync the scan tab's budget to the profile default any time the
+  // profile default changes (first load, profile edit, account switch).
+  // Tracking the last-synced value avoids clobbering an in-progress
+  // local override on every render.
   useEffect(() => {
-    if (savedPreferences && !prefsLoaded) {
-      setBudget(savedPreferences.defaultBudget ?? null);
-      setPrefsLoaded(true);
+    const profileBudget = savedPreferences?.defaultBudget ?? null;
+    if (profileBudget !== lastSyncedBudgetRef.current) {
+      setBudget(profileBudget);
+      lastSyncedBudgetRef.current = profileBudget;
     }
-  }, [savedPreferences]);
+  }, [savedPreferences?.defaultBudget]);
 
   useEffect(() => {
     if (needsReset) {

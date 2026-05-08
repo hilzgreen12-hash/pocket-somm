@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -77,6 +77,11 @@ export default function RootLayout() {
       const refresh_token = (queryParams?.refresh_token as string | undefined) ?? fragmentParams.refresh_token;
       if (access_token && refresh_token) {
         await supabase.auth.setSession({ access_token, refresh_token });
+        // Bounce back through the index router so it re-evaluates with the
+        // fresh session — otherwise the user can land on the public welcome
+        // screen (because index already decided "no session" before we
+        // installed it) and miss the onboarding tour entirely.
+        router.replace('/');
         return;
       }
 
@@ -84,6 +89,7 @@ export default function RootLayout() {
       const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
       if (token_hash && type) {
         await supabase.auth.verifyOtp({ token_hash, type: type as any });
+        router.replace('/');
       }
     }
 

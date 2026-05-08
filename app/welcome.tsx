@@ -1,9 +1,21 @@
+import { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../src/hooks/useAuth';
 import { colors, spacing } from '../src/constants/theme';
 
 export default function WelcomeScreen() {
+  const { session } = useAuth();
+
+  // Backstop: if the deep-link handler installs a session AFTER this screen
+  // has rendered (typical for cold-start email-confirm flows), kick the
+  // user back to the index router so they pick up the right post-login
+  // path (tour → wine prefs → recipe prefs → list).
+  useEffect(() => {
+    if (session) router.replace('/');
+  }, [session]);
+
   async function handleGuest() {
     await AsyncStorage.setItem('hasLaunched', 'true');
     router.replace('/(tabs)/scan');
