@@ -137,6 +137,9 @@ export default function CellarWineDetail() {
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
   const [removeStep, setRemoveStep] = useState<'idle' | 'confirm' | 'success'>('idle');
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
+  const [addBottlesOpen, setAddBottlesOpen] = useState(false);
+  const [addBottlesCount, setAddBottlesCount] = useState('1');
+  const [addingBottles, setAddingBottles] = useState(false);
 
   const [findingPairings, setFindingPairings] = useState(false);
 
@@ -250,6 +253,27 @@ export default function CellarWineDetail() {
       showAlert({ title: 'Error', body: 'Could not record removal. Please try again.' });
     } finally {
       setRemoving(false);
+    }
+  }
+
+  async function handleAddBottles() {
+    const count = parseInt(addBottlesCount) || 0;
+    if (count < 1) {
+      showAlert({ title: 'Invalid', body: 'Enter at least 1 bottle to add.' });
+      return;
+    }
+    setAddingBottles(true);
+    try {
+      await updateWine.mutateAsync({
+        id: wine!.id,
+        updates: { quantity: wine!.quantity + count },
+      });
+      setAddBottlesOpen(false);
+      setAddBottlesCount('1');
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not add bottles. Please try again.' });
+    } finally {
+      setAddingBottles(false);
     }
   }
 
@@ -512,6 +536,11 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>In {wineRack.name} →</Text>
             </TouchableOpacity>
           )}
+          {!isArchived && (
+            <TouchableOpacity onPress={() => { setAddBottlesCount('1'); setAddBottlesOpen(true); }}>
+              <Text style={styles.statAction}>+ Add bottles</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Archive</Text>
@@ -678,6 +707,44 @@ export default function CellarWineDetail() {
           <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
         </TouchableOpacity>
       )}
+
+      <Modal
+        visible={addBottlesOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !addingBottles && setAddBottlesOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.archiveModalSheet}>
+            <Text style={styles.archiveModalTitle}>Add bottles</Text>
+            <Text style={styles.archiveModalWine}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
+
+            <Text style={styles.fieldLabel}>How many bottles to add?</Text>
+            <TextInput
+              style={styles.input}
+              value={addBottlesCount}
+              onChangeText={setAddBottlesCount}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <TouchableOpacity
+              style={[styles.removeBtn, { borderColor: colors.gold }, addingBottles && styles.buttonDisabled]}
+              onPress={handleAddBottles}
+              disabled={addingBottles}
+            >
+              <Text style={[styles.removeBtnText, { color: colors.gold }]}>
+                {addingBottles ? 'Adding…' : 'Add to Cellar'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setAddBottlesOpen(false)} style={styles.archiveModalCancel} disabled={addingBottles}>
+              <Text style={styles.archiveModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={archiveModalOpen}

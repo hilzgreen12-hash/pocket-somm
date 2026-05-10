@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
@@ -36,7 +36,7 @@ function DrinkingWindowBadge({ status, from, to }: { status: string; from: numbe
 export default function LabelResultsScreen() {
   const { wineDetailsConfirmed, intelligence, reset } = useLabelStore();
   const { session } = useAuth();
-  const { addWine } = useCellar();
+  const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
   const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType } = useRackStore();
   const { racks } = useRacks();
@@ -128,69 +128,129 @@ export default function LabelResultsScreen() {
     }
   }
 
-  async function handleAddToCellar() {
+  // Find an existing active cellar row for the same wine identity. Match
+  // on producer + wine_name + vintage (case-insensitive). Falls back to a
+  // SWAPPED match (producer↔wine_name) so OCR flips on boutique wines like
+  // Mullineux Schist still merge into the same entry.
+  // Avoids duplicate entries and avoids regenerating wine-intelligence
+  // (non-deterministic, can produce slightly different drinking windows).
+  const matchingExisting = useMemo(() => {
+    if (!wineDetailsConfirmed || !wines) return null;
+    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    const wantedProducer = norm(wineDetailsConfirmed.producer);
+    const wantedName = norm(wineDetailsConfirmed.wineName || wineDetailsConfirmed.producer);
+    const wantedVintage = (wineDetailsConfirmed.vintage ?? '').trim();
+    const exact = wines.find((w) =>
+      norm(w.producer) === wantedProducer &&
+      norm(w.wine_name) === wantedName &&
+      (w.vintage ?? '').trim() === wantedVintage
+    );
+    if (exact) return exact;
+    // Swapped match — OCR flipped producer and wine name on a previous scan.
+    if (wantedProducer && wantedName && wantedProducer !== wantedName) {
+      const swapped = wines.find((w) =>
+        norm(w.producer) === wantedName &&
+        norm(w.wine_name) === wantedProducer &&
+        (w.vintage ?? '').trim() === wantedVintage
+      );
+      if (swapped) return swapped;
+    }
+    return null;
+  }, [wineDetailsConfirmed, wines]);
+
+  // Single place that handles all post-save routing — used by both the new-
+  // entry path and the merge-with-existing path.
+  async function performSaveFlow(savedWineId: string) {
+    if (pendingSlot) {
+      const slots = computeSlots(
+        pendingSlot.row, pendingSlot.col,
+        pendingSlot.rows, pendingSlot.cols,
+        parseInt(quantity) || 1,
+        orientation
+      );
+      await assignSlots(pendingSlot.rackId, slots, savedWineId);
+      qc.invalidateQueries({ queryKey: ['rack-slots', pendingSlot.rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      setPendingSlot(null);
+      setAddingToCellar(false);
+      reset();
+      if (router.canGoBack()) router.dismiss(2);
+      else router.replace(`/cellar/rack/${pendingSlot.rackId}`);
+      return;
+    }
+
+    if (selectedRackId === '__new__') {
+      setPendingWineId(savedWineId);
+      setPendingStorageType('rack');
+      setAddingToCellar(false);
+      reset();
+      if (router.canGoBack()) router.dismiss(2);
+      else router.replace('/(tabs)/cellar');
+      router.push('/cellar/rack/camera');
+      return;
+    }
+
+    if (selectedRackId) {
+      setPendingWineId(savedWineId);
+      setAddingToCellar(false);
+      reset();
+      if (router.canGoBack()) router.dismiss(2);
+      else router.replace('/(tabs)/cellar');
+      router.push(`/cellar/rack/${selectedRackId}` as any);
+      return;
+    }
+
+    setAddingToCellar(false);
+    showAlert({ title: 'Added to cellar', body: `${wine.wineName ?? wine.producer} has been saved.` });
+  }
+
+  async function performNewEntry() {
     if (!session?.user.id) return;
     setSaving(true);
     try {
       const saved = await addWine.mutateAsync(buildWinePayload(session.user.id));
-
-      if (pendingSlot) {
-        const slots = computeSlots(
-          pendingSlot.row, pendingSlot.col,
-          pendingSlot.rows, pendingSlot.cols,
-          parseInt(quantity) || 1,
-          orientation
-        );
-        await assignSlots(pendingSlot.rackId, slots, saved.id);
-        qc.invalidateQueries({ queryKey: ['rack-slots', pendingSlot.rackId] });
-        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-        setPendingSlot(null);
-        setAddingToCellar(false);
-        reset();
-        // Pop label/camera + label/results off the stack so Back returns to
-        // the cellar list, not back into the scanner. router.replace left the
-        // camera screen lurking underneath, trapping the user in a back-loop.
-        if (router.canGoBack()) router.dismiss(2);
-        else router.replace(`/cellar/rack/${pendingSlot.rackId}`);
-        return;
-      }
-
-      // User picked "+ Create new rack" from the picker — kick off the
-      // rack-creation flow with the wine pre-flagged for placement. Once
-      // the new rack is built, pendingWineId is still set so the user can
-      // tap a slot to place this bottle.
-      if (selectedRackId === '__new__') {
-        setPendingWineId(saved.id);
-        setPendingStorageType('rack');
-        setAddingToCellar(false);
-        reset();
-        if (router.canGoBack()) router.dismiss(2);
-        else router.replace('/(tabs)/cellar');
-        router.push('/cellar/rack/camera');
-        return;
-      }
-
-      // User picked an existing rack from the picker — set the wine as
-      // pending and open that rack so they can place it directly. Stack
-      // ends up [cellar tab, rack] so Back from the rack returns to the
-      // Cellar tab.
-      if (selectedRackId) {
-        setPendingWineId(saved.id);
-        setAddingToCellar(false);
-        reset();
-        if (router.canGoBack()) router.dismiss(2);
-        else router.replace('/(tabs)/cellar');
-        router.push(`/cellar/rack/${selectedRackId}` as any);
-        return;
-      }
-
-      setAddingToCellar(false);
-      showAlert({ title: 'Added to cellar', body: `${wine.wineName ?? wine.producer} has been saved.` });
+      await performSaveFlow(saved.id);
     } catch (err) {
       showAlert({ title: 'Error', body: 'Could not save to cellar. Please try again.' });
     } finally {
       setSaving(false);
     }
+  }
+
+  async function performMerge() {
+    if (!matchingExisting) return;
+    const qty = parseInt(quantity) || 1;
+    setSaving(true);
+    try {
+      await updateWine.mutateAsync({
+        id: matchingExisting.id,
+        updates: { quantity: matchingExisting.quantity + qty },
+      });
+      await performSaveFlow(matchingExisting.id);
+    } catch (err) {
+      showAlert({ title: 'Error', body: 'Could not save to cellar. Please try again.' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddToCellar() {
+    if (!session?.user.id) return;
+    if (matchingExisting) {
+      const qty = parseInt(quantity) || 1;
+      const existingQty = matchingExisting.quantity;
+      showAlert({
+        title: 'Already in your cellar',
+        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${matchingExisting.wine_name}${matchingExisting.vintage ? ` ${matchingExisting.vintage}` : ''}. Add ${qty} more to that entry, or save as a separate one?`,
+        buttons: [
+          { text: `Add ${qty} to existing`, onPress: performMerge },
+          { text: 'Save as separate', onPress: performNewEntry },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await performNewEntry();
   }
 
   return (
