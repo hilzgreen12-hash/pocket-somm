@@ -38,7 +38,7 @@ export default function LabelResultsScreen() {
   const { session } = useAuth();
   const { addWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
-  const { pendingSlot, setPendingSlot, setPendingWineId } = useRackStore();
+  const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
@@ -155,9 +155,25 @@ export default function LabelResultsScreen() {
         return;
       }
 
-      // User picked a rack from the picker — set the wine as pending and
-      // open that rack so they can place it directly. Stack ends up
-      // [cellar tab, rack] so Back from the rack returns to the Cellar tab.
+      // User picked "+ Create new rack" from the picker — kick off the
+      // rack-creation flow with the wine pre-flagged for placement. Once
+      // the new rack is built, pendingWineId is still set so the user can
+      // tap a slot to place this bottle.
+      if (selectedRackId === '__new__') {
+        setPendingWineId(saved.id);
+        setPendingStorageType('rack');
+        setAddingToCellar(false);
+        reset();
+        if (router.canGoBack()) router.dismiss(2);
+        else router.replace('/(tabs)/cellar');
+        router.push('/cellar/rack/camera');
+        return;
+      }
+
+      // User picked an existing rack from the picker — set the wine as
+      // pending and open that rack so they can place it directly. Stack
+      // ends up [cellar tab, rack] so Back from the rack returns to the
+      // Cellar tab.
       if (selectedRackId) {
         setPendingWineId(saved.id);
         setAddingToCellar(false);
@@ -304,7 +320,7 @@ export default function LabelResultsScreen() {
                   </TouchableOpacity>
                 </View>
               </>
-            ) : racks.length > 0 ? (
+            ) : (
               <>
                 <Text style={styles.modalLabel}>Storage location (optional)</Text>
                 <Text style={styles.modalHint}>Pick a rack to place this bottle in now, or save without and assign later.</Text>
@@ -326,9 +342,16 @@ export default function LabelResultsScreen() {
                       <Text style={[styles.rackOptionText, selectedRackId === r.id && styles.rackOptionTextActive]}>{r.name}</Text>
                     </TouchableOpacity>
                   ))}
+                  <TouchableOpacity
+                    style={[styles.rackOption, styles.rackOptionNew, selectedRackId === '__new__' && styles.rackOptionActive]}
+                    onPress={() => setSelectedRackId('__new__')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.rackOptionText, styles.rackOptionTextNew, selectedRackId === '__new__' && styles.rackOptionTextActive]}>+ Create new rack</Text>
+                  </TouchableOpacity>
                 </View>
               </>
-            ) : null}
+            )}
 
             <TouchableOpacity
               style={[styles.button, saving && styles.buttonDisabled]}
@@ -338,9 +361,11 @@ export default function LabelResultsScreen() {
               <Text style={styles.buttonText}>
                 {saving
                   ? 'Saving…'
-                  : selectedRackId
-                    ? `Save & Place in ${racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack'}`
-                    : 'Save to Cellar'}
+                  : selectedRackId === '__new__'
+                    ? 'Save & Build a New Rack'
+                    : selectedRackId
+                      ? `Save & Place in ${racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack'}`
+                      : 'Save to Cellar'}
               </Text>
             </TouchableOpacity>
 
@@ -411,4 +436,6 @@ const styles = StyleSheet.create({
   rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
   rackOptionText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   rackOptionTextActive: { color: colors.gold },
+  rackOptionNew: { borderStyle: 'dashed', marginTop: spacing.xs },
+  rackOptionTextNew: { color: colors.gold },
 });
