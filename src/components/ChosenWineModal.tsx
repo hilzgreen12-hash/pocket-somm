@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { showAlert } from './AppAlert';
 import { CityAutocomplete } from './CityAutocomplete';
@@ -72,6 +72,10 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
 
   async function handleSave() {
     if (!wine || !session) return;
+    // Dismiss keyboard explicitly — without this, on iOS the first tap on
+    // Save sometimes only dismisses the numeric keypad (from the score
+    // input) and the user has to tap a second time to actually save.
+    Keyboard.dismiss();
     try {
       await save.mutateAsync({
         wine,
@@ -124,7 +128,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
 
             <Text style={styles.heading}>{wineName}</Text>
             <Text style={styles.wineProducer}>{wine.producer}{wine.region ? ` · ${wine.region}` : ''}</Text>
@@ -197,7 +201,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
               <View style={styles.savedRow}>
                 <Text style={styles.savedText}>Saved — </Text>
                 <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
-                  <Text style={styles.savedLink}>View Wine Reviews</Text>
+                  <Text style={styles.savedLink}>View in Your Profile</Text>
                 </TouchableOpacity>
                 {showReturnToArchive && (
                   <>

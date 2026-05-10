@@ -315,19 +315,25 @@ export default function ResultsScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Save to Archive is always available — fresh scans show the call-to-
-          action; history loads default to "Saved ✓" so the user has a clear
-          confirmation that the result is in their archive. */}
-      <TouchableOpacity
-        style={[styles.saveButton, (isSaved || isSaving || isFromHistory) && styles.saveButtonDone]}
-        onPress={handleSaveToArchive}
-        disabled={isSaved || isSaving || isFromHistory}
-        activeOpacity={0.8}
-      >
-        <Text style={[styles.saveButtonText, (isSaved || isSaving || isFromHistory) && styles.saveButtonTextDone]}>
-          {(isSaved || isFromHistory) ? 'Saved ✓' : isSaving ? 'Saving…' : 'Save to Archive'}
-        </Text>
-      </TouchableOpacity>
+      {(isSaved || isFromHistory) ? (
+        <View style={styles.savedBlock}>
+          <Text style={styles.savedLabel}>Saved</Text>
+          <TouchableOpacity onPress={() => router.push('/scan/history')} activeOpacity={0.7}>
+            <Text style={styles.viewProfileLink}>View in List Archive</Text>
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <TouchableOpacity
+          style={styles.saveButton}
+          onPress={handleSaveToArchive}
+          disabled={isSaving}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.saveButtonText}>
+            {isSaving ? 'Saving…' : 'Save to Archive'}
+          </Text>
+        </TouchableOpacity>
+      )}
 
       {!isFromHistory && (
         <TouchableOpacity
@@ -679,6 +685,24 @@ const styles = StyleSheet.create({
   },
   saveButtonDone: {
     backgroundColor: 'rgba(212,176,96,0.10)',
+  },
+  savedBlock: {
+    alignItems: 'center',
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    gap: 4,
+  },
+  savedLabel: {
+    color: colors.gold,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+    letterSpacing: 0.5,
+  },
+  viewProfileLink: {
+    color: colors.gold,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    textDecorationLine: 'underline',
   },
   saveButtonText: {
     color: colors.gold,

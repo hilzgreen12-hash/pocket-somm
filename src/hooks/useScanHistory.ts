@@ -101,6 +101,12 @@ export function useScanHistory() {
 
   const autoSave = useMutation({
     mutationFn: async ({ extractedWines, recommendation, restaurantNameOverride }: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantNameOverride?: string | null }) => {
+      // Surface a clear failure when the auth token hasn't hydrated yet —
+      // previously this branch silently skipped the Supabase insert, so the
+      // user saw "Saved ✓" but the archive query found nothing.
+      if (!session) {
+        throw new Error('Sign in to save to archive — your save did not reach the cloud.');
+      }
       const now = new Date().toISOString();
 
       let city: string | null = null;
