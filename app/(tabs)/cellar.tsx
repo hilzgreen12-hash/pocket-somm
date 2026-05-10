@@ -1,4 +1,5 @@
-import { View, Text, TouchableOpacity, StyleSheet, Alert, ActivityIndicator, ScrollView, useWindowDimensions, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView, useWindowDimensions, Modal } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -95,13 +96,13 @@ export default function CellarTab() {
       const base64 = await prepareImageBase64(result.assets[0].uri);
       const data = await importCellarDocument(base64);
       if (!data.wines || data.wines.length === 0) {
-        Alert.alert('No wines found', 'Vinster could not identify any wines in that document. Try a clearer photo.');
+        showAlert({ title: 'No wines found', body: 'Vinster could not identify any wines in that document. Try a clearer photo.' });
         return;
       }
       setWines(data.wines);
       router.push('/cellar/import-preview');
     } catch (err) {
-      Alert.alert('Error', 'Could not read the document. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not read the document. Please try again.' });
     } finally {
       setImporting(false);
     }
@@ -120,7 +121,7 @@ export default function CellarTab() {
       const text = await FileSystem.readAsStringAsync(file.uri);
       const rows = parseCSV(text);
       if (rows.length < 2) {
-        Alert.alert('Empty file', 'Vinster couldn\'t find any rows in that spreadsheet.');
+        showAlert({ title: 'Empty file', body: 'Vinster couldn\'t find any rows in that spreadsheet.' });
         return;
       }
       const headers = rows[0];
@@ -133,10 +134,10 @@ export default function CellarTab() {
       const currencyIdx = findCol(headers, ['currency', 'ccy']);
 
       if (nameIdx < 0 && producerIdx < 0) {
-        Alert.alert(
-          'Columns not recognised',
-          'Vinster looks for columns named wine, producer, region, vintage, quantity, price, currency. Add a header row that uses one of those names and try again.'
-        );
+        showAlert({
+          title: 'Columns not recognised',
+          body: 'Vinster looks for columns named wine, producer, region, vintage, quantity, price, currency. Add a header row that uses one of those names and try again.',
+        });
         return;
       }
 
@@ -161,13 +162,13 @@ export default function CellarTab() {
         .filter((w) => w.wine_name);
 
       if (wines.length === 0) {
-        Alert.alert('No wines found', 'No usable rows in that spreadsheet.');
+        showAlert({ title: 'No wines found', body: 'No usable rows in that spreadsheet.' });
         return;
       }
       setWines(wines);
       router.push('/cellar/import-preview');
     } catch (err) {
-      Alert.alert('Couldn\'t read file', 'Vinster expects a comma-separated CSV file with a header row. Try saving from Numbers/Excel as CSV.');
+      showAlert({ title: 'Couldn\'t read file', body: 'Vinster expects a comma-separated CSV file with a header row. Try saving from Numbers/Excel as CSV.' });
     } finally {
       setImporting(false);
     }

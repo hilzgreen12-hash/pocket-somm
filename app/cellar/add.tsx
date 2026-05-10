@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -20,7 +21,7 @@ export default function AddWineScreen() {
 
   async function handleSave() {
     if (!wineName.trim()) {
-      Alert.alert('Wine name required', 'Please enter a wine name.');
+      showAlert({ title: 'Wine name required', body: 'Please enter a wine name.' });
       return;
     }
     if (!session?.user.id) return;
@@ -44,11 +45,10 @@ export default function AddWineScreen() {
         label_image_path: null,
         user_notes: null,
       });
-      Alert.alert(
-        'Added to cellar',
-        'Would you like to place this wine in a rack?',
-        [
-          { text: 'Not now', onPress: () => router.back() },
+      showAlert({
+        title: 'Added to cellar',
+        body: 'Would you like to place this wine in a rack?',
+        buttons: [
           {
             text: 'Add to Rack',
             onPress: () => {
@@ -56,10 +56,11 @@ export default function AddWineScreen() {
               router.replace('/cellar/racks');
             },
           },
-        ]
-      );
+          { text: 'Not now', style: 'cancel', onPress: () => router.back() },
+        ],
+      });
     } catch {
-      Alert.alert('Error', 'Could not save wine. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not save wine. Please try again.' });
     } finally {
       setSaving(false);
     }

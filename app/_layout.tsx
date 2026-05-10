@@ -10,6 +10,7 @@ import * as Linking from 'expo-linking';
 import { supabase } from '../src/api/supabase';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
+import { AppAlertHost } from '../src/components/AppAlert';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 
@@ -157,6 +158,7 @@ export default function RootLayout() {
             <Stack.Screen name="about" />
           </Stack>
           <StatusBar style="light" />
+          <AppAlertHost />
         </AuthProvider>
       </QueryClientProvider>
       </ErrorBoundary>

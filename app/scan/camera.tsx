@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions, Alert } from 'react-native';
+import { View, StyleSheet, Dimensions } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -102,7 +103,7 @@ export default function CameraScreen() {
     router.push('/scan/preview');
     } catch (err) {
       console.error('[Camera] Capture failed:', err);
-      Alert.alert('Camera error', 'Could not capture the photo. Please try again.');
+      showAlert({ title: 'Camera error', body: 'Could not capture the photo. Please try again.' });
     }
   }
 

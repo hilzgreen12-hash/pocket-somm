@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -22,11 +23,11 @@ export default function LabelConfirmScreen() {
 
   async function handleConfirm() {
     if (!producer.trim() || !region.trim()) {
-      Alert.alert('Missing details', 'Producer and region are required.');
+      showAlert({ title: 'Missing details', body: 'Producer and region are required.' });
       return;
     }
     if (!vintage.trim()) {
-      Alert.alert('Missing vintage', 'Please enter a vintage year or NV.');
+      showAlert({ title: 'Missing vintage', body: 'Please enter a vintage year or NV.' });
       return;
     }
 
@@ -47,7 +48,7 @@ export default function LabelConfirmScreen() {
       router.replace('/label/results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wine details');
-      Alert.alert('Error', 'Could not load wine details. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not load wine details. Please try again.' });
     } finally {
       setLoading(false);
     }

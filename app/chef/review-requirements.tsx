@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { SearchProgress } from '../../src/components/SearchProgress';
@@ -40,7 +41,7 @@ export default function ReviewRequirementsScreen() {
 
   async function handleContinue() {
     if (!wineDetailsConfirmed) {
-      Alert.alert('Missing wine details', 'Please confirm the wine first.');
+      showAlert({ title: 'Missing wine details', body: 'Please confirm the wine first.' });
       router.replace('/chef/confirm');
       return;
     }
@@ -83,7 +84,7 @@ export default function ReviewRequirementsScreen() {
       router.replace('/chef/results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
-      Alert.alert('Error', 'Could not generate pairings. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
     } finally {
       setLoading(false);
     }

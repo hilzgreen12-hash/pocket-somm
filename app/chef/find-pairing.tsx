@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -29,11 +30,11 @@ export default function FindPairingScreen() {
 
   async function handleFind(skipPrompt = false) {
     if (!dish.trim()) {
-      Alert.alert('What are you cooking?', 'Please describe your dish first.');
+      showAlert({ title: 'What are you cooking?', body: 'Please describe your dish first.' });
       return;
     }
     if (mode === 'cellar' && wines.length === 0) {
-      Alert.alert('Empty cellar', 'Your cellar is empty. Switch to "Suggest a Style" to get a general recommendation.');
+      showAlert({ title: 'Empty cellar', body: 'Your cellar is empty. Switch to "Suggest a Style" to get a general recommendation.' });
       return;
     }
 
@@ -71,7 +72,7 @@ export default function FindPairingScreen() {
 
       router.push('/chef/pairing-results');
     } catch {
-      Alert.alert('Error', 'Could not find a pairing. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not find a pairing. Please try again.' });
     } finally {
       setLoading(false);
     }

@@ -11,7 +11,14 @@
       "Bash(cp \"C:\\\\Claude - Recipe Pairing App\\\\artifacts\\\\wine-pairer\\\\app\\\\results.tsx\" \"C:\\\\Claude - Bottles First\\\\app\\\\results.tsx\")",
       "Bash(cp \"C:\\\\Claude - Recipe Pairing App\\\\artifacts\\\\wine-pairer\\\\app\\\\_layout.tsx\" \"C:\\\\Claude - Bottles First\\\\app\\\\_layout.tsx\")",
       "Bash(cp \"C:\\\\Claude - Recipe Pairing App\\\\artifacts\\\\wine-pairer\\\\app\\\\+not-found.tsx\" \"C:\\\\Claude - Bottles First\\\\app\\\\+not-found.tsx\")",
-      "Bash(cp \"C:\\\\Claude - Recipe Pairing App\\\\artifacts\\\\wine-pairer\\\\app\\\\archive\\\\index.tsx\" \"C:\\\\Claude - Bottles First\\\\app\\\\archive\\\\index.tsx\")"
+      "Bash(cp \"C:\\\\Claude - Recipe Pairing App\\\\artifacts\\\\wine-pairer\\\\app\\\\archive\\\\index.tsx\" \"C:\\\\Claude - Bottles First\\\\app\\\\archive\\\\index.tsx\")",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(npx eas *)",
+      "WebSearch",
+      "WebFetch"
     ]
   }
 }

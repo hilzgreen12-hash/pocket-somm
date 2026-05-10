@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useRacks } from '../../../src/hooks/useRacks';
@@ -33,7 +34,7 @@ export default function RackDetectScreen() {
 
   async function handleSave() {
     if (!name.trim()) {
-      Alert.alert('Name required', `Please give your ${isFridge ? 'fridge' : 'rack'} a name.`);
+      showAlert({ title: 'Name required', body: `Please give your ${isFridge ? 'fridge' : 'rack'} a name.` });
       return;
     }
     setSaving(true);
@@ -43,7 +44,7 @@ export default function RackDetectScreen() {
       router.replace(`/cellar/rack/${rack.id}`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      Alert.alert(`Error saving ${isFridge ? 'fridge' : 'rack'}`, msg);
+      showAlert({ title: `Error saving ${isFridge ? 'fridge' : 'rack'}`, body: msg });
     } finally {
       setSaving(false);
     }

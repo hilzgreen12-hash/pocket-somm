@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -117,7 +118,7 @@ export default function CommunityUploadScreen() {
       qc.invalidateQueries({ queryKey: ['community-uploads', key] });
       qc.invalidateQueries({ queryKey: ['community-reviews', key] });
     },
-    onError: (err: any) => Alert.alert('Could not post', err?.message || 'Please try again.'),
+    onError: (err: any) => showAlert({ title: 'Could not post', body: err?.message || 'Please try again.' }),
   });
 
   const unpublish = useMutation({
@@ -126,7 +127,7 @@ export default function CommunityUploadScreen() {
       qc.invalidateQueries({ queryKey: ['community-uploads', key] });
       qc.invalidateQueries({ queryKey: ['community-reviews', key] });
     },
-    onError: (err: any) => Alert.alert('Could not remove', err?.message || 'Please try again.'),
+    onError: (err: any) => showAlert({ title: 'Could not remove', body: err?.message || 'Please try again.' }),
   });
 
   function handleToggle(row: SourceRow) {

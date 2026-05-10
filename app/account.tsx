@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, Alert, ActivityIndicator, Switch, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal } from 'react-native';
+import { showAlert } from '../src/components/AppAlert';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
@@ -72,14 +73,14 @@ export default function AccountScreen() {
           { emailRedirectTo: redirectTo },
         );
         if (error) throw new Error(`email: ${error.message}`);
-        Alert.alert(
-          'Check both inboxes',
-          'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.'
-        );
+        showAlert({
+          title: 'Check both inboxes',
+          body: 'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.',
+        });
       }
       setEditingIdentity(false);
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingIdentity(false);
     }
@@ -88,7 +89,7 @@ export default function AccountScreen() {
   async function handleSignOut() {
     const { error } = await supabase.auth.signOut();
     if (error) {
-      Alert.alert('Could not sign out', error.message);
+      showAlert({ title: 'Could not sign out', body: error.message });
       return;
     }
     router.replace('/(auth)/sign-in');
@@ -96,6 +97,7 @@ export default function AccountScreen() {
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [signOutConfirmOpen, setSignOutConfirmOpen] = useState(false);
 
   function handleDeleteAccount() {
     setDeleteConfirmOpen(true);
@@ -106,7 +108,7 @@ export default function AccountScreen() {
     try {
       const { error } = await supabase.functions.invoke('delete-account');
       if (error) {
-        Alert.alert('Error', 'Could not delete your account. Please try again or contact support.');
+        showAlert({ title: 'Error', body: 'Could not delete your account. Please try again or contact support.' });
         return;
       }
       await supabase.auth.signOut();
@@ -229,12 +231,7 @@ export default function AccountScreen() {
 
       <TouchableOpacity
         style={[styles.signOutButton, !session && { marginTop: spacing.sm }]}
-        onPress={() =>
-          Alert.alert('Sign Out', 'Are you sure?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Sign Out', style: 'destructive', onPress: handleSignOut },
-          ])
-        }
+        onPress={() => setSignOutConfirmOpen(true)}
       >
         <Text style={styles.signOutText}>Sign Out</Text>
       </TouchableOpacity>
@@ -242,6 +239,29 @@ export default function AccountScreen() {
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
         <Text style={styles.deleteText}>Delete Account</Text>
       </TouchableOpacity>
+
+      <Modal visible={signOutConfirmOpen} transparent animationType="fade" onRequestClose={() => setSignOutConfirmOpen(false)}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setSignOutConfirmOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
+            <Text style={styles.confirmTitle}>Sign out?</Text>
+            <Text style={styles.confirmBody}>
+              You can sign back in anytime — your cellar, reviews, and personality sketches stay safe.
+            </Text>
+            <TouchableOpacity
+              style={styles.confirmGoldBtn}
+              onPress={() => {
+                setSignOutConfirmOpen(false);
+                handleSignOut();
+              }}
+            >
+              <Text style={styles.confirmGoldBtnText}>Sign Out</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setSignOutConfirmOpen(false)} style={styles.confirmCancel}>
+              <Text style={styles.confirmCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={deleteConfirmOpen} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteConfirmOpen(false)}>
         <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => !deleting && setDeleteConfirmOpen(false)}>
@@ -333,6 +353,8 @@ const styles = StyleSheet.create({
   confirmDangerBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   confirmDangerBtnDisabled: { opacity: 0.5 },
   confirmDangerBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.error },
+  confirmGoldBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  confirmGoldBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   confirmCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   confirmCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
   deleteText: { color: colors.error, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', textDecorationLine: 'underline' },

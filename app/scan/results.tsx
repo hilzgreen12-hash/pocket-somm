@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
@@ -73,7 +74,7 @@ export default function ResultsScreen() {
       {
         onError: (err) => {
           hasSaved.current = false;
-          Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+          showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
         },
       },
     );

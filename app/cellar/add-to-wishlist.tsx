@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -18,7 +19,7 @@ export default function AddToWishListScreen() {
 
   async function handleSave() {
     if (!wineName.trim()) {
-      Alert.alert('Wine name required', 'Please enter a wine name.');
+      showAlert({ title: 'Wine name required', body: 'Please enter a wine name.' });
       return;
     }
     if (!session?.user.id) return;
@@ -45,7 +46,7 @@ export default function AddToWishListScreen() {
       });
       router.back();
     } catch {
-      Alert.alert('Error', 'Could not save wine. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not save wine. Please try again.' });
     } finally {
       setSaving(false);
     }

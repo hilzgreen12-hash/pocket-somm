@@ -69,10 +69,14 @@ export default function OnboardingTour() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.skipRow}>
-        <TouchableOpacity onPress={handleSkip} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-          <Text style={styles.skipText}>Skip</Text>
-        </TouchableOpacity>
+      <View style={styles.topBar}>
+        <View style={styles.topBarSide} />
+        <Text style={styles.brand}>Vinster</Text>
+        <View style={styles.topBarSide}>
+          <TouchableOpacity onPress={handleSkip} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={styles.skipText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView
@@ -109,7 +113,9 @@ export default function OnboardingTour() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingTop: 60, paddingBottom: 40 },
-  skipRow: { paddingHorizontal: spacing.xl, alignItems: 'flex-end' },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  topBarSide: { flex: 1, alignItems: 'flex-end' },
+  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold, letterSpacing: 2, textAlign: 'center', flex: 1 },
   skipText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
   badge: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },

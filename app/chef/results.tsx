@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -102,7 +103,7 @@ export default function ChefResultsScreen() {
       setSaveState('idle');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
-      Alert.alert('Could not regenerate', 'Please try again in a moment.');
+      showAlert({ title: 'Could not regenerate', body: 'Please try again in a moment.' });
     } finally {
       setRegenerating(false);
     }
@@ -135,7 +136,7 @@ export default function ChefResultsScreen() {
       setSaveState('saved');
     } catch (err) {
       setSaveState('idle');
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -193,7 +194,7 @@ export default function ChefResultsScreen() {
 
       setArchivedModalOpen(true);
     } catch (err) {
-      Alert.alert('Could not archive', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setArchiving(false);
     }

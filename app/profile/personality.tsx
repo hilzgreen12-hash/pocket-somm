@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Alert, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Modal } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { captureRef } from 'react-native-view-shot';
@@ -177,7 +178,7 @@ export default function PersonalityScreen() {
       setPublishState('saved');
     } catch (err) {
       setPublishState('idle');
-      Alert.alert('Could not upload', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not upload', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -210,7 +211,7 @@ export default function PersonalityScreen() {
       }
       await Share.share({ message: `${caption}\n\n${body}`, title: heading });
     } catch (err) {
-      Alert.alert('Could not share', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
