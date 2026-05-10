@@ -136,6 +136,7 @@ export default function CellarWineDetail() {
   const [removing, setRemoving] = useState(false);
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
   const [removeStep, setRemoveStep] = useState<'idle' | 'confirm' | 'success'>('idle');
+  const [archiveModalOpen, setArchiveModalOpen] = useState(false);
 
   const [findingPairings, setFindingPairings] = useState(false);
 
@@ -640,57 +641,16 @@ export default function CellarWineDetail() {
 
       {!isArchived && (
         <>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Archive or Delete Wine</Text>
-
-            <View style={styles.removeBlock}>
-              {wine.quantity > 1 && (
-                <>
-                  <Text style={styles.fieldLabel}>How many of your {wine.quantity} bottles?</Text>
-                  <TextInput
-                    style={styles.input}
-                    value={removeCount}
-                    onChangeText={setRemoveCount}
-                    keyboardType="number-pad"
-                    placeholder="1"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </>
-              )}
-
-              <Text style={styles.fieldLabel}>Date removed</Text>
-              <TextInput
-                style={styles.input}
-                value={removeDate}
-                onChangeText={setRemoveDate}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-              />
-
-              <TouchableOpacity
-                style={[styles.removeBtn, removing && styles.buttonDisabled]}
-                onPress={handleArchiveWine}
-                disabled={removing}
-              >
-                <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
-                onPress={() => setRemoveStep('confirm')}
-                disabled={removing}
-              >
-                <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
-              </TouchableOpacity>
-
-              {rackRemovalMsg && (
-                <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
-              )}
-            </View>
-          </View>
+          {rackRemovalMsg && (
+            <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
+          )}
 
           <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
             <Text style={styles.chefBtnText}>Chef, find me a food pairing for this wine</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
+            <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
           </TouchableOpacity>
         </>
       )}
@@ -718,6 +678,66 @@ export default function CellarWineDetail() {
           <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
         </TouchableOpacity>
       )}
+
+      <Modal
+        visible={archiveModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !removing && setArchiveModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.archiveModalSheet}>
+            <Text style={styles.archiveModalTitle}>Archive or Delete Wine</Text>
+            <Text style={styles.archiveModalWine}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
+
+            {wine.quantity > 1 && (
+              <>
+                <Text style={styles.fieldLabel}>How many of your {wine.quantity} bottles?</Text>
+                <TextInput
+                  style={styles.input}
+                  value={removeCount}
+                  onChangeText={setRemoveCount}
+                  keyboardType="number-pad"
+                  placeholder="1"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </>
+            )}
+
+            <Text style={styles.fieldLabel}>Date removed</Text>
+            <TextInput
+              style={styles.input}
+              value={removeDate}
+              onChangeText={setRemoveDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <TouchableOpacity
+              style={[styles.removeBtn, removing && styles.buttonDisabled]}
+              onPress={async () => {
+                await handleArchiveWine();
+                setArchiveModalOpen(false);
+              }}
+              disabled={removing}
+            >
+              <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
+              onPress={() => { setArchiveModalOpen(false); setRemoveStep('confirm'); }}
+              disabled={removing}
+            >
+              <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity onPress={() => setArchiveModalOpen(false)} style={styles.archiveModalCancel} disabled={removing}>
+              <Text style={styles.archiveModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={removeStep !== 'idle'}
@@ -818,6 +838,14 @@ const styles = StyleSheet.create({
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   chefBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  archiveAccessBtn: { borderWidth: 1, borderColor: 'rgba(212,64,64,0.55)', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
+  archiveAccessBtnText: { color: 'rgba(212,64,64,0.85)', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  archiveModalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48, borderTopWidth: 1, borderColor: colors.border },
+  archiveModalTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 2 },
+  archiveModalWine: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },
+  archiveModalCancel: { alignItems: 'center', marginTop: spacing.md },
+  archiveModalCancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   statCell: {
     width: '50%',
