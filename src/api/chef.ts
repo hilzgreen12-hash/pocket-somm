@@ -9,6 +9,7 @@ export interface ChefLabelSession {
   filters: Record<string, unknown> | null;
   pairings: Pairing[];
   city: string | null;
+  is_starred?: boolean;
 }
 
 export interface ChefPairingSession {
@@ -20,12 +21,13 @@ export interface ChefPairingSession {
   general_result: GeneralRecommendation[] | null;
   general_summary: string | null;
   city: string | null;
+  is_starred?: boolean;
 }
 
 export async function listChefLabelSessions(userId: string): Promise<ChefLabelSession[]> {
   const { data, error } = await supabase
     .from('chef_label_sessions')
-    .select('id, saved_at, wine, filters, pairings, city')
+    .select('id, saved_at, wine, filters, pairings, city, is_starred')
     .eq('user_id', userId)
     .order('saved_at', { ascending: false });
   if (error) throw error;
@@ -48,7 +50,7 @@ export async function insertChefLabelSession(input: {
       pairings: input.pairings,
       city: input.city,
     })
-    .select('id, saved_at, wine, filters, pairings, city')
+    .select('id, saved_at, wine, filters, pairings, city, is_starred')
     .single();
   if (error) throw error;
   return data as ChefLabelSession;
@@ -62,7 +64,7 @@ export async function deleteChefLabelSession(id: string): Promise<void> {
 export async function listChefPairingSessions(userId: string): Promise<ChefPairingSession[]> {
   const { data, error } = await supabase
     .from('chef_pairing_sessions')
-    .select('id, saved_at, dish, mode, cellar_result, general_result, general_summary, city')
+    .select('id, saved_at, dish, mode, cellar_result, general_result, general_summary, city, is_starred')
     .eq('user_id', userId)
     .order('saved_at', { ascending: false });
   if (error) throw error;
@@ -89,7 +91,7 @@ export async function insertChefPairingSession(input: {
       general_summary: input.generalSummary,
       city: input.city,
     })
-    .select('id, saved_at, dish, mode, cellar_result, general_result, general_summary, city')
+    .select('id, saved_at, dish, mode, cellar_result, general_result, general_summary, city, is_starred')
     .single();
   if (error) throw error;
   return data as ChefPairingSession;

@@ -10,6 +10,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
+import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
 import { splitPersonality } from '../../src/utils/personalityText';
@@ -33,6 +34,27 @@ export default function PersonalityScreen() {
   const { wines } = useCellar();
   const { chosenWines } = useChosenWines();
   const { archive } = useScanHistory();
+  const { sessions: chefLabelSessions } = useChefLabelHistory();
+  const { sessions: chefPairingSessions } = useChefPairingHistory();
+
+  // Gate the auto-generate behind a minimum-activity bar so first-time users
+  // don't get a personality sketch invented from nothing.
+  // Wine: ≥2 wine list scans OR ≥5 bottles in the cellar.
+  // Chef: ≥1 pairing AND ≥1 label scan, OR ≥2 label scans, OR ≥2 pairings.
+  const hasEnoughData = (() => {
+    if (cat === 'wine') {
+      const totalBottles = (wines ?? []).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+      const wineListScanCount = archive?.length ?? 0;
+      return wineListScanCount >= 2 || totalBottles >= 5;
+    }
+    const labels = chefLabelSessions?.length ?? 0;
+    const pairings = chefPairingSessions?.length ?? 0;
+    return (
+      (pairings >= 1 && labels >= 1) ||
+      labels >= 2 ||
+      pairings >= 2
+    );
+  })();
 
   const [text, setText] = useState<string | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
@@ -63,12 +85,14 @@ export default function PersonalityScreen() {
       });
   }, [session?.user.id, cat]);
 
-  // Auto-generate on first visit if there's no cached text yet.
+  // Auto-generate on first visit if there's no cached text yet AND the user
+  // has met the minimum activity bar — otherwise we'd invent a sketch from
+  // thin air on someone's first session.
   useEffect(() => {
-    if (hydrated && !text && !loading && !error) {
+    if (hydrated && !text && !loading && !error && hasEnoughData) {
       generate();
     }
-  }, [hydrated]);
+  }, [hydrated, hasEnoughData]);
 
   async function generate() {
     if (!session?.user.id) return;
@@ -255,6 +279,15 @@ export default function PersonalityScreen() {
             <TouchableOpacity style={styles.retryBtn} onPress={generate}>
               <Text style={styles.retryBtnText}>Try again</Text>
             </TouchableOpacity>
+          </View>
+        ) : !text && !hasEnoughData ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle}>We don't have enough on you yet</Text>
+            <Text style={styles.errorBody}>
+              {cat === 'wine'
+                ? 'Scan some lists or labels for your personality sketch.'
+                : 'Find a few wine pairings or scan a label for recipes for your personality sketch.'}
+            </Text>
           </View>
         ) : text ? (
           <>

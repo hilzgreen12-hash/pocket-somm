@@ -15,17 +15,22 @@ const SLIDES: Slide[] = [
   {
     badge: 'List',
     title: 'Scan any wine list',
-    body: 'Vinster reads any restaurant list and hands you three picks fitted to your taste, your budget, and what you\'re eating. The polite hovering is over.',
+    body: 'Like the smoothest Somm, Vinster reads any restaurant list and offers three wines fitted to your taste, budget, and what you\'re eating. Sweat over your wine pairing no longer.',
   },
   {
-    badge: 'Chef + Cellar',
-    title: 'Save your bottles, cook better',
-    body: 'Track every bottle in your cellar — what you paid, what it\'s worth, when to drink it. Tell Vinster what you\'re cooking and it pours you a wine; scan a label and it cooks you three chef-inspired recipes.',
+    badge: 'Chef',
+    title: 'Cook & Drink better',
+    body: 'Tell Vinster what you\'re cooking and it offers you a wine, scan a label and it serves up three chef-inspired recipes.',
   },
   {
-    badge: 'Personality',
-    title: 'Meet your gastronomic self',
-    body: 'Vinster watches how you drink and what you eat, then sketches you a witty character profile. Publish it, share it with friends — gentle roast included.',
+    badge: 'Cellar',
+    title: 'Save & Track',
+    body: 'Scan labels to input your wines and have your cellar stats all in one place — what you paid, what it\'s worth, when to drink it, and even where the heck it is in your home cellar.',
+  },
+  {
+    badge: 'Personality + Community',
+    title: 'Meet your gastronomic self & others',
+    body: 'Vinster watches how you drink and what you eat not only to improve your recommendations, it sketches a witty character profile of you to share with friends and within the Vinster community.',
   },
 ];
 
@@ -70,13 +75,7 @@ export default function OnboardingTour() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <View style={styles.topBarSide} />
         <Text style={styles.brand}>Vinster</Text>
-        <View style={styles.topBarSide}>
-          <TouchableOpacity onPress={handleSkip} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       <ScrollView
@@ -113,9 +112,9 @@ export default function OnboardingTour() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingTop: 60, paddingBottom: 40 },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginTop: spacing.xl, marginBottom: spacing.lg },
   topBarSide: { flex: 1, alignItems: 'flex-end' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold, letterSpacing: 2, textAlign: 'center', flex: 1 },
+  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: '#FFFFFF', letterSpacing: 2, textAlign: 'center', flex: 1 },
   skipText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
   badge: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },

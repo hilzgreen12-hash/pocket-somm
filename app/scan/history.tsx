@@ -56,7 +56,7 @@ export default function ScanHistoryScreen() {
       ) : archive.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No archive yet</Text>
-          <Text style={styles.emptyBody}>Your wine list scans will appear here automatically after each search.</Text>
+          <Text style={styles.emptyBody}>Your archived search results will appear here.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
