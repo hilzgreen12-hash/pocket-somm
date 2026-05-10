@@ -6,6 +6,7 @@ import {
 import { router } from 'expo-router';
 import { useChosenRecipes } from '../hooks/useChosenRecipes';
 import { useAuth } from '../hooks/useAuth';
+import { CityAutocomplete } from './CityAutocomplete';
 import { colors, spacing } from '../constants/theme';
 import type { Pairing, WineDetailsComplete } from '../types/wine';
 
@@ -84,7 +85,7 @@ export function ChosenRecipeModal({ pairing, wine, visible, onClose, onSaved }: 
             />
 
             <Text style={styles.fieldLabel}>City</Text>
-            <TextInput
+            <CityAutocomplete
               style={styles.input}
               value={city}
               onChangeText={setCity}

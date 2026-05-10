@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { colors, spacing } from '../src/constants/theme';
 
@@ -15,11 +14,6 @@ export default function WelcomeScreen() {
   useEffect(() => {
     if (session) router.replace('/');
   }, [session]);
-
-  async function handleGuest() {
-    await AsyncStorage.setItem('hasLaunched', 'true');
-    router.replace('/(tabs)/scan');
-  }
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -63,10 +57,6 @@ export default function WelcomeScreen() {
         <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/(auth)/sign-up')}>
           <Text style={styles.secondaryText}>Create Account</Text>
           <Text style={styles.secondaryNote}>Save & learn your preferences so your results become more personal</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.primaryButton} onPress={handleGuest}>
-          <Text style={styles.primaryText}>Start Scanning</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.linkButton} onPress={() => router.push('/(auth)/sign-in')}>

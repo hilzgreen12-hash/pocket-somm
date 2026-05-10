@@ -40,9 +40,6 @@ export default function SignUp() {
       <View style={styles.container}>
         <Text style={styles.title}>Check your email</Text>
         <Text style={styles.subtitle}>We've sent a confirmation link to {email}. Tap it to confirm and we'll bring you straight back into Vinster.</Text>
-        <TouchableOpacity style={styles.skipLink} onPress={() => router.replace('/(tabs)/scan')}>
-          <Text style={styles.skipLinkText}>Continue without my account for now</Text>
-        </TouchableOpacity>
       </View>
     );
   }

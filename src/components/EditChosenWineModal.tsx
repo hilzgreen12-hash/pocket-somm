@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useChosenWines } from '../hooks/useChosenWines';
+import { CityAutocomplete } from './CityAutocomplete';
 import { colors, spacing } from '../constants/theme';
 import type { ChosenWine } from '../types/wine';
 
@@ -73,7 +74,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             />
 
             <Text style={styles.fieldLabel}>City</Text>
-            <TextInput
+            <CityAutocomplete
               style={styles.input}
               value={city}
               onChangeText={setCity}

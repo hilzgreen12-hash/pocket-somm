@@ -63,9 +63,6 @@ function GeneralResults({ results, summary }: { results: GeneralRecommendation[]
           <Text style={[styles.cardSection, { marginTop: spacing.md }]}>What to look for</Text>
           <Text style={styles.cardItem}>{result.characteristics}</Text>
 
-          <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Price guide</Text>
-          <Text style={styles.cardItem}>{result.priceGuide}</Text>
-
           {result.examples && result.examples.length > 0 && (
             <>
               <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Examples to look for</Text>

@@ -51,10 +51,6 @@ export default function OnboardingTour() {
     router.replace('/profile/wine?onboarding=1');
   }
 
-  function handleSkip() {
-    finish();
-  }
-
   function handleNext() {
     if (index === SLIDES.length - 1) {
       finish();
@@ -115,7 +111,6 @@ const styles = StyleSheet.create({
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginTop: spacing.xl, marginBottom: spacing.lg },
   topBarSide: { flex: 1, alignItems: 'flex-end' },
   brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: '#FFFFFF', letterSpacing: 2, textAlign: 'center', flex: 1 },
-  skipText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
   badge: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },
   title: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: colors.text, letterSpacing: 0.5, lineHeight: 46, textAlign: 'center', marginBottom: spacing.lg },
