@@ -62,6 +62,16 @@ export function DropdownMultiSelect({ label, options, selected, onChange, max, n
             {hint ? <Text style={styles.modalHint}>{hint}</Text> : null}
 
             <ScrollView style={{ maxHeight: 420 }}>
+              {/* Top row: tap to clear all selections, also acts as the "no
+                  preference" sentinel for users who want a blank slate. */}
+              <TouchableOpacity
+                style={[styles.modalOption, selected.length === 0 && styles.modalOptionActive]}
+                onPress={() => onChange([])}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.modalOptionText, selected.length === 0 && styles.modalOptionTextActive]}>{noneLabel}</Text>
+                {selected.length === 0 && <Text style={styles.modalOptionCheck}>✓</Text>}
+              </TouchableOpacity>
               {customSelections.map((opt) => (
                 <TouchableOpacity
                   key={`custom-${opt}`}
