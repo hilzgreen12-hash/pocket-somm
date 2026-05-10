@@ -4,6 +4,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, 
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabFooter } from '../../src/components/TabFooter';
+import { TabSwipeView } from '../../src/components/TabSwipeView';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 if (Platform.OS === 'android') {
@@ -198,7 +199,7 @@ export default function ScanTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <View style={styles.header}>
@@ -295,7 +296,7 @@ export default function ScanTab() {
 
     </ScrollView>
     <TabFooter />
-    </View>
+    </TabSwipeView>
   );
 }
 

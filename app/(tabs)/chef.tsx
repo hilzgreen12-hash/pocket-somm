@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
+import { TabSwipeView } from '../../src/components/TabSwipeView';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
@@ -89,7 +90,7 @@ export default function ChefTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.appName}>Chef</Text>
@@ -98,23 +99,6 @@ export default function ChefTab() {
         <Text style={styles.sectionDesc}>
           Set your food preferences in your profile to ensure Vinster's recommendations are tailored to your tastes and dietary concerns.
         </Text>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.section}>
-        <Text style={styles.subheading}>Need a wine for your recipe?</Text>
-        <Text style={styles.sectionDesc}>
-          Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
-        </Text>
-        <TouchableOpacity onPress={handleViewLastPairing}>
-          <Text style={styles.lastResultLink}>View last result</Text>
-        </TouchableOpacity>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>
-            <Text style={styles.buttonText}>Find a Wine Pairing</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       <View style={styles.divider} />
@@ -135,14 +119,26 @@ export default function ChefTab() {
             <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF', marginTop: spacing.sm }]} onPress={() => router.push('/chef/archive')}>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Recipe Archive</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => router.push('/chef/archive')}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Recipe Archive</Text>
+        <Text style={styles.subheading}>Need a wine for your recipe?</Text>
+        <Text style={styles.sectionDesc}>
+          Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
+        </Text>
+        <TouchableOpacity onPress={handleViewLastPairing}>
+          <Text style={styles.lastResultLink}>View last result</Text>
         </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>
+            <Text style={styles.buttonText}>Find a Wine Pairing</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
@@ -158,7 +154,7 @@ export default function ChefTab() {
       </Modal>
     </ScrollView>
     <TabFooter />
-    </View>
+    </TabSwipeView>
   );
 }
 
