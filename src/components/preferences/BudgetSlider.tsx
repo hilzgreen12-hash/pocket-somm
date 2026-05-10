@@ -92,6 +92,6 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 11,
-    color: 'rgba(255,255,255,0.40)',
+    color: '#FFFFFF',
   },
 });

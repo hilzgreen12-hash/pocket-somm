@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
   brandName: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 22,
-    color: 'rgba(255,255,255,0.50)',
+    color: '#FFFFFF',
     letterSpacing: 1,
     marginBottom: spacing.md,
   },
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
   },
   chevron: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.45)',
+    color: '#FFFFFF',
     marginLeft: spacing.sm,
   },
   question: {
@@ -381,7 +381,7 @@ const styles = StyleSheet.create({
   selectionSummary: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.40)',
+    color: '#FFFFFF',
     marginTop: 2,
     textAlign: 'center',
   },

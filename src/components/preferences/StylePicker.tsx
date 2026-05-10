@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   label: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 14,
-    color: 'rgba(255,255,255,0.40)',
+    color: '#FFFFFF',
     marginBottom: 2,
   },
   labelActive: {
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
   description: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 11,
-    color: 'rgba(255,255,255,0.22)',
+    color: '#FFFFFF',
     lineHeight: 16,
   },
 });

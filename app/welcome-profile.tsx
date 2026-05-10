@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
   },
   skipText: {
     fontFamily: 'CormorantGaramond_400Regular',
-    color: 'rgba(255,255,255,0.45)',
+    color: '#FFFFFF',
     fontSize: 14,
   },
 });

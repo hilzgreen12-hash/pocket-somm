@@ -252,20 +252,16 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
+    backgroundColor: colors.background,
   },
   sheet: {
+    flex: 1,
     backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '92%',
-    borderTopWidth: 1,
-    borderColor: colors.border,
   },
   content: {
     padding: spacing.xl,
-    paddingBottom: 40,
+    paddingTop: 64,
+    paddingBottom: 60,
   },
   heading: {
     fontFamily: 'CormorantGaramond_700Bold',
