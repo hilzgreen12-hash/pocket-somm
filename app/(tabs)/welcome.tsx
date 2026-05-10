@@ -78,5 +78,5 @@ const styles = StyleSheet.create({
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   skipButton: { alignItems: 'center', padding: spacing.md },
-  skipText: { fontFamily: 'CormorantGaramond_400Regular', color: 'rgba(255,255,255,0.45)', fontSize: 14 },
+  skipText: { fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', fontSize: 14 },
 });

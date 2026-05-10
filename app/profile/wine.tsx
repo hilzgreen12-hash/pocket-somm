@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   questionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 2 },
   question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.text },
   questionMuted: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.textMuted },
-  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: 'rgba(255,255,255,0.40)', marginBottom: spacing.xs },
+  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: '#FFFFFF', marginBottom: spacing.xs },
   pickerWrap: { marginTop: spacing.sm },
   customRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.md },
   customInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 15 },

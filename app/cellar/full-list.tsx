@@ -172,19 +172,19 @@ export default function FullCellarListScreen() {
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rack')}>
           <Text style={styles.filterChipLabel}>Rack</Text>
-          <Text style={styles.filterChipValue}>{rackLabel}</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{rackLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('country')}>
           <Text style={styles.filterChipLabel}>Country</Text>
-          <Text style={styles.filterChipValue}>{countryFilter === 'All' ? 'All' : countryFilter}</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{countryFilter === 'All' ? 'All' : countryFilter}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('colour')}>
           <Text style={styles.filterChipLabel}>Colour</Text>
-          <Text style={styles.filterChipValue}>{colourFilter === 'All' ? 'All' : colourFilter}</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setOpenDropdown('sort')}>
           <Text style={styles.filterChipLabel}>Sort</Text>
-          <Text style={styles.filterChipValue}>{sortLabel}</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -270,11 +270,11 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.8 },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
-  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.xs },
-  filterChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginRight: spacing.xs, alignItems: 'flex-start' },
+  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
+  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   sortChip: { borderColor: colors.gold },
   filterChipLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  filterChipValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.text, marginTop: 2 },
+  filterChipValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 20 },

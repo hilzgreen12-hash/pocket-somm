@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
   section: { marginBottom: spacing.md },
   questionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
   question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: colors.text },
-  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: 'rgba(255,255,255,0.40)', marginBottom: spacing.sm },
+  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF', marginBottom: spacing.sm },
   pickerWrap: { marginTop: spacing.sm },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },

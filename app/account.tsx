@@ -349,7 +349,7 @@ const styles = StyleSheet.create({
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   confirmTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  confirmBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: 'rgba(255,255,255,0.75)', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  confirmBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   confirmDangerBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   confirmDangerBtnDisabled: { opacity: 0.5 },
   confirmDangerBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.error },

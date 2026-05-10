@@ -446,7 +446,7 @@ const styles = StyleSheet.create({
   summary: {
     fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    color: 'rgba(255,255,255,0.70)',
+    color: '#FFFFFF',
     lineHeight: 24,
   },
   locationRow: {
@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
   locationText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 15,
-    color: 'rgba(255,255,255,0.55)',
+    color: '#FFFFFF',
   },
   locationInput: {
     flex: 1,
@@ -587,7 +587,7 @@ const styles = StyleSheet.create({
   chosenButtonText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 13,
-    color: 'rgba(255,255,255,0.50)',
+    color: '#FFFFFF',
   },
   chosenButtonTextDone: {
     color: colors.gold,
@@ -634,7 +634,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xl,
     fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    color: 'rgba(255,255,255,0.70)',
+    color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 24,
   },

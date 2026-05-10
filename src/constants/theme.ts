@@ -14,8 +14,8 @@ export const colors = {
 
   // White text system
   text: '#FFFFFF',
-  textMuted: 'rgba(255,255,255,0.55)',
-  textSubtle: 'rgba(255,255,255,0.25)',
+  textMuted: '#FFFFFF',
+  textSubtle: 'rgba(255,255,255,0.55)',
 
   // Borders — white with low opacity
   border: 'rgba(255,255,255,0.10)',

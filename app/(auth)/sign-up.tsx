@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   skipLinkText: {
-    color: 'rgba(255,255,255,0.45)',
+    color: '#FFFFFF',
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 14,
     textDecorationLine: 'underline',

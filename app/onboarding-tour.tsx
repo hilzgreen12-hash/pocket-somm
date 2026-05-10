@@ -120,7 +120,7 @@ const styles = StyleSheet.create({
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
   badge: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },
   title: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: colors.text, letterSpacing: 0.5, lineHeight: 46, textAlign: 'center', marginBottom: spacing.lg },
-  body: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: 'rgba(255,255,255,0.78)', textAlign: 'center', lineHeight: 28 },
+  body: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: '#FFFFFF', textAlign: 'center', lineHeight: 28 },
   dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginVertical: spacing.lg },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.20)' },
   dotActive: { backgroundColor: colors.gold, width: 24 },
