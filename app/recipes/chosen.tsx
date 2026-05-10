@@ -335,7 +335,7 @@ const styles = StyleSheet.create({
   folderChipCountActive: { color: colors.gold },
   newFolderChip: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderLight, borderRadius: 20, paddingHorizontal: spacing.md, paddingVertical: 6, marginRight: spacing.xs },
   newFolderChipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, paddingBottom: spacing.xxl * 2, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   signInBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },

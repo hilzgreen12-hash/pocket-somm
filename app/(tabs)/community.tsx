@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensio
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 
@@ -21,7 +22,7 @@ export default function CommunityTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.title}>Community</Text>
@@ -59,7 +60,7 @@ export default function CommunityTab() {
       />
     </ScrollView>
     <TabFooter />
-    </View>
+    </TabSwipeView>
   );
 }
 

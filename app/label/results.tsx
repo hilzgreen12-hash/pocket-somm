@@ -34,7 +34,7 @@ function DrinkingWindowBadge({ status, from, to }: { status: string; from: numbe
 
 
 export default function LabelResultsScreen() {
-  const { wineDetailsConfirmed, intelligence, reset } = useLabelStore();
+  const { wineDetailsConfirmed, intelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
@@ -159,7 +159,12 @@ export default function LabelResultsScreen() {
   }, [wineDetailsConfirmed, wines]);
 
   // Single place that handles all post-save routing — used by both the new-
-  // entry path and the merge-with-existing path.
+  // entry path and the merge-with-existing path. NOTE: don't call
+  // labelStore.reset() here. Clearing wineDetailsConfirmed while the
+  // addingToCellar Modal is still animating closed causes the modal's body
+  // (which references `wine.wineName`) to re-render with a null wine,
+  // crashing into the ErrorBoundary as "Something Went Wrong". The store
+  // will be naturally replaced on the next label scan.
   async function performSaveFlow(savedWineId: string) {
     if (pendingSlot) {
       const slots = computeSlots(
@@ -173,7 +178,6 @@ export default function LabelResultsScreen() {
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       setPendingSlot(null);
       setAddingToCellar(false);
-      reset();
       if (router.canGoBack()) router.dismiss(2);
       else router.replace(`/cellar/rack/${pendingSlot.rackId}`);
       return;
@@ -183,7 +187,6 @@ export default function LabelResultsScreen() {
       setPendingWineId(savedWineId);
       setPendingStorageType('rack');
       setAddingToCellar(false);
-      reset();
       if (router.canGoBack()) router.dismiss(2);
       else router.replace('/(tabs)/cellar');
       router.push('/cellar/rack/camera');
@@ -193,7 +196,6 @@ export default function LabelResultsScreen() {
     if (selectedRackId) {
       setPendingWineId(savedWineId);
       setAddingToCellar(false);
-      reset();
       if (router.canGoBack()) router.dismiss(2);
       else router.replace('/(tabs)/cellar');
       router.push(`/cellar/rack/${selectedRackId}` as any);
@@ -257,7 +259,7 @@ export default function LabelResultsScreen() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
         style={styles.backRow}
-        onPress={() => { reset(); router.replace('/(tabs)/cellar'); }}
+        onPress={() => router.replace('/(tabs)/cellar')}
       >
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
@@ -323,7 +325,7 @@ export default function LabelResultsScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.discardButton} onPress={() => { reset(); router.replace('/(tabs)/cellar'); }}>
+      <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/(tabs)/cellar')}>
         <Text style={styles.discardText}>Discard</Text>
       </TouchableOpacity>
 

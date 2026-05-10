@@ -11,6 +11,7 @@ import { prepareImageBase64, scanLabel, importCellarDocument } from '../../src/a
 import { useCellarImportStore, type ImportedWine } from '../../src/stores/cellarImportStore';
 import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { colors, spacing } from '../../src/constants/theme';
 
 // Minimal CSV parser — handles standard comma-separated values with optional
@@ -190,7 +191,7 @@ export default function CellarTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       {importing && (
@@ -219,7 +220,7 @@ export default function CellarTab() {
             <Text style={styles.buttonText}>Quick Cellar Stats</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-            <Text style={styles.buttonText}>View Storage</Text>
+            <Text style={styles.buttonText}>View / Edit Storage</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.buttonRow}>
@@ -283,7 +284,7 @@ export default function CellarTab() {
       />
     </ScrollView>
     <TabFooter />
-    </View>
+    </TabSwipeView>
   );
 }
 

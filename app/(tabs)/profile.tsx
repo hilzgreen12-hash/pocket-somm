@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { TabFooter } from '../../src/components/TabFooter';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function ProfileTab() {
@@ -23,7 +24,7 @@ export default function ProfileTab() {
   }
 
   return (
-    <View style={styles.container}>
+    <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.title}>Your Profile</Text>
@@ -85,7 +86,7 @@ export default function ProfileTab() {
       />
     </ScrollView>
     <TabFooter />
-    </View>
+    </TabSwipeView>
   );
 }
 
