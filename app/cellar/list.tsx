@@ -259,20 +259,55 @@ export default function CellarStatsScreen() {
               <TouchableOpacity style={styles.calcBtn} onPress={handleCalculate} activeOpacity={0.8}>
                 <Text style={styles.calcBtnText}>Calculate</Text>
               </TouchableOpacity>
+            ) : winesNeedingEstimate.length > 0 ? (
+              <View style={styles.estimateMetaStack}>
+                {lastEstimateDate ? (
+                  <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
+                ) : null}
+                <Text style={styles.estimateUpdateNote}>
+                  You've added {winesNeedingEstimate.length} wine{winesNeedingEstimate.length === 1 ? '' : 's'} since your last valuation
+                </Text>
+                <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
+                  <Text style={styles.recalcLink}>
+                    Add {winesNeedingEstimate.length} wine{winesNeedingEstimate.length === 1 ? '' : 's'} to total cellar value
+                  </Text>
+                </TouchableOpacity>
+              </View>
             ) : (
               <View style={styles.estimateMeta}>
                 {lastEstimateDate ? (
                   <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
                 ) : null}
                 <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                  <Text style={styles.recalcLink}>
-                    {winesNeedingEstimate.length > 0
-                      ? `Value ${winesNeedingEstimate.length} more`
-                      : 'Recalculate'}
-                  </Text>
+                  <Text style={styles.recalcLink}>Recalculate</Text>
                 </TouchableOpacity>
               </View>
             )}
+          </View>
+
+          {/* Condition */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Condition</Text>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Peak</Text>
+              <Text style={styles.breakdownCount}>{peakCount}</Text>
+              <Text style={styles.breakdownPct}>{pct(peakCount, totalBottles)}</Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Approaching</Text>
+              <Text style={styles.breakdownCount}>{approachingCount}</Text>
+              <Text style={styles.breakdownPct}>{pct(approachingCount, totalBottles)}</Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Too Young</Text>
+              <Text style={styles.breakdownCount}>{tooYoungCount}</Text>
+              <Text style={styles.breakdownPct}>{pct(tooYoungCount, totalBottles)}</Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Declining</Text>
+              <Text style={styles.breakdownCount}>{decliningCount}</Text>
+              <Text style={styles.breakdownPct}>{pct(decliningCount, totalBottles)}</Text>
+            </View>
           </View>
 
           {/* Most Represented Regions */}
@@ -308,31 +343,6 @@ export default function CellarStatsScreen() {
             )}
           </View>
 
-          {/* Condition */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Condition</Text>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Peak</Text>
-              <Text style={styles.breakdownCount}>{peakCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(peakCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Approaching</Text>
-              <Text style={styles.breakdownCount}>{approachingCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(approachingCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Too Young</Text>
-              <Text style={styles.breakdownCount}>{tooYoungCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(tooYoungCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Declining</Text>
-              <Text style={styles.breakdownCount}>{decliningCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(decliningCount, totalBottles)}</Text>
-            </View>
-          </View>
-
         </ScrollView>
       )}
     </View>
@@ -363,6 +373,8 @@ const styles = StyleSheet.create({
   calcBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
   calcBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   estimateMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
+  estimateMetaStack: { marginTop: spacing.sm, gap: 4 },
+  estimateUpdateNote: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 18 },
   lastEstimate: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   recalcLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
