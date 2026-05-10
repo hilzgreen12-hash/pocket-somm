@@ -23,9 +23,7 @@ export function DropdownMultiSelect({ label, options, selected, onChange, max, n
 
   const summary = selected.length === 0
     ? noneLabel
-    : selected.length <= 2
-      ? selected.join(', ')
-      : `${selected.length} selected`;
+    : `${selected.length} selected`;
 
   function toggle(option: string) {
     if (selected.includes(option)) {

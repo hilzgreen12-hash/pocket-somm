@@ -27,7 +27,7 @@ function RackRow({ rack, wines }: { rack: WineRack; wines: CellarWine[] }) {
       <View style={styles.rowMain}>
         <Text style={styles.rowName}>{rack.name}</Text>
         <Text style={styles.rowDetail}>
-          {isFridge ? 'Wine Fridge' : 'Wine Rack'} · {rack.rows} rows · {rack.cols} columns · {rack.rows * rack.cols} slots
+          {isFridge ? 'Wine Fridge' : 'Wine Rack'} · {rack.rows} vertical · {rack.cols} horizontal · {rack.rows * rack.cols} slots
         </Text>
         <Text style={styles.rowBottles}>{bottleLabel(totalBottles)}</Text>
         <View style={styles.homeToRow}>

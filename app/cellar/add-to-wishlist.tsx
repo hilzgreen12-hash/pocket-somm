@@ -1,21 +1,25 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function AddToWishListScreen() {
   const { addWine } = useWishList();
   const { session } = useAuth();
+  const { setImage, setWineDetails } = useLabelStore();
 
   const [wineName, setWineName] = useState('');
   const [producer, setProducer] = useState('');
   const [region, setRegion] = useState('');
   const [vintage, setVintage] = useState('');
-  const [quantity, setQuantity] = useState('1');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   async function handleSave() {
     if (!wineName.trim()) {
@@ -31,7 +35,7 @@ export default function AddToWishListScreen() {
         producer: producer.trim() || null,
         region: region.trim() || null,
         vintage: vintage.trim() || null,
-        quantity: parseInt(quantity) || 1,
+        quantity: 1,
         storage_location: null,
         date_received: new Date().toISOString().split('T')[0],
         critic_score: null,
@@ -52,6 +56,36 @@ export default function AddToWishListScreen() {
     }
   }
 
+  async function handleUploadPhoto() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploading(true);
+      const uri = result.assets[0].uri;
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+      router.push('/label/confirm');
+    } catch {
+      showAlert({ title: 'Could not read photo', body: 'Please try a clearer image.' });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  if (uploading) {
+    return (
+      <View style={styles.uploadingScreen}>
+        <ActivityIndicator size="large" color={colors.gold} />
+        <Text style={styles.uploadingText}>Reading the label…</Text>
+      </View>
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity onPress={() => router.back()}>
@@ -61,9 +95,14 @@ export default function AddToWishListScreen() {
       <Text style={styles.heading}>Add a Wine</Text>
       <Text style={styles.subheading}>Scan a label for full details, or enter manually.</Text>
 
-      <TouchableOpacity style={styles.scanButton} onPress={() => router.push('/label/camera')}>
-        <Text style={styles.scanButtonText}>Scan Wine Label</Text>
-      </TouchableOpacity>
+      <View style={styles.scanRow}>
+        <TouchableOpacity style={styles.scanButton} onPress={() => router.push('/label/camera')}>
+          <Text style={styles.scanButtonText}>Scan Wine Label</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.scanButton} onPress={handleUploadPhoto}>
+          <Text style={styles.scanButtonText}>Upload Screenshot/Photo</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.divider}>
         <View style={styles.dividerLine} />
@@ -108,16 +147,6 @@ export default function AddToWishListScreen() {
         keyboardType="number-pad"
       />
 
-      <Text style={styles.label}>Quantity</Text>
-      <TextInput
-        style={styles.input}
-        value={quantity}
-        onChangeText={setQuantity}
-        placeholder="1"
-        placeholderTextColor={colors.textMuted}
-        keyboardType="number-pad"
-      />
-
       <TouchableOpacity
         style={[styles.saveButton, saving && { opacity: 0.6 }]}
         onPress={handleSave}
@@ -138,8 +167,11 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xl },
   heading: { fontSize: 30, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
-  scanButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', marginBottom: spacing.xl },
-  scanButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  scanRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
+  scanButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
+  scanButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  uploadingScreen: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', gap: spacing.lg },
+  uploadingText: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.5 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
   dividerText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
