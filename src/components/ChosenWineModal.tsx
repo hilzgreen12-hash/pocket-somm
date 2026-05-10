@@ -4,6 +4,7 @@ import {
   ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { showAlert } from './AppAlert';
+import { CityAutocomplete } from './CityAutocomplete';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -142,7 +143,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
             />
 
             <Text style={styles.fieldLabel}>City</Text>
-            <TextInput
+            <CityAutocomplete
               style={styles.input}
               value={city}
               onChangeText={setCity}

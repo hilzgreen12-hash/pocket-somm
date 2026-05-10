@@ -5,19 +5,13 @@ import { useAuth } from '../src/hooks/useAuth';
 
 export default function Index() {
   const { session, loading } = useAuth();
-  const [hasLaunched, setHasLaunched] = useState<boolean | null>(null);
   const [tourSeen, setTourSeen] = useState<boolean | null>(null);
 
-  // Read both keys whenever the session changes so a fresh sign-up on a
-  // device that's previously seen the tour still triggers the tour for the
-  // new account. Tour-seen is keyed per user_id.
+  // Tour-seen is keyed per user_id so a fresh sign-up on a device that's
+  // previously seen the tour still triggers it for the new account.
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const [launchedRaw] = await Promise.all([AsyncStorage.getItem('hasLaunched')]);
-      if (cancelled) return;
-      setHasLaunched(launchedRaw === 'true');
-
       if (session?.user.id) {
         const tourRaw = await AsyncStorage.getItem(`vinster_tour_seen_${session.user.id}`);
         if (cancelled) return;
@@ -29,7 +23,7 @@ export default function Index() {
     return () => { cancelled = true; };
   }, [session?.user.id]);
 
-  if (loading || hasLaunched === null || tourSeen === null) return null;
+  if (loading || tourSeen === null) return null;
 
   // Signed-in users
   if (session) {
@@ -37,9 +31,6 @@ export default function Index() {
     return <Redirect href="/(tabs)/scan" />;
   }
 
-  // Returning guest — skip welcome
-  if (hasLaunched) return <Redirect href="/(tabs)/scan" />;
-
-  // First-time visitor
+  // Everyone else lands on the welcome page — account setup is required.
   return <Redirect href="/welcome" />;
 }

@@ -430,7 +430,7 @@ const styles = StyleSheet.create({
   archiveButton: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: '#FFFFFF',
     borderRadius: 14,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xs,
@@ -438,7 +438,7 @@ const styles = StyleSheet.create({
   },
   archiveButtonText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    color: colors.gold,
+    color: '#FFFFFF',
     fontSize: 14,
     textAlign: 'center',
   },

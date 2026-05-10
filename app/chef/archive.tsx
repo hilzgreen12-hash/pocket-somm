@@ -1,24 +1,21 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
-import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
+import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useChefArchiveCollections } from '../../src/hooks/useChefArchiveCollections';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useAuth } from '../../src/hooks/useAuth';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
-import type { ChefLabelSession, ChefPairingSession } from '../../src/api/chef';
+import type { ChefLabelSession } from '../../src/api/chef';
 import type { ChefArchiveCollection } from '../../src/api/chefArchiveCollections';
 
 const FILTER_ALL = 'ALL';
 const FILTER_FAVOURITES = 'FAVOURITES';
 
-type UnifiedItem =
-  | { type: 'label'; key: string; saved_at: string; is_starred: boolean; session: ChefLabelSession }
-  | { type: 'pairing'; key: string; saved_at: string; is_starred: boolean; session: ChefPairingSession };
+type UnifiedItem = { type: 'label'; key: string; saved_at: string; is_starred: boolean; session: ChefLabelSession };
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -39,7 +36,7 @@ function FolderChip({ label, count, active, onPress, onLongPress, accent }: {
       onLongPress={onLongPress}
       activeOpacity={0.7}
     >
-      <Text style={[styles.chipText, active && styles.chipTextActive]}>
+      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1} ellipsizeMode="tail">
         {accent === 'star' ? '★ ' : ''}{label}{count != null ? ` (${count})` : ''}
       </Text>
     </TouchableOpacity>
@@ -49,11 +46,9 @@ function FolderChip({ label, count, active, onPress, onLongPress, accent }: {
 export default function ChefArchiveScreen() {
   const { session } = useAuth();
   const { sessions: labelSessions, isLoading: labelLoading } = useChefLabelHistory();
-  const { sessions: pairingSessions, isLoading: pairingLoading } = useChefPairingHistory();
   const { collections, membershipMap, create, rename, remove, addItem, removeItem, toggleStar } = useChefArchiveCollections();
 
   const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
-  const { setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
 
   const [filter, setFilter] = useState<string>(FILTER_ALL);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -62,15 +57,20 @@ export default function ChefArchiveScreen() {
   const [renameDraft, setRenameDraft] = useState('');
   const [assigning, setAssigning] = useState<UnifiedItem | null>(null);
 
-  // Unified feed sorted newest-first.
+  // Recipe-only feed sorted newest-first. Wine pairings (find-a-pairing
+  // searches) are intentionally not archived — only recipe sets generated
+  // from a label scan land here.
   const allItems: UnifiedItem[] = useMemo(() => {
-    const items: UnifiedItem[] = [
-      ...labelSessions.map((s): UnifiedItem => ({ type: 'label', key: `label:${s.id}`, saved_at: s.saved_at, is_starred: !!s.is_starred, session: s })),
-      ...pairingSessions.map((s): UnifiedItem => ({ type: 'pairing', key: `pairing:${s.id}`, saved_at: s.saved_at, is_starred: !!s.is_starred, session: s })),
-    ];
+    const items: UnifiedItem[] = labelSessions.map((s): UnifiedItem => ({
+      type: 'label',
+      key: `label:${s.id}`,
+      saved_at: s.saved_at,
+      is_starred: !!s.is_starred,
+      session: s,
+    }));
     items.sort((a, b) => (a.saved_at < b.saved_at ? 1 : -1));
     return items;
-  }, [labelSessions, pairingSessions]);
+  }, [labelSessions]);
 
   const favouritesCount = allItems.filter((i) => i.is_starred).length;
 
@@ -134,43 +134,22 @@ export default function ChefArchiveScreen() {
   }
 
   function handleViewItem(item: UnifiedItem) {
-    if (item.type === 'label') {
-      const s = item.session;
-      setWineDetailsConfirmed(s.wine);
-      setPairings(s.pairings);
-      setFilters(s.filters ?? null);
-      router.push({ pathname: '/chef/results', params: { fromHistory: 'true', savedAt: s.saved_at, city: s.city ?? '' } });
-    } else {
-      const s = item.session;
-      setDish(s.dish);
-      setMode(s.mode);
-      if (s.mode === 'cellar') setCellarResult(s.cellar_result ?? []);
-      else setGeneralResult(s.general_result ?? [], s.general_summary ?? undefined);
-      router.push({ pathname: '/chef/pairing-results', params: { fromHistory: 'true', savedAt: s.saved_at, city: s.city ?? '' } });
-    }
+    const s = item.session;
+    setWineDetailsConfirmed(s.wine);
+    setPairings(s.pairings);
+    setFilters(s.filters ?? null);
+    router.push({ pathname: '/chef/results', params: { fromHistory: 'true', savedAt: s.saved_at, city: s.city ?? '' } });
   }
 
   function itemTitle(item: UnifiedItem): string {
-    if (item.type === 'label') {
-      return wineHeaderLine(item.session.wine.producer, item.session.wine.wineName, item.session.wine.vintage);
-    }
-    return item.session.dish;
+    return wineHeaderLine(item.session.wine.producer, item.session.wine.wineName, item.session.wine.vintage);
   }
 
   function itemSubtitle(item: UnifiedItem): string {
-    if (item.type === 'label') {
-      return item.session.pairings.map((p) => p.dishName).join(' · ');
-    }
-    if (item.session.mode === 'cellar' && item.session.cellar_result?.length) {
-      return `From your cellar — ${item.session.cellar_result.length} suggestion${item.session.cellar_result.length === 1 ? '' : 's'}`;
-    }
-    if (item.session.mode === 'general' && item.session.general_result?.length) {
-      return `Style suggestions — ${item.session.general_result.length}`;
-    }
-    return '';
+    return item.session.pairings.map((p) => p.dishName).join(' · ');
   }
 
-  const isLoading = labelLoading || pairingLoading;
+  const isLoading = labelLoading;
 
   return (
     <View style={styles.container}>
@@ -178,7 +157,7 @@ export default function ChefArchiveScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Chef Archive</Text>
+        <Text style={styles.title}>Recipe Archive</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -210,13 +189,13 @@ export default function ChefArchiveScreen() {
         />
       ) : isLoading ? null : filteredItems.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'No Archive Yet' : 'Nothing here'}</Text>
+          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'No Recipe Archive Yet' : 'Nothing here'}</Text>
           <Text style={styles.emptyBody}>
             {filter === FILTER_ALL
-              ? 'After each search, save your results to archive to keep track of your recipes and wine pairings.'
+              ? 'After scanning a wine label, save the chef-inspired recipes to your archive to keep them here.'
               : filter === FILTER_FAVOURITES
-                ? 'Tap the ★ on any archive card to add it to your Favourites.'
-                : 'No items in this folder yet. From the All tab, open any item and add it to a folder.'}
+                ? 'Tap the ★ on any recipe card to add it to your Favourites.'
+                : 'No recipes in this folder yet. From the All tab, open any recipe and add it to a folder.'}
           </Text>
         </View>
       ) : (
@@ -229,9 +208,6 @@ export default function ChefArchiveScreen() {
             return (
               <View key={item.key} style={styles.card}>
                 <View style={styles.cardTopRow}>
-                  <View style={[styles.typePill, item.type === 'label' ? styles.typePillRecipe : styles.typePillPairing]}>
-                    <Text style={styles.typePillText}>{item.type === 'label' ? 'Recipe' : 'Pairing'}</Text>
-                  </View>
                   <Text style={styles.cardDate}>{formatDate(item.saved_at)}</Text>
                   <TouchableOpacity
                     style={styles.starBtn}
@@ -364,14 +340,14 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
   title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  folderStrip: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.xs },
-  chip: { borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, paddingVertical: 6, marginRight: spacing.xs },
+  folderStrip: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
+  chip: { width: 130, height: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingHorizontal: spacing.sm, justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm, overflow: 'hidden' },
   chipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.15)' },
   chipStar: { borderColor: 'rgba(212,176,96,0.5)' },
-  chipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted },
+  chipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted, textAlign: 'center' },
   chipTextActive: { color: colors.gold },
-  newFolderChip: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 16, paddingHorizontal: spacing.md, paddingVertical: 6 },
-  newFolderChipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold },
+  newFolderChip: { width: 130, height: 40, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 20, paddingHorizontal: spacing.sm, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
+  newFolderChipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, textAlign: 'center' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
