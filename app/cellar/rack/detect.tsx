@@ -77,9 +77,9 @@ export default function RackDetectScreen() {
           <Text style={styles.previewSub}>{rows * cols} bottle slots</Text>
         </View>
 
-        <Counter label="Rows" value={rows} onChange={setRows} />
+        <Counter label="Vertical" value={rows} onChange={setRows} />
         <View style={styles.divider} />
-        <Counter label="Columns" value={cols} onChange={setCols} />
+        <Counter label="Horizontal" value={cols} onChange={setCols} />
 
         <Text style={styles.fieldLabel}>{isFridge ? 'Fridge' : 'Rack'} Name</Text>
         <TextInput
