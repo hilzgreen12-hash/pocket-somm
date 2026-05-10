@@ -98,13 +98,13 @@ export default function RacksScreen() {
       ) : racks.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No storage yet</Text>
-          <Text style={styles.emptyBody}>Photograph your wine rack or wine cooler and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
+          <Text style={styles.emptyBody}>Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
           <Text style={styles.emptyNote}>Vinster maps your storage as a rectangular grid — non-rectangular or alternative-shaped racks will need to be approximated to a grid layout.</Text>
           <TouchableOpacity style={styles.emptyButtonGold} onPress={() => handleAddType('rack')}>
             <Text style={styles.emptyButtonGoldText}>Add Wine Rack</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.emptyButtonGold, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
-            <Text style={styles.emptyButtonGoldText}>Add Wine Cooler</Text>
+            <Text style={styles.emptyButtonGoldText}>Add Wine Fridge</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -127,12 +127,10 @@ export default function RacksScreen() {
 
             <TouchableOpacity style={styles.typeButton} onPress={() => handleAddType('rack')}>
               <Text style={styles.typeButtonText}>Wine Rack</Text>
-              <Text style={styles.typeButtonSub}>A freestanding or wall-mounted bottle rack</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={[styles.typeButton, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
               <Text style={styles.typeButtonText}>Wine Fridge</Text>
-              <Text style={styles.typeButtonSub}>A temperature-controlled wine fridge or cooler</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelButton} onPress={() => setTypeModalOpen(false)}>

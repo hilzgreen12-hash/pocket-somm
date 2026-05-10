@@ -6,9 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
-import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
-import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
@@ -84,8 +82,6 @@ export default function PairingResultsScreen() {
   const { wines } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
-  const { save: savePairingSession } = useChefPairingHistory();
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
   const [renderedAt] = useState(() => new Date().toISOString());
 
   // Selection modal — opens when the user taps "Select This Wine" on a
@@ -95,7 +91,6 @@ export default function PairingResultsScreen() {
   const [bottleCount, setBottleCount] = useState('1');
   const [archiving, setArchiving] = useState(false);
   const [archivedSuccess, setArchivedSuccess] = useState<{ count: number; recName: string } | null>(null);
-  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
 
   const stampDateSource = savedAt || renderedAt;
   const stampDate = stampDateSource
@@ -173,28 +168,6 @@ export default function PairingResultsScreen() {
     }
   }
 
-  async function handleSaveToArchive() {
-    if (saveState !== 'idle' || !dish) return;
-    if (!session) {
-      setSignInPromptVisible(true);
-      return;
-    }
-    setSaveState('saving');
-    try {
-      await savePairingSession.mutateAsync({
-        dish,
-        mode,
-        cellarResult: mode === 'cellar' ? (cellarResult ?? null) : null,
-        generalResult: mode === 'general' ? (generalResult ?? null) : null,
-        generalSummary: mode === 'general' ? (generalSummary ?? null) : null,
-      });
-      setSaveState('saved');
-    } catch (err) {
-      setSaveState('idle');
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity onPress={handleBack} style={styles.backRow}>
@@ -223,18 +196,6 @@ export default function PairingResultsScreen() {
         )}
       </View>
 
-      {!isFromHistory && (
-        <TouchableOpacity
-          style={[styles.saveButton, saveState !== 'idle' && styles.saveButtonDone]}
-          onPress={handleSaveToArchive}
-          disabled={saveState !== 'idle'}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.saveButtonText}>
-            {saveState === 'saved' ? 'Saved ✓' : saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
-          </Text>
-        </TouchableOpacity>
-      )}
 
       <Modal visible={selecting !== null} transparent animationType="fade" onRequestClose={closeSelect}>
         <View style={styles.modalOverlay}>
@@ -296,13 +257,6 @@ export default function PairingResultsScreen() {
         </View>
       </Modal>
 
-      <SignInPromptModal
-        visible={signInPromptVisible}
-        onDismiss={() => setSignInPromptVisible(false)}
-        onSignIn={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
-        onContinue={() => setSignInPromptVisible(false)}
-      />
     </ScrollView>
   );
 }
@@ -330,9 +284,6 @@ const styles = StyleSheet.create({
   cardItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
   cardLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.sm },
   cardLinkMuted: { color: colors.textMuted },
-  saveButton: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  saveButtonDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },

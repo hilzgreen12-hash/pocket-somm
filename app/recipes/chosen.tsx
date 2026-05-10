@@ -102,34 +102,38 @@ export default function ChosenRecipesScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Folder strip */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderStrip}>
-        <FolderChip
-          label="All"
-          count={chosenRecipes.length}
-          active={filter === FILTER_ALL}
-          onPress={() => setFilter(FILTER_ALL)}
-        />
-        <FolderChip
-          label="Unfiled"
-          count={chosenRecipes.filter((r) => !membershipMap.get(r.id)?.size).length}
-          active={filter === FILTER_UNFILED}
-          onPress={() => setFilter(FILTER_UNFILED)}
-        />
-        {collections.map((c) => (
+      {/* Folder strip — hidden until the user has at least one review,
+          so a brand-new user isn't shown empty filter chips on a screen
+          they've never used yet. */}
+      {session && chosenRecipes.length > 0 && (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderStrip}>
           <FolderChip
-            key={c.id}
-            label={c.name}
-            count={c.recipe_count}
-            active={filter === c.id}
-            onPress={() => setFilter(c.id)}
-            onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
+            label="All"
+            count={chosenRecipes.length}
+            active={filter === FILTER_ALL}
+            onPress={() => setFilter(FILTER_ALL)}
           />
-        ))}
-        <TouchableOpacity style={styles.newFolderChip} onPress={() => gatedAction(() => setNewFolderOpen(true))}>
-          <Text style={styles.newFolderChipText}>+ New folder</Text>
-        </TouchableOpacity>
-      </ScrollView>
+          <FolderChip
+            label="Unfiled"
+            count={chosenRecipes.filter((r) => !membershipMap.get(r.id)?.size).length}
+            active={filter === FILTER_UNFILED}
+            onPress={() => setFilter(FILTER_UNFILED)}
+          />
+          {collections.map((c) => (
+            <FolderChip
+              key={c.id}
+              label={c.name}
+              count={c.recipe_count}
+              active={filter === c.id}
+              onPress={() => setFilter(c.id)}
+              onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
+            />
+          ))}
+          <TouchableOpacity style={styles.newFolderChip} onPress={() => gatedAction(() => setNewFolderOpen(true))}>
+            <Text style={styles.newFolderChipText}>+ New folder</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      )}
 
       {!session ? (
         <View style={styles.empty}>

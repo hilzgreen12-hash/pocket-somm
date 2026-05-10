@@ -250,16 +250,25 @@ export default function ChefResultsScreen() {
             <Text style={styles.regenLinkText}>Not quite — generate another set of recipes</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.saveButton, saveState !== 'idle' && styles.saveButtonDone]}
-            onPress={handleSaveToArchive}
-            disabled={saveState !== 'idle'}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.saveButtonText}>
-              {saveState === 'saved' ? 'Saved ✓' : saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
-            </Text>
-          </TouchableOpacity>
+          {saveState === 'saved' ? (
+            <View style={styles.savedBlock}>
+              <Text style={styles.savedLabel}>Saved</Text>
+              <TouchableOpacity onPress={() => router.push('/chef/archive')} activeOpacity={0.7}>
+                <Text style={styles.viewProfileLink}>View in Recipe Archive</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.saveButton}
+              onPress={handleSaveToArchive}
+              disabled={saveState === 'saving'}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.saveButtonText}>
+                {saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
+              </Text>
+            </TouchableOpacity>
+          )}
         </>
       )}
 
@@ -328,6 +337,9 @@ const styles = StyleSheet.create({
   saveButton: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   saveButtonDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
   saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  savedBlock: { alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, gap: 4 },
+  savedLabel: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, letterSpacing: 0.5 },
+  viewProfileLink: { color: colors.gold, fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, textDecorationLine: 'underline' },
   regenLink: { alignItems: 'center', paddingVertical: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm },
   regenLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
