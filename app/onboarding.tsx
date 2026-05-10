@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, SafeAreaView } from 'react-native';
+import { showAlert } from '../src/components/AppAlert';
 import { router } from 'expo-router';
 import { ChipPicker } from '../src/components/preferences/ChipPicker';
 import { StylePicker } from '../src/components/preferences/StylePicker';
@@ -47,7 +48,7 @@ export default function OnboardingScreen() {
         });
         router.replace('/(tabs)/scan');
       } catch (err) {
-        Alert.alert('Could not save preferences', 'Check your connection and try again.');
+        showAlert({ title: 'Could not save preferences', body: 'Check your connection and try again.' });
       }
     } else {
       setStep((s) => s + 1);

@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useCellarImportStore, type ImportedWine } from '../../src/stores/cellarImportStore';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -42,7 +43,7 @@ export default function ImportPreviewScreen() {
   async function handleImportAll() {
     if (!session?.user.id) return;
     if (wines.length === 0) {
-      Alert.alert('Nothing to import', 'All wines have been removed.');
+      showAlert({ title: 'Nothing to import', body: 'All wines have been removed.' });
       return;
     }
     setSaving(true);
@@ -72,11 +73,13 @@ export default function ImportPreviewScreen() {
         )
       );
       reset();
-      Alert.alert('Cellar updated', `${wines.length} wine${wines.length > 1 ? 's' : ''} added to your cellar.`, [
-        { text: 'OK', onPress: () => router.replace('/cellar/list') },
-      ]);
+      showAlert({
+        title: 'Cellar updated',
+        body: `${wines.length} wine${wines.length > 1 ? 's' : ''} added to your cellar.`,
+        buttons: [{ text: 'OK', onPress: () => router.replace('/cellar/list') }],
+      });
     } catch {
-      Alert.alert('Error', 'Could not save all wines. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not save all wines. Please try again.' });
     } finally {
       setSaving(false);
     }

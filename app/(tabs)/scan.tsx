@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabFooter } from '../../src/components/TabFooter';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -180,7 +181,7 @@ export default function ScanTab() {
       }
     } catch (err) {
       console.error('[Scan] Image picker failed:', err);
-      Alert.alert('Upload failed', 'Could not open the photo library. Please try again.');
+      showAlert({ title: 'Upload failed', body: 'Could not open the photo library. Please try again.' });
     } finally {
       setIsUploading(false);
     }

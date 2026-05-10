@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Alert, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -50,7 +51,7 @@ function RemovalRow({ removal, onSaved }: { removal: { id: string; removed_at: s
       setEditing(false);
       onSaved();
     } catch {
-      Alert.alert('Could not save', 'Please try again.');
+      showAlert({ title: 'Could not save', body: 'Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -169,9 +170,9 @@ export default function CellarWineDetail() {
       });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       setEditingNote(false);
-      Alert.alert('Note Saved');
+      showAlert({ title: 'Note Saved' });
     } catch {
-      Alert.alert('Error', 'Could not save note.');
+      showAlert({ title: 'Error', body: 'Could not save note.' });
     } finally {
       setSavingNote(false);
     }
@@ -180,11 +181,11 @@ export default function CellarWineDetail() {
   async function handleArchiveWine() {
     const count = parseInt(removeCount) || 0;
     if (count < 1) {
-      Alert.alert('Invalid', 'Enter at least 1 bottle to archive.');
+      showAlert({ title: 'Invalid', body: 'Enter at least 1 bottle to archive.' });
       return;
     }
     if (count > wine!.quantity) {
-      Alert.alert('Invalid', `You only have ${wine!.quantity} bottle${wine!.quantity === 1 ? '' : 's'}.`);
+      showAlert({ title: 'Invalid', body: `You only have ${wine!.quantity} bottle${wine!.quantity === 1 ? '' : 's'}.` });
       return;
     }
 
@@ -222,11 +223,11 @@ export default function CellarWineDetail() {
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
         if (wineRack) {
-          Alert.alert(
-            'Removed from cellar',
-            'This wine has also been removed from your live cellar rack.',
-            [{ text: 'OK', onPress: () => router.back() }]
-          );
+          showAlert({
+            title: 'Removed from cellar',
+            body: 'This wine has also been removed from your live cellar rack.',
+            buttons: [{ text: 'OK', onPress: () => router.back() }],
+          });
         } else {
           router.back();
         }
@@ -249,7 +250,7 @@ export default function CellarWineDetail() {
         setNoteText(updatedNotes);
       }
     } catch {
-      Alert.alert('Error', 'Could not record removal. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not record removal. Please try again.' });
     } finally {
       setRemoving(false);
     }
@@ -259,7 +260,7 @@ export default function CellarWineDetail() {
     const trimmed = purchasePriceDraft.trim();
     const parsed = trimmed ? Number(trimmed) : null;
     if (trimmed && (parsed === null || Number.isNaN(parsed) || parsed < 0)) {
-      Alert.alert('Invalid', 'Enter a positive number for the purchase price.');
+      showAlert({ title: 'Invalid', body: 'Enter a positive number for the purchase price.' });
       return;
     }
     setSavingPrice(true);
@@ -276,7 +277,7 @@ export default function CellarWineDetail() {
       });
       setEditingPrice(false);
     } catch {
-      Alert.alert('Error', 'Could not save purchase price.');
+      showAlert({ title: 'Error', body: 'Could not save purchase price.' });
     } finally {
       setSavingPrice(false);
     }
@@ -290,7 +291,7 @@ export default function CellarWineDetail() {
     if (scoreTrim) {
       const n = Number(scoreTrim);
       if (!Number.isFinite(n) || n < 0 || n > 100) {
-        Alert.alert('Invalid score', 'Enter a score between 0 and 100.');
+        showAlert({ title: 'Invalid score', body: 'Enter a score between 0 and 100.' });
         return;
       }
       parsedScore = Math.round(n);
@@ -307,7 +308,7 @@ export default function CellarWineDetail() {
       });
       setReviewExpanded(false);
     } catch {
-      Alert.alert('Could not save review', 'Please try again.');
+      showAlert({ title: 'Could not save review', body: 'Please try again.' });
     } finally {
       setSavingReview(false);
     }
@@ -330,7 +331,7 @@ export default function CellarWineDetail() {
       setRemoveStep('success');
     } catch {
       setRemoveStep('idle');
-      Alert.alert('Could not remove', 'Please try again.');
+      showAlert({ title: 'Could not remove', body: 'Please try again.' });
     } finally {
       setRemoving(false);
     }
@@ -356,7 +357,7 @@ export default function CellarWineDetail() {
         },
       });
     } catch {
-      Alert.alert('Could not refresh', 'Vinster couldn\'t generate an estimate right now. Please try again.');
+      showAlert({ title: 'Could not refresh', body: 'Vinster couldn\'t generate an estimate right now. Please try again.' });
     } finally {
       setRefreshingValue(false);
     }
@@ -392,7 +393,7 @@ export default function CellarWineDetail() {
       router.push('/chef/results');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
-      Alert.alert('Error', 'Could not generate pairings. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
     } finally {
       setFindingPairings(false);
     }

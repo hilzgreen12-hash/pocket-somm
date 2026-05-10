@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -46,7 +47,7 @@ export default function CommunityProfileScreen() {
       if (error) throw error;
       qc.invalidateQueries({ queryKey: ['community-profile', session.user.id] });
     } catch {
-      Alert.alert('Could not update', 'Please try again.');
+      showAlert({ title: 'Could not update', body: 'Please try again.' });
     }
   }
 

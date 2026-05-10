@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, Modal } from 'react-native';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
@@ -128,7 +129,7 @@ export default function PairingResultsScreen() {
     const count = Math.max(1, parseInt(bottleCount, 10) || 0);
     const wine = selecting.wine;
     if (count > wine.quantity) {
-      Alert.alert('Not enough bottles', `You only have ${wine.quantity} ${wine.quantity === 1 ? 'bottle' : 'bottles'} of this wine in your cellar.`);
+      showAlert({ title: 'Not enough bottles', body: `You only have ${wine.quantity} ${wine.quantity === 1 ? 'bottle' : 'bottles'} of this wine in your cellar.` });
       return;
     }
     setArchiving(true);
@@ -169,7 +170,7 @@ export default function PairingResultsScreen() {
 
       setArchivedSuccess({ count, recName: selecting.recName });
     } catch (err) {
-      Alert.alert('Could not archive', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setArchiving(false);
     }
@@ -193,7 +194,7 @@ export default function PairingResultsScreen() {
       setSaveState('saved');
     } catch (err) {
       setSaveState('idle');
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 

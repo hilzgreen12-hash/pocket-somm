@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Alert,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { showAlert } from './AppAlert';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -82,7 +83,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
       setSaved(true);
       onSaved();
     } catch (err) {
-      Alert.alert('Could not save', err instanceof Error ? err.message : 'Please try again.');
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 

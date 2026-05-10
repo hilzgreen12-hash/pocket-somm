@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -168,7 +169,7 @@ export default function CellarStatsScreen() {
     try {
       await processBatch(targets);
     } catch {
-      Alert.alert('Could not finish', 'Some wines could not be valued. Please try again.');
+      showAlert({ title: 'Could not finish', body: 'Some wines could not be valued. Please try again.' });
     } finally {
       setCalculating(false);
     }

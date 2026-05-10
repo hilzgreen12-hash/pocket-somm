@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Alert } from 'react-native';
+import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -18,7 +19,7 @@ export default function ChefConfirmScreen() {
 
   function handleConfirm() {
     if (!producer.trim() || !region.trim()) {
-      Alert.alert('Missing details', 'Producer and region are required.');
+      showAlert({ title: 'Missing details', body: 'Producer and region are required.' });
       return;
     }
 

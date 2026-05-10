@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useChosenRecipes } from '../../src/hooks/useChosenRecipes';
 import { useRecipeCollections } from '../../src/hooks/useRecipeCollections';
@@ -53,7 +54,7 @@ export default function ChosenRecipesScreen() {
         setNewFolderName('');
         setNewFolderOpen(false);
       },
-      onError: (err) => Alert.alert('Could not create', err instanceof Error ? err.message : 'Please try again.'),
+      onError: (err) => showAlert({ title: 'Could not create', body: err instanceof Error ? err.message : 'Please try again.' }),
     });
   }
 
@@ -66,7 +67,7 @@ export default function ChosenRecipesScreen() {
     }
     rename.mutate({ id: manageFolder.id, name }, {
       onSuccess: () => setManageFolder(null),
-      onError: (err) => Alert.alert('Could not rename', err instanceof Error ? err.message : 'Please try again.'),
+      onError: (err) => showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }),
     });
   }
 
@@ -76,7 +77,7 @@ export default function ChosenRecipesScreen() {
     setManageFolder(null);
     if (filter === f.id) setFilter(FILTER_ALL);
     remove.mutate(f.id, {
-      onError: (err) => Alert.alert('Could not delete', err instanceof Error ? err.message : 'Please try again.'),
+      onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
     });
   }
 

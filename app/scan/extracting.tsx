@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import * as Location from 'expo-location';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -32,15 +33,15 @@ async function detectLocalCurrency(): Promise<{ currency: string; country: strin
 function askUseLocalCurrency(local: string, profile: string, country: string | null): Promise<string> {
   const where = country ? `in ${country}` : `somewhere using ${local}`;
   return new Promise((resolve) => {
-    Alert.alert(
-      'Local currency detected',
-      `You appear to be ${where}. Use local currency (${local}) for budget and value guidance on this list?`,
-      [
-        { text: `Keep ${profile}`, onPress: () => resolve(profile), style: 'cancel' },
+    showAlert({
+      title: 'Local currency detected',
+      body: `You appear to be ${where}. Use local currency (${local}) for budget and value guidance on this list?`,
+      dismissable: false,
+      buttons: [
         { text: `Use ${local}`, onPress: () => resolve(local) },
+        { text: `Keep ${profile}`, style: 'cancel', onPress: () => resolve(profile) },
       ],
-      { cancelable: false }
-    );
+    });
   });
 }
 

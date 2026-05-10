@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { showAlert } from '../../../src/components/AppAlert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
@@ -146,7 +147,7 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
     } catch {
-      Alert.alert('Move failed', 'Could not move the wine. Please try again.');
+      showAlert({ title: 'Move failed', body: 'Could not move the wine. Please try again.' });
     }
   }
 

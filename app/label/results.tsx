@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -115,9 +116,9 @@ export default function LabelResultsScreen() {
     try {
       await addToWishList.mutateAsync({ ...buildWinePayload(session.user.id), is_wishlist: true });
       setAddingToWishList(false);
-      Alert.alert('Added to Wish List', `${wine.wineName ?? wine.producer} has been saved to your wish list.`);
+      showAlert({ title: 'Added to Wish List', body: `${wine.wineName ?? wine.producer} has been saved to your wish list.` });
     } catch {
-      Alert.alert('Error', 'Could not save to wish list. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not save to wish list. Please try again.' });
     } finally {
       setSaving(false);
     }
@@ -151,9 +152,9 @@ export default function LabelResultsScreen() {
       }
 
       setAddingToCellar(false);
-      Alert.alert('Added to cellar', `${wine.wineName ?? wine.producer} has been saved.`);
+      showAlert({ title: 'Added to cellar', body: `${wine.wineName ?? wine.producer} has been saved.` });
     } catch (err) {
-      Alert.alert('Error', 'Could not save to cellar. Please try again.');
+      showAlert({ title: 'Error', body: 'Could not save to cellar. Please try again.' });
     } finally {
       setSaving(false);
     }
