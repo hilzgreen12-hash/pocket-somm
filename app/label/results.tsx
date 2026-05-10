@@ -8,7 +8,9 @@ import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
+import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots } from '../../src/api/racks';
+import { formatCurrency } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 
 function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
@@ -36,7 +38,8 @@ export default function LabelResultsScreen() {
   const { session } = useAuth();
   const { addWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
-  const { pendingSlot, setPendingSlot } = useRackStore();
+  const { pendingSlot, setPendingSlot, setPendingWineId } = useRackStore();
+  const { racks } = useRacks();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
   const userCurrency = preferences?.defaultCurrency ?? 'GBP';
@@ -44,9 +47,10 @@ export default function LabelResultsScreen() {
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
   const [quantity, setQuantity] = useState('1');
-  const [storageLocation, setStorageLocation] = useState('');
   const [orientation, setOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
+  const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showEstimate, setShowEstimate] = useState(false);
 
   if (!wineDetailsConfirmed || !intelligence) {
     return (
@@ -92,7 +96,7 @@ export default function LabelResultsScreen() {
       region: wine.region,
       vintage: wine.vintage,
       quantity: parseInt(quantity) || 1,
-      storage_location: pendingSlot ? orientation : (storageLocation.trim() || null),
+      storage_location: pendingSlot ? orientation : null,
       date_received: new Date().toISOString().split('T')[0],
       critic_score: intel.criticScore,
       drinking_window_from: intel.drinkingWindowFrom,
@@ -151,6 +155,19 @@ export default function LabelResultsScreen() {
         return;
       }
 
+      // User picked a rack from the picker — set the wine as pending and
+      // open that rack so they can place it directly. Stack ends up
+      // [cellar tab, rack] so Back from the rack returns to the Cellar tab.
+      if (selectedRackId) {
+        setPendingWineId(saved.id);
+        setAddingToCellar(false);
+        reset();
+        if (router.canGoBack()) router.dismiss(2);
+        else router.replace('/(tabs)/cellar');
+        router.push(`/cellar/rack/${selectedRackId}` as any);
+        return;
+      }
+
       setAddingToCellar(false);
       showAlert({ title: 'Added to cellar', body: `${wine.wineName ?? wine.producer} has been saved.` });
     } catch (err) {
@@ -192,6 +209,33 @@ export default function LabelResultsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Tasting Notes</Text>
         <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.sectionTitle}>Estimated Value</Text>
+        {!showEstimate ? (
+          <TouchableOpacity style={styles.estimateButton} onPress={() => setShowEstimate(true)}>
+            <Text style={styles.estimateButtonText}>Generate estimated value</Text>
+          </TouchableOpacity>
+        ) : intel.estimatedValue != null ? (
+          <View>
+            <Text style={styles.estimateValue}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
+            <Text style={styles.estimateCaption}>per bottle · AI estimate based on producer, region, and vintage</Text>
+          </View>
+        ) : (
+          <View>
+            <Text style={styles.estimateUnavailable}>Not enough market data</Text>
+            <Text style={styles.estimateCaption}>This wine is too obscure for Vinster to estimate reliably. Add a purchase price when saving to your cellar to track value yourself.</Text>
+          </View>
+        )}
+      </View>
+
+      <View style={styles.section}>
+        <View style={styles.communityRow}>
+          <Text style={styles.communityLabel}>Community notes on this wine</Text>
+          <Text style={styles.communityComingSoon}>coming soon</Text>
+        </View>
+        <Text style={styles.communityCaption}>See what other Vinster users have noted about this wine.</Text>
       </View>
 
       <View style={styles.actionRow}>
@@ -260,25 +304,44 @@ export default function LabelResultsScreen() {
                   </TouchableOpacity>
                 </View>
               </>
-            ) : (
+            ) : racks.length > 0 ? (
               <>
                 <Text style={styles.modalLabel}>Storage location (optional)</Text>
-                <TextInput
-                  style={styles.modalInput}
-                  value={storageLocation}
-                  onChangeText={setStorageLocation}
-                  placeholder="e.g. Rack A, Shelf 2"
-                  placeholderTextColor={colors.textMuted}
-                />
+                <Text style={styles.modalHint}>Pick a rack to place this bottle in now, or save without and assign later.</Text>
+                <View style={styles.rackList}>
+                  <TouchableOpacity
+                    style={[styles.rackOption, selectedRackId === null && styles.rackOptionActive]}
+                    onPress={() => setSelectedRackId(null)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.rackOptionText, selectedRackId === null && styles.rackOptionTextActive]}>Save without placing</Text>
+                  </TouchableOpacity>
+                  {racks.map((r) => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.rackOption, selectedRackId === r.id && styles.rackOptionActive]}
+                      onPress={() => setSelectedRackId(r.id)}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.rackOptionText, selectedRackId === r.id && styles.rackOptionTextActive]}>{r.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </>
-            )}
+            ) : null}
 
             <TouchableOpacity
               style={[styles.button, saving && styles.buttonDisabled]}
               onPress={handleAddToCellar}
               disabled={saving}
             >
-              <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save to Cellar'}</Text>
+              <Text style={styles.buttonText}>
+                {saving
+                  ? 'Saving…'
+                  : selectedRackId
+                    ? `Save & Place in ${racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack'}`
+                    : 'Save to Cellar'}
+              </Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelButton} onPress={() => setAddingToCellar(false)}>
@@ -312,6 +375,15 @@ const styles = StyleSheet.create({
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   tastingNotes: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22 },
+  estimateButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  estimateButtonText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.3 },
+  estimateValue: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, letterSpacing: 0.5 },
+  estimateUnavailable: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  estimateCaption: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, lineHeight: 19 },
+  communityRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  communityLabel: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: 'rgba(212,176,96,0.45)', letterSpacing: 0.3 },
+  communityComingSoon: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textTransform: 'lowercase', letterSpacing: 0.5 },
+  communityCaption: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, lineHeight: 19 },
   actionRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.xl, marginTop: spacing.xl },
   actionButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   actionButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
@@ -333,4 +405,10 @@ const styles = StyleSheet.create({
   orientationBtnActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
   orientationText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   orientationTextActive: { color: colors.gold },
+  modalHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm, lineHeight: 18 },
+  rackList: { gap: spacing.xs, marginBottom: spacing.md },
+  rackOption: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
+  rackOptionText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  rackOptionTextActive: { color: colors.gold },
 });

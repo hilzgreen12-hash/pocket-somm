@@ -222,15 +222,11 @@ export default function CellarWineDetail() {
         }
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
-        if (wineRack) {
-          showAlert({
-            title: 'Removed from cellar',
-            body: 'This wine has also been removed from your live cellar rack.',
-            buttons: [{ text: 'OK', onPress: () => router.back() }],
-          });
-        } else {
-          router.back();
-        }
+        showAlert({
+          title: 'Wine Archived',
+          body: 'Removed from Cellar List and racks.',
+          buttons: [{ text: 'OK', onPress: () => router.back() }],
+        });
       } else {
         await updateWine.mutateAsync({
           id: wine!.id,
@@ -642,54 +638,62 @@ export default function CellarWineDetail() {
         ) : null}
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Archive or Delete Wine</Text>
+      {!isArchived && (
+        <>
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Archive or Delete Wine</Text>
 
-        <View style={styles.removeBlock}>
-          <Text style={styles.fieldLabel}>Number of bottles to remove</Text>
-          <TextInput
-            style={styles.input}
-            value={removeCount}
-            onChangeText={setRemoveCount}
-            keyboardType="number-pad"
-            placeholder="1"
-            placeholderTextColor={colors.textMuted}
-          />
+            <View style={styles.removeBlock}>
+              {wine.quantity > 1 && (
+                <>
+                  <Text style={styles.fieldLabel}>How many of your {wine.quantity} bottles?</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={removeCount}
+                    onChangeText={setRemoveCount}
+                    keyboardType="number-pad"
+                    placeholder="1"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </>
+              )}
 
-          <Text style={styles.fieldLabel}>Date removed</Text>
-          <TextInput
-            style={styles.input}
-            value={removeDate}
-            onChangeText={setRemoveDate}
-            placeholder="YYYY-MM-DD"
-            placeholderTextColor={colors.textMuted}
-          />
+              <Text style={styles.fieldLabel}>Date removed</Text>
+              <TextInput
+                style={styles.input}
+                value={removeDate}
+                onChangeText={setRemoveDate}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textMuted}
+              />
 
-          <TouchableOpacity
-            style={[styles.removeBtn, removing && styles.buttonDisabled]}
-            onPress={handleArchiveWine}
-            disabled={removing}
-          >
-            <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
+              <TouchableOpacity
+                style={[styles.removeBtn, removing && styles.buttonDisabled]}
+                onPress={handleArchiveWine}
+                disabled={removing}
+              >
+                <Text style={styles.removeBtnText}>{removing ? 'Working…' : 'Archive Wine'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
+                onPress={() => setRemoveStep('confirm')}
+                disabled={removing}
+              >
+                <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
+              </TouchableOpacity>
+
+              {rackRemovalMsg && (
+                <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
+              )}
+            </View>
+          </View>
+
+          <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
+            <Text style={styles.chefBtnText}>Chef, find me a food pairing for this wine</Text>
           </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.removeWineBtn, removing && styles.buttonDisabled]}
-            onPress={() => setRemoveStep('confirm')}
-            disabled={removing}
-          >
-            <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
-          </TouchableOpacity>
-
-          {rackRemovalMsg && (
-            <Text style={styles.rackRemovalMsg}>{rackRemovalMsg}</Text>
-          )}
-        </View>
-      </View>
-
-      <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
-        <Text style={styles.chefBtnText}>Chef, find me a food pairing for this wine</Text>
-      </TouchableOpacity>
+        </>
+      )}
 
       {removals.length > 0 && (
         <View style={styles.section}>
@@ -703,6 +707,16 @@ export default function CellarWineDetail() {
             <RemovalRow key={ev.id} removal={ev} onSaved={() => qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] })} />
           ))}
         </View>
+      )}
+
+      {isArchived && (
+        <TouchableOpacity
+          style={[styles.removeWineBtn, styles.archivedDeleteBtn, removing && styles.buttonDisabled]}
+          onPress={() => setRemoveStep('confirm')}
+          disabled={removing}
+        >
+          <Text style={styles.removeWineBtnText}>Delete Wine From Your Records</Text>
+        </TouchableOpacity>
       )}
 
       <Modal
@@ -783,6 +797,7 @@ const styles = StyleSheet.create({
   removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   removeWineBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   removeWineBtnText: { color: colors.error, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  archivedDeleteBtn: { marginHorizontal: spacing.xl, marginBottom: spacing.lg },
   archivedAt: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
   removalRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   removalHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 },

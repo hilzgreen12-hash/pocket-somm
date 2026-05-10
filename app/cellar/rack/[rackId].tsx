@@ -41,6 +41,14 @@ export default function RackGridScreen() {
   const [isLandscape, setIsLandscape] = useState(false);
   const [moving, setMoving] = useState<{ row: number; col: number; wineId: string; wineName: string } | null>(null);
   const [movingMsg, setMovingMsg] = useState<string | null>(null);
+  const [savedMsg, setSavedMsg] = useState<string | null>(null);
+
+  // Auto-clear the "Wine saved to rack" confirmation after a few seconds.
+  useEffect(() => {
+    if (!savedMsg) return;
+    const t = setTimeout(() => setSavedMsg(null), 3000);
+    return () => clearTimeout(t);
+  }, [savedMsg]);
 
   // Unlock landscape for this screen; restore portrait on leave
   useEffect(() => {
@@ -111,7 +119,10 @@ export default function RackGridScreen() {
       // there's a single source of truth for the wine UI.
       router.push(`/cellar/${wine.id}` as any);
     } else if (pendingWineId) {
-      assign.mutate({ row, col, wineId: pendingWineId });
+      assign.mutate(
+        { row, col, wineId: pendingWineId },
+        { onSuccess: () => setSavedMsg('Wine saved to rack') }
+      );
       setPendingWineId(null);
     } else {
       setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols });
@@ -220,6 +231,16 @@ export default function RackGridScreen() {
             <TouchableOpacity onPress={() => { setMoving(null); setMovingMsg(null); }}>
               <Text style={styles.movingCancelLink}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        )}
+        {pendingWineId && (
+          <View style={styles.pendingBanner}>
+            <Text style={styles.pendingBannerText}>Tap an empty slot to place this wine</Text>
+          </View>
+        )}
+        {savedMsg && (
+          <View style={styles.savedBanner}>
+            <Text style={styles.savedBannerText}>{savedMsg} ✓</Text>
           </View>
         )}
         {/* Rack grid — horizontally scrollable for wide racks */}
@@ -392,6 +413,8 @@ const styles = StyleSheet.create({
   fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background, marginBottom: spacing.md },
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
-  savedBanner: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginTop: spacing.sm, alignItems: 'center' },
+  savedBanner: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, alignItems: 'center' },
   savedBannerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, letterSpacing: 0.3 },
+  pendingBanner: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, alignItems: 'center' },
+  pendingBannerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, letterSpacing: 0.3 },
 });
