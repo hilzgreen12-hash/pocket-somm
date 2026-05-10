@@ -140,11 +140,8 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/label-archive')}>
-          <Text style={styles.buttonText}>View Archived Recipes</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => router.push('/chef/pairing-archive')}>
-          <Text style={styles.buttonText}>View Archived Wine Pairings</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
+          <Text style={styles.buttonText}>View Archive</Text>
         </TouchableOpacity>
       </View>
 

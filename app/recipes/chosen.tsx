@@ -141,10 +141,10 @@ export default function ChosenRecipesScreen() {
         </View>
       ) : isLoading ? null : filteredRecipes.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'No reviews yet' : 'Nothing here'}</Text>
+          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'Nothing here yet' : 'Nothing here'}</Text>
           <Text style={styles.emptyBody}>
             {filter === FILTER_ALL
-              ? 'Tap Review Recipe on any chef pairing to log your cooking notes and score here.'
+              ? 'When you cook from a Vinster chef pairing, tap "Review Recipe" to record it here — with your cooking notes, score, and where you cooked it.'
               : 'No recipes in this folder yet. Tap a recipe below "All" and add it to a folder.'}
           </Text>
         </View>

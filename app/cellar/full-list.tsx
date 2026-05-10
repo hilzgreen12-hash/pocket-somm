@@ -169,6 +169,7 @@ export default function FullCellarListScreen() {
       </View>
 
       {/* Filter row */}
+      <Text style={styles.filterHint}>Swipe to see all filters →</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rack')}>
           <Text style={styles.filterChipLabel}>Rack</Text>
@@ -190,8 +191,17 @@ export default function FullCellarListScreen() {
 
       {sorted.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No wines match</Text>
-          <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
+          {wines.length === 0 ? (
+            <>
+              <Text style={styles.emptyTitle}>Your cellar is empty</Text>
+              <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyTitle}>No wines match</Text>
+              <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
+            </>
+          )}
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
@@ -270,6 +280,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.8 },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 11, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, letterSpacing: 0.3 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   sortChip: { borderColor: colors.gold },

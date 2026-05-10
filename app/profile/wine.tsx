@@ -80,10 +80,12 @@ export default function WineProfileScreen() {
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-          <Text style={styles.back}>Back</Text>
-        </TouchableOpacity>
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop: isOnboarding ? 70 : 0 }}>
+        {!isOnboarding && (
+          <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
+            <Text style={styles.back}>Back</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.profileIntro}>
           <Text style={styles.profileHeading}>Wine Preferences</Text>

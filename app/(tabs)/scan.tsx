@@ -139,9 +139,14 @@ export default function ScanTab() {
   async function handleViewLastSearch() {
     try {
       const raw = await AsyncStorage.getItem('vinster_scan_history');
-      if (!raw) return;
-      const items = JSON.parse(raw);
-      if (!items.length) return;
+      const items = raw ? JSON.parse(raw) : [];
+      if (!items.length) {
+        showAlert({
+          title: 'No previous search',
+          body: 'Once you scan a wine list, you can come back here to revisit it.',
+        });
+        return;
+      }
       const last = items[0];
       setExtractedWines(last.extractedWines);
       setRecommendation(last.recommendation);
@@ -150,7 +155,12 @@ export default function ScanTab() {
       if (last.restaurantName) params.set('restaurant', last.restaurantName);
       if (last.city) params.set('city', last.city);
       router.push(`/scan/results?${params.toString()}`);
-    } catch { /* no history available */ }
+    } catch {
+      showAlert({
+        title: 'No previous search',
+        body: 'Once you scan a wine list, you can come back here to revisit it.',
+      });
+    }
   }
 
   function handleScan() {
@@ -268,11 +278,7 @@ export default function ScanTab() {
           <TouchableOpacity style={styles.archiveButton} onPress={() => router.push('/scan/history')}>
             <Text style={styles.archiveButtonText}>View Archive</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.archiveButton, !hasLastSearch && { opacity: 0.35 }]}
-            onPress={handleViewLastSearch}
-            disabled={!hasLastSearch}
-          >
+          <TouchableOpacity style={styles.archiveButton} onPress={handleViewLastSearch}>
             <Text style={styles.archiveButtonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>

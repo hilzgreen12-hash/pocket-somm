@@ -11,19 +11,23 @@ const SECTIONS = [
   },
   {
     title: 'How Recommendations Are Scored',
-    body: 'Wines are ranked in this order:\n\n1. Average critic score (Wine Spectator, Parker, Decanter, Jancis Robinson, Vinous) — wines below 85 are filtered out\n2. Vintage quality for the specific appellation\n3. Value for money vs. market price\n4. Fit with your stated preferences',
+    body: 'Wines are ranked in this order:\n\n1. Average critic score, sourced via deep AI from respected global wine critics, calculated and delivered — wines below 85 are filtered out\n2. Vintage quality for the specific appellation\n3. Value for money vs. market price\n4. Application of your profile preferences, the more you input the more tailored the results',
   },
   {
     title: 'How Chef Works',
-    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each.',
+    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each. Chef will apply any additional dietary needs or preferences that you have set in your profile.',
   },
   {
     title: 'How Cellar Works',
     body: 'Scan a label to add a bottle to your cellar. Vinster tracks your collection, records critic scores and drinking windows, and lets you know when each wine is approaching its peak — so you always open a bottle at the right time.',
   },
   {
+    title: 'Personality Sketches',
+    body: 'Vinster watches how you drink and what you eat, then sketches witty character profiles for you — separate Wine and Chef personalities drawn from your scans, cellar, ratings, and preferences. Share them with friends, post them to the Vinster community, or watch them evolve as your tastes broaden. Every sketch Vinster has ever drawn for you lives in your personality archive.',
+  },
+  {
     title: 'Your Preferences',
-    body: 'The settings you save in your Profile are used as default parameters across List and Chef. You can always override them for a specific session directly in the List tab.',
+    body: 'The settings you save in your Profile are used as default parameters across List and Chef as you generate recommendations. You can override your preferences on each specific search you generate in List or Chef, depending on one-off requirements.',
   },
   {
     title: 'Privacy & Data',

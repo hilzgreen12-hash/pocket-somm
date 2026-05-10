@@ -98,9 +98,13 @@ export default function RacksScreen() {
       ) : racks.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No storage yet</Text>
-          <Text style={styles.emptyBody}>Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
-          <TouchableOpacity style={styles.emptyButton} onPress={() => setTypeModalOpen(true)}>
-            <Text style={styles.emptyButtonText}>Add Storage</Text>
+          <Text style={styles.emptyBody}>Photograph your wine rack or wine cooler and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
+          <Text style={styles.emptyNote}>Vinster maps your storage as a rectangular grid — non-rectangular or alternative-shaped racks will need to be approximated to a grid layout.</Text>
+          <TouchableOpacity style={styles.emptyButtonGold} onPress={() => handleAddType('rack')}>
+            <Text style={styles.emptyButtonGoldText}>Add Wine Rack</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.emptyButtonGold, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
+            <Text style={styles.emptyButtonGoldText}>Add Wine Cooler</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -160,9 +164,12 @@ const styles = StyleSheet.create({
   separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
-  emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
+  emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
+  emptyNote: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.xl },
   emptyButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
   emptyButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  emptyButtonGold: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
+  emptyButtonGoldText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48 },
   modalTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.xs },

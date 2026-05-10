@@ -94,9 +94,9 @@ const styles = StyleSheet.create({
   },
   appName: {
     fontFamily: 'CormorantGaramond_700Bold',
-    fontSize: 52,
-    color: colors.text,
-    letterSpacing: 1.5,
+    fontSize: 38,
+    color: '#FFFFFF',
+    letterSpacing: 2,
     marginBottom: spacing.xs,
   },
   tagline: {
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     borderWidth: 1,
-    borderColor: colors.borderLight,
+    borderColor: colors.gold,
     borderRadius: 14,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.lg,
@@ -167,7 +167,7 @@ const styles = StyleSheet.create({
   secondaryText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 18,
-    color: colors.text,
+    color: colors.gold,
   },
   secondaryNote: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
