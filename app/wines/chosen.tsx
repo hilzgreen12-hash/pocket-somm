@@ -29,7 +29,7 @@ export default function ChosenWinesScreen() {
   const [filterBy, setFilterBy] = useState<'all' | 'cellar' | 'restaurant'>('all');
 
   // Cellar wines that have ANY user-supplied review content count as a
-  // "cellar review". Mirrors the logic in /cellar/notes.
+  // "cellar review".
   const cellarReviews = cellarWines.filter((w) =>
     (w.user_notes && w.user_notes.trim().length > 0) ||
     w.review_score != null ||
