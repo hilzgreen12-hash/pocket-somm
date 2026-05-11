@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -11,14 +11,29 @@ export default function CommunityTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
   const { session } = useAuth();
-  const [pendingRoute, setPendingRoute] = useState<string | null>(null);
+  const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const pendingActionRef = useRef<(() => void) | null>(null);
 
   function gated(route: string) {
+    const proceed = () => router.push(route as any);
     if (session) {
-      router.push(route as any);
-    } else {
-      setPendingRoute(route);
+      proceed();
+      return;
     }
+    pendingActionRef.current = proceed;
+    setSignInPromptVisible(true);
+  }
+
+  function dismissSignInPrompt() {
+    setSignInPromptVisible(false);
+    pendingActionRef.current = null;
+  }
+
+  function continueWithoutAccount() {
+    setSignInPromptVisible(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    action?.();
   }
 
   return (
@@ -52,11 +67,11 @@ export default function CommunityTab() {
       </View>
 
       <SignInPromptModal
-        visible={!!pendingRoute}
-        onDismiss={() => setPendingRoute(null)}
-        onSignIn={() => { setPendingRoute(null); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { setPendingRoute(null); router.push('/(auth)/sign-up'); }}
-        onContinue={() => setPendingRoute(null)}
+        visible={signInPromptVisible}
+        onDismiss={dismissSignInPrompt}
+        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
+        onContinue={continueWithoutAccount}
       />
     </ScrollView>
     <TabFooter />
