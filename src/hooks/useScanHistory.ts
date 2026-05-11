@@ -81,10 +81,12 @@ export function useScanHistory() {
     // to a just-saved scan failing to appear.
     refetchOnMount: 'always',
     queryFn: async () => {
+      const userId = session?.user.id;
+      if (!userId) return [];
       const { data, error } = await supabase
         .from('scan_sessions')
         .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note, rating_food, rating_service, rating_wine_list, rating_overall')
-        .eq('user_id', session!.user.id)
+        .eq('user_id', userId)
         .order('captured_at', { ascending: false });
       if (error) throw error;
       return (data ?? []).map((row: any) => ({
