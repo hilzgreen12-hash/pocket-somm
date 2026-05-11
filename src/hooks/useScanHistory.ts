@@ -76,6 +76,10 @@ export function useScanHistory() {
   const { data: archive = [], isLoading: archiveLoading } = useQuery<ScanArchiveItem[]>({
     queryKey: ['scan-archive', session?.user.id],
     enabled: !!session,
+    // Always refetch when the archive screen opens — invalidation alone
+    // can be skipped if React Query thinks the cache is fresh, leading
+    // to a just-saved scan failing to appear.
+    refetchOnMount: 'always',
     queryFn: async () => {
       const { data, error } = await supabase
         .from('scan_sessions')
@@ -137,31 +141,39 @@ export function useScanHistory() {
       }
 
       let sessionId: string | undefined;
-      if (session) {
-        const { data: inserted, error: insertError } = await supabase
-          .from('scan_sessions')
-          .insert({
-            user_id: session.user.id,
-            captured_at: now,
-            extracted_wines: extractedWines,
-            recommendation,
-            city,
-            latitude,
-            longitude,
-            restaurant_name: restaurantName,
-            image_path: null,
-            preferences_snapshot: null,
-          })
-          .select('id')
-          .single();
-        if (insertError) {
-          // Surface the failure so the UI can fall out of "Saved ✓" — the
-          // local AsyncStorage write below is skipped to avoid a misleading
-          // success state.
-          throw new Error(insertError.message);
-        }
-        sessionId = inserted?.id;
+      const { data: inserted, error: insertError } = await supabase
+        .from('scan_sessions')
+        .insert({
+          user_id: session.user.id,
+          captured_at: now,
+          extracted_wines: extractedWines,
+          recommendation,
+          city,
+          latitude,
+          longitude,
+          restaurant_name: restaurantName,
+          image_path: null,
+          preferences_snapshot: null,
+        })
+        .select('id')
+        .single();
+      if (insertError) {
+        // Surface the failure so the UI can fall out of "Saved ✓" — the
+        // local AsyncStorage write below is skipped to avoid a misleading
+        // success state. Include code + details to help diagnose RLS or
+        // schema issues that just say "permission denied" otherwise.
+        const detail = [insertError.code, insertError.message, insertError.details]
+          .filter(Boolean)
+          .join(' — ');
+        throw new Error(`scan_sessions insert failed: ${detail || 'unknown error'}`);
       }
+      if (!inserted?.id) {
+        // Should never happen because .single() throws on missing row, but
+        // belt-and-braces — if we got here without an inserted id the row
+        // wasn't actually written.
+        throw new Error('scan_sessions insert returned no row id');
+      }
+      sessionId = inserted.id;
 
       const newItem: ScanHistoryItem = {
         id: Date.now().toString(),
