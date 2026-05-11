@@ -35,6 +35,10 @@ export function useCellar() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
+      // Archiving a wine that was on the wishlist (is_wishlist=true) sets
+      // archived_at but leaves the wishlist row visible until the next
+      // cache GC. Invalidate the wishlist query so it disappears immediately.
+      qc.invalidateQueries({ queryKey: ['wishlist', userId] });
     },
   });
 
@@ -104,7 +108,13 @@ export function useArchive() {
   const updateNote = useMutation({
     mutationFn: ({ id, note }: { id: string; note: string }) =>
       updateCellarWine(id, { user_notes: note || null }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-archive', userId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
+      // Editing a note on a wine that's still racked needs rack-slots to
+      // pick up the new note text — the live cellar/[wineId] edit path
+      // already invalidates this for the same reason.
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+    },
   });
 
   return { wines, isLoading, updateNote };
