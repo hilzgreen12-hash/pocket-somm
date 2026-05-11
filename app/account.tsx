@@ -35,8 +35,21 @@ export default function AccountScreen() {
   const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
-  async function updateNotifySetting(key: string, value: boolean) {
-    await supabase.auth.updateUser({ data: { [key]: value } });
+  async function updateNotifySetting(key: string, value: boolean, revert: (v: boolean) => void) {
+    // Optimistic switch flip happens before this runs. If the update fails
+    // we revert the local state and surface an alert — previously this
+    // returned silently, so the next app launch quietly snapped back to the
+    // server's value with no explanation.
+    try {
+      const { error } = await supabase.auth.updateUser({ data: { [key]: value } });
+      if (error) throw new Error(error.message);
+    } catch (err) {
+      revert(!value);
+      showAlert({
+        title: "Couldn't save preference",
+        body: err instanceof Error ? err.message : 'Please try again.',
+      });
+    }
   }
 
   function openIdentityEdit() {
@@ -191,7 +204,7 @@ export default function AccountScreen() {
           <Text style={styles.toggleLabel}>When wines approach their drinking window</Text>
           <Switch
             value={notifyWindow}
-            onValueChange={(v) => { setNotifyWindow(v); updateNotifySetting('notify_drinking_window', v); }}
+            onValueChange={(v) => { setNotifyWindow(v); updateNotifySetting('notify_drinking_window', v, setNotifyWindow); }}
             trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
             thumbColor="#FFFFFF"
           />
@@ -200,7 +213,7 @@ export default function AccountScreen() {
           <Text style={styles.toggleLabel}>When wines are approaching decline</Text>
           <Switch
             value={notifyDecline}
-            onValueChange={(v) => { setNotifyDecline(v); updateNotifySetting('notify_decline', v); }}
+            onValueChange={(v) => { setNotifyDecline(v); updateNotifySetting('notify_decline', v, setNotifyDecline); }}
             trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
             thumbColor="#FFFFFF"
           />
