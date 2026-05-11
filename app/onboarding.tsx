@@ -102,14 +102,19 @@ export default function OnboardingScreen() {
 
         {step === 4 && (
           <>
-            <Text style={styles.subLabel}>Regions to avoid</Text>
+            <Text style={styles.subLabel}>
+              Regions to avoid{dislikedRegions.length > 0 ? ` (${dislikedRegions.length} selected)` : ''}
+            </Text>
             <ChipPicker
               options={WINE_REGIONS}
               selected={dislikedRegions}
               onChange={setDislikedRegions}
               activeColor={colors.error}
             />
-            <Text style={[styles.subLabel, { marginTop: spacing.lg }]}>Grapes to avoid</Text>
+            <View style={styles.avoidDivider} />
+            <Text style={styles.subLabel}>
+              Grapes to avoid{dislikedGrapes.length > 0 ? ` (${dislikedGrapes.length} selected)` : ''}
+            </Text>
             <ChipPicker
               options={GRAPE_VARIETIES}
               selected={dislikedGrapes}
@@ -207,6 +212,11 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: colors.text,
     marginBottom: spacing.sm,
+  },
+  avoidDivider: {
+    height: 1,
+    backgroundColor: colors.border,
+    marginVertical: spacing.lg,
   },
   navRow: {
     flexDirection: 'row',
