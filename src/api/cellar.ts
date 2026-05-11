@@ -72,28 +72,33 @@ export async function repairRackedWines(userId: string): Promise<number> {
     .select('cellar_wine_id, wine_racks!inner(user_id)')
     .eq('wine_racks.user_id', userId)
     .not('cellar_wine_id', 'is', null);
-  if (assignErr) return 0;
+  if (assignErr) {
+    console.error('[repairRackedWines] could not read rack assignments:', assignErr);
+    return 0;
+  }
 
   const wineIds = Array.from(new Set(((assignments ?? []) as any[]).map((r) => r.cellar_wine_id))).filter(Boolean) as string[];
   if (wineIds.length === 0) return 0;
 
   let fixed = 0;
   // Reset wishlist flag on racked wines that are wrongly flagged.
-  const { data: wlFixed } = await supabase
+  const { data: wlFixed, error: wlErr } = await supabase
     .from('cellar_wines')
     .update({ is_wishlist: false })
     .in('id', wineIds)
     .eq('is_wishlist', true)
     .select('id');
+  if (wlErr) console.error('[repairRackedWines] wishlist reset failed:', wlErr);
   fixed += (wlFixed ?? []).length;
 
   // Restore archived flag on racked wines that are wrongly archived.
-  const { data: arFixed } = await supabase
+  const { data: arFixed, error: arErr } = await supabase
     .from('cellar_wines')
     .update({ archived_at: null })
     .in('id', wineIds)
     .not('archived_at', 'is', null)
     .select('id');
+  if (arErr) console.error('[repairRackedWines] archive reset failed:', arErr);
   fixed += (arFixed ?? []).length;
 
   return fixed;

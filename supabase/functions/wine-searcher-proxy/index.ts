@@ -64,8 +64,10 @@ Deno.serve(async (req) => {
       source: 'wine-searcher' as const,
     };
 
-    // Write to cache
-    await supabase.from('pricing_cache').upsert({
+    // Write to cache — surface upsert errors so a misconfigured RLS or
+    // unique-key collision doesn't silently cause every subsequent call to
+    // re-hit the upstream Wine-Searcher API.
+    const { error: cacheErr } = await supabase.from('pricing_cache').upsert({
       wine_key: wineKey,
       market_price_avg: pricing.averageMarketPrice,
       market_price_min: pricing.minPrice,
@@ -74,6 +76,9 @@ Deno.serve(async (req) => {
       currency: pricing.currency,
       fetched_at: new Date().toISOString(),
     });
+    if (cacheErr) {
+      console.error('[wine-searcher-proxy] pricing_cache upsert failed:', cacheErr);
+    }
 
     return new Response(JSON.stringify(pricing), {
       headers: { 'Content-Type': 'application/json' },
