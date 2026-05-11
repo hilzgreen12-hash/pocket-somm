@@ -60,37 +60,47 @@ export default function RootLayout() {
     // Earlier code only handled (2), which is why fresh signups were landing
     // back in the app without a session. This handler now covers both.
     async function handleUrl(url: string) {
-      const { queryParams } = Linking.parse(url);
+      // Wrapped in try/catch because Linking.parse, setSession, and verifyOtp
+      // can all throw (malformed URL, expired/already-redeemed token, network).
+      // An unhandled rejection inside the addEventListener('url', …) callback
+      // is silently swallowed by React Native at best, and surfaces as a
+      // confusing yellow box in development. Log so TestFlight diagnostics
+      // can see when deep-link redemption is failing.
+      try {
+        const { queryParams } = Linking.parse(url);
 
-      // Pull params from both query string AND hash fragment (Supabase
-      // server-redirect uses the fragment by default).
-      const fragmentParams: Record<string, string> = {};
-      const hashIdx = url.indexOf('#');
-      if (hashIdx >= 0) {
-        const hash = url.slice(hashIdx + 1);
-        for (const pair of hash.split('&')) {
-          const [k, v] = pair.split('=');
-          if (k) fragmentParams[decodeURIComponent(k)] = decodeURIComponent(v ?? '');
+        // Pull params from both query string AND hash fragment (Supabase
+        // server-redirect uses the fragment by default).
+        const fragmentParams: Record<string, string> = {};
+        const hashIdx = url.indexOf('#');
+        if (hashIdx >= 0) {
+          const hash = url.slice(hashIdx + 1);
+          for (const pair of hash.split('&')) {
+            const [k, v] = pair.split('=');
+            if (k) fragmentParams[decodeURIComponent(k)] = decodeURIComponent(v ?? '');
+          }
         }
-      }
 
-      const access_token = (queryParams?.access_token as string | undefined) ?? fragmentParams.access_token;
-      const refresh_token = (queryParams?.refresh_token as string | undefined) ?? fragmentParams.refresh_token;
-      if (access_token && refresh_token) {
-        await supabase.auth.setSession({ access_token, refresh_token });
-        // Bounce back through the index router so it re-evaluates with the
-        // fresh session — otherwise the user can land on the public welcome
-        // screen (because index already decided "no session" before we
-        // installed it) and miss the onboarding tour entirely.
-        router.replace('/');
-        return;
-      }
+        const access_token = (queryParams?.access_token as string | undefined) ?? fragmentParams.access_token;
+        const refresh_token = (queryParams?.refresh_token as string | undefined) ?? fragmentParams.refresh_token;
+        if (access_token && refresh_token) {
+          await supabase.auth.setSession({ access_token, refresh_token });
+          // Bounce back through the index router so it re-evaluates with the
+          // fresh session — otherwise the user can land on the public welcome
+          // screen (because index already decided "no session" before we
+          // installed it) and miss the onboarding tour entirely.
+          router.replace('/');
+          return;
+        }
 
-      const token_hash = (queryParams?.token_hash as string | undefined) ?? fragmentParams.token_hash;
-      const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
-      if (token_hash && type) {
-        await supabase.auth.verifyOtp({ token_hash, type: type as any });
-        router.replace('/');
+        const token_hash = (queryParams?.token_hash as string | undefined) ?? fragmentParams.token_hash;
+        const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
+        if (token_hash && type) {
+          await supabase.auth.verifyOtp({ token_hash, type: type as any });
+          router.replace('/');
+        }
+      } catch (err) {
+        console.warn('[deep-link] handleUrl failed:', url, err);
       }
     }
 

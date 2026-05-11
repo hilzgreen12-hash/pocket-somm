@@ -46,7 +46,18 @@ Base drinking window status on the current year ${currentYear}. Return only the 
     const match = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim().match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
 
-    return new Response(JSON.parse(match[0]) ? match[0] : JSON.stringify({ error: 'empty' }), {
+    // Parse-then-restringify so the response is guaranteed to be valid JSON.
+    // The previous form called JSON.parse only as a truthiness guard and sent
+    // back the raw match[0] string — if Claude's output was truncated by
+    // max_tokens the parse threw and the outer catch returned a generic 500
+    // that surfaced to users as "Could not refresh / wine-intelligence: …".
+    const parsed = JSON.parse(match[0]);
+    if (!parsed) {
+      return new Response(JSON.stringify({ error: 'empty' }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' },
     });
 
