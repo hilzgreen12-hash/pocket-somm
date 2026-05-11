@@ -5,12 +5,14 @@ import { supabase } from '../../src/api/supabase';
 import { colors, spacing } from '../../src/constants/theme';
 
 // Lands here after a Supabase magic-link / verification deep link is opened.
-// _layout.tsx already exchanges the token in its global Linking handler, so by
-// the time we render the token has usually been redeemed; this screen acts as
-// a friendly landing pad and a fallback verifyOtp call in case the global
-// handler missed it.
+// _layout.tsx owns ALL token redemption via its global Linking handler — this
+// screen used to ALSO call verifyOtp, which raced the global handler: a token
+// can only be redeemed once, so the loser saw "Token has expired or is
+// invalid" for a fraction of a second before the session-check fallback
+// rescued it. The screen is now passive: poll for a session and route home,
+// otherwise show the error state.
 export default function AuthCallbackScreen() {
-  const params = useLocalSearchParams<{ token_hash?: string; type?: string; error?: string; error_description?: string }>();
+  const params = useLocalSearchParams<{ error?: string; error_description?: string }>();
   const [status, setStatus] = useState<'verifying' | 'ok' | 'error'>('verifying');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -24,28 +26,21 @@ export default function AuthCallbackScreen() {
         }
         return;
       }
-      if (params.token_hash && params.type) {
-        const { error } = await supabase.auth.verifyOtp({ token_hash: params.token_hash, type: params.type as any });
+      // Poll for a session — _layout's handler may already be mid-flight.
+      // Three quick checks at 200ms intervals is enough in practice.
+      for (let i = 0; i < 3; i++) {
+        const { data: { session } } = await supabase.auth.getSession();
         if (cancelled) return;
-        if (error) {
-          // The global handler in _layout.tsx may have already redeemed it —
-          // a "Token has expired or is invalid" error here is therefore not
-          // necessarily fatal. Check whether we have a session before failing.
-          const { data: { session } } = await supabase.auth.getSession();
-          if (session) {
-            setStatus('ok');
-            setTimeout(() => router.replace('/'), 600);
-            return;
-          }
-          setErrorMessage(error.message);
-          setStatus('error');
+        if (session) {
+          setStatus('ok');
+          setTimeout(() => router.replace('/'), 600);
           return;
         }
+        await new Promise((r) => setTimeout(r, 200));
       }
-      // Either we just verified, or the token was already redeemed by _layout.
       if (!cancelled) {
-        setStatus('ok');
-        setTimeout(() => router.replace('/'), 600);
+        setErrorMessage('Verification link could not be redeemed. Please request a fresh one.');
+        setStatus('error');
       }
     })();
     return () => { cancelled = true; };

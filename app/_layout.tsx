@@ -123,7 +123,6 @@ export default function RootLayout() {
             <Stack.Screen name="onboarding-tour" />
             <Stack.Screen name="welcome-profile" />
             <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(auth)/forgot-password" />
             <Stack.Screen name="auth/callback" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="scan/camera" />
@@ -152,6 +151,7 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/rack/detect" />
             <Stack.Screen name="cellar/rack/[rackId]" />
             <Stack.Screen name="cellar/[wineId]" />
+            <Stack.Screen name="cellar/archive" />
             <Stack.Screen name="scan/history" />
             <Stack.Screen name="profile/wine" />
             <Stack.Screen name="profile/recipe" />
