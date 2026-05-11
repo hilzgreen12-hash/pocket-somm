@@ -172,30 +172,33 @@ export default function ScanTab() {
 
   async function handleScreenshot() {
     if (isUploading) return;
-    if (maybeShowSignInPrompt(() => handleScreenshot())) return;
-    setIsUploading(true);
-    try {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true,
-        quality: 1,
-      });
-      if (!result.canceled && result.assets.length > 0) {
-        setPreferences(buildPreferences());
-        if (result.assets.length === 1) {
-          setImage(result.assets[0].uri);
-          router.push('/scan/preview');
-        } else {
-          setImageUris(result.assets.map((a) => a.uri));
-          router.push('/scan/extracting');
+    const go = async () => {
+      setIsUploading(true);
+      try {
+        const result = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          allowsMultipleSelection: true,
+          quality: 1,
+        });
+        if (!result.canceled && result.assets.length > 0) {
+          setPreferences(buildPreferences());
+          if (result.assets.length === 1) {
+            setImage(result.assets[0].uri);
+            router.push('/scan/preview');
+          } else {
+            setImageUris(result.assets.map((a) => a.uri));
+            router.push('/scan/extracting');
+          }
         }
+      } catch (err) {
+        console.error('[Scan] Image picker failed:', err);
+        showAlert({ title: 'Upload failed', body: 'Could not open the photo library. Please try again.' });
+      } finally {
+        setIsUploading(false);
       }
-    } catch (err) {
-      console.error('[Scan] Image picker failed:', err);
-      showAlert({ title: 'Upload failed', body: 'Could not open the photo library. Please try again.' });
-    } finally {
-      setIsUploading(false);
-    }
+    };
+    if (maybeShowSignInPrompt(go)) return;
+    await go();
   }
 
   return (

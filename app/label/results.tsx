@@ -56,7 +56,7 @@ export default function LabelResultsScreen() {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>No results available.</Text>
-        <TouchableOpacity onPress={() => router.replace('/(tabs)/label')}>
+        <TouchableOpacity onPress={() => router.replace('/label/camera')}>
           <Text style={styles.linkText}>Scan a label</Text>
         </TouchableOpacity>
       </View>
