@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, LayoutAnimation, Platform, UIManager } from 'react-native';
 
 if (Platform.OS === 'android') {
@@ -24,18 +24,36 @@ export default function RecipeProfileScreen() {
   const isOnboarding = onboarding === '1';
   const { preferences, updatePreferences } = usePreferences();
   const [concernsDraft, setConcernsDraft] = useState(preferences?.specificConcerns ?? '');
-  const [saved, setSaved] = useState(false);
+
+  // Refs so the unmount cleanup can diff the latest draft against the
+  // last-saved value. TextInput's onBlur doesn't fire reliably on Android
+  // when the screen unmounts while the input still has focus.
+  const draftRef = useRef(concernsDraft);
+  const savedRef = useRef(preferences?.specificConcerns ?? '');
 
   useEffect(() => {
     setConcernsDraft(preferences?.specificConcerns ?? '');
+    savedRef.current = preferences?.specificConcerns ?? '';
   }, [preferences?.specificConcerns]);
 
-  function handleSave() {
-    if (concernsDraft !== (preferences?.specificConcerns ?? '')) {
-      updatePreferences({ specificConcerns: concernsDraft.trim() });
+  useEffect(() => {
+    draftRef.current = concernsDraft;
+  }, [concernsDraft]);
+
+  useEffect(() => {
+    return () => {
+      const trimmed = draftRef.current.trim();
+      if (trimmed !== savedRef.current) {
+        updatePreferences({ specificConcerns: trimmed });
+      }
+    };
+  }, [updatePreferences]);
+
+  function commitConcernsIfChanged() {
+    const trimmed = concernsDraft.trim();
+    if (trimmed !== (preferences?.specificConcerns ?? '')) {
+      updatePreferences({ specificConcerns: trimmed });
     }
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
   }
 
   return (
@@ -48,6 +66,7 @@ export default function RecipeProfileScreen() {
         <View style={styles.profileIntro}>
           <Text style={styles.profileHeading}>Recipe Preferences</Text>
           <Text style={styles.profileBody}>Set your recipe preferences so Vinster can generate the best recipe and food pairing recommendations for you — over time your food choices will inform our guidance, making our suggestions even more tailored. You can see what we've learned about you so far at the bottom of this page.</Text>
+          <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>
 
         <View style={styles.section}>
@@ -78,6 +97,7 @@ export default function RecipeProfileScreen() {
             style={styles.concernsInput}
             value={concernsDraft}
             onChangeText={setConcernsDraft}
+            onBlur={commitConcernsIfChanged}
             placeholder="Type any specific concerns…"
             placeholderTextColor={colors.textMuted}
             multiline
@@ -111,13 +131,13 @@ export default function RecipeProfileScreen() {
           />
         </View>
 
-        {isOnboarding ? (
+        {isOnboarding && (
           <>
             <TouchableOpacity
               style={styles.saveButton}
-              onPress={() => router.replace('/(tabs)/scan')}
+              onPress={() => { commitConcernsIfChanged(); router.replace('/(tabs)/scan'); }}
             >
-              <Text style={styles.saveButtonText}>Save & Finish</Text>
+              <Text style={styles.saveButtonText}>Finish</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.skipLink}
@@ -125,13 +145,6 @@ export default function RecipeProfileScreen() {
             >
               <Text style={styles.skipLinkText}>Not now</Text>
             </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveButtonText}>Save Recipe Preferences</Text>
-            </TouchableOpacity>
-            {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
           </>
         )}
       </ScrollView>
@@ -154,7 +167,7 @@ const styles = StyleSheet.create({
   pickerWrap: { marginTop: spacing.sm },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
+  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
   skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   helperText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },

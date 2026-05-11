@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
+import { showAlert } from '../components/AppAlert';
 import { useAuth } from './useAuth';
 import type { UserPreferences } from '../types/preferences';
 
@@ -60,7 +61,18 @@ export function usePreferences() {
       if (error) throw new Error(error.message);
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['preferences'] }),
-    onError: (err) => console.error('[Preferences] Save error:', err),
+    onError: (err) => {
+      // Surface real failures so users don't keep changing settings under the
+      // impression they're being saved. Previously this only logged to console,
+      // which meant a network blip or RLS rejection silently dropped the
+      // change — and the screens still rendered "Your profile has been saved".
+      console.error('[Preferences] Save error:', err);
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      showAlert({
+        title: "Couldn't save preference",
+        body: `Your change wasn't saved — please try again.\n\n${message}`,
+      });
+    },
   });
 
   return {
@@ -68,6 +80,7 @@ export function usePreferences() {
     updatePreferences: mutation.mutate,
     updatePreferencesAsync: mutation.mutateAsync,
     isSaving: mutation.isPending,
+    saveError: mutation.error,
     prefsLoading,
     prefsError,
   };

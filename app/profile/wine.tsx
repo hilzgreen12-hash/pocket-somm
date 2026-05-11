@@ -34,7 +34,6 @@ export default function WineProfileScreen() {
   const [customGrape, setCustomGrape] = useState('');
   const [customDislikedRegion, setCustomDislikedRegion] = useState('');
   const [customDislikedGrape, setCustomDislikedGrape] = useState('');
-  const [saved, setSaved] = useState(false);
 
   function toggle(setter: React.Dispatch<React.SetStateAction<boolean>>) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -73,11 +72,6 @@ export default function WineProfileScreen() {
     setCustomDislikedGrape('');
   }
 
-  function handleSave() {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  }
-
   return (
     <View style={styles.wrapper}>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop: isOnboarding ? 70 : 0 }}>
@@ -90,6 +84,7 @@ export default function WineProfileScreen() {
         <View style={styles.profileIntro}>
           <Text style={styles.profileHeading}>Wine Preferences</Text>
           <Text style={styles.profileBody}>Set your wine preferences so Vinster can generate the best recommendations for you — over time your wine choices will inform our guidance, making our suggestions even more tailored. You can see what we've learned about you so far at the bottom of this page.</Text>
+          <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>
 
         <View style={styles.section}>
@@ -206,13 +201,13 @@ export default function WineProfileScreen() {
           )}
         </View>
 
-        {isOnboarding ? (
+        {isOnboarding && (
           <>
             <TouchableOpacity
               style={styles.saveButton}
               onPress={() => router.replace('/profile/recipe?onboarding=1')}
             >
-              <Text style={styles.saveButtonText}>Save & Continue</Text>
+              <Text style={styles.saveButtonText}>Continue</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.skipLink}
@@ -220,13 +215,6 @@ export default function WineProfileScreen() {
             >
               <Text style={styles.skipLinkText}>Not now</Text>
             </TouchableOpacity>
-          </>
-        ) : (
-          <>
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
-              <Text style={styles.saveButtonText}>Save Wine Preferences</Text>
-            </TouchableOpacity>
-            {saved && <Text style={styles.savedMessage}>Your profile has been saved</Text>}
           </>
         )}
       </ScrollView>
@@ -254,7 +242,7 @@ const styles = StyleSheet.create({
   customAddText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.text },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  savedMessage: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.lg },
+  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
   skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
