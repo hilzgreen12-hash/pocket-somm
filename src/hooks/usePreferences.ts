@@ -12,10 +12,12 @@ export function usePreferences() {
     queryKey: ['preferences', session?.user.id],
     enabled: !!session,
     queryFn: async () => {
+      const userId = session?.user.id;
+      if (!userId) return null;
       const { data, error } = await supabase
         .from('profiles')
         .select('style_preferences, default_budget, default_currency, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks, specific_concerns, regional_preferences, nutritional_preferences')
-        .eq('user_id', session!.user.id)
+        .eq('user_id', userId)
         .single();
       if (error) {
         if (error.code === 'PGRST116') return null; // no profile row yet — new user

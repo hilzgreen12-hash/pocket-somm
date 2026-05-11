@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal } from 'react-native';
 import { showAlert } from '../src/components/AppAlert';
+import { ArchiveSignInPrompt } from '../src/components/ArchiveSignInPrompt';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
@@ -99,13 +100,21 @@ export default function AccountScreen() {
     }
   }
 
+  const [signingOut, setSigningOut] = useState(false);
+
   async function handleSignOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      showAlert({ title: 'Could not sign out', body: error.message });
-      return;
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        showAlert({ title: 'Could not sign out', body: `${error.message}\n\nPlease try again.` });
+        return;
+      }
+      router.replace('/(auth)/sign-in');
+    } finally {
+      setSigningOut(false);
     }
-    router.replace('/(auth)/sign-in');
   }
 
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -114,6 +123,21 @@ export default function AccountScreen() {
 
   function handleDeleteAccount() {
     setDeleteConfirmOpen(true);
+  }
+
+  if (!session) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.heading}>Account</Text>
+        <ArchiveSignInPrompt
+          title="Sign in to manage your account"
+          body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
+        />
+      </ScrollView>
+    );
   }
 
   async function confirmDelete() {
@@ -171,6 +195,7 @@ export default function AccountScreen() {
               placeholder="Username"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="words"
+              editable={!savingIdentity}
             />
             <Text style={styles.fieldLabel}>Email</Text>
             <TextInput
@@ -181,10 +206,11 @@ export default function AccountScreen() {
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               keyboardType="email-address"
+              editable={!savingIdentity}
             />
             <View style={styles.editActions}>
-              <TouchableOpacity onPress={cancelIdentityEdit}>
-                <Text style={styles.cancelText}>Cancel</Text>
+              <TouchableOpacity onPress={cancelIdentityEdit} disabled={savingIdentity}>
+                <Text style={[styles.cancelText, savingIdentity && { opacity: 0.4 }]}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.saveBtn} onPress={handleIdentitySave} disabled={savingIdentity}>
                 {savingIdentity
@@ -233,20 +259,12 @@ export default function AccountScreen() {
 
       <View style={styles.divider} />
 
-      {!session && (
-        <TouchableOpacity
-          style={styles.signOutButton}
-          onPress={() => router.push('/(auth)/sign-in')}
-        >
-          <Text style={styles.signOutText}>Sign In</Text>
-        </TouchableOpacity>
-      )}
-
       <TouchableOpacity
-        style={[styles.signOutButton, !session && { marginTop: spacing.sm }]}
+        style={[styles.signOutButton, signingOut && { opacity: 0.5 }]}
         onPress={() => setSignOutConfirmOpen(true)}
+        disabled={signingOut}
       >
-        <Text style={styles.signOutText}>Sign Out</Text>
+        <Text style={styles.signOutText}>{signingOut ? 'Signing out…' : 'Sign Out'}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.deleteButton} onPress={handleDeleteAccount}>
