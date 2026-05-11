@@ -26,7 +26,7 @@ export default function ScanTab() {
   const paddingTop = Math.max(60, height * 0.13);
   const { session } = useAuth();
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
-  const { preferences: savedPreferences } = usePreferences();
+  const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
   const [wineTypes, setWineTypes] = useState<WineType[]>([]);
   const [styleProfiles, setStyleProfiles] = useState<string[]>([]);
@@ -254,7 +254,9 @@ export default function ScanTab() {
         <View style={styles.section}>
           <View style={styles.bubbleWrap}>
             <Text style={styles.question}>Budget?</Text>
-            <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} />
+            {prefsLoading
+              ? <View style={{ height: 60 }} />
+              : <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} />}
           </View>
         </View>
 

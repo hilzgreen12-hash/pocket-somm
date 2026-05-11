@@ -1,19 +1,17 @@
-import { useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { Redirect, router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
 import { colors, spacing } from '../src/constants/theme';
 
 export default function WelcomeScreen() {
   const { session } = useAuth();
 
-  // Backstop: if the deep-link handler installs a session AFTER this screen
-  // has rendered (typical for cold-start email-confirm flows), kick the
-  // user back to the index router so they pick up the right post-login
-  // path (tour → wine prefs → recipe prefs → list).
-  useEffect(() => {
-    if (session) router.replace('/');
-  }, [session]);
+  // Top-level guard rather than useEffect — if a session installs while
+  // the welcome screen is rendering (cold-start email-confirm flows),
+  // we want to swap immediately rather than render-then-effect, which
+  // briefly flashed the welcome content. /index handles the post-login
+  // routing (tour → wine prefs → recipe prefs → list).
+  if (session) return <Redirect href="/" />;
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
