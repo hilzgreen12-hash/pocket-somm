@@ -23,8 +23,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="welcome" options={{ href: null }} />
-      <Tabs.Screen name="label" options={{ href: null }} />
-      <Tabs.Screen name="history" options={{ href: null }} />
     </Tabs>
   );
 }
