@@ -31,6 +31,7 @@ export default function RecipeProfileScreen() {
   const [cuisineOpen, setCuisineOpen] = useState(false);
   const [nutritionalOpen, setNutritionalOpen] = useState(false);
   const [concernsOpen, setConcernsOpen] = useState(false);
+  const [concernsSaved, setConcernsSaved] = useState(false);
 
   // Refs so the unmount cleanup can diff the latest draft against the
   // last-saved value. TextInput's onBlur doesn't fire reliably on Android
@@ -61,6 +62,12 @@ export default function RecipeProfileScreen() {
     if (trimmed !== (preferences?.specificConcerns ?? '')) {
       updatePreferences({ specificConcerns: trimmed });
     }
+  }
+
+  function handleSaveConcerns() {
+    commitConcernsIfChanged();
+    setConcernsSaved(true);
+    setTimeout(() => setConcernsSaved(false), 2000);
   }
 
   function toggle(setter: React.Dispatch<React.SetStateAction<boolean>>) {
@@ -162,6 +169,13 @@ export default function RecipeProfileScreen() {
                 numberOfLines={3}
                 textAlignVertical="top"
               />
+              <TouchableOpacity
+                style={styles.concernsSaveBtn}
+                onPress={handleSaveConcerns}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.concernsSaveBtnText}>{concernsSaved ? 'Saved ✓' : 'Save'}</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>
@@ -260,6 +274,8 @@ const styles = StyleSheet.create({
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
   skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
+  concernsSaveBtn: { alignSelf: 'flex-end', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: 6, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
+  concernsSaveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
   softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
   softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
