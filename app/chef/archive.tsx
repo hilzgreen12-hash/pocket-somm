@@ -24,7 +24,7 @@ function formatDate(iso: string) {
 export default function ChefArchiveScreen() {
   const { filter: initialFilter } = useLocalSearchParams<{ filter?: string }>();
   const { session } = useAuth();
-  const { sessions: labelSessions, isLoading: labelLoading } = useChefLabelHistory();
+  const { sessions: labelSessions, isLoading: labelLoading, remove: removeLabel } = useChefLabelHistory();
   const { collections, membershipMap, create, rename, remove, addItem, removeItem, toggleStar } = useChefArchiveCollections();
 
   const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
@@ -113,6 +113,25 @@ export default function ChefArchiveScreen() {
     }
   }
 
+  function handleRemoveItem(item: UnifiedItem) {
+    showAlert({
+      title: 'Remove from recipe archive?',
+      body: itemTitle(item),
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            removeLabel.mutate(item.session.id, {
+              onError: (err) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+      ],
+    });
+  }
+
   function handleViewItem(item: UnifiedItem) {
     const s = item.session;
     setWineDetailsConfirmed(s.wine);
@@ -192,7 +211,13 @@ export default function ChefArchiveScreen() {
               .map((id) => collections.find((c) => c.id === id)?.name)
               .filter(Boolean) as string[];
             return (
-              <View key={item.key} style={styles.card}>
+              <TouchableOpacity
+                key={item.key}
+                style={styles.card}
+                activeOpacity={0.9}
+                onLongPress={() => handleRemoveItem(item)}
+                delayLongPress={400}
+              >
                 <View style={styles.cardTopRow}>
                   <Text style={styles.cardDate}>{formatDate(item.saved_at)}</Text>
                   <TouchableOpacity
@@ -225,7 +250,7 @@ export default function ChefArchiveScreen() {
                     <Text style={styles.viewBtnText}>View</Text>
                   </TouchableOpacity>
                 </View>
-              </View>
+              </TouchableOpacity>
             );
           })}
         </ScrollView>
