@@ -5,6 +5,7 @@ import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
+import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 
@@ -16,10 +17,30 @@ function formatDate(iso: string) {
 }
 
 export default function ScanHistoryScreen() {
-  const { archive, archiveLoading } = useScanHistory();
+  const { archive, archiveLoading, removeArchiveItem } = useScanHistory();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { session } = useAuth();
   const [reviewing, setReviewing] = useState<ScanArchiveItem | null>(null);
+
+  function handleLongPress(item: ScanArchiveItem) {
+    const label = [item.restaurantName, item.city].filter(Boolean).join(' · ') || formatDate(item.capturedAt);
+    showAlert({
+      title: 'Remove from archive?',
+      body: `${label}\n\nThis permanently deletes the scan and its results.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            removeArchiveItem.mutate(item.id, {
+              onError: (err) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+      ],
+    });
+  }
 
   function handleView(item: ScanArchiveItem) {
     setExtractedWines(item.extractedWines);
@@ -37,7 +58,7 @@ export default function ScanHistoryScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Archive</Text>
+        <Text style={styles.title}>Wine List Archive</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -61,7 +82,13 @@ export default function ScanHistoryScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
           {archive.map((item) => (
-            <View key={item.id} style={styles.card}>
+            <TouchableOpacity
+              key={item.id}
+              style={styles.card}
+              activeOpacity={0.9}
+              onLongPress={() => handleLongPress(item)}
+              delayLongPress={400}
+            >
               <View style={styles.stampRow}>
                 <Text style={styles.stampDate}>{formatDate(item.capturedAt)}</Text>
                 {(() => {
@@ -85,7 +112,7 @@ export default function ScanHistoryScreen() {
                   <Text style={styles.actionButtonText}>Review Restaurant</Text>
                 </TouchableOpacity>
               </View>
-            </View>
+            </TouchableOpacity>
           ))}
         </ScrollView>
       )}

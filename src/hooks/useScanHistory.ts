@@ -201,5 +201,17 @@ export function useScanHistory() {
     },
   });
 
-  return { history, archive, archiveLoading, autoSave };
+  const removeArchiveItem = useMutation({
+    mutationFn: async (id: string) => {
+      if (!session) throw new Error('Sign in required');
+      const { error } = await supabase.from('scan_sessions').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      qc.invalidateQueries({ queryKey: ['scan-sessions'] });
+    },
+  });
+
+  return { history, archive, archiveLoading, autoSave, removeArchiveItem };
 }

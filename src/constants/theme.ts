@@ -1,5 +1,6 @@
-// Brighter warm terracotta — user-chosen palette swap (was #69413C).
-const BACKGROUND = '#945e5c';
+// Warm terracotta, a notch deeper than the previous #945e5c so the
+// crisp white text and vivid gold pop more.
+const BACKGROUND = '#7F4F4C';
 
 export const colors = {
   background: BACKGROUND,
@@ -9,8 +10,10 @@ export const colors = {
   burgundy: '#E8A0A0',   // soft rose — readable against terracotta
   burgundyDim: '#B06060',
 
-  gold: '#D4B060',
-  goldDim: '#8A7040',
+  // Brighter, more saturated gold so destructive/CTA buttons stand out
+  // clearly against the warm background.
+  gold: '#E0B84A',
+  goldDim: '#9A7F40',
 
   // White text system
   text: '#FFFFFF',

@@ -139,7 +139,7 @@ export default function RestaurantReviewsScreen() {
       ) : reviewed.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No restaurants yet</Text>
-          <Text style={styles.emptyBody}>From any wine list scan in Your Archive, tap "Review Restaurant" to capture the name, food, and atmosphere — your visits will appear here.</Text>
+          <Text style={styles.emptyBody}>From any wine list scan in your Wine List Archive, tap "Review Restaurant" to capture the name, food, and atmosphere — your visits will appear here.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
