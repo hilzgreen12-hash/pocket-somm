@@ -37,7 +37,13 @@
       "expo-router",
       "expo-secure-store",
       "expo-font",
-      "expo-screen-orientation"
+      "expo-screen-orientation",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Vinster uses your location to stamp wine list scans with the city and restaurant, so you can find them again in your archive."
+        }
+      ]
     ],
     "extra": {
       "router": {},

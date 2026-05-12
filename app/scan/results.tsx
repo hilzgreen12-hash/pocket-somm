@@ -58,12 +58,19 @@ export default function ResultsScreen() {
 
   // Fetch a fresh GPS reading on mount so the stamp can show the user's
   // city in real time, before the server-side autoSave round-trip lands.
+  // Requests permission if it hasn't been asked yet — the previous
+  // `getForegroundPermissionsAsync` only read existing state, so on a
+  // fresh install the prompt never fired and the stamp stayed blank.
   useEffect(() => {
     if (isFromHistory) return;
     let cancelled = false;
     (async () => {
       try {
-        const { status } = await Location.getForegroundPermissionsAsync();
+        let { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          const req = await Location.requestForegroundPermissionsAsync();
+          status = req.status;
+        }
         if (status !== 'granted') return;
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
