@@ -37,6 +37,31 @@ function PairingCard({
         <Text style={styles.toggle}>{expanded ? 'Hide Recipe' : 'View Recipe'}</Text>
       </TouchableOpacity>
 
+      {/* Quick-save sits just under the View Recipe toggle so the user can
+          save without expanding the full recipe. Saved recipes land in the
+          Recipe Archive as Unfiled (no folder assignment, not starred). */}
+      {!isFromHistory && (
+        saveState === 'saved' ? (
+          <View style={styles.cardSavedBlock}>
+            <Text style={styles.cardSavedLabel}>Saved</Text>
+            <TouchableOpacity onPress={() => router.push('/chef/archive')} activeOpacity={0.7}>
+              <Text style={styles.cardViewArchiveLink}>View in Recipe Archive</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={[styles.cardSaveButton, saveState === 'saving' && styles.cardSaveButtonDisabled]}
+            onPress={onSave}
+            disabled={saveState === 'saving'}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cardSaveButtonText}>
+              {saveState === 'saving' ? 'Saving…' : 'Quick Save Recipe'}
+            </Text>
+          </TouchableOpacity>
+        )
+      )}
+
       {expanded && (
         <View style={styles.recipe}>
           <Text style={styles.recipeIntro}>{pairing.introduction}</Text>
@@ -51,28 +76,6 @@ function PairingCard({
           {pairing.recipe.instructions.map((step, i) => (
             <Text key={i} style={styles.recipeItem}>{step}</Text>
           ))}
-
-          {!isFromHistory && (
-            saveState === 'saved' ? (
-              <View style={styles.cardSavedBlock}>
-                <Text style={styles.cardSavedLabel}>Saved</Text>
-                <TouchableOpacity onPress={() => router.push('/chef/archive')} activeOpacity={0.7}>
-                  <Text style={styles.cardViewArchiveLink}>View in Recipe Archive</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity
-                style={[styles.cardSaveButton, saveState === 'saving' && styles.cardSaveButtonDisabled]}
-                onPress={onSave}
-                disabled={saveState === 'saving'}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.cardSaveButtonText}>
-                  {saveState === 'saving' ? 'Saving…' : 'Save Recipe to My Archive'}
-                </Text>
-              </TouchableOpacity>
-            )
-          )}
         </View>
       )}
     </View>
