@@ -145,6 +145,11 @@ export default function CellarWineDetail() {
   const [removing, setRemoving] = useState(false);
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
   const [removeStep, setRemoveStep] = useState<'idle' | 'confirm' | 'success'>('idle');
+  // True for the brief window between deletion and auto-navigation. Used to
+  // suppress the "Wine not found" fallback (the cellar query has already
+  // refetched without this wine) so the auto-dismissing success toast can
+  // render on top of an otherwise-empty screen.
+  const [justDeleted, setJustDeleted] = useState(false);
   const [archiveModalOpen, setArchiveModalOpen] = useState(false);
   const [addBottlesOpen, setAddBottlesOpen] = useState(false);
   const [addBottlesCount, setAddBottlesCount] = useState('1');
@@ -165,6 +170,20 @@ export default function CellarWineDetail() {
   // otherwise have to type the date out every time.
   const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? todayISO());
   const [savingReview, setSavingReview] = useState(false);
+
+  // Brief "Wine removed from your records" toast — shown for ~1.4s after
+  // a permanent delete, then the auto-dismiss timer navigates back. The
+  // user just confirmed deletion, so the underlying wine row is gone and
+  // we render this on top of an empty screen rather than the wine card.
+  if (justDeleted) {
+    return (
+      <View style={styles.removeModalOverlay}>
+        <View style={styles.removeModalSheet}>
+          <Text style={styles.removeModalTitle}>Wine has been removed from your records</Text>
+        </View>
+      </View>
+    );
+  }
 
   // While the cellar query is in flight, show a spinner instead of the
   // "Wine not found" fallback — otherwise the user sees a flash of that
@@ -392,13 +411,16 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['cellar-archive'] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      // Navigate back immediately — showing a success modal here used to
-      // leave the user stranded on "Wine not found" because the cellar
-      // query refetched faster than the modal animation, and the wine
-      // detail screen's no-wine fallback short-circuited the render.
       setRemoveStep('idle');
-      if (router.canGoBack()) router.back();
-      else router.replace('/(tabs)/cellar');
+      // Flip the just-deleted flag BEFORE the cellar refetch can land — the
+      // dedicated render block at the top of the component renders the
+      // toast and suppresses the "Wine not found" fallback. Auto-dismiss
+      // after a beat, then navigate back to wherever the user came from.
+      setJustDeleted(true);
+      setTimeout(() => {
+        if (router.canGoBack()) router.back();
+        else router.replace('/(tabs)/cellar');
+      }, 1400);
     } catch {
       setRemoveStep('idle');
       showAlert({ title: 'Could not remove', body: 'Please try again.' });
