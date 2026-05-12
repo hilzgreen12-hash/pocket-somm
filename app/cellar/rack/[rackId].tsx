@@ -35,7 +35,7 @@ export default function RackGridScreen() {
   const { width } = useWindowDimensions();
   const qc = useQueryClient();
 
-  const { setPendingSlot, pendingWineId, setPendingWineId } = useRackStore();
+  const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode } = useRackStore();
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isLandscape, setIsLandscape] = useState(false);
@@ -126,8 +126,10 @@ export default function RackGridScreen() {
     const wine = slot?.wine as CellarWine | null | undefined;
     if (wine) {
       // Navigate to the same wine detail card that Cellar List uses, so
-      // there's a single source of truth for the wine UI.
-      router.push(`/cellar/${wine.id}` as any);
+      // there's a single source of truth for the wine UI. The from=rack
+      // hint tells the wine card to hide the "In {rack} →" affordance
+      // (which would just point back to where we came from).
+      router.push(`/cellar/${wine.id}?from=rack` as any);
     } else if (pendingWineId) {
       // Ask the user how many bottles to place at this slot. The wine was
       // saved with quantity = 1 by default; if they place more here we'll
@@ -176,19 +178,35 @@ export default function RackGridScreen() {
       }
       await assignSlots(rackId, freeSlots, placingAt.wineId);
 
-      // Bump the wine's quantity if we placed more than it currently holds —
-      // the wine was added at qty=1 in the Add Wine modal, so multi-bottle
-      // placements on the grid effectively backfill the count.
       const wine = wines.find((w) => w.id === placingAt.wineId);
-      if (wine && freeSlots.length > wine.quantity) {
+      if (pendingAddMode && wine) {
+        // "+ Add bottles" flow — the wine already exists with N bottles,
+        // we're adding M more. Increment quantity by the placed count.
+        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity + freeSlots.length } });
+      } else if (wine && freeSlots.length > wine.quantity) {
+        // First-time placement of a newly-added wine — the wine was saved
+        // at qty=1 in the Add Wine modal, so a multi-bottle placement here
+        // effectively backfills the count.
         await updateWine.mutateAsync({ id: wine.id, updates: { quantity: freeSlots.length } });
       }
 
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
       setSavedMsg(freeSlots.length === 1 ? 'Wine saved to rack' : `${freeSlots.length} bottles saved to rack`);
       setPendingWineId(null);
       setPlacingAt(null);
+
+      // "+ Add bottles" routes the user here from the wine card. After
+      // they confirm placement, drop them back to the screen they were on
+      // BEFORE the wine card (Full Cellar List, or whichever rack), not
+      // the wine card itself — feels like a finished task.
+      if (pendingAddMode) {
+        setPendingAddMode(false);
+        if (router.canGoBack()) {
+          try { router.dismiss(2); } catch { router.back(); }
+        }
+      }
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {

@@ -10,6 +10,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, getWineIntelligence } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWineRemoval, listCellarWineRemovals, updateCellarWineRemoval } from '../../src/api/cellar';
@@ -102,12 +103,19 @@ function RemovalRow({ removal, onSaved }: { removal: { id: string; removed_at: s
 
 export default function CellarWineDetail() {
   useKeepAwake();
-  const { wineId } = useLocalSearchParams<{ wineId: string }>();
+  const { wineId, from } = useLocalSearchParams<{ wineId: string; from?: string }>();
+  // When the user came in by tapping a slot on a rack grid, the
+  // "In {rack name} →" affordance on the Bottles stat would just point
+  // them back to where they came from — hide it in that case. The link
+  // stays visible when entering via Full Cellar List, where it acts as a
+  // legitimate shortcut to the rack.
+  const cameFromRack = from === 'rack';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
+  const { setPendingWineId, setPendingAddMode } = useRackStore();
   const qc = useQueryClient();
   const { wines: archivedWines, isLoading: archiveLoading } = useArchive();
   const wine = wines.find((w) => w.id === wineId) ?? archivedWines.find((w) => w.id === wineId);
@@ -179,6 +187,22 @@ export default function CellarWineDetail() {
         </TouchableOpacity>
       </View>
     );
+  }
+
+  function handleAddBottlesEntry() {
+    // When the wine is already placed in a rack, route the user through
+    // the rack grid so they can choose a starting slot + orientation and
+    // place the new bottles visually. When the wine has no rack yet, fall
+    // back to the simple inline modal (just bumps the quantity) — the
+    // user can place those bottles later by picking a rack first.
+    if (wineRack) {
+      setPendingWineId(wine!.id);
+      setPendingAddMode(true);
+      router.push(`/cellar/rack/${wineRack.id}` as any);
+      return;
+    }
+    setAddBottlesCount('1');
+    setAddBottlesOpen(true);
   }
 
   async function handleSaveNote() {
@@ -368,7 +392,13 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['cellar-archive'] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      setRemoveStep('success');
+      // Navigate back immediately — showing a success modal here used to
+      // leave the user stranded on "Wine not found" because the cellar
+      // query refetched faster than the modal animation, and the wine
+      // detail screen's no-wine fallback short-circuited the render.
+      setRemoveStep('idle');
+      if (router.canGoBack()) router.back();
+      else router.replace('/(tabs)/cellar');
     } catch {
       setRemoveStep('idle');
       showAlert({ title: 'Could not remove', body: 'Please try again.' });
@@ -489,13 +519,13 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
-          {wineRack && (
+          {wineRack && !cameFromRack && (
             <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
               <Text style={styles.statAction}>In {wineRack.name} →</Text>
             </TouchableOpacity>
           )}
           {!isArchived && (
-            <TouchableOpacity onPress={() => { setAddBottlesCount('1'); setAddBottlesOpen(true); }}>
+            <TouchableOpacity onPress={() => handleAddBottlesEntry()}>
               <Text style={styles.statAction}>+ Add bottles</Text>
             </TouchableOpacity>
           )}
@@ -852,17 +882,7 @@ export default function CellarWineDetail() {
                   <Text style={styles.removeModalCancelText}>Cancel</Text>
                 </TouchableOpacity>
               </>
-            ) : (
-              <>
-                <Text style={styles.removeModalTitle}>Wine has been deleted from your record</Text>
-                <TouchableOpacity
-                  style={styles.removeModalOkBtn}
-                  onPress={() => { setRemoveStep('idle'); router.back(); }}
-                >
-                  <Text style={styles.removeModalOkText}>OK</Text>
-                </TouchableOpacity>
-              </>
-            )}
+            ) : null}
           </View>
         </View>
       </Modal>
