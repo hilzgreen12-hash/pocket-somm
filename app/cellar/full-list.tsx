@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
-import { getSlotAssignments } from '../../src/api/racks';
+import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
+import { supabase } from '../../src/api/supabase';
+import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
@@ -30,6 +32,34 @@ export default function FullCellarListScreen() {
   const { session } = useAuth();
   const { wines, isLoading } = useCellar();
   const { racks } = useRacks();
+  const qc = useQueryClient();
+
+  function handleLongPressWine(wine: CellarWine) {
+    showAlert({
+      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
+      body: 'Permanently remove this wine from your records? This can\'t be undone.',
+      buttons: [
+        {
+          text: 'Delete wine',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearWineFromRacks(wine.id);
+              const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
+              if (error) throw error;
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+              qc.invalidateQueries({ queryKey: ['rack-slots'] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
 
   const rackIds = racks.map((r) => r.id);
   const { data: slotAssignments = [] } = useQuery({
@@ -218,6 +248,8 @@ export default function FullCellarListScreen() {
                 key={w.id}
                 style={styles.row}
                 onPress={() => router.push(`/cellar/${w.id}`)}
+                onLongPress={() => handleLongPressWine(w)}
+                delayLongPress={400}
                 activeOpacity={0.7}
               >
                 <View style={styles.rowMain}>

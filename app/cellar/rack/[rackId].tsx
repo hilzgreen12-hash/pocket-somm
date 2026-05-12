@@ -6,7 +6,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
-import { assignSlot, assignSlots, clearSlot } from '../../../src/api/racks';
+import { assignSlot, assignSlots, clearSlot, clearWineFromRacks } from '../../../src/api/racks';
+import { supabase } from '../../../src/api/supabase';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { colors, spacing } from '../../../src/constants/theme';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
@@ -27,7 +28,7 @@ function truncate(str: string, max: number) {
 export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
   const { slots, isLoading, assign } = useRack(rackId);
-  const { racks } = useRacks();
+  const { racks, remove: removeRack, rename: renameRackMutation, wipe: wipeRackMutation } = useRacks();
   // useCellar gives us access to updateWine so we can bump the wine's
   // quantity when the user places multiple bottles from this screen.
   const { wines, updateWine } = useCellar();
@@ -47,6 +48,10 @@ export default function RackGridScreen() {
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [placing, setPlacing] = useState(false);
+  // Edit-rack modal — Wipe Contents / Rename / Delete.
+  const [editOpen, setEditOpen] = useState(false);
+  const [renaming, setRenaming] = useState(false);
+  const [renameDraft, setRenameDraft] = useState('');
 
   // Auto-clear the "Wine saved to rack" confirmation after a few seconds.
   useEffect(() => {
@@ -195,8 +200,56 @@ export default function RackGridScreen() {
     const slot = slotMap[`${row},${col}`];
     const wine = slot?.wine as CellarWine | null | undefined;
     if (!wine || !slot?.cellar_wine_id) return;
-    setMoving({ row, col, wineId: slot.cellar_wine_id, wineName: wine.wine_name });
-    setMovingMsg(`Moving ${wine.wine_name} — tap a slot to place, or tap the source slot to cancel`);
+    const wineId = slot.cellar_wine_id;
+    // Long-press now opens an action sheet rather than dropping straight
+    // into move-mode — this is also the user-facing entry point for
+    // deleting a wine directly from the rack grid.
+    showAlert({
+      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
+      body: 'What would you like to do?',
+      buttons: [
+        {
+          text: 'Move to another slot',
+          onPress: () => {
+            setMoving({ row, col, wineId, wineName: wine.wine_name });
+            setMovingMsg(`Moving ${wine.wine_name} — tap a slot to place, or tap the source slot to cancel`);
+          },
+        },
+        {
+          text: 'Delete wine from cellar',
+          style: 'destructive',
+          onPress: () => confirmDeleteWine(wineId, wine.wine_name),
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  function confirmDeleteWine(wineId: string, wineName: string) {
+    showAlert({
+      title: 'Delete wine?',
+      body: `Permanently remove ${wineName} from your records. This can't be undone.`,
+      buttons: [
+        {
+          text: 'Delete permanently',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearWineFromRacks(wineId);
+              const { error } = await supabase.from('cellar_wines').delete().eq('id', wineId);
+              if (error) throw error;
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
   }
 
   async function handleDrop(toRow: number, toCol: number) {
@@ -294,11 +347,20 @@ export default function RackGridScreen() {
             </TouchableOpacity>
           </View>
         )}
-        {pendingWineId && (
-          <View style={styles.pendingBanner}>
-            <Text style={styles.pendingBannerText}>Tap an empty slot to place this wine</Text>
-          </View>
-        )}
+        {pendingWineId && (() => {
+          // Surface the actual wine name so the user can't lose track of
+          // which bottle they're placing — common pain when coming in from
+          // the Wish List and then tapping into a rack.
+          const pendingWine = wines.find((w) => w.id === pendingWineId);
+          const headerLine = pendingWine
+            ? [pendingWine.producer, pendingWine.wine_name, pendingWine.vintage].filter(Boolean).join(' · ')
+            : 'this wine';
+          return (
+            <View style={styles.pendingBanner}>
+              <Text style={styles.pendingBannerText}>Tap an empty slot to place {headerLine}</Text>
+            </View>
+          );
+        })()}
         {savedMsg && (
           <View style={styles.savedBanner}>
             <Text style={styles.savedBannerText}>{savedMsg} ✓</Text>
@@ -391,6 +453,8 @@ export default function RackGridScreen() {
                   key={wine.id}
                   style={[styles.wineRow, active && styles.wineRowActive]}
                   onPress={() => toggleHighlight(wine.id)}
+                  onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name)}
+                  delayLongPress={400}
                 >
                   <View style={styles.wineRowMain}>
                     <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>
@@ -406,6 +470,17 @@ export default function RackGridScreen() {
             })}
           </View>
         )}
+
+        {/* Edit bubble — opens the rack-management modal (wipe / rename /
+            delete). Sits at the bottom of the page so destructive actions
+            stay out of the user's primary path. */}
+        <TouchableOpacity
+          style={styles.editRackBtn}
+          onPress={() => { setRenameDraft(rack.name); setEditOpen(true); }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.editRackBtnText}>Edit</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       {/* Placement modal — opens when the user taps an empty slot while a
@@ -462,6 +537,108 @@ export default function RackGridScreen() {
           </View>
         </View>
       </Modal>
+      {/* Edit-rack modal — Wipe Contents / Rename / Delete. */}
+      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+        <View style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>Edit Rack</Text>
+
+            {renaming ? (
+              <>
+                <Text style={styles.placeFieldLabel}>Rack name</Text>
+                <TextInput
+                  style={styles.placeInput}
+                  value={renameDraft}
+                  onChangeText={setRenameDraft}
+                  placeholder="Rack name"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                />
+                <TouchableOpacity
+                  style={styles.placeConfirmBtn}
+                  onPress={() => {
+                    const name = renameDraft.trim();
+                    if (!name) return;
+                    renameRackMutation.mutate({ id: rackId, name }, {
+                      onSuccess: () => { setRenaming(false); setEditOpen(false); },
+                      onError: (err) => showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }),
+                    });
+                  }}
+                  disabled={renameRackMutation.isPending}
+                >
+                  <Text style={styles.placeConfirmText}>{renameRackMutation.isPending ? 'Saving…' : 'Save name'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setRenaming(false)} style={styles.placeCancel}>
+                  <Text style={styles.placeCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={styles.editActionBtn}
+                  onPress={() => { setRenameDraft(rack.name); setRenaming(true); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editActionBtnText}>Rename Rack</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editActionBtn}
+                  onPress={() => {
+                    showAlert({
+                      title: 'Wipe rack contents?',
+                      body: 'This empties every slot in this rack. The wines stay in your cellar — they\'re just unassigned from this rack.',
+                      buttons: [
+                        {
+                          text: 'Wipe rack',
+                          style: 'destructive',
+                          onPress: () => {
+                            wipeRackMutation.mutate(rackId, {
+                              onSuccess: () => setEditOpen(false),
+                              onError: (err) => showAlert({ title: 'Could not wipe', body: err instanceof Error ? err.message : 'Please try again.' }),
+                            });
+                          },
+                        },
+                        { text: 'Cancel', style: 'cancel' },
+                      ],
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editActionBtnText}>Wipe Rack Contents</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.editActionBtn, styles.editActionBtnDanger]}
+                  onPress={() => {
+                    showAlert({
+                      title: 'Delete this rack?',
+                      body: `Permanently remove "${rack.name}". The wines stay in your cellar — they\'re just no longer mapped to a rack.`,
+                      buttons: [
+                        {
+                          text: 'Delete rack',
+                          style: 'destructive',
+                          onPress: () => {
+                            removeRack.mutate(rackId, {
+                              onSuccess: () => { setEditOpen(false); router.back(); },
+                              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
+                            });
+                          },
+                        },
+                        { text: 'Cancel', style: 'cancel' },
+                      ],
+                    });
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editActionBtnTextDanger}>Delete Rack</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.placeCancel}>
+                  <Text style={styles.placeCancelText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -490,6 +667,12 @@ const styles = StyleSheet.create({
   placeConfirmText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   placeCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   placeCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  editRackBtn: { alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 20, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, backgroundColor: 'rgba(212,176,96,0.10)' },
+  editRackBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
+  editActionBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  editActionBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  editActionBtnDanger: { borderColor: colors.error },
+  editActionBtnTextDanger: { color: colors.error },
   slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
   movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
   movingBannerText: { flex: 1, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, lineHeight: 18 },

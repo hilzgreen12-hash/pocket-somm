@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
 import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
+import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
 import type { WineRack, CellarWine } from '../../src/types/wine';
@@ -17,13 +18,18 @@ function bottleLabel(n: number) {
   return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 }
 
-function RackRow({ rack, wines }: { rack: WineRack; wines: CellarWine[] }) {
+function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
   const isFridge = rack.storage_type === 'fridge';
   const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const blurb = rackHomeToBlurb(rack.id, wines);
 
   return (
-    <TouchableOpacity style={styles.row} onPress={() => router.push(`/cellar/rack/${rack.id}`)}>
+    <TouchableOpacity
+      style={styles.row}
+      onPress={() => router.push(`/cellar/rack/${rack.id}`)}
+      onLongPress={onLongPress}
+      delayLongPress={400}
+    >
       <View style={styles.rowMain}>
         <Text style={styles.rowName}>{rack.name}</Text>
         <Text style={styles.rowDetail}>
@@ -42,10 +48,29 @@ function RackRow({ rack, wines }: { rack: WineRack; wines: CellarWine[] }) {
 
 export default function RacksScreen() {
   const { session } = useAuth();
-  const { racks, isLoading } = useRacks();
+  const { racks, isLoading, remove: removeRack } = useRacks();
   const { wines } = useCellar();
   const { setPendingStorageType } = useRackStore();
   const [typeModalOpen, setTypeModalOpen] = useState(false);
+
+  function handleLongPressRack(rack: WineRack) {
+    showAlert({
+      title: rack.name,
+      body: `Permanently remove this ${rack.storage_type === 'fridge' ? 'fridge' : 'rack'}? Wines stay in your cellar — they're just no longer mapped to it.`,
+      buttons: [
+        {
+          text: 'Delete rack',
+          style: 'destructive',
+          onPress: () => {
+            removeRack.mutate(rack.id, {
+              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
 
   const rackIds = racks.map((r) => r.id);
   const { data: slotAssignments = [] } = useQuery({
@@ -112,7 +137,7 @@ export default function RacksScreen() {
           data={racks}
           keyExtractor={(r) => r.id}
           renderItem={({ item }) => (
-            <RackRow rack={item} wines={winesByRack[item.id] ?? []} />
+            <RackRow rack={item} wines={winesByRack[item.id] ?? []} onLongPress={() => handleLongPressRack(item)} />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           contentContainerStyle={{ paddingBottom: 80 }}

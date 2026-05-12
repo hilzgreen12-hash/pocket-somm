@@ -66,7 +66,7 @@ export default function ChefConfirmScreen() {
         <Text style={styles.confirmButtonText}>Confirm Wine</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.scanAgain} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.scanAgain} onPress={() => router.replace('/chef/camera')}>
         <Text style={styles.scanAgainText}>Scan again</Text>
       </TouchableOpacity>
     </ScrollView>

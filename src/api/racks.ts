@@ -44,6 +44,17 @@ export async function deleteRack(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function renameRack(id: string, name: string): Promise<void> {
+  const { error } = await supabase.from('wine_racks').update({ name }).eq('id', id);
+  if (error) throw error;
+}
+
+export async function wipeRackContents(rackId: string): Promise<void> {
+  // Clears every slot assignment for this rack — the rack itself stays.
+  const { error } = await supabase.from('rack_slots').delete().eq('rack_id', rackId);
+  if (error) throw error;
+}
+
 export async function getRackSlots(rackId: string): Promise<RackSlot[]> {
   const { data, error } = await supabase
     .from('rack_slots')

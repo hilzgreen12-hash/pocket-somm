@@ -81,10 +81,10 @@ export default function ChefCameraScreen() {
       setImage(uri, base64);
       const details = await scanLabel(base64);
       setWineDetails(details);
-      router.push('/chef/confirm');
+      router.replace('/chef/confirm');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
-      router.push('/chef/confirm');
+      router.replace('/chef/confirm');
     }
     } catch (err) {
       console.error('[ChefCamera] Capture failed:', err);

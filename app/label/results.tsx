@@ -101,6 +101,7 @@ export default function LabelResultsScreen() {
       storage_location: null,
       date_received: new Date().toISOString().split('T')[0],
       critic_score: intel.criticScore,
+      critic_score_note: intel.criticScoreNote ?? null,
       drinking_window_from: intel.drinkingWindowFrom,
       drinking_window_to: intel.drinkingWindowTo,
       drinking_window_status: intel.drinkingWindowStatus,
@@ -186,8 +187,10 @@ export default function LabelResultsScreen() {
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       setPendingSlot(null);
       setAddingToCellar(false);
-      if (router.canGoBack()) router.dismiss(2);
-      else router.replace(`/cellar/rack/${pendingSlot.rackId}`);
+      // Camera/confirm now use router.replace so the stack is short by the
+      // time we land here. A clean router.replace to the destination keeps
+      // the back-stack tidy and doesn't push extra entries.
+      router.replace(`/cellar/rack/${pendingSlot.rackId}`);
       return;
     }
 
@@ -195,18 +198,14 @@ export default function LabelResultsScreen() {
       setPendingWineId(savedWineId);
       setPendingStorageType('rack');
       setAddingToCellar(false);
-      if (router.canGoBack()) router.dismiss(2);
-      else router.replace('/(tabs)/cellar');
-      router.push('/cellar/rack/camera');
+      router.replace('/cellar/rack/camera');
       return;
     }
 
     if (selectedRackId) {
       setPendingWineId(savedWineId);
       setAddingToCellar(false);
-      if (router.canGoBack()) router.dismiss(2);
-      else router.replace('/(tabs)/cellar');
-      router.push(`/cellar/rack/${selectedRackId}` as any);
+      router.replace(`/cellar/rack/${selectedRackId}` as any);
       return;
     }
 
@@ -279,12 +278,17 @@ export default function LabelResultsScreen() {
         {intel.grapeVariety && <Text style={styles.grape}>{intel.grapeVariety}</Text>}
       </View>
 
-      {intel.criticScore !== null && (
+      {intel.criticScore !== null ? (
         <View style={styles.scoreRow}>
           <Text style={styles.scoreLabel}>Critic Score</Text>
           <Text style={styles.score}>{intel.criticScore}</Text>
         </View>
-      )}
+      ) : intel.criticScoreNote ? (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Critic Score</Text>
+          <Text style={styles.tastingNotes}>{intel.criticScoreNote}</Text>
+        </View>
+      ) : null}
 
       <DrinkingWindowBadge
         status={intel.drinkingWindowStatus}
