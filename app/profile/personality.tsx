@@ -40,20 +40,23 @@ export default function PersonalityScreen() {
   // Gate the auto-generate behind a minimum-activity bar so first-time users
   // don't get a personality sketch invented from nothing.
   // Wine: ≥2 wine list scans OR ≥5 bottles in the cellar.
-  // Chef: ≥1 pairing AND ≥1 label scan, OR ≥2 label scans, OR ≥2 pairings.
+  // Foodie: ≥2 total signals across rated/noted restaurants + saved recipes
+  // (chef sessions) + chef pairings. Anything with content from the user
+  // counts as one signal.
   const hasEnoughData = (() => {
     if (cat === 'wine') {
       const totalBottles = (wines ?? []).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
       const wineListScanCount = archive?.length ?? 0;
       return wineListScanCount >= 2 || totalBottles >= 5;
     }
+    const restaurantSignals = (archive ?? []).filter((a) =>
+      (a.restaurantName && a.restaurantName.trim()) ||
+      a.ratingOverall != null || a.ratingFood != null ||
+      (a.restaurantNote && a.restaurantNote.trim())
+    ).length;
     const labels = chefLabelSessions?.length ?? 0;
     const pairings = chefPairingSessions?.length ?? 0;
-    return (
-      (pairings >= 1 && labels >= 1) ||
-      labels >= 2 ||
-      pairings >= 2
-    );
+    return restaurantSignals + labels + pairings >= 2;
   })();
 
   const [text, setText] = useState<string | null>(null);
@@ -105,8 +108,11 @@ export default function PersonalityScreen() {
             ...(chosenWines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage != null ? String(w.vintage) : null, region: w.region })),
           ].slice(0, 30)
         : undefined;
-      // Chef personality also folds in restaurant dining history so the
-      // sketch can riff on what the user actually orders and rates.
+      // Foodie personality folds in restaurant dining history, saved
+      // recipes (each pairing as its own entry, with the session's
+      // favourite/star carried through), and any free-form pairing
+      // searches. Together this gives Vinster a picture of where they
+      // eat, what they cook, and what they treasure.
       const restaurantData = cat === 'recipe'
         ? archive
             .filter((a) => (a.restaurantName && a.restaurantName.trim()) || a.ratingOverall != null || a.ratingFood != null)
@@ -121,10 +127,21 @@ export default function PersonalityScreen() {
               note: a.restaurantNote,
             }))
         : undefined;
+      const recipeData = cat === 'recipe'
+        ? (chefLabelSessions ?? [])
+            .flatMap((s) => (s.pairings ?? []).map((p) => ({
+              dishName: p.dishName,
+              chefInspiration: p.chefInspiration ?? null,
+              pairingNotes: p.pairingNotes ?? null,
+              isFavourite: !!s.is_starred,
+            })))
+            .slice(0, 25)
+        : undefined;
       const result = await generatePersonality(cat, {
         preferences: preferences as unknown as Record<string, unknown>,
         wines: wineData,
         restaurants: restaurantData,
+        recipes: recipeData,
       });
       setText(result.text);
       setPublishState('idle');
@@ -167,13 +184,18 @@ export default function PersonalityScreen() {
       ]);
       return (c1 ?? 0) + (c2 ?? 0);
     }
-    const [{ count: c1 }, { count: c2 }] = await Promise.all([
+    const [{ count: c1 }, { count: c2 }, { count: c3 }] = await Promise.all([
       supabase.from('chef_label_sessions').select('id', { count: 'exact', head: true })
         .eq('user_id', userId).gt('saved_at', lastGeneratedAt),
       supabase.from('chef_pairing_sessions').select('id', { count: 'exact', head: true })
         .eq('user_id', userId).gt('saved_at', lastGeneratedAt),
+      // New restaurant signals since the last sketch — any scan_session with
+      // a restaurant_name or an overall rating counts.
+      supabase.from('scan_sessions').select('id', { count: 'exact', head: true })
+        .eq('user_id', userId).gt('captured_at', lastGeneratedAt)
+        .or('restaurant_name.not.is.null,rating_overall.not.is.null'),
     ]);
-    return (c1 ?? 0) + (c2 ?? 0);
+    return (c1 ?? 0) + (c2 ?? 0) + (c3 ?? 0);
   }
 
   async function handleEvolve() {
@@ -209,7 +231,7 @@ export default function PersonalityScreen() {
   async function handleShare() {
     if (!text) return;
     const { title, body } = splitPersonality(text);
-    const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : 'My Chef Personality, by Vinster';
+    const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : 'My Foodie Personality, by Vinster';
     const caption = [heading, title ? `\n${title}` : ''].filter(Boolean).join('\n');
 
     try {
@@ -262,7 +284,7 @@ export default function PersonalityScreen() {
 
         <View style={styles.intro}>
           <Text style={styles.heading}>{
-            cat === 'wine' ? 'Your Wine Personality' : 'Your Chef Personality'
+            cat === 'wine' ? 'Your Wine Personality' : 'Your Foodie Personality'
           }</Text>
           <Text style={styles.subheading}>A character sketch through the lens of your profile and your choices so far.</Text>
         </View>
@@ -286,7 +308,7 @@ export default function PersonalityScreen() {
             <Text style={styles.errorBody}>
               {cat === 'wine'
                 ? 'Scan some lists or labels for your personality sketch.'
-                : 'Find a few wine pairings or scan a label for recipes for your personality sketch.'}
+                : 'Rate a few restaurants, save some recipes, or find wine pairings — we need a couple of breadcrumbs before we can sketch you as a foodie.'}
             </Text>
           </View>
         ) : text ? (

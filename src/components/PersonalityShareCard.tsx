@@ -13,7 +13,7 @@ interface Props {
 }
 
 export const PersonalityShareCard = forwardRef<View, Props>(({ title, body, category }, ref) => {
-  const heading = category === 'wine' ? 'My Wine Personality' : 'My Chef Personality';
+  const heading = category === 'wine' ? 'My Wine Personality' : 'My Foodie Personality';
   return (
     <View ref={ref} collapsable={false} style={styles.card}>
       <View style={styles.inner}>
