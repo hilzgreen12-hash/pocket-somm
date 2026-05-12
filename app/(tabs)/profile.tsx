@@ -74,8 +74,8 @@ export default function ProfileTab() {
           <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/profile/recipe')}>
             <Text style={styles.buttonText}>Your Recipe Preferences</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/recipes/chosen')}>
-            <Text style={styles.buttonText}>Your Recipe Reviews</Text>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/chef/archive?filter=favourites')}>
+            <Text style={styles.buttonText}>Your Favourite Recipes</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=recipe')}>
