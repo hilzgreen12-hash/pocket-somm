@@ -1,6 +1,12 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+
+// Per-user rate limits — slightly higher than OCR since a single scan can
+// trigger multiple recommend calls if the user re-rolls their picks.
+const RECOMMEND_HOURLY_LIMIT = 60;
+const RECOMMEND_DAILY_LIMIT = 200;
 
 const SYSTEM_PROMPT = `You are Vinster, an expert sommelier with encyclopaedic knowledge of wine regions, producers, vintages, critic scores, and market value.
 
@@ -110,11 +116,48 @@ Return ONLY valid JSON in this exact format:
 Do not include markdown, explanation, or any text outside the JSON.`;
 
 Deno.serve(async (req) => {
-  if (!req.headers.get('Authorization')) {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
   try {
+    // Resolve the user from the JWT — needed for per-user rate limiting,
+    // and to reject expired/invalid tokens before paying for a Claude call.
+    const userClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Rate-limit check via service-role RPC. Fail open on infrastructure
+    // errors so a Supabase blip doesn't lock out legitimate users.
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
+      p_user_id: user.id,
+      p_function_name: 'recommend',
+      p_hourly_limit: RECOMMEND_HOURLY_LIMIT,
+      p_daily_limit: RECOMMEND_DAILY_LIMIT,
+    });
+    if (rlError) {
+      console.error('[recommend] rate-limit RPC failed (failing open):', rlError);
+    } else if (allowed === false) {
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limit_exceeded',
+          message: "You've requested a lot of recommendations recently — please try again in a few minutes.",
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const {
       wines,
       wineTypes,

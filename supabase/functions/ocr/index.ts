@@ -1,6 +1,14 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+
+// Per-user rate limits — generous for real use, tight enough to stop abuse.
+// Roughly 1-3 photo scans per dining outing × multiple outings/day is well
+// under these limits. Anyone hitting them is making sustained automated
+// calls.
+const OCR_HOURLY_LIMIT = 30;
+const OCR_DAILY_LIMIT = 100;
 
 const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - name: the wine name (string)
@@ -27,11 +35,49 @@ If you cannot identify any wines, return: { "wines": [] }`;
 const IMAGE_SYSTEM_PROMPT = `You are a wine list parser. Extract every wine from the provided image of a restaurant wine list.\n\n${WINE_FIELDS}`;
 
 Deno.serve(async (req) => {
-  if (!req.headers.get('Authorization')) {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
   }
 
   try {
+    // Resolve the user from the JWT — we need user_id to rate-limit per
+    // user, and we want to reject expired/invalid tokens before paying
+    // for a Claude call.
+    const userClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+    const { data: { user }, error: userError } = await userClient.auth.getUser();
+    if (userError || !user) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { 'Content-Type': 'application/json' } });
+    }
+
+    // Rate-limit check via service-role RPC. Fail open on infrastructure
+    // errors (logged) so a Supabase blip doesn't lock out legitimate users.
+    const adminClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    const { data: allowed, error: rlError } = await adminClient.rpc('check_and_log_function_call', {
+      p_user_id: user.id,
+      p_function_name: 'ocr',
+      p_hourly_limit: OCR_HOURLY_LIMIT,
+      p_daily_limit: OCR_DAILY_LIMIT,
+    });
+    if (rlError) {
+      console.error('[ocr] rate-limit RPC failed (failing open):', rlError);
+    } else if (allowed === false) {
+      return new Response(
+        JSON.stringify({
+          error: 'rate_limit_exceeded',
+          message: "You've made a lot of scans recently — please try again in a few minutes.",
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+
     const body = await req.json();
     const { imageBase64 } = body;
 
