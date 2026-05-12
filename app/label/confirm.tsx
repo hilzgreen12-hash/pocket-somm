@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { getWineIntelligence, generatePairings } from '../../src/api/label';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -11,6 +11,8 @@ import type { WineDetailsComplete } from '../../src/types/wine';
 
 export default function LabelConfirmScreen() {
   useKeepAwake();
+  const { context } = useLocalSearchParams<{ context?: string }>();
+  const contextQuery = context === 'wishlist' ? '?context=wishlist' : '';
   const { wineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
   const { preferences } = usePreferences();
 
@@ -45,7 +47,7 @@ export default function LabelConfirmScreen() {
     try {
       const intel = await getWineIntelligence(confirmed, preferences?.defaultCurrency ?? 'GBP');
       setIntelligence(intel);
-      router.replace('/label/results');
+      router.replace(`/label/results${contextQuery}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wine details');
       showAlert({ title: 'Error', body: 'Could not load wine details. Please try again.' });

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
@@ -34,6 +34,8 @@ function DrinkingWindowBadge({ status, from, to }: { status: string; from: numbe
 
 
 export default function LabelResultsScreen() {
+  const { context } = useLocalSearchParams<{ context?: string }>();
+  const isWishlistFlow = context === 'wishlist';
   const { wineDetailsConfirmed, intelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
@@ -120,7 +122,15 @@ export default function LabelResultsScreen() {
     try {
       await addToWishList.mutateAsync({ ...buildWinePayload(session.user.id), is_wishlist: true });
       setAddingToWishList(false);
-      showAlert({ title: 'Added to Wish List', body: `${wine.wineName ?? wine.producer} has been saved to your wish list.` });
+      showAlert({
+        title: 'Added to Wish List',
+        body: `${wine.wineName ?? wine.producer} has been saved to your wish list.`,
+        // When the user came in via the wish-list flow they're expecting to
+        // land back on the wish list, not the wine card. Route there from OK.
+        buttons: isWishlistFlow
+          ? [{ text: 'OK', onPress: () => router.replace('/cellar/wishlist') }]
+          : undefined,
+      });
     } catch {
       showAlert({ title: 'Error', body: 'Could not save to wish list. Please try again.' });
     } finally {
@@ -259,7 +269,7 @@ export default function LabelResultsScreen() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
         style={styles.backRow}
-        onPress={() => router.replace('/(tabs)/cellar')}
+        onPress={() => router.replace(isWishlistFlow ? '/cellar/wishlist' : '/(tabs)/cellar')}
       >
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
@@ -316,18 +326,42 @@ export default function LabelResultsScreen() {
         <Text style={styles.communityCaption}>See what other Vinster users have noted about this wine.</Text>
       </View>
 
-      <View style={styles.actionRow}>
-        <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToCellar(true)}>
-          <Text style={styles.actionButtonText}>Add to Cellar</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToWishList(true)}>
-          <Text style={styles.actionButtonText}>Add to Wish List</Text>
-        </TouchableOpacity>
-      </View>
+      {isWishlistFlow ? (
+        // User entered the flow via "Add to Wish List" — they've already
+        // decided this wine is going to the wish list. Skip the dual-button
+        // decision and offer a single confirm.
+        <>
+          <View style={styles.singleActionRow}>
+            <TouchableOpacity
+              style={[styles.singleActionButton, saving && { opacity: 0.6 }]}
+              onPress={handleAddToWishList}
+              disabled={saving}
+            >
+              <Text style={styles.singleActionButtonText}>
+                {saving ? 'Adding…' : 'Confirm Add to Wish List'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/cellar/wishlist')}>
+            <Text style={styles.discardText}>Cancel</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <View style={styles.actionRow}>
+            <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToCellar(true)}>
+              <Text style={styles.actionButtonText}>Add to Cellar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToWishList(true)}>
+              <Text style={styles.actionButtonText}>Add to Wish List</Text>
+            </TouchableOpacity>
+          </View>
 
-      <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/(tabs)/cellar')}>
-        <Text style={styles.discardText}>Discard</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/(tabs)/cellar')}>
+            <Text style={styles.discardText}>Discard</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       <Modal visible={addingToWishList} transparent animationType="slide">
         <View style={styles.modalOverlay}>
@@ -474,6 +508,9 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.xl, marginTop: spacing.xl },
   actionButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   actionButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  singleActionRow: { marginHorizontal: spacing.xl, marginTop: spacing.xl },
+  singleActionButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
+  singleActionButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, textAlign: 'center' },
   discardButton: { margin: spacing.xl, alignItems: 'center', paddingVertical: spacing.sm },
   discardText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, textDecorationLine: 'underline' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
