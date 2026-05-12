@@ -81,12 +81,6 @@ export default function ProfileTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=recipe')}>
           <Text style={styles.buttonText}>Your Foodie Personality</Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.section}>
-        <Text style={styles.sectionDesc}>Look back at the restaurants you've dined in — add your notes and share.</Text>
         <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/restaurants/reviews')}>
           <Text style={styles.buttonText}>Your Restaurants</Text>
         </TouchableOpacity>
