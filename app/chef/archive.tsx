@@ -21,28 +21,6 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function FolderChip({ label, count, active, onPress, onLongPress, accent }: {
-  label: string;
-  count?: number;
-  active: boolean;
-  onPress: () => void;
-  onLongPress?: () => void;
-  accent?: 'gold' | 'star';
-}) {
-  return (
-    <TouchableOpacity
-      style={[styles.chip, active && styles.chipActive, accent === 'star' && styles.chipStar]}
-      onPress={onPress}
-      onLongPress={onLongPress}
-      activeOpacity={0.7}
-    >
-      <Text style={[styles.chipText, active && styles.chipTextActive]} numberOfLines={1} ellipsizeMode="tail">
-        {accent === 'star' ? '★ ' : ''}{label}{count != null ? ` (${count})` : ''}
-      </Text>
-    </TouchableOpacity>
-  );
-}
-
 export default function ChefArchiveScreen() {
   const { filter: initialFilter } = useLocalSearchParams<{ filter?: string }>();
   const { session } = useAuth();
@@ -52,6 +30,7 @@ export default function ChefArchiveScreen() {
   const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
 
   const [filter, setFilter] = useState<string>(initialFilter === 'favourites' ? FILTER_FAVOURITES : FILTER_ALL);
+  const [folderDropdownOpen, setFolderDropdownOpen] = useState(false);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [manageFolder, setManageFolder] = useState<ChefArchiveCollection | null>(null);
@@ -152,6 +131,14 @@ export default function ChefArchiveScreen() {
 
   const isLoading = labelLoading;
 
+  // Current folder label for the filter chip — Full Cellar List style:
+  // single chip showing the active selection. Tap opens a dropdown modal.
+  const folderLabel = (() => {
+    if (filter === FILTER_ALL) return 'All';
+    if (filter === FILTER_FAVOURITES) return '★ Favourites';
+    return collections.find((c) => c.id === filter)?.name ?? 'All';
+  })();
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -162,25 +149,23 @@ export default function ChefArchiveScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Folder strip */}
+      {/* Summary + single folder filter chip — mirrors Full Cellar List
+          style instead of the old multi-chip horizontal strip. */}
       {session && (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderStrip}>
-          <FolderChip label="All" count={allItems.length} active={filter === FILTER_ALL} onPress={() => setFilter(FILTER_ALL)} />
-          <FolderChip label="Favourites" count={favouritesCount} active={filter === FILTER_FAVOURITES} onPress={() => setFilter(FILTER_FAVOURITES)} accent="star" />
-          {collections.map((c) => (
-            <FolderChip
-              key={c.id}
-              label={c.name}
-              count={c.item_count}
-              active={filter === c.id}
-              onPress={() => setFilter(c.id)}
-              onLongPress={() => { setManageFolder(c); setRenameDraft(c.name); }}
-            />
-          ))}
-          <TouchableOpacity style={styles.newFolderChip} onPress={() => gatedAction(() => setNewFolderOpen(true))}>
-            <Text style={styles.newFolderChipText}>+ New folder</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        <>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>
+              {filteredItems.length} {filteredItems.length === 1 ? 'recipe' : 'recipes'}
+              {favouritesCount > 0 ? ` · ${favouritesCount} favourite${favouritesCount === 1 ? '' : 's'}` : ''}
+            </Text>
+          </View>
+          <View style={styles.filterRow}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setFolderDropdownOpen(true)}>
+              <Text style={styles.filterChipLabel}>Folder</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{folderLabel}</Text>
+            </TouchableOpacity>
+          </View>
+        </>
       )}
 
       {!session ? (
@@ -245,6 +230,65 @@ export default function ChefArchiveScreen() {
           })}
         </ScrollView>
       )}
+
+      {/* Folder filter dropdown — mirrors Full Cellar List's dropdown
+          pattern: tap the chip, pick a value, close. Long-press a folder
+          row to manage (rename / delete). */}
+      <Modal visible={folderDropdownOpen} transparent animationType="fade" onRequestClose={() => setFolderDropdownOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setFolderDropdownOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Folder</Text>
+            <ScrollView style={{ maxHeight: 400 }}>
+              <TouchableOpacity
+                style={[styles.modalOption, filter === FILTER_ALL && styles.modalOptionActive]}
+                onPress={() => { setFilter(FILTER_ALL); setFolderDropdownOpen(false); }}
+              >
+                <Text style={[styles.modalOptionText, filter === FILTER_ALL && styles.modalOptionTextActive]}>
+                  All ({allItems.length})
+                </Text>
+                {filter === FILTER_ALL && <Text style={styles.modalOptionCheck}>✓</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalOption, filter === FILTER_FAVOURITES && styles.modalOptionActive]}
+                onPress={() => { setFilter(FILTER_FAVOURITES); setFolderDropdownOpen(false); }}
+              >
+                <Text style={[styles.modalOptionText, filter === FILTER_FAVOURITES && styles.modalOptionTextActive]}>
+                  ★ Favourites ({favouritesCount})
+                </Text>
+                {filter === FILTER_FAVOURITES && <Text style={styles.modalOptionCheck}>✓</Text>}
+              </TouchableOpacity>
+              {collections.map((c) => {
+                const active = filter === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.modalOption, active && styles.modalOptionActive]}
+                    onPress={() => { setFilter(c.id); setFolderDropdownOpen(false); }}
+                    onLongPress={() => { setFolderDropdownOpen(false); setManageFolder(c); setRenameDraft(c.name); }}
+                  >
+                    <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>
+                      {c.name} ({c.item_count})
+                    </Text>
+                    {active && <Text style={styles.modalOptionCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                style={[styles.modalOption, styles.modalOptionNewFolder]}
+                onPress={() => { setFolderDropdownOpen(false); gatedAction(() => setNewFolderOpen(true)); }}
+              >
+                <Text style={styles.modalOptionNewText}>+ Create new folder</Text>
+              </TouchableOpacity>
+            </ScrollView>
+            {collections.length > 0 && (
+              <Text style={styles.manageHint}>Long-press a folder to rename or delete.</Text>
+            )}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setFolderDropdownOpen(false)}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* New folder modal */}
       <Modal visible={newFolderOpen} transparent animationType="fade" onRequestClose={() => setNewFolderOpen(false)}>
@@ -341,14 +385,23 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
   title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  folderStrip: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
-  chip: { width: 130, height: 40, borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingHorizontal: spacing.sm, justifyContent: 'center', alignItems: 'center', marginRight: spacing.sm, overflow: 'hidden' },
-  chipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.15)' },
-  chipStar: { borderColor: 'rgba(212,176,96,0.5)' },
-  chipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.textMuted, textAlign: 'center' },
-  chipTextActive: { color: colors.gold },
-  newFolderChip: { width: 130, height: 40, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 20, paddingHorizontal: spacing.sm, justifyContent: 'center', alignItems: 'center', overflow: 'hidden' },
-  newFolderChipText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, textAlign: 'center' },
+  // Filter UI mirrors Full Cellar List: small summary row, then a single
+  // chip per filter dimension. Tap to open a dropdown modal. Compact and
+  // sits flush against the header rather than a chunky multi-chip strip.
+  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, flexDirection: 'row', gap: spacing.sm },
+  filterChip: { width: 160, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChipLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterChipValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  modalOptionText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text },
+  modalOptionTextActive: { color: colors.gold },
+  modalOptionCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
+  modalOptionNewFolder: { borderBottomWidth: 0, paddingTop: spacing.md },
+  modalOptionNewText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  manageHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingTop: spacing.xs, paddingBottom: 4 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },

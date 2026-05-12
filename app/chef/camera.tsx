@@ -1,7 +1,7 @@
-import { useRef, useState } from 'react';
-import { View, StyleSheet, Dimensions } from 'react-native';
+import { useCallback, useRef, useState } from 'react';
+import { View, Text, Image, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
@@ -9,23 +9,33 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraOverlay';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { colors, spacing } from '../../src/constants/theme';
 
 export default function ChefCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);
+  const [previewUri, setPreviewUri] = useState<string | null>(null);
   const { setImage, setWineDetails, setError } = useLabelStore();
+
+  // Drop the still-photo preview when the screen regains focus (e.g. user
+  // navigated back from /chef/confirm) so the live camera comes back.
+  useFocusEffect(useCallback(() => { setPreviewUri(null); }, []));
 
   if (!permission) return <View style={styles.container} />;
   if (!permission.granted) return <PermissionScreen onRequest={requestPermission} />;
 
   async function handleCapture() {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || previewUri) return;
     try {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
     if (!photo?.uri) return;
+
+    // Show the captured photo immediately so the user gets visual feedback
+    // that the shot worked — keep it on screen while OCR + intelligence run.
+    setPreviewUri(photo.uri);
 
     let uri = photo.uri;
 
@@ -78,8 +88,21 @@ export default function ChefCameraScreen() {
     }
     } catch (err) {
       console.error('[ChefCamera] Capture failed:', err);
+      setPreviewUri(null);
       showAlert({ title: 'Camera error', body: 'Could not capture the photo. Please try again.' });
     }
+  }
+
+  if (previewUri) {
+    return (
+      <View style={styles.container}>
+        <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        <View style={styles.processingOverlay}>
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.processingText}>Reading the label…</Text>
+        </View>
+      </View>
+    );
   }
 
   return (
@@ -98,4 +121,23 @@ export default function ChefCameraScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#000' },
+  processingOverlay: {
+    position: 'absolute',
+    bottom: 80,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+  },
+  processingText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 18,
+    color: '#FFFFFF',
+    letterSpacing: 0.5,
+    textShadowColor: 'rgba(0,0,0,0.85)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
+  },
 });
