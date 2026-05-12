@@ -1,8 +1,8 @@
-// Little Greene Arras — deep warm terracotta
-const ARRAS = '#69413C';
+// Brighter warm terracotta — user-chosen palette swap (was #69413C).
+const BACKGROUND = '#945e5c';
 
 export const colors = {
-  background: ARRAS,
+  background: BACKGROUND,
   surface: '#572F2B',
   surfaceElevated: '#4A2522',
 
