@@ -50,8 +50,9 @@ export default function ResultsScreen() {
   }, [autoSave.data]);
 
   // Cache fresh scans to local AsyncStorage on render so View Last Result
-  // works in-session even when the user hasn't tapped Save to Archive.
-  // Only fires once per render of a fresh scan (skips history loads).
+  // works in-session even when the network save is still in flight or has
+  // failed. Only fires once per render of a fresh scan (skips history
+  // loads).
   useEffect(() => {
     if (isFromHistory) return;
     if (!recommendation || !extractedWines) return;
@@ -79,6 +80,18 @@ export default function ResultsScreen() {
       },
     );
   }
+
+  // Fire the archive save automatically once the results render, gated on
+  // a real session being present. The button was previously the only
+  // trigger; users who missed it left the server archive empty even though
+  // the local cache made "View Last Result" work — which is exactly the
+  // bug this addresses. Re-renders are guarded by hasSaved.current inside
+  // handleSaveToArchive so this only fires once per scan.
+  useEffect(() => {
+    if (isFromHistory) return;
+    if (!recommendation || !extractedWines || !session) return;
+    handleSaveToArchive();
+  }, [isFromHistory, !!recommendation, !!extractedWines, !!session]);
 
   const isSaved = !!autoSave.data;
   const isSaving = autoSave.isPending;
