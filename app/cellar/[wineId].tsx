@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -104,12 +104,12 @@ export default function CellarWineDetail() {
   useKeepAwake();
   const { wineId } = useLocalSearchParams<{ wineId: string }>();
   const { session } = useAuth();
-  const { wines, updateWine } = useCellar();
+  const { wines, updateWine, isLoading: cellarLoading } = useCellar();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
   const qc = useQueryClient();
-  const { wines: archivedWines } = useArchive();
+  const { wines: archivedWines, isLoading: archiveLoading } = useArchive();
   const wine = wines.find((w) => w.id === wineId) ?? archivedWines.find((w) => w.id === wineId);
   const isArchived = !!wine?.archived_at;
 
@@ -157,6 +157,18 @@ export default function CellarWineDetail() {
   // otherwise have to type the date out every time.
   const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? todayISO());
   const [savingReview, setSavingReview] = useState(false);
+
+  // While the cellar query is in flight, show a spinner instead of the
+  // "Wine not found" fallback — otherwise the user sees a flash of that
+  // message right after a wine is added (the navigation lands before the
+  // cellar refetch resolves).
+  if (!wine && (cellarLoading || archiveLoading)) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.gold} size="large" />
+      </View>
+    );
+  }
 
   if (!wine) {
     return (
@@ -458,7 +470,9 @@ export default function CellarWineDetail() {
         {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
       </View>
 
-      {/* Compact stats grid */}
+      {/* Compact stats grid — score / window / bottle counts only. The
+          Purchase and Estimated values are pulled out into full-width rows
+          below so each has room to breathe and a clearer call to action. */}
       <View style={styles.statsGrid}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Critic Score</Text>
@@ -470,52 +484,6 @@ export default function CellarWineDetail() {
           {wine.drinking_window_from && wine.drinking_window_to && (
             <Text style={styles.statSub}>{wine.drinking_window_from}–{wine.drinking_window_to}</Text>
           )}
-        </View>
-
-        <TouchableOpacity style={styles.statCell} onPress={() => !editingPrice && setEditingPrice(true)} activeOpacity={editingPrice ? 1 : 0.7}>
-          <Text style={styles.statLabel}>Purchase Price</Text>
-          {editingPrice ? (
-            <>
-              <TextInput
-                style={styles.statInput}
-                value={purchasePriceDraft}
-                onChangeText={setPurchasePriceDraft}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={colors.textMuted}
-                autoFocus
-              />
-              <View style={styles.statActions}>
-                <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
-                  <Text style={styles.statCancel}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
-                  <Text style={[styles.statAction, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          ) : (
-            <>
-              <Text style={[styles.statValue, wine.purchase_price == null && styles.statValueMuted]}>
-                {wine.purchase_price != null ? formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 2 }) : 'Tap to add'}
-              </Text>
-              {wine.purchase_price != null && <Text style={styles.statAction}>Edit</Text>}
-            </>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Estimated Value</Text>
-          {refreshingValue ? (
-            <Text style={[styles.statValue, styles.statValueMuted]}>Estimating…</Text>
-          ) : wine.estimated_value != null ? (
-            <Text style={styles.statValue}>{formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}</Text>
-          ) : (
-            <Text style={[styles.statValue, styles.statValueMuted]}>—</Text>
-          )}
-          <TouchableOpacity onPress={handleRefreshEstimate} disabled={refreshingValue}>
-            <Text style={styles.statAction}>{wine.estimated_value != null ? 'Refresh' : 'Get estimate'}</Text>
-          </TouchableOpacity>
         </View>
 
         <View style={styles.statCell}>
@@ -537,6 +505,69 @@ export default function CellarWineDetail() {
           <Text style={[styles.statValue, bottlesInArchive === 0 && styles.statValueMuted]}>{bottleLabel(bottlesInArchive)}</Text>
         </View>
       </View>
+
+      {/* When no critic score is available, surface Vinster's brief
+          explanation so the dash doesn't feel like an error. */}
+      {wine.critic_score == null && wine.critic_score_note ? (
+        <View style={styles.scoreNoteBlock}>
+          <Text style={styles.scoreNoteLabel}>Why no critic score?</Text>
+          <Text style={styles.scoreNoteText}>{wine.critic_score_note}</Text>
+        </View>
+      ) : null}
+
+      {/* Purchase Value — full-width row, label left, value or input-prompt
+          on the right. Tap anywhere on the row to start editing. */}
+      <TouchableOpacity
+        style={styles.valueRow}
+        onPress={() => !editingPrice && setEditingPrice(true)}
+        activeOpacity={editingPrice ? 1 : 0.7}
+      >
+        <Text style={styles.valueLabel}>Purchase Value</Text>
+        {editingPrice ? (
+          <View style={styles.valueEditBlock}>
+            <TextInput
+              style={styles.valueInput}
+              value={purchasePriceDraft}
+              onChangeText={setPurchasePriceDraft}
+              keyboardType="decimal-pad"
+              placeholder="0.00"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+            <TouchableOpacity onPress={() => { setEditingPrice(false); setPurchasePriceDraft(wine.purchase_price != null ? String(wine.purchase_price) : ''); }}>
+              <Text style={styles.valueCancel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleSavePrice} disabled={savingPrice}>
+              <Text style={[styles.valueSave, savingPrice && { opacity: 0.5 }]}>{savingPrice ? '…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </View>
+        ) : wine.purchase_price != null ? (
+          <Text style={styles.valueText}>{formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 2 })}</Text>
+        ) : (
+          <Text style={styles.valueAction}>Input Purchase Price</Text>
+        )}
+      </TouchableOpacity>
+
+      {/* Estimated Value — full-width row, label left, value + date or
+          generate-prompt on the right. */}
+      <TouchableOpacity
+        style={styles.valueRow}
+        onPress={handleRefreshEstimate}
+        activeOpacity={refreshingValue ? 1 : 0.7}
+        disabled={refreshingValue}
+      >
+        <Text style={styles.valueLabel}>Estimated Value</Text>
+        {refreshingValue ? (
+          <Text style={[styles.valueText, styles.valueTextMuted]}>Estimating…</Text>
+        ) : wine.estimated_value != null ? (
+          <Text style={styles.valueText}>
+            {formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}
+            {wine.estimated_value_at ? `, on ${new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''}
+          </Text>
+        ) : (
+          <Text style={styles.valueAction}>Generate Value</Text>
+        )}
+      </TouchableOpacity>
 
       {wine.tasting_notes && (
         <View style={styles.tastingBlock}>
@@ -872,8 +903,8 @@ const styles = StyleSheet.create({
   removeBlock: { paddingTop: spacing.sm },
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
-  removeWineBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  removeWineBtnText: { color: colors.error, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  removeWineBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  removeWineBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   archivedDeleteBtn: { marginHorizontal: spacing.xl, marginBottom: spacing.lg },
   archivedAt: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
   removalRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -886,8 +917,8 @@ const styles = StyleSheet.create({
   removeModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   removeModalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm, lineHeight: 28 },
   removeModalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
-  removeModalConfirmBtn: { borderWidth: 1, borderColor: colors.error, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
-  removeModalConfirmText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.error },
+  removeModalConfirmBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  removeModalConfirmText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   removeModalCancel: { alignItems: 'center', paddingVertical: spacing.sm },
   removeModalCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted },
   removeModalOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
@@ -904,6 +935,23 @@ const styles = StyleSheet.create({
   archiveModalCancel: { alignItems: 'center', marginTop: spacing.md },
   archiveModalCancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  // Full-width "label left, value/action right" rows used for Purchase
+  // and Estimated value — these get their own single-line treatment so the
+  // CTAs are scannable instead of cramped into the 50%-wide grid.
+  valueRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
+  valueLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  valueText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, flexShrink: 1, textAlign: 'right' },
+  valueTextMuted: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' },
+  valueAction: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  valueEditBlock: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, justifyContent: 'flex-end' },
+  valueInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minWidth: 80, maxWidth: 120, textAlign: 'right' },
+  valueCancel: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  valueSave: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // "Why no critic score?" explanation block — only renders when Vinster
+  // couldn't find a score and provided a one-sentence reason.
+  scoreNoteBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  scoreNoteLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  scoreNoteText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 18 },
   statCell: {
     width: '50%',
     paddingVertical: spacing.sm,

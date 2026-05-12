@@ -26,6 +26,7 @@ Provide intelligence on this wine:
 Return ONLY a valid JSON object with exactly this structure:
 {
   "criticScore": <integer 0-100 representing typical critic consensus, or null if very obscure>,
+  "criticScoreNote": <single short sentence — 20 words max — explaining why no critic score is available when criticScore is null. e.g. "No published reviews — this is a small-production producer rarely covered by mainstream critics." or "Vintage too young — no major critics have scored this release yet." Set to null when criticScore is provided>,
   "drinkingWindowFrom": <4-digit year when ready to drink, or null>,
   "drinkingWindowTo": <4-digit year by which it should ideally be drunk, or null>,
   "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining" | "unknown">,

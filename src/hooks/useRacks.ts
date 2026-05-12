@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getRacks, createRack, deleteRack, getRackSlots, assignSlot, clearSlot } from '../api/racks';
+import { getRacks, createRack, deleteRack, renameRack, wipeRackContents, getRackSlots, assignSlot, clearSlot } from '../api/racks';
 
 export function useRacks() {
   const { session } = useAuth();
@@ -21,10 +21,26 @@ export function useRacks() {
 
   const remove = useMutation({
     mutationFn: (id: string) => deleteRack(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['racks', userId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    },
+  });
+
+  const rename = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => renameRack(id, name),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['racks', userId] }),
   });
 
-  return { racks, isLoading, create, remove };
+  const wipe = useMutation({
+    mutationFn: (id: string) => wipeRackContents(id),
+    onSuccess: (_data, rackId) => {
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    },
+  });
+
+  return { racks, isLoading, create, remove, rename, wipe };
 }
 
 export function useRack(rackId: string) {

@@ -69,6 +69,10 @@ export interface WineDetailsComplete {
 
 export interface WineIntelligence {
   criticScore: number | null;
+  // Short explanation surfaced when criticScore is null — e.g. "small
+  // producer, no published reviews." Lets Vinster say WHY rather than
+  // showing a blank score with no context.
+  criticScoreNote?: string | null;
   drinkingWindowFrom: number | null;
   drinkingWindowTo: number | null;
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
@@ -120,6 +124,9 @@ export interface CellarWine {
   storage_location: string | null;
   date_received: string | null;
   critic_score: number | null;
+  // One-sentence explanation surfaced when critic_score is null — saved at
+  // wine-intelligence generation time. Migration 033 adds this column.
+  critic_score_note: string | null;
   drinking_window_from: number | null;
   drinking_window_to: number | null;
   drinking_window_status: string;

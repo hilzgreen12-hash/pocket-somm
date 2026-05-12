@@ -84,10 +84,10 @@ export default function LabelCameraScreen() {
       setImage(uri, base64);
       const details = await scanLabel(base64);
       setWineDetails(details);
-      router.push(`/label/confirm${contextQuery}`);
+      router.replace(`/label/confirm${contextQuery}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
-      router.push(`/label/confirm${contextQuery}`);
+      router.replace(`/label/confirm${contextQuery}`);
     }
     } catch (err) {
       console.error('[LabelCamera] Capture failed:', err);

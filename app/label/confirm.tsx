@@ -119,7 +119,7 @@ export default function LabelConfirmScreen() {
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      <TouchableOpacity style={styles.backButton} onPress={() => router.replace(`/label/camera${contextQuery}`)}>
         <Text style={styles.backText}>Scan Again</Text>
       </TouchableOpacity>
     </ScrollView>
