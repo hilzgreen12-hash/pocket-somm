@@ -131,7 +131,6 @@ export default function RecipeProfileScreen() {
                 options={ALLERGY_OPTIONS}
                 selected={allergy}
                 onChange={(v) => updatePreferences({ allergyRisks: v })}
-                activeColor={colors.error}
               />
             </View>
           )}
