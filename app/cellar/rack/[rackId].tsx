@@ -479,7 +479,7 @@ export default function RackGridScreen() {
           onPress={() => { setRenameDraft(rack.name); setEditOpen(true); }}
           activeOpacity={0.7}
         >
-          <Text style={styles.editRackBtnText}>Edit</Text>
+          <Text style={styles.editRackBtnText}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -541,7 +541,7 @@ export default function RackGridScreen() {
       <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
         <View style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
-            <Text style={styles.placeTitle}>Edit Rack</Text>
+            <Text style={styles.placeTitle}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
 
             {renaming ? (
               <>
@@ -671,8 +671,8 @@ const styles = StyleSheet.create({
   editRackBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
   editActionBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
   editActionBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  editActionBtnDanger: { borderColor: colors.error },
-  editActionBtnTextDanger: { color: colors.error },
+  editActionBtnDanger: { borderColor: colors.gold },
+  editActionBtnTextDanger: { color: colors.gold },
   slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
   movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
   movingBannerText: { flex: 1, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, lineHeight: 18 },

@@ -129,8 +129,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     alignItems: 'center',
   },
+  // "Destructive" buttons (Delete confirms across the app) used to render
+  // in red — that read poorly against the warm terracotta background. The
+  // user-facing rule now is gold for every delete action.
   primaryBtnDestructive: {
-    borderColor: colors.error,
+    borderColor: colors.gold,
   },
   primaryBtnText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
@@ -138,7 +141,7 @@ const styles = StyleSheet.create({
     color: colors.gold,
   },
   primaryBtnTextDestructive: {
-    color: colors.error,
+    color: colors.gold,
   },
   cancelBtn: {
     alignItems: 'center',
