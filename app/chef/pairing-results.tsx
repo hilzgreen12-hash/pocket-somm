@@ -3,12 +3,18 @@ import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal 
 import { showAlert } from '../../src/components/AppAlert';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
+import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample } from '../../src/stores/foodPairingStore';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
+import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
+
+function isPriceBandExample(ex: PriceBandExample | string): ex is PriceBandExample {
+  return typeof ex === 'object' && ex !== null && 'priceBand' in ex;
+}
 
 const RANK_LABELS = ['1st choice', '2nd choice', '3rd choice'];
 
@@ -48,7 +54,8 @@ function CellarResults({ recommendations, wines, onSelect }: {
   );
 }
 
-function GeneralResults({ results, summary }: { results: GeneralRecommendation[]; summary: string | null }) {
+function GeneralResults({ results, summary, currency }: { results: GeneralRecommendation[]; summary: string | null; currency: string }) {
+  const sym = currencySymbol(currency);
   return (
     <>
       {summary ? <Text style={styles.summary}>{summary}</Text> : null}
@@ -61,12 +68,27 @@ function GeneralResults({ results, summary }: { results: GeneralRecommendation[]
           <Text style={[styles.cardSection, { marginTop: spacing.md }]}>What to look for</Text>
           <Text style={styles.cardItem}>{result.characteristics}</Text>
 
+          {/* Legacy archived pairings may still carry a free-text priceGuide. */}
+          {result.priceGuide ? (
+            <Text style={[styles.cardItem, { color: colors.gold, marginTop: spacing.xs }]}>{result.priceGuide}</Text>
+          ) : null}
+
           {result.examples && result.examples.length > 0 && (
             <>
-              <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Examples to look for</Text>
-              {result.examples.map((ex, j) => (
-                <Text key={j} style={styles.cardItem}>· {ex}</Text>
-              ))}
+              <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Where to look for it</Text>
+              {result.examples.map((ex, j) => {
+                if (isPriceBandExample(ex)) {
+                  const band = Math.min(3, Math.max(1, ex.priceBand));
+                  return (
+                    <View key={j} style={styles.bandRow}>
+                      <Text style={styles.bandSymbol}>{sym.repeat(band)}</Text>
+                      <Text style={styles.bandRegion}>{ex.region}</Text>
+                    </View>
+                  );
+                }
+                // Legacy archived pairings carried producer-string examples.
+                return <Text key={j} style={styles.cardItem}>· {ex}</Text>;
+              })}
             </>
           )}
         </View>
@@ -81,6 +103,8 @@ export default function PairingResultsScreen() {
   const { dish, mode, cellarResult, generalResult, generalSummary } = useFoodPairingStore();
   const { wines } = useCellar();
   const { session } = useAuth();
+  const { preferences } = usePreferences();
+  const userCurrency = preferences?.defaultCurrency ?? 'GBP';
   const qc = useQueryClient();
   const [renderedAt] = useState(() => new Date().toISOString());
 
@@ -192,7 +216,7 @@ export default function PairingResultsScreen() {
           <CellarResults recommendations={cellarResult} wines={wines} onSelect={openSelect} />
         )}
         {mode === 'general' && generalResult && (
-          <GeneralResults results={generalResult} summary={generalSummary} />
+          <GeneralResults results={generalResult} summary={generalSummary} currency={userCurrency} />
         )}
       </View>
 
@@ -282,6 +306,9 @@ const styles = StyleSheet.create({
   cardBody: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   cardSection: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   cardItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
+  bandRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginBottom: 6 },
+  bandSymbol: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 16, color: colors.gold, minWidth: 40, letterSpacing: 1 },
+  bandRegion: { flex: 1, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.text, lineHeight: 20 },
   cardLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.sm },
   cardLinkMuted: { color: colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

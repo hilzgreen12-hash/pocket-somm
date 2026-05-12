@@ -70,6 +70,8 @@ ${difficultyBlock}${preferenceBlock}
 
 Recommend the top 3 wine styles that would complement this dish, ranked from best to third-best match. Be specific — name the grape variety and region, not just a broad colour. Where possible, offer variety across the three recommendations (different grapes, regions, or styles) so the user has genuine options to consider.
 
+For each style, also provide three concrete BUYING SUGGESTIONS at three price bands — band 1 (least expensive entry into this style), band 2 (mid-range), band 3 (premium). Each suggestion should be a country + region pairing, NOT a producer or brand name. Where possible, the three bands should come from DIFFERENT countries to give the user real geographic breadth at any budget. Use the price bands as relative tiers within the style — for example, for white Burgundy, band 1 might be a Mâcon-Villages, band 2 a Côte de Beaune village wine, band 3 a Premier Cru.
+
 SOFT RULE — REGIONAL AFFINITY:
 Where you can identify the dish's culinary origin (e.g. Italian, French, Spanish, Japanese), give positive weight to wines from that same region or country. A regional match — e.g. a Sicilian white with a Sicilian fish dish, or a Rhône red with a Provençal lamb stew — reflects the centuries of pairing wisdom built into those cuisines and should be favoured where quality allows. This is a preference, not a hard rule: if a non-regional wine is clearly superior on pairing harmony or quality, rank it accordingly and explain why.
 
@@ -86,12 +88,17 @@ Return ONLY valid JSON with this structure:
       "region": "e.g. Côte de Beaune, Burgundy, France",
       "whyItWorks": "2-3 sentences explaining the pairing logic and why this ranks above the others",
       "characteristics": "What to look for on the label or shelf — body, oak, acidity etc.",
-      "priceGuide": "e.g. £20–£45",
-      "examples": ["Producer or appellation example 1", "Producer or appellation example 2", "Producer or appellation example 3"]
+      "examples": [
+        { "priceBand": 1, "region": "Country, Region — e.g. France, Mâcon-Villages" },
+        { "priceBand": 2, "region": "Country, Region — e.g. New Zealand, Marlborough" },
+        { "priceBand": 3, "region": "Country, Region — e.g. France, Puligny-Montrachet Premier Cru" }
+      ]
     }
   ],
   "summary": "1-2 sentences on your overall pairing approach for this dish"
 }
+
+Each "region" string must lead with the country, then the specific region/appellation — no producers, no brand names. priceBand is an integer 1, 2, or 3 (1 = least expensive entry into this style, 3 = premium). The three examples within a single recommendation should ideally span DIFFERENT countries.
 
 Return raw JSON only. No markdown. No explanation.`;
 }

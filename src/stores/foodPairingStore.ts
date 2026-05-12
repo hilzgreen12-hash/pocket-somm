@@ -7,13 +7,22 @@ export interface CellarRecommendation {
   servingTip: string;
 }
 
+export interface PriceBandExample {
+  priceBand: 1 | 2 | 3;
+  region: string;
+}
+
 export interface GeneralRecommendation {
   wineStyle: string;
   region: string;
   whyItWorks: string;
   characteristics: string;
-  priceGuide: string;
-  examples: string[];
+  // priceGuide is legacy (pre-2026-05-12). Archived pairings may still have
+  // it; current pairings express price as per-example priceBand instead.
+  priceGuide?: string;
+  // Current shape is PriceBandExample[]; older archived pairings may still
+  // be plain string[]. The pairing-results renderer handles both.
+  examples: PriceBandExample[] | string[];
 }
 
 interface FoodPairingStore {
