@@ -17,7 +17,7 @@ function formatDate(iso: string) {
 }
 
 export default function ScanHistoryScreen() {
-  const { archive, archiveLoading, removeArchiveItem } = useScanHistory();
+  const { archive, archiveLoading, archiveError, removeArchiveItem } = useScanHistory();
   const { setExtractedWines, setRecommendation } = useScanStore();
   const { session } = useAuth();
   const [reviewing, setReviewing] = useState<ScanArchiveItem | null>(null);
@@ -78,6 +78,17 @@ export default function ScanHistoryScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No archive yet</Text>
           <Text style={styles.emptyBody}>Your archived search results will appear here.</Text>
+          {/* Temporary diagnostic — surface query state so we can tell
+              whether the cause is "user not signed in", "RLS rejecting
+              the read", or "row genuinely missing from the table". */}
+          <Text style={styles.debugLine}>
+            Signed in as: {session?.user.id ?? '(none)'}
+          </Text>
+          {archiveError ? (
+            <Text style={styles.debugLine}>
+              Query error: {archiveError instanceof Error ? archiveError.message : String(archiveError)}
+            </Text>
+          ) : null}
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
@@ -154,6 +165,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  debugLine: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: 'rgba(255,255,255,0.45)', textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.md },
   signInButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl },
   signInButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
