@@ -210,13 +210,17 @@ export default function CellarStatsScreen() {
           title="Sign in to view your stats"
           body="Cellar statistics live with your account — sign in to see them."
         />
-      ) : wines.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Your cellar is empty</Text>
-          <Text style={styles.emptyBody}>Add a wine to start seeing your cellar statistics.</Text>
-        </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+
+          {wines.length === 0 && (
+            <View style={styles.emptyBanner}>
+              <Text style={styles.emptyBannerTitle}>Your cellar is empty</Text>
+              <Text style={styles.emptyBannerBody}>
+                Add wines to your cellar and these stats will fill in automatically. The fields below show you what's tracked.
+              </Text>
+            </View>
+          )}
 
           {/* Top quick numbers */}
           <View style={styles.statsRow}>
@@ -255,7 +259,7 @@ export default function CellarStatsScreen() {
               </Text>
             </View>
 
-            {winesWithEstimate.length === 0 ? (
+            {wines.length === 0 ? null : winesWithEstimate.length === 0 ? (
               <TouchableOpacity style={styles.calcBtn} onPress={handleCalculate} activeOpacity={0.8}>
                 <Text style={styles.calcBtnText}>Calculate</Text>
               </TouchableOpacity>
@@ -358,6 +362,9 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyBanner: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 4 },
+  emptyBannerTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
+  emptyBannerBody: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20 },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.lg },
   statValue: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: 2 },
