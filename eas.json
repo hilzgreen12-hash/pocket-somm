@@ -5,6 +5,7 @@
   },
   "build": {
     "preview": {
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://skwfykendnhnhhbdrfbr.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_wsa6cGlrAaULP_YA1JwDlQ_h-qaHTke"

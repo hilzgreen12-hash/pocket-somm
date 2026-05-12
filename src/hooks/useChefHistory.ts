@@ -14,9 +14,15 @@ import type { Pairing, WineDetailsComplete } from '../types/wine';
 
 // Best-effort city resolution from GPS. Returns null if permission isn't
 // granted or anything fails — saves should never block on location.
+// Prompts for permission if it hasn't been asked yet (fresh installs
+// otherwise stayed at `undetermined` forever and never captured a city).
 async function captureCity(): Promise<string | null> {
   try {
-    const { status } = await Location.getForegroundPermissionsAsync();
+    let { status } = await Location.getForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      const req = await Location.requestForegroundPermissionsAsync();
+      status = req.status;
+    }
     if (status !== 'granted') return null;
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
     const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
