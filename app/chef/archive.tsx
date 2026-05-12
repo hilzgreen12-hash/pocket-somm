@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useChefArchiveCollections } from '../../src/hooks/useChefArchiveCollections';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -44,13 +44,14 @@ function FolderChip({ label, count, active, onPress, onLongPress, accent }: {
 }
 
 export default function ChefArchiveScreen() {
+  const { filter: initialFilter } = useLocalSearchParams<{ filter?: string }>();
   const { session } = useAuth();
   const { sessions: labelSessions, isLoading: labelLoading } = useChefLabelHistory();
   const { collections, membershipMap, create, rename, remove, addItem, removeItem, toggleStar } = useChefArchiveCollections();
 
   const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
 
-  const [filter, setFilter] = useState<string>(FILTER_ALL);
+  const [filter, setFilter] = useState<string>(initialFilter === 'favourites' ? FILTER_FAVOURITES : FILTER_ALL);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [manageFolder, setManageFolder] = useState<ChefArchiveCollection | null>(null);
@@ -157,7 +158,7 @@ export default function ChefArchiveScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Recipe Archive</Text>
+        <Text style={styles.title}>{filter === FILTER_FAVOURITES ? 'Your Favourite Recipes' : 'Recipe Archive'}</Text>
         <View style={{ width: 40 }} />
       </View>
 

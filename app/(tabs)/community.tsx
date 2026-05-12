@@ -43,7 +43,7 @@ export default function CommunityTab() {
       <Text style={styles.title}>Community</Text>
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine, recipe, and restaurant reviews while connecting with friends, old and new.</Text>
+        <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
       </View>
 
       <View style={styles.divider} />
@@ -51,9 +51,6 @@ export default function CommunityTab() {
       <View style={styles.section}>
         <TouchableOpacity style={styles.button} onPress={() => gated('/community/profile')}>
           <Text style={styles.buttonText}>Your Community Profile</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => gated('/community/recipe')}>
-          <Text style={styles.buttonText}>Recipe Reviews</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={() => gated('/community/wine')}>
           <Text style={styles.buttonText}>Wine Reviews</Text>

@@ -9,14 +9,23 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { ChosenRecipeModal } from '../../src/components/ChosenRecipeModal';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import type { Pairing, CellarWine, WineDetailsComplete } from '../../src/types/wine';
 
-function PairingCard({ pairing, onReview }: { pairing: Pairing; onReview: (p: Pairing) => void }) {
+function PairingCard({
+  pairing,
+  saveState,
+  onSave,
+  isFromHistory,
+}: {
+  pairing: Pairing;
+  saveState: 'idle' | 'saving' | 'saved';
+  onSave: () => void;
+  isFromHistory: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -25,11 +34,7 @@ function PairingCard({ pairing, onReview }: { pairing: Pairing; onReview: (p: Pa
         <Text style={styles.dishName}>{pairing.dishName}</Text>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
         <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
-        <Text style={styles.toggle}>{expanded ? 'Hide recipe' : 'Show recipe'}</Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity onPress={() => onReview(pairing)}>
-        <Text style={styles.reviewToggle}>Review Recipe</Text>
+        <Text style={styles.toggle}>{expanded ? 'Hide Recipe' : 'View Recipe'}</Text>
       </TouchableOpacity>
 
       {expanded && (
@@ -46,6 +51,28 @@ function PairingCard({ pairing, onReview }: { pairing: Pairing; onReview: (p: Pa
           {pairing.recipe.instructions.map((step, i) => (
             <Text key={i} style={styles.recipeItem}>{step}</Text>
           ))}
+
+          {!isFromHistory && (
+            saveState === 'saved' ? (
+              <View style={styles.cardSavedBlock}>
+                <Text style={styles.cardSavedLabel}>Saved</Text>
+                <TouchableOpacity onPress={() => router.push('/chef/archive')} activeOpacity={0.7}>
+                  <Text style={styles.cardViewArchiveLink}>View in Recipe Archive</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <TouchableOpacity
+                style={[styles.cardSaveButton, saveState === 'saving' && styles.cardSaveButtonDisabled]}
+                onPress={onSave}
+                disabled={saveState === 'saving'}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cardSaveButtonText}>
+                  {saveState === 'saving' ? 'Saving…' : 'Save Recipe to My Archive'}
+                </Text>
+              </TouchableOpacity>
+            )
+          )}
         </View>
       )}
     </View>
@@ -88,9 +115,10 @@ export default function ChefResultsScreen() {
   const { save: saveLabelSession } = useChefLabelHistory();
   const [archiving, setArchiving] = useState(false);
   const [archivedModalOpen, setArchivedModalOpen] = useState(false);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>(isFromHistory ? 'saved' : 'idle');
+  // Per-pairing save state — the user can save each recipe individually
+  // to their archive. Indexed by pairing position (0/1/2).
+  const [pairingSaveStates, setPairingSaveStates] = useState<Record<number, 'idle' | 'saving' | 'saved'>>({});
   const [renderedAt] = useState(() => new Date().toISOString());
-  const [reviewingPairing, setReviewingPairing] = useState<Pairing | null>(null);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
@@ -120,22 +148,27 @@ export default function ChefResultsScreen() {
     [cellarWines, wineDetailsConfirmed],
   );
 
-  async function handleSaveToArchive() {
-    if (!wineDetailsConfirmed || saveState !== 'idle') return;
+  async function handleSavePairing(index: number) {
+    const pairing = pairings[index];
+    if (!wineDetailsConfirmed || !pairing) return;
+    if (pairingSaveStates[index] && pairingSaveStates[index] !== 'idle') return;
     if (!session) {
       setSignInPromptVisible(true);
       return;
     }
-    setSaveState('saving');
+    setPairingSaveStates((s) => ({ ...s, [index]: 'saving' }));
     try {
       await saveLabelSession.mutateAsync({
         wine: wineDetailsConfirmed,
         filters: filters ?? null,
-        pairings,
+        // Save just this one pairing as its own archive entry, so each
+        // recipe lives independently in the archive (can be starred,
+        // foldered, deleted on its own).
+        pairings: [pairing],
       });
-      setSaveState('saved');
+      setPairingSaveStates((s) => ({ ...s, [index]: 'saved' }));
     } catch (err) {
-      setSaveState('idle');
+      setPairingSaveStates((s) => ({ ...s, [index]: 'idle' }));
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
@@ -241,35 +274,21 @@ export default function ChefResultsScreen() {
 
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Chef-Inspired Pairings</Text>
-        {pairings.map((p, i) => <PairingCard key={i} pairing={p} onReview={setReviewingPairing} />)}
+        {pairings.map((p, i) => (
+          <PairingCard
+            key={i}
+            pairing={p}
+            saveState={pairingSaveStates[i] ?? 'idle'}
+            onSave={() => handleSavePairing(i)}
+            isFromHistory={isFromHistory}
+          />
+        ))}
       </View>
 
       {!isFromHistory && (
-        <>
-          <TouchableOpacity style={styles.regenLink} onPress={handleRegenerate} disabled={regenerating}>
-            <Text style={styles.regenLinkText}>Not quite — generate another set of recipes</Text>
-          </TouchableOpacity>
-
-          {saveState === 'saved' ? (
-            <View style={styles.savedBlock}>
-              <Text style={styles.savedLabel}>Saved</Text>
-              <TouchableOpacity onPress={() => router.push('/chef/archive')} activeOpacity={0.7}>
-                <Text style={styles.viewProfileLink}>View in Recipe Archive</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={handleSaveToArchive}
-              disabled={saveState === 'saving'}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.saveButtonText}>
-                {saveState === 'saving' ? 'Saving…' : 'Save to Archive'}
-              </Text>
-            </TouchableOpacity>
-          )}
-        </>
+        <TouchableOpacity style={styles.regenLink} onPress={handleRegenerate} disabled={regenerating}>
+          <Text style={styles.regenLinkText}>Not quite — generate another set of recipes</Text>
+        </TouchableOpacity>
       )}
 
       <Modal visible={archivedModalOpen} transparent animationType="fade" onRequestClose={() => setArchivedModalOpen(false)}>
@@ -285,14 +304,6 @@ export default function ChefResultsScreen() {
           </View>
         </View>
       </Modal>
-
-      <ChosenRecipeModal
-        pairing={reviewingPairing}
-        wine={wineDetailsConfirmed}
-        visible={reviewingPairing !== null}
-        onClose={() => setReviewingPairing(null)}
-        onSaved={() => setReviewingPairing(null)}
-      />
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -328,18 +339,17 @@ const styles = StyleSheet.create({
   chefInspiration: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: 2 },
   pairingNotes: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.sm },
-  reviewToggle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.xs },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
+  cardSaveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  cardSaveButtonDisabled: { opacity: 0.6 },
+  cardSaveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, letterSpacing: 0.3 },
+  cardSavedBlock: { alignItems: 'center', marginTop: spacing.md, gap: 4 },
+  cardSavedLabel: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, letterSpacing: 0.5 },
+  cardViewArchiveLink: { color: colors.gold, fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, textDecorationLine: 'underline' },
   recipeIntro: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
   recipeMeta: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   recipeSection: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   recipeItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
-  saveButton: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  saveButtonDone: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
-  savedBlock: { alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, gap: 4 },
-  savedLabel: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, letterSpacing: 0.5 },
-  viewProfileLink: { color: colors.gold, fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, textDecorationLine: 'underline' },
   regenLink: { alignItems: 'center', paddingVertical: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm },
   regenLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

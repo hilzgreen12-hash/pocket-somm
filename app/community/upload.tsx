@@ -17,7 +17,6 @@ import { colors, spacing } from '../../src/constants/theme';
 
 const HEADINGS: Record<string, string> = {
   wine: 'Upload Wine Reviews',
-  recipe: 'Upload Recipe Reviews',
   restaurant: 'Upload Restaurant Reviews',
 };
 
@@ -149,7 +148,6 @@ export default function CommunityUploadScreen() {
   }
 
   const isLoading = uploadsLoading;
-  const recipeNotice = key === 'recipe';
 
   return (
     <View style={styles.container}>
@@ -165,11 +163,6 @@ export default function CommunityUploadScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Sign in to post</Text>
           <Text style={styles.emptyBody}>Community uploads are saved to your account.</Text>
-        </View>
-      ) : recipeNotice ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Recipe reviews coming soon</Text>
-          <Text style={styles.emptyBody}>Saving a recipe from a chef pairing isn't wired up yet — once it is, your saved recipe reviews will appear here ready to share.</Text>
         </View>
       ) : isLoading ? (
         <View style={styles.empty}>
