@@ -152,7 +152,10 @@ export default function CellarWineDetail() {
   const [reviewExpanded, setReviewExpanded] = useState(false);
   const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
   const [reviewLocationDraft, setReviewLocationDraft] = useState(wine?.review_location ?? '');
-  const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? '');
+  // "When did you drink it?" defaults to today if the wine hasn't been
+  // reviewed yet — users adding a review immediately after drinking would
+  // otherwise have to type the date out every time.
+  const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? todayISO());
   const [savingReview, setSavingReview] = useState(false);
 
   if (!wine) {
@@ -388,8 +391,14 @@ export default function CellarWineDetail() {
     }
   }
 
-  async function handleFindPairings() {
+  function handleFindPairings() {
     if (!wine) return;
+    // Route through the same per-search preferences screen that the Chef
+    // tab uses (dietary / allergy / difficulty / time / specific concerns),
+    // rather than generating pairings inline from profile preferences only.
+    // The screen reads wineDetailsConfirmed from the label store, so we set
+    // it here. from=cellar lets the results screen know to route Back to
+    // the wine card on tap rather than to the Chef tab.
     const confirmed: WineDetailsComplete = {
       producer: wine.producer || '',
       region: wine.region || '',
@@ -397,31 +406,8 @@ export default function CellarWineDetail() {
       vintage: wine.vintage || 'NV',
       style: null,
     };
-
-    setFindingPairings(true);
     setWineDetailsConfirmed(confirmed);
-
-    try {
-      const filters = {
-        dietary: (preferences?.dietaryNeeds?.[0] ?? null) as any,
-        allergens: (preferences?.allergyRisks ?? []) as any,
-        customAllergen: '',
-        dietaryNote: null,
-        difficulty: null,
-        specificConcerns: preferences?.specificConcerns?.trim() || null,
-        regionalPreferences: preferences?.regionalPreferences ?? [],
-        nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
-      };
-      const pairings = await generatePairings(confirmed, filters);
-      setPairings(pairings);
-      setFilters(filters as unknown as Record<string, unknown>);
-      router.push('/chef/results');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate pairings');
-      showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
-    } finally {
-      setFindingPairings(false);
-    }
+    router.push(`/chef/review-requirements?from=cellar&wineId=${wine.id}`);
   }
 
   if (findingPairings) {
@@ -603,7 +589,7 @@ export default function CellarWineDetail() {
                 setReviewExpanded(false);
                 setReviewScoreDraft(wine.review_score != null ? String(wine.review_score) : '');
                 setReviewLocationDraft(wine.review_location ?? '');
-                setReviewDateDraft(wine.review_date ?? '');
+                setReviewDateDraft(wine.review_date ?? todayISO());
               }}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -907,11 +893,11 @@ const styles = StyleSheet.create({
   removeModalOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   removeModalOkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   rackRemovalMsg: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
-  chefBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
-  chefBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  chefBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
+  chefBtnText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  archiveAccessBtn: { borderWidth: 1, borderColor: 'rgba(212,64,64,0.55)', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
-  archiveAccessBtnText: { color: 'rgba(212,64,64,0.85)', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
+  archiveAccessBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
   archiveModalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48, borderTopWidth: 1, borderColor: colors.border },
   archiveModalTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 2 },
   archiveModalWine: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },

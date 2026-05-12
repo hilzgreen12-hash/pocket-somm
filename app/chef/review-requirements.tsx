@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -25,6 +25,10 @@ type DropdownField = 'dietary' | 'allergy' | 'difficulty' | 'time' | null;
 
 export default function ReviewRequirementsScreen() {
   useKeepAwake();
+  const { from, wineId } = useLocalSearchParams<{ from?: string; wineId?: string }>();
+  // When the user arrived from the cellar wine card, thread the source
+  // through to /chef/results so its Back button can route home properly.
+  const resultsQuery = from === 'cellar' && wineId ? `?from=cellar&wineId=${wineId}` : '';
   const { wineDetailsConfirmed, setPairings, setError, setFilters } = useLabelStore();
   const { preferences } = usePreferences();
 
@@ -81,7 +85,7 @@ export default function ReviewRequirementsScreen() {
       setFilters(filters as unknown as Record<string, unknown>);
       // The user is offered a "Save to Archive" button on the results screen;
       // we no longer persist eagerly here.
-      router.replace('/chef/results');
+      router.replace(`/chef/results${resultsQuery}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });

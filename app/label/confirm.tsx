@@ -128,7 +128,7 @@ export default function LabelConfirmScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl, paddingBottom: 60 },
+  content: { padding: spacing.xl, paddingTop: 70, paddingBottom: 60 },
   heading: {
     fontSize: 26,
     fontFamily: 'CormorantGaramond_700Bold',

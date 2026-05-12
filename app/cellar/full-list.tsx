@@ -168,9 +168,15 @@ export default function FullCellarListScreen() {
         </Text>
       </View>
 
-      {/* Filter row */}
+      {/* Filter row — Sort first so the most common interaction (changing
+          order) is closest to the user's thumb. Rack / Country / Colour
+          follow in descending likelihood of use. */}
       <Text style={styles.filterHint}>Swipe to see all filters →</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setOpenDropdown('sort')}>
+          <Text style={styles.filterChipLabel}>Sort</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rack')}>
           <Text style={styles.filterChipLabel}>Rack</Text>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{rackLabel}</Text>
@@ -182,10 +188,6 @@ export default function FullCellarListScreen() {
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('colour')}>
           <Text style={styles.filterChipLabel}>Colour</Text>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setOpenDropdown('sort')}>
-          <Text style={styles.filterChipLabel}>Sort</Text>
-          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -204,7 +206,7 @@ export default function FullCellarListScreen() {
           )}
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        <ScrollView contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: 60 }}>
           {sorted.map((w) => {
             const headerLine = wineHeaderLine(w.producer, w.wine_name, w.vintage);
             const subParts = [w.region, w.grape_variety].filter(Boolean);

@@ -35,5 +35,10 @@ export const useRackStore = create<RackStore>((set) => ({
   setPendingSlot: (slot) => set({ pendingSlot: slot }),
   setPendingWineId: (id) => set({ pendingWineId: id }),
   setPendingStorageType: (type) => set({ pendingStorageType: type }),
-  reset: () => set({ imageUri: null, detectedRows: 4, detectedCols: 6, pendingSlot: null, pendingWineId: null, pendingStorageType: 'rack' }),
+  // Resets only the rack-detection transients (image, rows, cols). pendingSlot,
+  // pendingWineId and pendingStorageType are cross-flow signals that should
+  // persist until their consumer clears them — clearing them here breaks the
+  // "Add wine → Create new rack → place on grid" flow because rack-creation
+  // would wipe out the wine the user just saved.
+  reset: () => set({ imageUri: null, detectedRows: 4, detectedCols: 6 }),
 }));

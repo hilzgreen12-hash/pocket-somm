@@ -109,8 +109,9 @@ function findCellarMatch(wines: CellarWine[], wine: WineDetailsComplete): Cellar
 }
 
 export default function ChefResultsScreen() {
-  const { fromHistory, savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
+  const { fromHistory, savedAt, city, from, wineId } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string; from?: string; wineId?: string }>();
   const isFromHistory = fromHistory === 'true';
+  const isFromCellar = from === 'cellar' && !!wineId;
   const { wineDetailsConfirmed, pairings, filters, reset, setPairings, setError } = useLabelStore();
   const { wines: cellarWines } = useCellar();
   const { session } = useAuth();
@@ -248,7 +249,10 @@ export default function ChefResultsScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
-      <TouchableOpacity onPress={() => router.replace('/(tabs)/chef')} style={styles.backRow}>
+      <TouchableOpacity
+        onPress={() => router.replace(isFromCellar ? `/cellar/${wineId}` as any : '/(tabs)/chef')}
+        style={styles.backRow}
+      >
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
 
