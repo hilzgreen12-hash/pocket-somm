@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -45,6 +45,7 @@ function RemovalRow({ removal, onSaved }: { removal: { id: string; removed_at: s
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await updateCellarWineRemoval(removal.id, { note: draft.trim() || null });
@@ -166,6 +167,7 @@ export default function CellarWineDetail() {
   }
 
   async function handleSaveNote() {
+    Keyboard.dismiss();
     setSavingNote(true);
     try {
       await updateWine.mutateAsync({
@@ -278,6 +280,7 @@ export default function CellarWineDetail() {
   }
 
   async function handleSavePrice() {
+    Keyboard.dismiss();
     const trimmed = purchasePriceDraft.trim();
     const parsed = trimmed ? Number(trimmed) : null;
     if (trimmed && (parsed === null || Number.isNaN(parsed) || parsed < 0)) {
@@ -305,6 +308,7 @@ export default function CellarWineDetail() {
   }
 
   async function handleSaveReview() {
+    Keyboard.dismiss();
     const scoreTrim = reviewScoreDraft.trim();
     const locationTrim = reviewLocationDraft.trim();
     const dateTrim = reviewDateDraft.trim();
@@ -449,7 +453,7 @@ export default function CellarWineDetail() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="always">
       <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
         <Text style={styles.backText}>← Back</Text>
       </TouchableOpacity>

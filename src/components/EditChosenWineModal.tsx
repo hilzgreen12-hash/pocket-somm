@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { CityAutocomplete } from './CityAutocomplete';
@@ -36,6 +36,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
   async function handleSave() {
     if (!wine) return;
+    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
+    // bug can't strand the user on this modal.
+    Keyboard.dismiss();
     await update.mutateAsync({
       id: wine.id,
       input: { restaurantName: restaurant, city, tastingNote, otherObservations, userScore },
@@ -55,7 +58,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
 
             <Text style={styles.heading}>{wineName}</Text>
             <Text style={styles.wineProducer}>{wine.producer}{wine.region ? ` · ${wine.region}` : ''}</Text>

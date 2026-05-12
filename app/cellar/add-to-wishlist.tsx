@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Keyboard } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
@@ -22,6 +22,9 @@ export default function AddToWishListScreen() {
   const [uploading, setUploading] = useState(false);
 
   async function handleSave() {
+    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
+    // bug can't strand the user on a focused TextInput.
+    Keyboard.dismiss();
     if (!wineName.trim()) {
       showAlert({ title: 'Wine name required', body: 'Please enter a wine name.' });
       return;
@@ -87,7 +90,7 @@ export default function AddToWishListScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
       <TouchableOpacity onPress={() => router.back()}>
         <Text style={styles.back}>Back</Text>
       </TouchableOpacity>

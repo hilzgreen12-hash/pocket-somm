@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard,
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
@@ -29,6 +29,10 @@ export function RestaurantReviewModal({ visible, sessionId, initialName, initial
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
+    // Dismiss the keyboard explicitly — on iOS, tapping a button outside a
+    // focused TextInput can cost the first tap to a keyboard dismiss,
+    // requiring the user to tap Save twice.
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await supabase
@@ -56,7 +60,7 @@ export function RestaurantReviewModal({ visible, sessionId, initialName, initial
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
             <Text style={styles.heading}>Review this Restaurant</Text>
 
             <Text style={styles.fieldLabel}>Restaurant name</Text>
