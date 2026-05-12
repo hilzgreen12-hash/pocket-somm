@@ -1,34 +1,107 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
+import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { StarRating } from '../../src/components/StarRating';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
+import type { ChosenWine } from '../../src/types/wine';
 
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function normName(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase();
+}
+
+type DateFilter = 'all' | '30d' | 'year';
+type RatingFilter = 'all' | '5' | '4plus' | '3plus';
+
 export default function RestaurantReviewsScreen() {
   const { archive, archiveLoading } = useScanHistory();
+  const { chosenWines } = useChosenWines();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
-  const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
+  const [dateFilter, setDateFilter] = useState<DateFilter>('all');
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
+
+  // Index chosen wines by normalised restaurant name so we can surface the
+  // wine the user picked for each visit. No FK between chosen_wines and
+  // scan_sessions today, so we match on restaurant_name (+ city if both
+  // sides have one) and pick the chosen-wine closest in time to the visit.
+  const chosenByRestaurant = useMemo(() => {
+    const map = new Map<string, ChosenWine[]>();
+    for (const cw of chosenWines) {
+      const key = normName(cw.restaurant_name);
+      if (!key) continue;
+      const list = map.get(key) ?? [];
+      list.push(cw);
+      map.set(key, list);
+    }
+    return map;
+  }, [chosenWines]);
+
+  function findChosenForVisit(item: ScanArchiveItem): ChosenWine | null {
+    const key = normName(item.restaurantName);
+    if (!key) return null;
+    const candidates = chosenByRestaurant.get(key) ?? [];
+    if (candidates.length === 0) return null;
+    const visitCity = normName(item.city);
+    // Filter by city if both sides have a city — avoids matching across
+    // different "Bistro X" venues in different cities.
+    const sameCity = candidates.filter((c) => {
+      const cityKey = normName(c.city);
+      return !cityKey || !visitCity || cityKey === visitCity;
+    });
+    const pool = sameCity.length > 0 ? sameCity : candidates;
+    const visitTime = new Date(item.capturedAt).getTime();
+    let closest: ChosenWine | null = null;
+    let closestDelta = Infinity;
+    for (const c of pool) {
+      const t = new Date(c.chosen_at).getTime();
+      const delta = Math.abs(t - visitTime);
+      if (delta < closestDelta) {
+        closestDelta = delta;
+        closest = c;
+      }
+    }
+    return closest;
+  }
 
   const reviewed = archive.filter((a) => (a.restaurantName && a.restaurantName.trim()) || (a.restaurantNote && a.restaurantNote.trim()));
 
-  const sorted = [...reviewed].sort((a, b) => {
-    if (sortBy === 'score') {
-      // Highest overall first; nulls fall to the bottom; ties break by date (newest first).
-      const ar = a.ratingOverall ?? -1;
-      const br = b.ratingOverall ?? -1;
-      if (ar !== br) return br - ar;
-    }
-    return new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime();
-  });
+  const filtered = useMemo(() => {
+    const now = Date.now();
+    const cutoff30d = now - 30 * 24 * 60 * 60 * 1000;
+    const cutoffYear = now - 365 * 24 * 60 * 60 * 1000;
+    return reviewed.filter((item) => {
+      if (dateFilter !== 'all') {
+        const t = new Date(item.capturedAt).getTime();
+        if (dateFilter === '30d' && t < cutoff30d) return false;
+        if (dateFilter === 'year' && t < cutoffYear) return false;
+      }
+      if (ratingFilter !== 'all') {
+        const r = item.ratingOverall;
+        if (r == null) return false;
+        if (ratingFilter === '5' && r < 5) return false;
+        if (ratingFilter === '4plus' && r < 4) return false;
+        if (ratingFilter === '3plus' && r < 3) return false;
+      }
+      return true;
+    });
+  }, [reviewed, dateFilter, ratingFilter]);
+
+  // Always sort newest-first. The previous "Top rated" sort is now handled
+  // by the rating filter (which removes lower-rated visits entirely).
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a, b) =>
+      new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+    );
+  }, [filtered]);
 
   return (
     <View style={styles.container}>
@@ -36,14 +109,14 @@ export default function RestaurantReviewsScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Restaurant Reviews</Text>
+        <Text style={styles.title}>Your Restaurants</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {!session ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>Sign in to view your reviews</Text>
-          <Text style={styles.emptyBody}>Restaurant reviews are saved with your account.</Text>
+          <Text style={styles.emptyTitle}>Sign in to view your restaurants</Text>
+          <Text style={styles.emptyBody}>Your restaurant visits are saved with your account.</Text>
         </View>
       ) : archiveLoading ? (
         <View style={styles.empty}>
@@ -51,74 +124,127 @@ export default function RestaurantReviewsScreen() {
         </View>
       ) : reviewed.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No reviews yet</Text>
-          <Text style={styles.emptyBody}>From any wine list scan in Your Archive, tap "Review Restaurant" to capture the name, food, and atmosphere — your reviews will appear here.</Text>
+          <Text style={styles.emptyTitle}>No restaurants yet</Text>
+          <Text style={styles.emptyBody}>From any wine list scan in Your Archive, tap "Review Restaurant" to capture the name, food, and atmosphere — your visits will appear here.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-          <View style={styles.sortRow}>
-            <Text style={styles.sortLabel}>Sort:</Text>
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Date</Text>
             <TouchableOpacity
-              style={[styles.sortChip, sortBy === 'date' && styles.sortChipActive]}
-              onPress={() => setSortBy('date')}
+              style={[styles.filterChip, dateFilter === 'all' && styles.filterChipActive]}
+              onPress={() => setDateFilter('all')}
               activeOpacity={0.7}
             >
-              <Text style={[styles.sortChipText, sortBy === 'date' && styles.sortChipTextActive]}>Date</Text>
+              <Text style={[styles.filterChipText, dateFilter === 'all' && styles.filterChipTextActive]}>All</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.sortChip, sortBy === 'score' && styles.sortChipActive]}
-              onPress={() => setSortBy('score')}
+              style={[styles.filterChip, dateFilter === '30d' && styles.filterChipActive]}
+              onPress={() => setDateFilter('30d')}
               activeOpacity={0.7}
             >
-              <Text style={[styles.sortChipText, sortBy === 'score' && styles.sortChipTextActive]}>Top rated</Text>
+              <Text style={[styles.filterChipText, dateFilter === '30d' && styles.filterChipTextActive]}>Last 30 days</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, dateFilter === 'year' && styles.filterChipActive]}
+              onPress={() => setDateFilter('year')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, dateFilter === 'year' && styles.filterChipTextActive]}>This year</Text>
             </TouchableOpacity>
           </View>
-          {sorted.map((item) => {
-            const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null;
-            return (
-              <TouchableOpacity key={item.id} style={styles.cardCompact} onPress={() => setEditing(item)} activeOpacity={0.7}>
-                <View style={styles.cardCompactRow}>
-                  <Text style={styles.restaurantName} numberOfLines={1}>
-                    {item.restaurantName || 'Unnamed restaurant'}
-                  </Text>
-                  {item.ratingOverall != null && (
-                    <StarRating value={item.ratingOverall} size={14} readonly />
-                  )}
-                </View>
-                <View style={styles.cardCompactMetaRow}>
-                  <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
-                  {item.city ? (
-                    <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
-                  ) : null}
-                </View>
-                {hasAnyRating && (
-                  <View style={styles.ratingGrid}>
-                    {item.ratingFood != null && (
-                      <View style={styles.ratingCell}>
-                        <Text style={styles.ratingCellLabel}>Food</Text>
-                        <StarRating value={item.ratingFood} size={11} readonly />
-                      </View>
-                    )}
-                    {item.ratingService != null && (
-                      <View style={styles.ratingCell}>
-                        <Text style={styles.ratingCellLabel}>Service</Text>
-                        <StarRating value={item.ratingService} size={11} readonly />
-                      </View>
-                    )}
-                    {item.ratingWineList != null && (
-                      <View style={styles.ratingCell}>
-                        <Text style={styles.ratingCellLabel}>Wine list</Text>
-                        <StarRating value={item.ratingWineList} size={11} readonly />
-                      </View>
+          <View style={styles.filterRow}>
+            <Text style={styles.filterLabel}>Rating</Text>
+            <TouchableOpacity
+              style={[styles.filterChip, ratingFilter === 'all' && styles.filterChipActive]}
+              onPress={() => setRatingFilter('all')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, ratingFilter === 'all' && styles.filterChipTextActive]}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, ratingFilter === '3plus' && styles.filterChipActive]}
+              onPress={() => setRatingFilter('3plus')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, ratingFilter === '3plus' && styles.filterChipTextActive]}>3★+</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, ratingFilter === '4plus' && styles.filterChipActive]}
+              onPress={() => setRatingFilter('4plus')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, ratingFilter === '4plus' && styles.filterChipTextActive]}>4★+</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.filterChip, ratingFilter === '5' && styles.filterChipActive]}
+              onPress={() => setRatingFilter('5')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.filterChipText, ratingFilter === '5' && styles.filterChipTextActive]}>5★</Text>
+            </TouchableOpacity>
+          </View>
+          {sorted.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyBody}>No visits match these filters. Try widening the date range or lowering the rating.</Text>
+            </View>
+          ) : (
+            sorted.map((item) => {
+              const chosen = findChosenForVisit(item);
+              const wineLine = chosen
+                ? [chosen.producer, chosen.wine_name, chosen.vintage]
+                    .filter((x) => x != null && String(x).trim().length > 0)
+                    .join(' · ')
+                : null;
+              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null;
+              return (
+                <TouchableOpacity key={item.id} style={styles.cardCompact} onPress={() => setEditing(item)} activeOpacity={0.7}>
+                  <View style={styles.cardCompactRow}>
+                    <Text style={styles.restaurantName} numberOfLines={1}>
+                      {item.restaurantName || 'Unnamed restaurant'}
+                    </Text>
+                    {item.ratingOverall != null && (
+                      <StarRating value={item.ratingOverall} size={14} readonly />
                     )}
                   </View>
-                )}
-                {item.restaurantNote ? (
-                  <Text style={styles.notePreview} numberOfLines={2}>{item.restaurantNote}</Text>
-                ) : null}
-              </TouchableOpacity>
-            );
-          })}
+                  <View style={styles.cardCompactMetaRow}>
+                    <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
+                    {item.city ? (
+                      <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
+                    ) : null}
+                  </View>
+                  {wineLine ? (
+                    <Text style={styles.wineLine} numberOfLines={1}>Chose: {wineLine}</Text>
+                  ) : null}
+                  {hasAnyRating && (
+                    <View style={styles.ratingGrid}>
+                      {item.ratingFood != null && (
+                        <View style={styles.ratingCell}>
+                          <Text style={styles.ratingCellLabel}>Food</Text>
+                          <StarRating value={item.ratingFood} size={11} readonly />
+                        </View>
+                      )}
+                      {item.ratingService != null && (
+                        <View style={styles.ratingCell}>
+                          <Text style={styles.ratingCellLabel}>Service</Text>
+                          <StarRating value={item.ratingService} size={11} readonly />
+                        </View>
+                      )}
+                      {item.ratingWineList != null && (
+                        <View style={styles.ratingCell}>
+                          <Text style={styles.ratingCellLabel}>Wine list</Text>
+                          <StarRating value={item.ratingWineList} size={11} readonly />
+                        </View>
+                      )}
+                    </View>
+                  )}
+                  {item.restaurantNote ? (
+                    <Text style={styles.notePreview} numberOfLines={2}>{item.restaurantNote}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })
+          )}
         </ScrollView>
       )}
 
@@ -159,12 +285,13 @@ const styles = StyleSheet.create({
   ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },
   ratingCell: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ratingCellLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
-  sortLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: spacing.xs },
-  sortChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 16, paddingVertical: 4, paddingHorizontal: spacing.md },
-  sortChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  sortChipText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
-  sortChipTextActive: { color: colors.gold },
+  wineLine: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: spacing.xs },
+  filterRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  filterLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 6, minWidth: 50 },
+  filterChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 14, paddingVertical: 3, paddingHorizontal: spacing.sm },
+  filterChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
+  filterChipText: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  filterChipTextActive: { color: colors.gold },
   personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(212,176,96,0.08)' },
   personalityButtonText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
 });
