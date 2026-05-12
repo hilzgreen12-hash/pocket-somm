@@ -347,6 +347,7 @@ export default function ResultsScreen() {
       <ChosenWineModal
         wine={chosenModalWine}
         visible={chosenModalWine !== null}
+        scanSessionId={isFromHistory ? (sessionId ?? null) : (autoSave.data?.[0]?.sessionId ?? null)}
         initialRestaurantName={isFromHistory ? (historyRestaurant ?? null) : (restaurantName || null)}
         initialCity={isFromHistory ? (historyCity ?? null) : (autoSave.data?.[0]?.city ?? null)}
         showReturnToArchive={isFromHistory}

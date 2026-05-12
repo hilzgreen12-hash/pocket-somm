@@ -5,6 +5,7 @@ import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
+import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
@@ -26,33 +27,46 @@ export default function RestaurantReviewsScreen() {
   const { chosenWines } = useChosenWines();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
+  const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
 
-  // Index chosen wines by normalised restaurant name so we can surface the
-  // wine the user picked for each visit. No FK between chosen_wines and
-  // scan_sessions today, so we match on restaurant_name (+ city if both
-  // sides have one) and pick the chosen-wine closest in time to the visit.
-  const chosenByRestaurant = useMemo(() => {
-    const map = new Map<string, ChosenWine[]>();
+  // Two indexes:
+  //  - chosenBySession: precise FK lookup for wines saved after migration
+  //    032 — multiple wines per session land here together.
+  //  - chosenByRestaurant: fallback for legacy rows with scan_session_id
+  //    null (pre-migration saves, or wines added manually).
+  const { chosenBySession, chosenByRestaurant } = useMemo(() => {
+    const bySession = new Map<string, ChosenWine[]>();
+    const byRestaurant = new Map<string, ChosenWine[]>();
     for (const cw of chosenWines) {
-      const key = normName(cw.restaurant_name);
-      if (!key) continue;
-      const list = map.get(key) ?? [];
-      list.push(cw);
-      map.set(key, list);
+      if (cw.scan_session_id) {
+        const list = bySession.get(cw.scan_session_id) ?? [];
+        list.push(cw);
+        bySession.set(cw.scan_session_id, list);
+      } else {
+        const key = normName(cw.restaurant_name);
+        if (!key) continue;
+        const list = byRestaurant.get(key) ?? [];
+        list.push(cw);
+        byRestaurant.set(key, list);
+      }
     }
-    return map;
+    return { chosenBySession: bySession, chosenByRestaurant: byRestaurant };
   }, [chosenWines]);
 
-  function findChosenForVisit(item: ScanArchiveItem): ChosenWine | null {
+  function findChosenForVisit(item: ScanArchiveItem): ChosenWine[] {
+    // Prefer the precise FK lookup if any wines were saved with this
+    // session_id. Skips the fuzzy fallback entirely in that case.
+    const linked = chosenBySession.get(item.id);
+    if (linked && linked.length > 0) return linked;
+
     const key = normName(item.restaurantName);
-    if (!key) return null;
+    if (!key) return [];
     const candidates = chosenByRestaurant.get(key) ?? [];
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) return [];
+
     const visitCity = normName(item.city);
-    // Filter by city if both sides have a city — avoids matching across
-    // different "Bistro X" venues in different cities.
     const sameCity = candidates.filter((c) => {
       const cityKey = normName(c.city);
       return !cityKey || !visitCity || cityKey === visitCity;
@@ -69,7 +83,7 @@ export default function RestaurantReviewsScreen() {
         closest = c;
       }
     }
-    return closest;
+    return closest ? [closest] : [];
   }
 
   const reviewed = archive.filter((a) => (a.restaurantName && a.restaurantName.trim()) || (a.restaurantNote && a.restaurantNote.trim()));
@@ -191,57 +205,77 @@ export default function RestaurantReviewsScreen() {
           ) : (
             sorted.map((item) => {
               const chosen = findChosenForVisit(item);
-              const wineLine = chosen
-                ? [chosen.producer, chosen.wine_name, chosen.vintage]
-                    .filter((x) => x != null && String(x).trim().length > 0)
-                    .join(' · ')
-                : null;
               const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null;
               return (
-                <TouchableOpacity key={item.id} style={styles.cardCompact} onPress={() => setEditing(item)} activeOpacity={0.7}>
-                  <View style={styles.cardCompactRow}>
-                    <Text style={styles.restaurantName} numberOfLines={1}>
-                      {item.restaurantName || 'Unnamed restaurant'}
-                    </Text>
-                    {item.ratingOverall != null && (
-                      <StarRating value={item.ratingOverall} size={14} readonly />
-                    )}
-                  </View>
-                  <View style={styles.cardCompactMetaRow}>
-                    <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
-                    {item.city ? (
-                      <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
-                    ) : null}
-                  </View>
-                  {wineLine ? (
-                    <Text style={styles.wineLine} numberOfLines={1}>Chose: {wineLine}</Text>
-                  ) : null}
-                  {hasAnyRating && (
-                    <View style={styles.ratingGrid}>
-                      {item.ratingFood != null && (
-                        <View style={styles.ratingCell}>
-                          <Text style={styles.ratingCellLabel}>Food</Text>
-                          <StarRating value={item.ratingFood} size={11} readonly />
-                        </View>
-                      )}
-                      {item.ratingService != null && (
-                        <View style={styles.ratingCell}>
-                          <Text style={styles.ratingCellLabel}>Service</Text>
-                          <StarRating value={item.ratingService} size={11} readonly />
-                        </View>
-                      )}
-                      {item.ratingWineList != null && (
-                        <View style={styles.ratingCell}>
-                          <Text style={styles.ratingCellLabel}>Wine list</Text>
-                          <StarRating value={item.ratingWineList} size={11} readonly />
-                        </View>
+                <View key={item.id} style={styles.cardCompact}>
+                  {/* Restaurant header — tap to edit the restaurant review.
+                      Wines below have their own tap targets so the user can
+                      jump straight into a wine review. */}
+                  <TouchableOpacity onPress={() => setEditing(item)} activeOpacity={0.7}>
+                    <View style={styles.cardCompactRow}>
+                      <Text style={styles.restaurantName} numberOfLines={1}>
+                        {item.restaurantName || 'Unnamed restaurant'}
+                      </Text>
+                      {item.ratingOverall != null && (
+                        <StarRating value={item.ratingOverall} size={14} readonly />
                       )}
                     </View>
-                  )}
-                  {item.restaurantNote ? (
-                    <Text style={styles.notePreview} numberOfLines={2}>{item.restaurantNote}</Text>
+                    <View style={styles.cardCompactMetaRow}>
+                      <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
+                      {item.city ? (
+                        <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
+                      ) : null}
+                    </View>
+                    {hasAnyRating && (
+                      <View style={styles.ratingGrid}>
+                        {item.ratingFood != null && (
+                          <View style={styles.ratingCell}>
+                            <Text style={styles.ratingCellLabel}>Food</Text>
+                            <StarRating value={item.ratingFood} size={11} readonly />
+                          </View>
+                        )}
+                        {item.ratingService != null && (
+                          <View style={styles.ratingCell}>
+                            <Text style={styles.ratingCellLabel}>Service</Text>
+                            <StarRating value={item.ratingService} size={11} readonly />
+                          </View>
+                        )}
+                        {item.ratingWineList != null && (
+                          <View style={styles.ratingCell}>
+                            <Text style={styles.ratingCellLabel}>Wine list</Text>
+                            <StarRating value={item.ratingWineList} size={11} readonly />
+                          </View>
+                        )}
+                      </View>
+                    )}
+                    {item.restaurantNote ? (
+                      <Text style={styles.notePreview} numberOfLines={2}>{item.restaurantNote}</Text>
+                    ) : null}
+                  </TouchableOpacity>
+
+                  {chosen.length > 0 ? (
+                    <View style={styles.wineList}>
+                      {chosen.map((cw) => {
+                        const wineLine = [cw.producer, cw.wine_name, cw.vintage]
+                          .filter((x) => x != null && String(x).trim().length > 0)
+                          .join(' · ');
+                        return (
+                          <TouchableOpacity
+                            key={cw.id}
+                            style={styles.wineRow}
+                            onPress={() => setEditingWine(cw)}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={styles.wineLine} numberOfLines={1}>Chose: {wineLine}</Text>
+                            {cw.user_score != null ? (
+                              <Text style={styles.wineScore}>{cw.user_score}/100</Text>
+                            ) : null}
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
                   ) : null}
-                </TouchableOpacity>
+                </View>
               );
             })
           )}
@@ -264,6 +298,13 @@ export default function RestaurantReviewsScreen() {
           onSaved={() => setEditing(null)}
         />
       )}
+
+      <EditChosenWineModal
+        wine={editingWine}
+        visible={editingWine !== null}
+        onClose={() => setEditingWine(null)}
+        onSaved={() => setEditingWine(null)}
+      />
     </View>
   );
 }
@@ -285,7 +326,10 @@ const styles = StyleSheet.create({
   ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },
   ratingCell: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   ratingCellLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  wineLine: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: spacing.xs },
+  wineList: { marginTop: spacing.xs, gap: 2 },
+  wineRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingVertical: 4 },
+  wineLine: { flex: 1, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold },
+  wineScore: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginLeft: spacing.sm },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
   filterLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 6, minWidth: 50 },
   filterChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 14, paddingVertical: 3, paddingHorizontal: spacing.sm },
