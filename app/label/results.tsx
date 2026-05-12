@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -48,8 +48,6 @@ export default function LabelResultsScreen() {
 
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
-  const [quantity, setQuantity] = useState('1');
-  const [orientation, setOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
@@ -97,8 +95,10 @@ export default function LabelResultsScreen() {
       producer: wine.producer,
       region: wine.region,
       vintage: wine.vintage,
-      quantity: parseInt(quantity) || 1,
-      storage_location: pendingSlot ? orientation : null,
+      // Wine is always saved as 1 bottle at this step. Multi-bottle placement
+      // is asked later on the rack grid after the user has tapped a slot.
+      quantity: 1,
+      storage_location: null,
       date_received: new Date().toISOString().split('T')[0],
       critic_score: intel.criticScore,
       drinking_window_from: intel.drinkingWindowFrom,
@@ -177,12 +177,10 @@ export default function LabelResultsScreen() {
   // will be naturally replaced on the next label scan.
   async function performSaveFlow(savedWineId: string) {
     if (pendingSlot) {
-      const slots = computeSlots(
-        pendingSlot.row, pendingSlot.col,
-        pendingSlot.rows, pendingSlot.cols,
-        parseInt(quantity) || 1,
-        orientation
-      );
+      // User came in from a specific empty rack slot — assign that one slot.
+      // Adding more bottles to this wine is done from the wine card or by
+      // tapping further slots on the rack.
+      const slots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, 1, 'Vertical');
       await assignSlots(pendingSlot.rackId, slots, savedWineId);
       qc.invalidateQueries({ queryKey: ['rack-slots', pendingSlot.rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -388,45 +386,22 @@ export default function LabelResultsScreen() {
             <Text style={styles.modalTitle}>Add to Cellar</Text>
             <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
 
-            <Text style={styles.modalLabel}>How many bottles of this wine?</Text>
-            <TextInput
-              style={styles.modalInput}
-              value={quantity}
-              onChangeText={setQuantity}
-              keyboardType="number-pad"
-              placeholder="1"
-              placeholderTextColor={colors.textMuted}
-            />
+            {/* Bottle count is no longer asked here. Save without placing
+                creates 1 bottle (editable later from the wine card). Place-
+                in-rack flows ask for quantity on the rack grid AFTER the
+                user has picked a slot, so the count maps directly to slots. */}
 
-            {pendingSlot ? (
+            {!pendingSlot && (
               <>
-                <Text style={styles.modalLabel}>Storage orientation</Text>
-                <View style={styles.orientationRow}>
-                  <TouchableOpacity
-                    style={[styles.orientationBtn, orientation === 'Vertical' && styles.orientationBtnActive]}
-                    onPress={() => setOrientation('Vertical')}
-                  >
-                    <Text style={[styles.orientationText, orientation === 'Vertical' && styles.orientationTextActive]}>Store Vertically</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.orientationBtn, orientation === 'Horizontal' && styles.orientationBtnActive]}
-                    onPress={() => setOrientation('Horizontal')}
-                  >
-                    <Text style={[styles.orientationText, orientation === 'Horizontal' && styles.orientationTextActive]}>Store Horizontally</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={styles.modalLabel}>Storage location (optional)</Text>
+                <Text style={styles.modalLabel}>Storage location</Text>
                 <Text style={styles.modalHint}>Pick a rack to place this bottle in now, or save without and assign later.</Text>
                 <View style={styles.rackList}>
                   <TouchableOpacity
-                    style={[styles.rackOption, selectedRackId === null && styles.rackOptionActive]}
+                    style={[styles.rackOptionPrimary, selectedRackId === null && styles.rackOptionPrimaryActive]}
                     onPress={() => setSelectedRackId(null)}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.rackOptionText, selectedRackId === null && styles.rackOptionTextActive]}>Save without placing</Text>
+                    <Text style={styles.rackOptionPrimaryText}>Save without placing</Text>
                   </TouchableOpacity>
                   {racks.map((r) => (
                     <TouchableOpacity
@@ -435,15 +410,15 @@ export default function LabelResultsScreen() {
                       onPress={() => setSelectedRackId(r.id)}
                       activeOpacity={0.8}
                     >
-                      <Text style={[styles.rackOptionText, selectedRackId === r.id && styles.rackOptionTextActive]}>{r.name}</Text>
+                      <Text style={[styles.rackOptionText, selectedRackId === r.id && styles.rackOptionTextActive]}>Save to {r.name}</Text>
                     </TouchableOpacity>
                   ))}
                   <TouchableOpacity
-                    style={[styles.rackOption, styles.rackOptionNew, selectedRackId === '__new__' && styles.rackOptionActive]}
+                    style={[styles.rackOptionPrimary, selectedRackId === '__new__' && styles.rackOptionPrimaryActive]}
                     onPress={() => setSelectedRackId('__new__')}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.rackOptionText, styles.rackOptionTextNew, selectedRackId === '__new__' && styles.rackOptionTextActive]}>+ Create new rack</Text>
+                    <Text style={styles.rackOptionPrimaryText}>+ Create new rack</Text>
                   </TouchableOpacity>
                 </View>
               </>
@@ -518,23 +493,22 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.xs },
   modalWine: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },
   modalLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
-  modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
   cancelButton: { alignItems: 'center', marginTop: spacing.md },
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
-  orientationRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  orientationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
-  orientationBtnActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
-  orientationText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
-  orientationTextActive: { color: colors.gold },
   modalHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm, lineHeight: 18 },
   rackList: { gap: spacing.xs, marginBottom: spacing.md },
   rackOption: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
   rackOptionText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   rackOptionTextActive: { color: colors.gold },
-  rackOptionNew: { borderStyle: 'dashed', marginTop: spacing.xs },
-  rackOptionTextNew: { color: colors.gold },
+  // The two emphasis-equal choices ("Save without placing" and "+ Create
+  // new rack") use this solid-gold style so they read as primary actions
+  // sitting either side of the user's existing racks (which use the muted
+  // rackOption style).
+  rackOptionPrimary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: 'rgba(212,176,96,0.10)' },
+  rackOptionPrimaryActive: { backgroundColor: 'rgba(212,176,96,0.25)' },
+  rackOptionPrimaryText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
 });

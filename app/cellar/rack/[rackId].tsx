@@ -1,12 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard } from 'react-native';
 import { showAlert } from '../../../src/components/AppAlert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
-import { assignSlot, clearSlot } from '../../../src/api/racks';
+import { assignSlot, assignSlots, clearSlot } from '../../../src/api/racks';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { colors, spacing } from '../../../src/constants/theme';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
@@ -28,10 +28,9 @@ export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
   const { slots, isLoading, assign } = useRack(rackId);
   const { racks } = useRacks();
-  // useCellar still needed for the auto-heal that runs on mount; the hook
-  // also keeps the cellar query warm so navigating to the wine detail card
-  // is instant (no second fetch).
-  useCellar();
+  // useCellar gives us access to updateWine so we can bump the wine's
+  // quantity when the user places multiple bottles from this screen.
+  const { wines, updateWine } = useCellar();
   const { width } = useWindowDimensions();
   const qc = useQueryClient();
 
@@ -42,6 +41,12 @@ export default function RackGridScreen() {
   const [moving, setMoving] = useState<{ row: number; col: number; wineId: string; wineName: string } | null>(null);
   const [movingMsg, setMovingMsg] = useState<string | null>(null);
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  // Placement modal — shown when the user taps an empty slot with a
+  // pending wine. Asks how many bottles and (when > 1) orientation.
+  const [placingAt, setPlacingAt] = useState<{ row: number; col: number; wineId: string } | null>(null);
+  const [placeCount, setPlaceCount] = useState('1');
+  const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
+  const [placing, setPlacing] = useState(false);
 
   // Auto-clear the "Wine saved to rack" confirmation after a few seconds.
   useEffect(() => {
@@ -119,14 +124,70 @@ export default function RackGridScreen() {
       // there's a single source of truth for the wine UI.
       router.push(`/cellar/${wine.id}` as any);
     } else if (pendingWineId) {
-      assign.mutate(
-        { row, col, wineId: pendingWineId },
-        { onSuccess: () => setSavedMsg('Wine saved to rack') }
-      );
-      setPendingWineId(null);
+      // Ask the user how many bottles to place at this slot. The wine was
+      // saved with quantity = 1 by default; if they place more here we'll
+      // also bump the wine's quantity to match.
+      setPlacingAt({ row, col, wineId: pendingWineId });
+      setPlaceCount('1');
+      setPlaceOrientation('Vertical');
     } else {
       setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols });
       router.push('/label/camera');
+    }
+  }
+
+  function computePlacementSlots(startRow: number, startCol: number, count: number, orient: 'Vertical' | 'Horizontal') {
+    const result: Array<{ row: number; col: number }> = [];
+    let row = startRow;
+    let col = startCol;
+    for (let i = 0; i < count; i++) {
+      if (row >= rack!.rows || col >= rack!.cols) break;
+      result.push({ row, col });
+      if (orient === 'Horizontal') {
+        col++;
+        if (col >= rack!.cols) { col = 0; row++; }
+      } else {
+        row++;
+        if (row >= rack!.rows) { row = 0; col++; }
+      }
+    }
+    return result;
+  }
+
+  async function confirmPlacement() {
+    if (!placingAt) return;
+    Keyboard.dismiss();
+    const requested = Math.max(1, parseInt(placeCount, 10) || 1);
+    setPlacing(true);
+    try {
+      const slots = computePlacementSlots(placingAt.row, placingAt.col, requested, placeOrientation);
+      // Skip any slots that are already occupied — assign one at a time
+      // so an existing wine in the path doesn't blow up the whole batch.
+      const freeSlots = slots.filter((s) => !slotMap[`${s.row},${s.col}`]?.cellar_wine_id);
+      if (freeSlots.length === 0) {
+        showAlert({ title: 'No empty slots', body: 'The next slots are already in use. Try a different starting position or orientation.' });
+        setPlacing(false);
+        return;
+      }
+      await assignSlots(rackId, freeSlots, placingAt.wineId);
+
+      // Bump the wine's quantity if we placed more than it currently holds —
+      // the wine was added at qty=1 in the Add Wine modal, so multi-bottle
+      // placements on the grid effectively backfill the count.
+      const wine = wines.find((w) => w.id === placingAt.wineId);
+      if (wine && freeSlots.length > wine.quantity) {
+        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: freeSlots.length } });
+      }
+
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      setSavedMsg(freeSlots.length === 1 ? 'Wine saved to rack' : `${freeSlots.length} bottles saved to rack`);
+      setPendingWineId(null);
+      setPlacingAt(null);
+    } catch (err) {
+      showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setPlacing(false);
     }
   }
 
@@ -347,6 +408,60 @@ export default function RackGridScreen() {
         )}
       </ScrollView>
 
+      {/* Placement modal — opens when the user taps an empty slot while a
+          pending wine is set. Asks how many bottles to place; orientation
+          only shown if > 1 bottle. Skips already-occupied slots so we don't
+          stomp an existing wine in the path. */}
+      <Modal visible={placingAt !== null} transparent animationType="fade" onRequestClose={() => !placing && setPlacingAt(null)}>
+        <View style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>How many bottles?</Text>
+            <Text style={styles.placeBody}>Place your wine in the rack — one slot per bottle, starting at the tapped position.</Text>
+
+            <TextInput
+              style={styles.placeInput}
+              value={placeCount}
+              onChangeText={setPlaceCount}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+              autoFocus
+            />
+
+            {(parseInt(placeCount, 10) || 1) > 1 && (
+              <>
+                <Text style={styles.placeFieldLabel}>Orientation</Text>
+                <View style={styles.placeOrientationRow}>
+                  <TouchableOpacity
+                    style={[styles.placeOrientationBtn, placeOrientation === 'Vertical' && styles.placeOrientationBtnActive]}
+                    onPress={() => setPlaceOrientation('Vertical')}
+                  >
+                    <Text style={[styles.placeOrientationText, placeOrientation === 'Vertical' && styles.placeOrientationTextActive]}>Vertical</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.placeOrientationBtn, placeOrientation === 'Horizontal' && styles.placeOrientationBtnActive]}
+                    onPress={() => setPlaceOrientation('Horizontal')}
+                  >
+                    <Text style={[styles.placeOrientationText, placeOrientation === 'Horizontal' && styles.placeOrientationTextActive]}>Horizontal</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity
+              style={[styles.placeConfirmBtn, placing && { opacity: 0.6 }]}
+              onPress={confirmPlacement}
+              disabled={placing}
+            >
+              <Text style={styles.placeConfirmText}>{placing ? 'Placing…' : 'Place in rack'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setPlacingAt(null)} disabled={placing} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -360,6 +475,21 @@ const styles = StyleSheet.create({
   rotateBtn: { alignItems: 'flex-end', width: 80 },
   rotateBtnText: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   scrollHint: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingBottom: spacing.xs },
+  placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  placeSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  placeTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  placeBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
+  placeInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
+  placeFieldLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  placeOrientationRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  placeOrientationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  placeOrientationBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.15)' },
+  placeOrientationText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  placeOrientationTextActive: { color: colors.gold },
+  placeConfirmBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  placeConfirmText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  placeCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  placeCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
   slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
   movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
   movingBannerText: { flex: 1, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, lineHeight: 18 },
