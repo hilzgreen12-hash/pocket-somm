@@ -35,6 +35,7 @@ export function useChefLabelHistory() {
     queryKey: ['chef-label-sessions', userId],
     queryFn: () => listChefLabelSessions(userId),
     enabled: !!userId,
+    refetchOnMount: 'always',
   });
 
   const save = useMutation({

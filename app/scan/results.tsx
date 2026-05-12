@@ -244,13 +244,16 @@ export default function ResultsScreen() {
         </TouchableOpacity>
       )}
 
-      {/* Cross-link to Your Restaurants — appears once a restaurant name
-          has been entered. The visit row in Your Restaurants is opened
-          via the restaurant name match. */}
-      {!isFromHistory && restaurantName.trim().length > 0 && (
+      {/* Cross-link to Your Restaurants. Only surfaces once the scan has
+          actually been saved — otherwise no row exists in scan_sessions
+          and the destination screen would show an empty list. */}
+      {!isFromHistory && restaurantName.trim().length > 0 && (isSaved || isFromHistory) && (
         <TouchableOpacity
           style={styles.reviewRestaurantLink}
-          onPress={() => router.push('/restaurants/reviews')}
+          onPress={() => {
+            qc.invalidateQueries({ queryKey: ['scan-archive'] });
+            router.push('/restaurants/reviews');
+          }}
           activeOpacity={0.7}
         >
           <Text style={styles.reviewRestaurantLinkText}>Review restaurant in your profile →</Text>

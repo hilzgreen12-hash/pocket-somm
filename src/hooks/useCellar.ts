@@ -103,6 +103,9 @@ export function useArchive() {
     queryKey: ['cellar-archive', userId],
     queryFn: () => getArchivedWines(userId),
     enabled: !!userId,
+    // Always refetch on mount so a just-archived wine appears immediately
+    // — invalidation alone can be skipped if the cache is still fresh.
+    refetchOnMount: 'always',
   });
 
   const updateNote = useMutation({
