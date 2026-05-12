@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { View, Text, Image, ActivityIndicator, StyleSheet, Dimensions } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
@@ -13,6 +13,8 @@ import { scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function LabelCameraScreen() {
+  const { context } = useLocalSearchParams<{ context?: string }>();
+  const contextQuery = context === 'wishlist' ? '?context=wishlist' : '';
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);
@@ -82,10 +84,10 @@ export default function LabelCameraScreen() {
       setImage(uri, base64);
       const details = await scanLabel(base64);
       setWineDetails(details);
-      router.push('/label/confirm');
+      router.push(`/label/confirm${contextQuery}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
-      router.push('/label/confirm');
+      router.push(`/label/confirm${contextQuery}`);
     }
     } catch (err) {
       console.error('[LabelCamera] Capture failed:', err);

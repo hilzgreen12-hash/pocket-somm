@@ -69,7 +69,7 @@ export default function AddToWishListScreen() {
       setImage(uri, base64);
       const details = await scanLabel(base64);
       setWineDetails(details);
-      router.push('/label/confirm');
+      router.push('/label/confirm?context=wishlist');
     } catch {
       showAlert({ title: 'Could not read photo', body: 'Please try a clearer image.' });
     } finally {
@@ -96,7 +96,7 @@ export default function AddToWishListScreen() {
       <Text style={styles.subheading}>Scan a label for full details, or enter manually.</Text>
 
       <View style={styles.scanRow}>
-        <TouchableOpacity style={styles.scanButton} onPress={() => router.push('/label/camera')}>
+        <TouchableOpacity style={styles.scanButton} onPress={() => router.push('/label/camera?context=wishlist')}>
           <Text style={styles.scanButtonText}>Scan Wine Label</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.scanButton} onPress={handleUploadPhoto}>
