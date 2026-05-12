@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal, Keyboard } from 'react-native';
 import { showAlert } from '../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../src/components/ArchiveSignInPrompt';
 import * as Linking from 'expo-linking';
@@ -66,6 +66,9 @@ export default function AccountScreen() {
   }
 
   async function handleIdentitySave() {
+    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
+    // bug can't strand the user with focused username/email inputs.
+    Keyboard.dismiss();
     const usernameTrim = usernameDraft.trim();
     const emailTrim = emailDraft.trim();
     const usernameChanged = usernameTrim !== (currentUsername ?? '').trim() && usernameTrim.length > 0;
@@ -157,7 +160,7 @@ export default function AccountScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
