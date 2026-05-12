@@ -73,7 +73,7 @@ export function useScanHistory() {
     queryFn: readLocal,
   });
 
-  const { data: archive = [], isLoading: archiveLoading } = useQuery<ScanArchiveItem[]>({
+  const { data: archive = [], isLoading: archiveLoading, error: archiveError } = useQuery<ScanArchiveItem[]>({
     queryKey: ['scan-archive', session?.user.id],
     enabled: !!session,
     // Always refetch when the archive screen opens — invalidation alone
@@ -181,6 +181,23 @@ export function useScanHistory() {
       }
       sessionId = inserted.id;
 
+      // Verify the inserted row is selectable under the same auth
+      // context. If the insert succeeded but the row isn't returned by
+      // a SELECT, that's an RLS read-side issue we want surfaced
+      // explicitly — otherwise the user sees a successful save and an
+      // empty archive (the bug we're chasing).
+      const { data: verify, error: verifyError } = await supabase
+        .from('scan_sessions')
+        .select('id')
+        .eq('id', sessionId)
+        .maybeSingle();
+      if (verifyError) {
+        throw new Error(`scan_sessions verify failed: ${verifyError.message}`);
+      }
+      if (!verify) {
+        throw new Error(`scan_sessions row ${sessionId} not visible after insert — RLS read policy may be rejecting your own rows.`);
+      }
+
       const newItem: ScanHistoryItem = {
         id: Date.now().toString(),
         savedAt: now,
@@ -217,5 +234,5 @@ export function useScanHistory() {
     },
   });
 
-  return { history, archive, archiveLoading, autoSave, removeArchiveItem };
+  return { history, archive, archiveLoading, archiveError, autoSave, removeArchiveItem };
 }

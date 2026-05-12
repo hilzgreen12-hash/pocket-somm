@@ -7,6 +7,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
+import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 import type { ChosenWine } from '../../src/types/wine';
@@ -23,7 +24,27 @@ type DateFilter = 'all' | '30d' | 'year';
 type RatingFilter = 'all' | '5' | '4plus' | '3plus';
 
 export default function RestaurantReviewsScreen() {
-  const { archive, archiveLoading } = useScanHistory();
+  const { archive, archiveLoading, removeArchiveItem } = useScanHistory();
+
+  function handleLongPressRestaurant(item: ScanArchiveItem) {
+    const label = item.restaurantName?.trim() || 'this restaurant';
+    showAlert({
+      title: 'Remove from Your Restaurants?',
+      body: `${label}\n\nThis permanently deletes the scan and its restaurant review.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            removeArchiveItem.mutate(item.id, {
+              onError: (err) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+      ],
+    });
+  }
   const { chosenWines } = useChosenWines();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
@@ -211,7 +232,12 @@ export default function RestaurantReviewsScreen() {
                   {/* Restaurant header — tap to edit the restaurant review.
                       Wines below have their own tap targets so the user can
                       jump straight into a wine review. */}
-                  <TouchableOpacity onPress={() => setEditing(item)} activeOpacity={0.7}>
+                  <TouchableOpacity
+                    onPress={() => setEditing(item)}
+                    onLongPress={() => handleLongPressRestaurant(item)}
+                    delayLongPress={400}
+                    activeOpacity={0.7}
+                  >
                     <View style={styles.cardCompactRow}>
                       <Text style={styles.restaurantName} numberOfLines={1}>
                         {item.restaurantName || 'Unnamed restaurant'}

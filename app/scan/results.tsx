@@ -93,10 +93,28 @@ export default function ResultsScreen() {
 
   async function handleSaveRestaurant() {
     setEditingRestaurant(false);
+    const trimmed = restaurantName.trim();
     const sid = autoSave.data?.[0]?.sessionId;
-    if (!sid) return;
-    await supabase.from('scan_sessions').update({ restaurant_name: restaurantName.trim() || null }).eq('id', sid);
-    qc.invalidateQueries({ queryKey: ['scan-archive'] });
+    if (sid) {
+      // Row already saved — just update the restaurant name on it.
+      await supabase.from('scan_sessions').update({ restaurant_name: trimmed || null }).eq('id', sid);
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      return;
+    }
+    // No row yet — auto-trigger the save so the restaurant entry lands
+    // in Your Restaurants without the user having to also tap Save to
+    // Archive. Skips silently if the user cleared the field.
+    if (trimmed.length === 0 || hasSaved.current || !recommendation || !extractedWines) return;
+    hasSaved.current = true;
+    autoSave.mutate(
+      { extractedWines, recommendation, restaurantNameOverride: trimmed },
+      {
+        onError: (err) => {
+          hasSaved.current = false;
+          showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+        },
+      },
+    );
   }
 
   function handleSaveToArchive() {
@@ -223,48 +241,52 @@ export default function ResultsScreen() {
         ) : null}
       </View>
 
-      {/* Dining location — editable on fresh scans */}
+      {/* Dining location — editable on fresh scans. Restaurant entry
+          auto-saves the scan so it appears in Your Restaurants without
+          the user having to also tap Save to Archive. */}
       {!isFromHistory && (
-        <TouchableOpacity
-          style={styles.locationRow}
-          onPress={() => setEditingRestaurant(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.locationPin}>📍</Text>
-          {editingRestaurant ? (
-            <TextInput
-              style={styles.locationInput}
-              value={restaurantName}
-              onChangeText={setRestaurantName}
-              placeholder="Restaurant name"
-              placeholderTextColor="rgba(255,255,255,0.30)"
-              autoFocus
-              onBlur={handleSaveRestaurant}
-              onSubmitEditing={handleSaveRestaurant}
-              returnKeyType="done"
-            />
-          ) : (
-            <Text style={styles.locationText}>
-              {restaurantName || 'Add restaurant name'}
-            </Text>
-          )}
-        </TouchableOpacity>
-      )}
+        <View style={styles.locationBlock}>
+          <TouchableOpacity
+            style={styles.locationRow}
+            onPress={() => setEditingRestaurant(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.locationPin}>📍</Text>
+            {editingRestaurant ? (
+              <TextInput
+                style={styles.locationInput}
+                value={restaurantName}
+                onChangeText={setRestaurantName}
+                placeholder="Restaurant name"
+                placeholderTextColor="rgba(255,255,255,0.30)"
+                autoFocus
+                onBlur={handleSaveRestaurant}
+                onSubmitEditing={handleSaveRestaurant}
+                returnKeyType="done"
+              />
+            ) : (
+              <Text style={styles.locationText}>
+                {restaurantName || 'Add restaurant name'}
+              </Text>
+            )}
+          </TouchableOpacity>
 
-      {/* Cross-link to Your Restaurants. Only surfaces once the scan has
-          actually been saved — otherwise no row exists in scan_sessions
-          and the destination screen would show an empty list. */}
-      {!isFromHistory && restaurantName.trim().length > 0 && (isSaved || isFromHistory) && (
-        <TouchableOpacity
-          style={styles.reviewRestaurantLink}
-          onPress={() => {
-            qc.invalidateQueries({ queryKey: ['scan-archive'] });
-            router.push('/restaurants/reviews');
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.reviewRestaurantLinkText}>Review restaurant in your profile →</Text>
-        </TouchableOpacity>
+          {/* Cross-link to Your Restaurants — sits directly under the
+              input. Surfaces once the scan has been saved so the
+              destination has a row to render. */}
+          {restaurantName.trim().length > 0 && isSaved && (
+            <TouchableOpacity
+              style={styles.reviewRestaurantLink}
+              onPress={() => {
+                qc.invalidateQueries({ queryKey: ['scan-archive'] });
+                router.push('/restaurants/reviews');
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.reviewRestaurantLinkText}>Review restaurant in your profile →</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       )}
 
       {/* Wine accordions */}
@@ -521,18 +543,30 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 24,
   },
+  locationBlock: {
+    paddingBottom: spacing.md,
+  },
   locationRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
     gap: 6,
   },
   locationPin: {
     fontSize: 14,
   },
-  reviewRestaurantLink: { alignSelf: 'center', marginTop: 2, marginBottom: spacing.sm, paddingVertical: 4, paddingHorizontal: spacing.sm },
-  reviewRestaurantLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+  reviewRestaurantLink: {
+    // Indent so the text sits roughly under the input, clear of the pin.
+    paddingLeft: spacing.md + 14 + 6,
+    paddingRight: spacing.md,
+    paddingTop: 2,
+  },
+  reviewRestaurantLinkText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 15,
+    color: colors.gold,
+    textDecorationLine: 'underline',
+  },
   locationText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 15,
