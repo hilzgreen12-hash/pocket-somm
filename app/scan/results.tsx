@@ -5,6 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
+import * as Location from 'expo-location';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -41,6 +42,12 @@ export default function ResultsScreen() {
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
   const [renderedAt] = useState(() => new Date().toISOString());
+  // Live GPS-derived city. The autoSave mutation also reads location at
+  // save time and persists it on the row, but that doesn't land until the
+  // server round-trip completes. Surfacing the city in the stamp on mount
+  // gives the user immediate feedback that Vinster knows where they are.
+  const [liveCity, setLiveCity] = useState<string | null>(null);
+  const [editingCity, setEditingCity] = useState(false);
   const qc = useQueryClient();
 
   // Pre-fill restaurant name from GPS once the search has been saved
@@ -48,6 +55,24 @@ export default function ResultsScreen() {
     const detected = autoSave.data?.[0]?.restaurantName;
     if (detected && !restaurantName) setRestaurantName(detected);
   }, [autoSave.data]);
+
+  // Fetch a fresh GPS reading on mount so the stamp can show the user's
+  // city in real time, before the server-side autoSave round-trip lands.
+  useEffect(() => {
+    if (isFromHistory) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.getForegroundPermissionsAsync();
+        if (status !== 'granted') return;
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+        const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+        const city = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+        if (city && !cancelled) setLiveCity(city);
+      } catch { /* location unavailable — stamp falls back to whatever's on the saved row */ }
+    })();
+    return () => { cancelled = true; };
+  }, [isFromHistory]);
 
   // Cache fresh scans to local AsyncStorage on render so View Last Result
   // works in-session even when the network save is still in flight or has
@@ -81,17 +106,10 @@ export default function ResultsScreen() {
     );
   }
 
-  // Fire the archive save automatically once the results render, gated on
-  // a real session being present. The button was previously the only
-  // trigger; users who missed it left the server archive empty even though
-  // the local cache made "View Last Result" work — which is exactly the
-  // bug this addresses. Re-renders are guarded by hasSaved.current inside
-  // handleSaveToArchive so this only fires once per scan.
-  useEffect(() => {
-    if (isFromHistory) return;
-    if (!recommendation || !extractedWines || !session) return;
-    handleSaveToArchive();
-  }, [isFromHistory, !!recommendation, !!extractedWines, !!session]);
+  // Auto-fire on mount removed by request — the user wants the explicit
+  // "Save to Archive" button to be visible until they tap it, rather than
+  // arriving on a screen that already says "Saved" without any user
+  // action.
 
   const isSaved = !!autoSave.data;
   const isSaving = autoSave.isPending;
@@ -145,7 +163,9 @@ export default function ResultsScreen() {
     ? new Date(stampDateSource).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
   const stampRestaurant = historyRestaurant ?? autoSave.data?.[0]?.restaurantName ?? restaurantName ?? null;
-  const stampCity = historyCity ?? autoSave.data?.[0]?.city ?? null;
+  // Prefer the persisted city (server-confirmed), falling back to the
+  // live GPS reading taken on mount.
+  const stampCity = historyCity ?? autoSave.data?.[0]?.city ?? liveCity;
   const stampLocation = [stampRestaurant, stampCity].filter(Boolean).join(' · ');
 
   function toggleWine(i: number) {
@@ -221,6 +241,19 @@ export default function ResultsScreen() {
               {restaurantName || 'Add restaurant name'}
             </Text>
           )}
+        </TouchableOpacity>
+      )}
+
+      {/* Cross-link to Your Restaurants — appears once a restaurant name
+          has been entered. The visit row in Your Restaurants is opened
+          via the restaurant name match. */}
+      {!isFromHistory && restaurantName.trim().length > 0 && (
+        <TouchableOpacity
+          style={styles.reviewRestaurantLink}
+          onPress={() => router.push('/restaurants/reviews')}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.reviewRestaurantLinkText}>Review restaurant in your profile →</Text>
         </TouchableOpacity>
       )}
 
@@ -331,7 +364,16 @@ export default function ResultsScreen() {
       {(isSaved || isFromHistory) ? (
         <View style={styles.savedBlock}>
           <Text style={styles.savedLabel}>Saved</Text>
-          <TouchableOpacity onPress={() => router.push('/scan/history')} activeOpacity={0.7}>
+          <TouchableOpacity
+            onPress={() => {
+              // Force the archive query to refetch so a just-saved scan
+              // shows up on the destination screen — without this, react-
+              // query's cache can briefly return the pre-save snapshot.
+              qc.invalidateQueries({ queryKey: ['scan-archive'] });
+              router.push('/scan/history');
+            }}
+            activeOpacity={0.7}
+          >
             <Text style={styles.viewProfileLink}>View in List Archive</Text>
           </TouchableOpacity>
         </View>
@@ -479,6 +521,8 @@ const styles = StyleSheet.create({
   locationPin: {
     fontSize: 14,
   },
+  reviewRestaurantLink: { alignSelf: 'center', marginTop: 2, marginBottom: spacing.sm, paddingVertical: 4, paddingHorizontal: spacing.sm },
+  reviewRestaurantLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   locationText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 15,
