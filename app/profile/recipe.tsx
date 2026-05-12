@@ -6,9 +6,11 @@ if (Platform.OS === 'android') {
 }
 import { router, useLocalSearchParams } from 'expo-router';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { DropdownMultiSelect } from '../../src/components/preferences/DropdownMultiSelect';
-import { Ionicons } from '@expo/vector-icons';
+import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { colors, spacing } from '../../src/constants/theme';
+
+const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Pescatarian'];
+const ALLERGY_OPTIONS = ['Nut Free', 'Dairy Free', 'Gluten Free'];
 
 const REGIONAL_CUISINES = [
   'Italian', 'French', 'Spanish', 'Greek', 'Mediterranean',
@@ -24,6 +26,11 @@ export default function RecipeProfileScreen() {
   const isOnboarding = onboarding === '1';
   const { preferences, updatePreferences } = usePreferences();
   const [concernsDraft, setConcernsDraft] = useState(preferences?.specificConcerns ?? '');
+  const [dietaryOpen, setDietaryOpen] = useState(false);
+  const [allergyOpen, setAllergyOpen] = useState(false);
+  const [cuisineOpen, setCuisineOpen] = useState(false);
+  const [nutritionalOpen, setNutritionalOpen] = useState(false);
+  const [concernsOpen, setConcernsOpen] = useState(false);
 
   // Refs so the unmount cleanup can diff the latest draft against the
   // last-saved value. TextInput's onBlur doesn't fire reliably on Android
@@ -56,6 +63,22 @@ export default function RecipeProfileScreen() {
     }
   }
 
+  function toggle(setter: React.Dispatch<React.SetStateAction<boolean>>) {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setter((v) => !v);
+  }
+
+  const dietary = preferences?.dietaryNeeds ?? [];
+  const allergy = preferences?.allergyRisks ?? [];
+  const cuisine = preferences?.regionalPreferences ?? [];
+  const nutritional = preferences?.nutritionalPreferences ?? [];
+
+  function summary(values: string[], noneLabel: string) {
+    if (values.length === 0) return noneLabel;
+    if (values.length <= 3) return values.join(', ');
+    return `${values.length} selected`;
+  }
+
   return (
     <View style={styles.wrapper}>
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
@@ -65,45 +88,83 @@ export default function RecipeProfileScreen() {
 
         <View style={styles.profileIntro}>
           <Text style={styles.profileHeading}>Recipe Preferences</Text>
-          <Text style={styles.profileBody}>Set your recipe preferences so Vinster can generate the best recipe and food pairing recommendations for you — over time your food choices will inform our guidance, making our suggestions even more tailored. You can see what we've learned about you so far at the bottom of this page.</Text>
+          <Text style={styles.profileBody}>Set your recipe preferences so Vinster can generate the best recipe and food pairing recommendations for you — over time your food choices will inform our guidance.</Text>
           <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>
 
+        {/* Hard rules first */}
+
         <View style={styles.section}>
-          <DropdownMultiSelect
-            label="Dietary Needs"
-            options={['Vegetarian', 'Vegan', 'Pescatarian']}
-            selected={preferences?.dietaryNeeds ?? []}
-            onChange={(v) => updatePreferences({ dietaryNeeds: v })}
-          />
+          <TouchableOpacity onPress={() => toggle(setDietaryOpen)} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>Dietary Needs</Text>
+              {!dietaryOpen && (
+                <Text style={styles.selectionSummary}>{summary(dietary, 'None')}</Text>
+              )}
+            </View>
+            <Text style={styles.chevron}>{dietaryOpen ? '▴' : '▾'}</Text>
+          </TouchableOpacity>
+          {dietaryOpen && (
+            <View style={styles.pickerWrap}>
+              <ChipPicker
+                options={DIETARY_OPTIONS}
+                selected={dietary}
+                onChange={(v) => updatePreferences({ dietaryNeeds: v })}
+              />
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
-          <DropdownMultiSelect
-            label="Allergy Risk"
-            options={['Nut Free', 'Dairy Free', 'Gluten Free']}
-            selected={preferences?.allergyRisks ?? []}
-            onChange={(v) => updatePreferences({ allergyRisks: v })}
-          />
+          <TouchableOpacity onPress={() => toggle(setAllergyOpen)} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>Allergy Risk</Text>
+              {!allergyOpen && (
+                <Text style={styles.selectionSummary}>{summary(allergy, 'None')}</Text>
+              )}
+            </View>
+            <Text style={styles.chevron}>{allergyOpen ? '▴' : '▾'}</Text>
+          </TouchableOpacity>
+          {allergyOpen && (
+            <View style={styles.pickerWrap}>
+              <ChipPicker
+                options={ALLERGY_OPTIONS}
+                selected={allergy}
+                onChange={(v) => updatePreferences({ allergyRisks: v })}
+                activeColor={colors.error}
+              />
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
-          <View style={styles.questionRow}>
-            <Ionicons name="alert-circle-outline" size={16} color="rgba(255,255,255,0.45)" />
-            <Text style={styles.question}>Specific Concerns</Text>
-          </View>
-          <Text style={styles.helperText}>Anything else Vinster must avoid (e.g. raw fish, very spicy food, soft food only). Treated as a hard rule.</Text>
-          <TextInput
-            style={styles.concernsInput}
-            value={concernsDraft}
-            onChangeText={setConcernsDraft}
-            onBlur={commitConcernsIfChanged}
-            placeholder="Type any specific concerns…"
-            placeholderTextColor={colors.textMuted}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-          />
+          <TouchableOpacity onPress={() => toggle(setConcernsOpen)} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>Specific Concerns</Text>
+              {!concernsOpen && (
+                <Text style={styles.selectionSummary}>
+                  {(preferences?.specificConcerns ?? '').trim() ? 'Set' : 'None'}
+                </Text>
+              )}
+            </View>
+            <Text style={styles.chevron}>{concernsOpen ? '▴' : '▾'}</Text>
+          </TouchableOpacity>
+          {concernsOpen && (
+            <View style={styles.pickerWrap}>
+              <Text style={styles.pickerHint}>Anything else Vinster must avoid (e.g. raw fish, very spicy food, soft food only). Treated as a hard rule.</Text>
+              <TextInput
+                style={styles.concernsInput}
+                value={concernsDraft}
+                onChangeText={setConcernsDraft}
+                onBlur={commitConcernsIfChanged}
+                placeholder="Type any specific concerns…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                numberOfLines={3}
+                textAlignVertical="top"
+              />
+            </View>
+          )}
         </View>
 
         <View style={styles.softDivider}>
@@ -112,23 +173,47 @@ export default function RecipeProfileScreen() {
         </View>
 
         <View style={styles.section}>
-          <DropdownMultiSelect
-            label="Regional Preferences"
-            hint="Pick up to 5 cuisines you enjoy."
-            options={REGIONAL_CUISINES}
-            selected={preferences?.regionalPreferences ?? []}
-            onChange={(v) => updatePreferences({ regionalPreferences: v })}
-            max={5}
-          />
+          <TouchableOpacity onPress={() => toggle(setCuisineOpen)} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>Regional Preferences</Text>
+              {!cuisineOpen && (
+                <Text style={styles.selectionSummary}>{summary(cuisine, 'I like them all')}</Text>
+              )}
+            </View>
+            <Text style={styles.chevron}>{cuisineOpen ? '▴' : '▾'}</Text>
+          </TouchableOpacity>
+          {cuisineOpen && (
+            <View style={styles.pickerWrap}>
+              <Text style={styles.pickerHint}>Pick up to 5 cuisines you enjoy.</Text>
+              <ChipPicker
+                options={REGIONAL_CUISINES}
+                selected={cuisine}
+                onChange={(v) => updatePreferences({ regionalPreferences: v })}
+                max={5}
+              />
+            </View>
+          )}
         </View>
 
         <View style={styles.section}>
-          <DropdownMultiSelect
-            label="Nutritional Preferences"
-            options={NUTRITIONAL_OPTIONS}
-            selected={preferences?.nutritionalPreferences ?? []}
-            onChange={(v) => updatePreferences({ nutritionalPreferences: v })}
-          />
+          <TouchableOpacity onPress={() => toggle(setNutritionalOpen)} activeOpacity={0.7} style={styles.accordionRow}>
+            <View style={styles.accordionLeft}>
+              <Text style={styles.question}>Nutritional Preferences</Text>
+              {!nutritionalOpen && (
+                <Text style={styles.selectionSummary}>{summary(nutritional, 'No preference')}</Text>
+              )}
+            </View>
+            <Text style={styles.chevron}>{nutritionalOpen ? '▴' : '▾'}</Text>
+          </TouchableOpacity>
+          {nutritionalOpen && (
+            <View style={styles.pickerWrap}>
+              <ChipPicker
+                options={NUTRITIONAL_OPTIONS}
+                selected={nutritional}
+                onChange={(v) => updatePreferences({ nutritionalPreferences: v })}
+              />
+            </View>
+          )}
         </View>
 
         {isOnboarding && (
@@ -157,20 +242,24 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: spacing.md },
   backRow: { paddingTop: 70, paddingBottom: spacing.md },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  profileIntro: { marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
-  profileHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 42, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.sm, textAlign: 'center' },
-  profileBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: colors.textMuted, lineHeight: 26, textAlign: 'center' },
-  section: { marginBottom: spacing.md },
-  questionRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 4 },
-  question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: colors.text },
-  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF', marginBottom: spacing.sm },
-  pickerWrap: { marginTop: spacing.sm },
+  profileIntro: { marginBottom: spacing.sm, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
+  profileHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 32, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xs, textAlign: 'center' },
+  profileBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
+  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
+  section: { marginBottom: spacing.sm },
+  // Matches app/(tabs)/scan.tsx and app/profile/wine.tsx for cross-screen
+  // preference UI consistency.
+  accordionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: 4 },
+  accordionLeft: { flex: 1, alignItems: 'center' },
+  chevron: { fontSize: 14, color: '#FFFFFF', marginLeft: spacing.sm },
+  question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
+  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
+  pickerHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
   skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  helperText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm, lineHeight: 18 },
   concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
   softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
