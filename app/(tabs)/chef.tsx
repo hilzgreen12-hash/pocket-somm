@@ -14,9 +14,9 @@ interface AppMessage { title: string; body: string; }
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();
-  // Chef tab content is dense (two flows + archive buttons) so we lift the
-  // header right up against the safe-area to keep everything on one screen.
-  const paddingTop = Math.max(40, height * 0.05);
+  // Match the Cellar / Community tabs so the header sits at a consistent
+  // height across the bottom-nav surfaces.
+  const paddingTop = Math.max(60, height * 0.13);
   const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, setFilters, pairings, wineDetailsConfirmed } = useLabelStore();
   const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
   const { sessions: labelSessions } = useChefLabelHistory();
