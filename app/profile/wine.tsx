@@ -29,6 +29,16 @@ export default function WineProfileScreen() {
   const [varietalOpen, setVarietalOpen] = useState(false);
   const [regionalDislikesOpen, setRegionalDislikesOpen] = useState(false);
   const [varietalDislikesOpen, setVarietalDislikesOpen] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  function handleSavePreferences() {
+    // Every control on this screen already commits inline as the user
+    // edits — and a real failure surfaces via usePreferences.onError.
+    // The Save Preferences button gives users an explicit "I'm done"
+    // moment with a clear confirmation flash.
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1800);
+  }
 
   function toggle(setter: React.Dispatch<React.SetStateAction<boolean>>) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -219,7 +229,7 @@ export default function WineProfileScreen() {
           )}
         </View>
 
-        {isOnboarding && (
+        {isOnboarding ? (
           <>
             <TouchableOpacity
               style={styles.saveButton}
@@ -234,6 +244,10 @@ export default function WineProfileScreen() {
               <Text style={styles.skipLinkText}>Not now</Text>
             </TouchableOpacity>
           </>
+        ) : (
+          <TouchableOpacity style={styles.saveButton} onPress={handleSavePreferences} activeOpacity={0.7}>
+            <Text style={styles.saveButtonText}>{savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </View>

@@ -32,6 +32,16 @@ export default function RecipeProfileScreen() {
   const [nutritionalOpen, setNutritionalOpen] = useState(false);
   const [concernsOpen, setConcernsOpen] = useState(false);
   const [concernsSaved, setConcernsSaved] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+
+  function handleSavePreferences() {
+    // All chip pickers commit inline; commit any pending concerns draft
+    // before flashing the confirmation so the bottom Save button covers
+    // everything the user might have changed.
+    commitConcernsIfChanged();
+    setSavedFlash(true);
+    setTimeout(() => setSavedFlash(false), 1800);
+  }
 
   // Refs so the unmount cleanup can diff the latest draft against the
   // last-saved value. TextInput's onBlur doesn't fire reliably on Android
@@ -229,7 +239,7 @@ export default function RecipeProfileScreen() {
           )}
         </View>
 
-        {isOnboarding && (
+        {isOnboarding ? (
           <>
             <TouchableOpacity
               style={styles.saveButton}
@@ -244,6 +254,10 @@ export default function RecipeProfileScreen() {
               <Text style={styles.skipLinkText}>Not now</Text>
             </TouchableOpacity>
           </>
+        ) : (
+          <TouchableOpacity style={styles.saveButton} onPress={handleSavePreferences} activeOpacity={0.7}>
+            <Text style={styles.saveButtonText}>{savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
+          </TouchableOpacity>
         )}
       </ScrollView>
     </View>
