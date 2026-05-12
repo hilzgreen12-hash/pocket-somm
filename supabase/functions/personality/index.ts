@@ -49,6 +49,7 @@ Return only the prose — no preamble, no title, no markdown headers. Just the c
 function buildRecipePrompt(payload: any): string {
   const p = payload.preferences ?? {};
   const restaurants: any[] = payload.restaurants ?? [];
+  const recipes: any[] = payload.recipes ?? [];
   const arr = (a: any) => Array.isArray(a) && a.length ? a.join(', ') : 'none specified';
   const stars = (n: number | null | undefined) => (n != null ? '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n)) : '—');
 
@@ -58,7 +59,21 @@ function buildRecipePrompt(payload: any): string {
         .map((r: any) => `- ${r.name ?? 'Unnamed'}${r.city ? ` (${r.city})` : ''} — Food ${stars(r.food)}, Service ${stars(r.service)}, Wine list ${stars(r.wineList)}, Overall ${stars(r.overall)}${r.note ? ` · "${(r.note as string).slice(0, 120)}"` : ''}`)
         .join('\n');
 
-  return `You are Vinster's resident food-personality-profiler. Read the cook-and-diner's profile below and write a short, witty, lovingly observed character sketch of them as an eater — at home AND when dining out.
+  // Favourited recipes (starred in the archive) get a leading ★ so the
+  // model can lean harder on them when shaping the sketch. Truncate notes
+  // to keep the prompt compact.
+  const recipeLines = recipes.length === 0
+    ? 'None yet — no recipes saved to their archive.'
+    : recipes.slice(0, 25)
+        .map((r: any) => {
+          const marker = r.isFavourite ? '★ ' : '- ';
+          const chef = r.chefInspiration ? ` (inspired by ${r.chefInspiration})` : '';
+          const notes = r.pairingNotes ? ` · "${String(r.pairingNotes).slice(0, 120)}"` : '';
+          return `${marker}${r.dishName}${chef}${notes}`;
+        })
+        .join('\n');
+
+  return `You are Vinster's resident foodie-personality-profiler. Read the cook-and-diner's profile below and write a short, witty, lovingly observed character sketch of them as a foodie — at home AND when dining out.
 
 OUTPUT FORMAT — required:
 First line: a punchy title for the sketch, prefixed with "# " (markdown H1). Six words or fewer, witty and specific to this person. Examples of the right vibe: "# She Likes It Hot", "# The Reluctant Vegetarian", "# Umami-Chasing Globetrotter", "# The Tablecloth Traditionalist". Make it memorable; don't reuse the examples.
@@ -71,7 +86,7 @@ Tone: warm, dry, gently teasing, never mean. Think a chef-friend who knows them 
 
 Address the user directly as "you". Give them a memorable nickname or archetype halfway through. Don't quote the data verbatim — read between the lines.
 
-Use the dietary/cuisine profile AND the restaurant history together. Look for tension or harmony between the two: do their stated preferences match the places they actually go and rate? Do they review wine lists harder than food? What does that say? If restaurants are sparse, just lean on the profile — and vice versa. If both are sparse, write a playful "early days" piece and invite them to keep telling Vinster what they like.
+Use the dietary/cuisine profile, the restaurant history, AND the saved-recipe archive together. Look for tension or harmony between them: do their stated preferences match the places they actually go and the dishes they save? Recipes marked with ★ are ones they've explicitly favourited — those carry the most weight as signals of what they truly love. Do they review wine lists harder than food? Are their favourite recipes adventurous but their restaurant orders conservative (or vice versa)? What does the combination say? If any source is sparse, lean on the others. If they're all sparse, write a playful "early days" piece and invite them to keep telling Vinster what they like.
 
 Here's what we know:
 
@@ -84,6 +99,9 @@ DIETARY & CUISINE PROFILE
 
 RESTAURANT HISTORY (where they've eaten and what they thought)
 ${restaurantLines}
+
+SAVED RECIPES (dishes they've cooked or want to cook — ★ marks favourites)
+${recipeLines}
 
 Return only the prose — no preamble, no markdown headers other than the title line. Just the title and the character sketch, ready to display.`;
 }

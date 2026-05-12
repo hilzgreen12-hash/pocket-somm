@@ -65,6 +65,7 @@ export async function generatePersonality(category: 'wine' | 'recipe' | 'restaur
   preferences?: Record<string, unknown> | null;
   wines?: Array<{ producer: string | null; wine_name: string; vintage: string | null; region: string | null }>;
   restaurants?: Array<{ name: string | null; city: string | null; food: number | null; service: number | null; wineList: number | null; overall: number | null; note: string | null }>;
+  recipes?: Array<{ dishName: string; chefInspiration: string | null; pairingNotes: string | null; isFavourite: boolean }>;
 }): Promise<{ text: string }> {
   return invokeFunction('personality', { category, ...payload }) as Promise<{ text: string }>;
 }

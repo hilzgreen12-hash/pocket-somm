@@ -79,7 +79,7 @@ export default function ProfileTab() {
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=recipe')}>
-          <Text style={styles.buttonText}>Your Chef Personality</Text>
+          <Text style={styles.buttonText}>Your Foodie Personality</Text>
         </TouchableOpacity>
       </View>
 
