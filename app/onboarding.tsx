@@ -109,7 +109,6 @@ export default function OnboardingScreen() {
               options={WINE_REGIONS}
               selected={dislikedRegions}
               onChange={setDislikedRegions}
-              activeColor={colors.error}
             />
             <View style={styles.avoidDivider} />
             <Text style={styles.subLabel}>
@@ -119,7 +118,6 @@ export default function OnboardingScreen() {
               options={GRAPE_VARIETIES}
               selected={dislikedGrapes}
               onChange={setDislikedGrapes}
-              activeColor={colors.error}
             />
           </>
         )}
