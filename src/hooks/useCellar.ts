@@ -117,5 +117,10 @@ export function useArchive() {
     },
   });
 
-  return { wines, isLoading, updateNote };
+  const deleteWine = useMutation({
+    mutationFn: (id: string) => deleteCellarWine(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-archive', userId] }),
+  });
+
+  return { wines, isLoading, updateNote, deleteWine };
 }

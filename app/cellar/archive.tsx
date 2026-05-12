@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
@@ -10,7 +11,7 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function ArchiveCard({ wine, onPress }: { wine: CellarWine; onPress: () => void }) {
+function ArchiveCard({ wine, onPress, onLongPress }: { wine: CellarWine; onPress: () => void; onLongPress: () => void }) {
   // Header line follows the wine-card convention: producer · wine name ·
   // vintage, deduped when producer matches the wine name.
   const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
@@ -19,7 +20,7 @@ function ArchiveCard({ wine, onPress }: { wine: CellarWine; onPress: () => void 
     : [wine.producer, wine.wine_name, wine.vintage]
   ).filter(Boolean).join(' · ');
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress} activeOpacity={0.7}>
+    <TouchableOpacity style={styles.card} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.7}>
       <Text style={styles.headerLine} numberOfLines={2}>{headerLine}</Text>
       {wine.region ? <Text style={styles.region} numberOfLines={1}>{wine.region}</Text> : null}
       {wine.archived_at ? (
@@ -31,7 +32,31 @@ function ArchiveCard({ wine, onPress }: { wine: CellarWine; onPress: () => void 
 
 export default function CellarArchiveScreen() {
   const { session } = useAuth();
-  const { wines, isLoading } = useArchive();
+  const { wines, isLoading, deleteWine } = useArchive();
+
+  function handleLongPressWine(wine: CellarWine) {
+    const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+    const label = (sameName
+      ? [wine.producer, wine.vintage]
+      : [wine.producer, wine.wine_name, wine.vintage]
+    ).filter(Boolean).join(' · ');
+    showAlert({
+      title: 'Remove from archive?',
+      body: `${label}\n\nThis permanently deletes the wine from your records.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            deleteWine.mutate(wine.id, {
+              onError: (err) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+      ],
+    });
+  }
 
   if (isLoading) {
     return (
@@ -64,7 +89,12 @@ export default function CellarArchiveScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
           {wines.map((wine) => (
-            <ArchiveCard key={wine.id} wine={wine} onPress={() => router.push(`/cellar/${wine.id}` as any)} />
+            <ArchiveCard
+              key={wine.id}
+              wine={wine}
+              onPress={() => router.push(`/cellar/${wine.id}` as any)}
+              onLongPress={() => handleLongPressWine(wine)}
+            />
           ))}
         </ScrollView>
       )}
