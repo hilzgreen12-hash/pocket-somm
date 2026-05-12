@@ -192,6 +192,11 @@ export interface ChosenWine {
   id: string;
   user_id: string;
   chosen_at: string;
+  // Links a chosen wine back to the scan session it was picked from,
+  // so a restaurant visit can carry multiple chosen wines without
+  // relying on name+city heuristics. Nullable for wines added manually
+  // and for legacy rows pre-migration 032.
+  scan_session_id: string | null;
   wine_name: string;
   producer: string | null;
   region: string | null;

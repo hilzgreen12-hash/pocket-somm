@@ -16,6 +16,7 @@ import type { WineRecommendation } from '../types/wine';
 interface Props {
   wine: WineRecommendation | null;
   visible: boolean;
+  scanSessionId?: string | null;
   initialRestaurantName?: string | null;
   initialCity?: string | null;
   showReturnToArchive?: boolean;
@@ -23,7 +24,7 @@ interface Props {
   onSaved: () => void;
 }
 
-export function ChosenWineModal({ wine, visible, initialRestaurantName, initialCity, showReturnToArchive, onClose, onSaved }: Props) {
+export function ChosenWineModal({ wine, visible, scanSessionId, initialRestaurantName, initialCity, showReturnToArchive, onClose, onSaved }: Props) {
   const { session } = useAuth();
   const { save } = useChosenWines();
   const { addWine: addToWishList } = useWishList();
@@ -79,6 +80,7 @@ export function ChosenWineModal({ wine, visible, initialRestaurantName, initialC
     try {
       await save.mutateAsync({
         wine,
+        scanSessionId: scanSessionId ?? null,
         restaurantName: restaurant,
         city,
         tastingNote,

@@ -3,6 +3,7 @@ import type { ChosenWine, WineRecommendation } from '../types/wine';
 
 export interface SaveChosenWineInput {
   wine: WineRecommendation;
+  scanSessionId: string | null;
   restaurantName: string;
   city: string;
   tastingNote: string;
@@ -11,9 +12,10 @@ export interface SaveChosenWineInput {
 }
 
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<void> {
-  const { wine, restaurantName, city, tastingNote, otherObservations, userScore } = input;
+  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore } = input;
   const { error } = await supabase.from('chosen_wines').insert({
     user_id: userId,
+    scan_session_id: scanSessionId,
     wine_name: wine.name,
     producer: wine.producer,
     region: wine.region,
