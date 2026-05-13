@@ -8,7 +8,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function AddWineScreen() {
-  const { addWine } = useCellar();
+  const { wines, addWine, updateWine } = useCellar();
   const { session } = useAuth();
   const { setPendingWineId } = useRackStore();
 
@@ -19,14 +19,20 @@ export default function AddWineScreen() {
   const [quantity, setQuantity] = useState('1');
   const [saving, setSaving] = useState(false);
 
-  async function handleSave() {
-    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
-    // bug can't strand the user on a focused TextInput.
-    Keyboard.dismiss();
-    if (!wineName.trim()) {
-      showAlert({ title: 'Wine name required', body: 'Please enter a wine name.' });
-      return;
-    }
+  function findMatchingExisting() {
+    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    const wantedName = norm(wineName);
+    const wantedProducer = norm(producer || wineName);
+    const wantedVintage = vintage.trim();
+    if (!wantedName) return null;
+    return wines.find((w) =>
+      norm(w.wine_name) === wantedName &&
+      norm(w.producer) === wantedProducer &&
+      (w.vintage ?? '').trim() === wantedVintage
+    ) ?? null;
+  }
+
+  async function performNewEntry() {
     if (!session?.user.id) return;
     setSaving(true);
     try {
@@ -68,6 +74,58 @@ export default function AddWineScreen() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function performMerge(existingId: string, currentQty: number) {
+    const addQty = parseInt(quantity) || 1;
+    setSaving(true);
+    try {
+      await updateWine.mutateAsync({
+        id: existingId,
+        updates: { quantity: currentQty + addQty },
+      });
+      showAlert({
+        title: 'Added to cellar',
+        body: `Updated existing listing — you now have ${currentQty + addQty} bottle${currentQty + addQty === 1 ? '' : 's'}.`,
+        buttons: [
+          { text: 'OK', onPress: () => router.back() },
+          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+        ],
+      });
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not update listing. Please try again.' });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleSave() {
+    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
+    // bug can't strand the user on a focused TextInput.
+    Keyboard.dismiss();
+    if (!wineName.trim()) {
+      showAlert({ title: 'Wine name required', body: 'Please enter a wine name.' });
+      return;
+    }
+    if (!session?.user.id) return;
+
+    const match = findMatchingExisting();
+    if (match) {
+      const existingQty = match.quantity;
+      const wineLabel = `${match.wine_name}${match.vintage ? ` ${match.vintage}` : ''}`;
+      showAlert({
+        title: 'Already in your cellar',
+        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel}. Add this bottle to that listing?`,
+        buttons: [
+          { text: 'Yes', onPress: () => performMerge(match.id, existingQty) },
+          { text: 'No, create a new line', onPress: performNewEntry },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+
+    await performNewEntry();
   }
 
   return (
