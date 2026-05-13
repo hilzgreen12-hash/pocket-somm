@@ -136,8 +136,11 @@ export default function LabelResultsScreen() {
           ? [{ text: 'OK', onPress: () => router.replace('/cellar/wishlist') }]
           : undefined,
       });
-    } catch {
-      showAlert({ title: 'Error', body: 'Could not save to wish list. Please try again.' });
+    } catch (err) {
+      // Surface the underlying error rather than the generic message so
+      // RLS / FK / schema failures are visible.
+      const detail = err instanceof Error ? err.message : String(err);
+      showAlert({ title: 'Could not save to wish list', body: detail });
     } finally {
       setSaving(false);
     }
