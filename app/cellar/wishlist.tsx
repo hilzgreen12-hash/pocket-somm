@@ -374,7 +374,12 @@ export default function WishListScreen() {
           <Text style={styles.emptyBody}>When you review a wine recommendation, tap "Add to Cellar Wish List" to save wines you'd like to seek out.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+        <ScrollView
+          contentContainerStyle={{ paddingBottom: 80 }}
+          automaticallyAdjustKeyboardInsets
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="interactive"
+        >
           {wines.map((wine) => (
             <WishListCard
               key={wine.id}

@@ -100,7 +100,13 @@ export default function RecipeProfileScreen() {
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60 }}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 60 }}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
         <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>

@@ -531,7 +531,13 @@ export default function CellarWineDetail() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="always">
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={{ paddingBottom: 80 }}
+      keyboardShouldPersistTaps="always"
+      automaticallyAdjustKeyboardInsets
+      keyboardDismissMode="interactive"
+    >
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={styles.backText}>← Back</Text>

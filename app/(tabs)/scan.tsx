@@ -227,7 +227,13 @@ export default function ScanTab() {
 
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
+    <ScrollView
+      style={{ flex: 1 }}
+      contentContainerStyle={{ paddingBottom: 20, paddingTop }}
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+    >
 
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
