@@ -85,30 +85,51 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ error: 'imageBase64 required' }), { status: 400 });
     }
 
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 8192,
-      system: IMAGE_SYSTEM_PROMPT,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'image',
-              source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
-            },
-            { type: 'text', text: 'Extract all wines from this wine list. When a wine has multiple prices (glass + bottle, or different pour sizes), use the highest one — the bottle price. Return only JSON.' },
-          ],
-        },
-      ],
-    });
+    // Retry once on parse / no-JSON failures so non-deterministic
+    // Claude output doesn't surface as a generic Something Went Wrong
+    // on the client. Same pattern used by the recommend function.
+    async function attemptOCR(attempt: number): Promise<any> {
+      const response = await client.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 8192,
+        system: IMAGE_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'image',
+                source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 },
+              },
+              { type: 'text', text: 'Extract all wines from this wine list. When a wine has multiple prices (glass + bottle, or different pour sizes), use the highest one — the bottle price. Return only JSON.' },
+            ],
+          },
+        ],
+      });
+      const textBlock = response.content.find((b) => b.type === 'text');
+      const text = textBlock?.type === 'text' ? textBlock.text : '';
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) {
+        const snippet = text ? text.slice(0, 200) : `(no text block; content types: ${response.content.map((b) => b.type).join(', ')})`;
+        if (attempt < 2) {
+          console.warn(`[ocr] no JSON in Claude response (attempt ${attempt}), retrying. Snippet: ${snippet}`);
+          return attemptOCR(attempt + 1);
+        }
+        throw new Error(`Claude returned no JSON after ${attempt} attempts. Snippet: ${snippet}`);
+      }
+      try {
+        return JSON.parse(match[0]);
+      } catch (parseErr) {
+        if (attempt < 2) {
+          console.warn(`[ocr] JSON parse failed (attempt ${attempt}), retrying. Detail:`, parseErr);
+          return attemptOCR(attempt + 1);
+        }
+        const detail = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        throw new Error(`Claude returned malformed JSON after ${attempt} attempts: ${detail}`);
+      }
+    }
 
-    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
-
-    // Extract JSON object from response regardless of surrounding text
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`No JSON found in response: ${text.slice(0, 200)}`);
-    const parsed = JSON.parse(match[0]);
+    const parsed = await attemptOCR(1);
 
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' },
@@ -116,9 +137,12 @@ Deno.serve(async (req) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('OCR function error:', message);
-    return new Response(JSON.stringify({ error: message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(
+      JSON.stringify({
+        error: message,
+        message: "Vinster had trouble reading this photo. Try a clearer, well-lit shot with the wine list fully in frame.",
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 });
