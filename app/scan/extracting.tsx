@@ -196,6 +196,7 @@ export default function ExtractingScreen() {
       body={stage === 'reading'
         ? 'Identifying every wine on the list'
         : 'Scoring by critic rating, vintage quality and value'}
+      durationMs={70000}
     />
   );
 }
