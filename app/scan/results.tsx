@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -17,6 +19,7 @@ import { VintageWindowBadge } from '../../src/components/results/VintageWindowBa
 import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { RationaleBlock } from '../../src/components/results/RationaleBlock';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
+import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 import type { WineRecommendation } from '../../src/types/wine';
 
@@ -50,6 +53,8 @@ export default function ResultsScreen() {
   const [liveCity, setLiveCity] = useState<string | null>(null);
   const [editingCity, setEditingCity] = useState(false);
   const qc = useQueryClient();
+  const shareCardRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
 
   // Pre-fill restaurant name from GPS once the search has been saved
   useEffect(() => {
@@ -237,6 +242,48 @@ export default function ResultsScreen() {
     setOpenIndex(openIndex === i ? null : i);
   }
 
+  async function handleShare() {
+    if (!recommendation || sharing) return;
+    setSharing(true);
+    try {
+      // Capture the off-screen branded card as a PNG and hand it to the
+      // native share sheet so users can post to WhatsApp / Instagram /
+      // Stories. Falls back to a plain-text share if capture fails or
+      // expo-sharing isn't available on this device.
+      if (shareCardRef.current) {
+        const uri = await captureRef(shareCardRef, {
+          format: 'png',
+          quality: 1,
+          width: 1080,
+          height: 1350,
+          result: 'tmpfile',
+        });
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(uri, {
+            mimeType: 'image/png',
+            dialogTitle: 'Share Vinster recommendations',
+            UTI: 'public.png',
+          });
+          return;
+        }
+      }
+      const lines = recommendation.wines.slice(0, 3).map((w, i) => {
+        const rank = RANK_LABELS[i] ?? `#${i + 1}`;
+        const vintage = w.vintage ? `${w.vintage} ` : '';
+        const score = w.criticScore > 0 ? ` (${w.criticScore} pts)` : '';
+        return `${rank}: ${vintage}${w.name}${score}`;
+      });
+      await Share.share({
+        title: 'Vinster Recommends',
+        message: `Vinster picked these wines for me:\n\n${lines.join('\n')}\n\nDownload Vinster — your AI sommelier.`,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharing(false);
+    }
+  }
+
   return (
     <ScrollView
       style={styles.container}
@@ -248,21 +295,33 @@ export default function ResultsScreen() {
 
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity
-          onPress={() => {
-            if (isFromHistory) {
-              router.back();
-            } else {
-              // Skip the camera/preview/extracting stack on the way back —
-              // jump straight to the List tab.
-              reset();
-              router.replace('/(tabs)/scan');
-            }
-          }}
-          style={styles.backRow}
-        >
-          <Text style={styles.backLink}>Back</Text>
-        </TouchableOpacity>
+        <View style={styles.topRow}>
+          <TouchableOpacity
+            onPress={() => {
+              if (isFromHistory) {
+                router.back();
+              } else {
+                // Skip the camera/preview/extracting stack on the way back —
+                // jump straight to the List tab.
+                reset();
+                router.replace('/(tabs)/scan');
+              }
+            }}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          >
+            <Text style={styles.backLink}>Back</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleShare}
+            disabled={sharing}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.shareBtnText, sharing && { opacity: 0.5 }]}>
+              {sharing ? 'Preparing…' : '+ Share'}
+            </Text>
+          </TouchableOpacity>
+        </View>
         {(stampDate || stampLocation) && (
           <View style={styles.stampRow}>
             {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
@@ -487,6 +546,19 @@ export default function ResultsScreen() {
         }}
       />
 
+      {/* Off-screen share card. Positioned out of view; captured to a
+          PNG when the user taps Share so the system share sheet gets a
+          designed, branded image to hand to WhatsApp / Instagram / etc. */}
+      <View style={styles.shareCardWrap} pointerEvents="none">
+        <WineListShareCard
+          ref={shareCardRef}
+          wines={recommendation.wines}
+          date={stampDate}
+          restaurant={stampRestaurant}
+          city={stampCity}
+        />
+      </View>
+
     </ScrollView>
   );
 }
@@ -506,10 +578,31 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
     marginBottom: spacing.sm,
   },
+  topRow: {
+    width: '100%',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
   backLink: {
     fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
+  },
+  shareBtnText: {
+    fontSize: 14,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: colors.gold,
+    letterSpacing: 0.5,
+  },
+  // Off-screen share card — positioned far below the viewport so it
+  // renders for the captureRef snapshot but never appears on screen.
+  shareCardWrap: {
+    position: 'absolute',
+    top: 100000,
+    left: 0,
+    opacity: 0,
   },
   stampRow: {
     alignItems: 'center',
