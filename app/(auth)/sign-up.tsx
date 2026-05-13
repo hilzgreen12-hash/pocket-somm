@@ -161,8 +161,8 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    color: colors.error,
-    fontSize: 15,
+    color: colors.gold,
+    fontSize: 16,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
