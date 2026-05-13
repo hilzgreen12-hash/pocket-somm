@@ -38,7 +38,12 @@ export default function ResultsScreen() {
   const { preferences: userPrefs } = usePreferences();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
   const [isGenerating, setIsGenerating] = useState(false);
-  const hasSaved = useRef(false);
+  // Tracks the in-flight autoSave promise so concurrent callers
+  // (onBlur of the input + the Review CTA tap) join the same save
+  // rather than racing or skipping the wait. Without this, the CTA
+  // could route to Your Restaurants before the scan_sessions row
+  // landed, leaving the user staring at an empty list.
+  const inFlightSaveRef = useRef<Promise<void> | null>(null);
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   const [wishlistIndexes, setWishlistIndexes] = useState<Set<number>>(new Set());
@@ -65,14 +70,12 @@ export default function ResultsScreen() {
   // Pre-fill restaurant name from the URL params when the user came
   // back to a result via View Last Result. Without this the input
   // shows the empty placeholder even though the saved entry already
-  // has a restaurant on it. hasSaved is flipped to true when the URL
-  // also carries a sessionId so we route to update rather than insert.
+  // has a restaurant on it.
   useEffect(() => {
     if (historyRestaurant && !restaurantName) {
       setRestaurantName(historyRestaurant);
     }
-    if (sessionId) hasSaved.current = true;
-  }, [historyRestaurant, sessionId]);
+  }, [historyRestaurant]);
 
   // Effective scan_sessions id used by every restaurant-edit path on
   // this screen. Prefers the URL sessionId (set when the user came in
@@ -138,13 +141,26 @@ export default function ResultsScreen() {
     // lands in Your Restaurants. Skip if there's no name to save and no
     // recommendation to save against.
     if (trimmed.length === 0 || !recommendation || !extractedWines) return;
-    if (hasSaved.current) return;
-    hasSaved.current = true;
+    // If an autoSave is already in flight (e.g. the input's onBlur
+    // started it and the Review CTA tap then re-enters this function),
+    // join the existing promise instead of skipping the wait. The
+    // previous "hasSaved" boolean returned immediately on the second
+    // caller, so the CTA could route to Your Restaurants before the
+    // row was actually inserted.
+    if (inFlightSaveRef.current) {
+      try { await inFlightSaveRef.current; } catch { /* original caller already alerted */ }
+      return;
+    }
+    const promise = autoSave
+      .mutateAsync({ extractedWines, recommendation, restaurantNameOverride: trimmed })
+      .then(() => undefined);
+    inFlightSaveRef.current = promise;
     try {
-      await autoSave.mutateAsync({ extractedWines, recommendation, restaurantNameOverride: trimmed });
+      await promise;
     } catch (err) {
-      hasSaved.current = false;
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      inFlightSaveRef.current = null;
     }
   }
 
