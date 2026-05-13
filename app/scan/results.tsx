@@ -347,60 +347,70 @@ export default function ResultsScreen() {
 
       {/* Dining card — prominent restaurant entry / review CTA. Shown
           for fresh scans AND when a saved result is reopened via View
-          Last Result, so the user can always add or edit the
-          restaurant. Typing a name promotes the scan to scan_sessions
-          so the row appears in Your Restaurants. The Review CTA
-          navigates to Your Restaurants where the user can edit the
-          full review (food, atmosphere, service). */}
+          Last Result. Typing a name promotes the scan to scan_sessions
+          so the row appears in Your Restaurants. Once the row exists
+          the name is locked here — further edits happen in the proper
+          restaurant review in Your Restaurants. The CTA below always
+          routes there for adding or editing. */}
       <View style={styles.restaurantCard}>
         <Text style={styles.restaurantCardLabel}>Dining at</Text>
-        <TouchableOpacity
-          style={styles.restaurantNameRow}
-          onPress={() => setEditingRestaurant(true)}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.locationPin}>📍</Text>
-          {editingRestaurant ? (
-            <TextInput
-              style={styles.restaurantNameInput}
-              value={restaurantName}
-              onChangeText={setRestaurantName}
-              placeholder="Restaurant name"
-              placeholderTextColor="rgba(255,255,255,0.45)"
-              autoFocus
-              onBlur={handleSaveRestaurant}
-              onSubmitEditing={handleSaveRestaurant}
-              returnKeyType="done"
-            />
-          ) : (
-            <Text
-              style={[
-                styles.restaurantNameDisplay,
-                !restaurantName && styles.restaurantNamePlaceholder,
-              ]}
-            >
-              {restaurantName || 'Tap to add restaurant name'}
-            </Text>
-          )}
-        </TouchableOpacity>
+        {effectiveSessionId ? (
+          // Locked display once a scan_sessions row backs the result.
+          // Editing the restaurant name only here would leave the
+          // change out of sync with chosen_wines and other surfaces,
+          // so we steer the user to the proper Your Restaurants entry
+          // for any rename.
+          <View style={styles.restaurantNameRow}>
+            <Text style={styles.locationPin}>📍</Text>
+            <Text style={styles.restaurantNameDisplay}>{restaurantName}</Text>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.restaurantNameRow}
+            onPress={() => setEditingRestaurant(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.locationPin}>📍</Text>
+            {editingRestaurant ? (
+              <TextInput
+                style={styles.restaurantNameInput}
+                value={restaurantName}
+                onChangeText={setRestaurantName}
+                placeholder="Restaurant name"
+                placeholderTextColor="rgba(255,255,255,0.45)"
+                autoFocus
+                onBlur={handleSaveRestaurant}
+                onSubmitEditing={handleSaveRestaurant}
+                returnKeyType="done"
+              />
+            ) : (
+              <Text
+                style={[
+                  styles.restaurantNameDisplay,
+                  !restaurantName && styles.restaurantNamePlaceholder,
+                ]}
+              >
+                {restaurantName || 'Tap to add restaurant name'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
 
         {restaurantName.trim().length > 0 ? (
           <TouchableOpacity
             style={styles.reviewRestaurantBtn}
             onPress={async () => {
-              // Make sure the scan_sessions row is in place (and
-              // carries the latest restaurant name) before we route
-              // to Your Restaurants. Without this, a user who taps
-              // the CTA before onBlur fires lands on an empty list.
+              // Make sure the scan_sessions row is in place before we
+              // route to Your Restaurants. Without this, a user who
+              // tapped the CTA before onBlur fired could land on an
+              // empty list.
               await handleSaveRestaurant();
               qc.invalidateQueries({ queryKey: ['scan-archive'] });
               router.push('/restaurants/reviews');
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.reviewRestaurantBtnText}>
-              {effectiveSessionId ? 'Edit restaurant review →' : 'Review this restaurant →'}
-            </Text>
+            <Text style={styles.reviewRestaurantBtnText}>Add or Edit Review →</Text>
           </TouchableOpacity>
         ) : (
           <Text style={styles.restaurantHint}>
@@ -727,7 +737,7 @@ const styles = StyleSheet.create({
   reviewRestaurantBtn: {
     marginTop: spacing.sm,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: '#FFFFFF',
     borderRadius: 10,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
@@ -736,7 +746,7 @@ const styles = StyleSheet.create({
   reviewRestaurantBtnText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 15,
-    color: colors.gold,
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   list: {
