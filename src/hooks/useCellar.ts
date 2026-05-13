@@ -27,7 +27,14 @@ export function useCellar() {
 
   const updateWine = useMutation({
     mutationFn: ({ id, updates }: { id: string; updates: Partial<CellarWine> }) => updateCellarWine(id, updates),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar', userId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      // The wine card is shared between active and archived wines and reads
+      // from whichever list contains the row. Without this the archive
+      // query stays stale after edits made on an archived wine (purchase
+      // price, estimated value, notes, etc.) and the UI shows old values.
+      qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
+    },
   });
 
   const deleteWine = useMutation({
