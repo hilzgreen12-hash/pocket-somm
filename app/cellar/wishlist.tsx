@@ -304,11 +304,11 @@ export default function WishListScreen() {
             <Text style={styles.moveHint}>Pick a rack to place this bottle in now, or save without and assign later.</Text>
             <View style={styles.rackList}>
               <TouchableOpacity
-                style={[styles.rackOption, moveSelectedRackId === null && styles.rackOptionActive]}
+                style={[styles.rackOptionPrimary, moveSelectedRackId === null && styles.rackOptionPrimaryActive]}
                 onPress={() => setMoveSelectedRackId(null)}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.rackOptionText, moveSelectedRackId === null && styles.rackOptionTextActive]}>Save without placing</Text>
+                <Text style={styles.rackOptionPrimaryText}>Save without placing</Text>
               </TouchableOpacity>
               {racks.map((r) => (
                 <TouchableOpacity
@@ -321,11 +321,11 @@ export default function WishListScreen() {
                 </TouchableOpacity>
               ))}
               <TouchableOpacity
-                style={[styles.rackOption, styles.rackOptionNew, moveSelectedRackId === '__new__' && styles.rackOptionActive]}
+                style={[styles.rackOptionPrimary, { marginTop: spacing.xs }, moveSelectedRackId === '__new__' && styles.rackOptionPrimaryActive]}
                 onPress={() => setMoveSelectedRackId('__new__')}
                 activeOpacity={0.8}
               >
-                <Text style={[styles.rackOptionText, styles.rackOptionTextNew, moveSelectedRackId === '__new__' && styles.rackOptionTextActive]}>+ Create new rack</Text>
+                <Text style={styles.rackOptionPrimaryText}>+ Create new rack</Text>
               </TouchableOpacity>
             </View>
 
@@ -433,8 +433,9 @@ const styles = StyleSheet.create({
   rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
   rackOptionText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   rackOptionTextActive: { color: colors.gold },
-  rackOptionNew: { borderStyle: 'dashed', marginTop: spacing.xs },
-  rackOptionTextNew: { color: colors.gold },
-  moveSaveBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  moveSaveBtnText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, textAlign: 'center' },
+  rackOptionPrimary: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  rackOptionPrimaryActive: { backgroundColor: 'rgba(255,255,255,0.10)' },
+  rackOptionPrimaryText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
+  moveSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  moveSaveBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, textAlign: 'center' },
 });
