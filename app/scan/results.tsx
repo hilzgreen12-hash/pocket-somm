@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   },
   stampLocation: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textMuted,
     textAlign: 'center',
   },
@@ -526,19 +526,19 @@ const styles = StyleSheet.create({
   },
   topScoringBannerBody: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontSize: 15,
     color: 'rgba(212,176,96,0.80)',
     lineHeight: 20,
     textAlign: 'center',
   },
   vintageNote: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: colors.textMuted,
     marginBottom: spacing.sm,
   },
   summary: {
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: '#FFFFFF',
     lineHeight: 24,
@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   },
   locationText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 15,
+    fontSize: 16,
     color: '#FFFFFF',
   },
   locationInput: {
@@ -668,7 +668,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   grape: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textMuted,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     marginBottom: 4,
@@ -733,14 +733,14 @@ const styles = StyleSheet.create({
   },
   outsideText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 13,
+    fontSize: 14,
     color: colors.gold,
     lineHeight: 19,
   },
   scoreNote: {
     marginHorizontal: spacing.md,
     marginTop: spacing.xl,
-    fontSize: 16,
+    fontSize: 17,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: '#FFFFFF',
     textAlign: 'center',
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
   viewProfileLink: {
     color: colors.gold,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontSize: 15,
     textDecorationLine: 'underline',
   },
   saveButtonText: {
@@ -816,7 +816,7 @@ const styles = StyleSheet.create({
   },
   savedConfirm: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontSize: 15,
     color: colors.gold,
     textAlign: 'center',
     marginTop: spacing.md,

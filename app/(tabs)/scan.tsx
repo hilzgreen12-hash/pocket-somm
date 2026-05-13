@@ -271,21 +271,16 @@ export default function ScanTab() {
           </View>
         </TouchableOpacity>
 
+        <TouchableOpacity style={styles.lastResultButton} onPress={handleViewLastSearch}>
+          <Text style={styles.lastResultText}>View Last Result</Text>
+        </TouchableOpacity>
+
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>
             <Text style={styles.buttonHalfText}>Scan Wine List</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
             <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Screenshot / Photo'}</Text>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.archiveRow}>
-          <TouchableOpacity style={styles.archiveButton} onPress={() => router.push('/scan/history')}>
-            <Text style={styles.archiveButtonText}>View Archive</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.archiveButton} onPress={handleViewLastSearch}>
-            <Text style={styles.archiveButtonText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
 
@@ -318,7 +313,7 @@ const styles = StyleSheet.create({
   },
   brandName: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 22,
+    fontSize: 23,
     color: '#FFFFFF',
     letterSpacing: 1,
     marginBottom: spacing.md,
@@ -331,7 +326,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 16,
+    fontSize: 17,
     color: '#FFFFFF',
     marginTop: spacing.xs,
     textAlign: 'center',
@@ -428,21 +423,17 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  archiveRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  archiveButton: {
-    flex: 1,
+  lastResultButton: {
     borderWidth: 1,
     borderColor: '#FFFFFF',
     borderRadius: 14,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
+    paddingHorizontal: spacing.md,
     alignItems: 'center',
+    marginTop: spacing.sm,
+    marginBottom: spacing.xs,
   },
-  archiveButtonText: {
+  lastResultText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: '#FFFFFF',
     fontSize: 14,
@@ -450,7 +441,7 @@ const styles = StyleSheet.create({
   },
   profileNote: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 16,
+    fontSize: 17,
     color: '#FFFFFF',
     marginTop: spacing.xs,
     textAlign: 'center',

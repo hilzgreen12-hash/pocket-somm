@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 16,
+    fontSize: 17,
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 24,

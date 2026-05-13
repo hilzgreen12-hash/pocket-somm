@@ -71,7 +71,7 @@ const styles = StyleSheet.create({
   },
   brandTagline: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 28,
+    fontSize: 29,
     color: 'rgba(255,255,255,0.55)',
     marginTop: 6,
     letterSpacing: 1.5,
@@ -118,7 +118,7 @@ const styles = StyleSheet.create({
   },
   footerCta: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 26,
+    fontSize: 27,
     color: 'rgba(255,255,255,0.55)',
     marginTop: 6,
   },

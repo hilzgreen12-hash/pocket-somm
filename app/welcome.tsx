@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 20,
+    fontSize: 21,
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 30,
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   },
   secondaryNote: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 15,
+    fontSize: 16,
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,

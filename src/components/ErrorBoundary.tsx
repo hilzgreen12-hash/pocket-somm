@@ -44,7 +44,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, backgroundColor: colors.background },
   title: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
   body: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
-  detail: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.xl },
+  detail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.xl },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
 });

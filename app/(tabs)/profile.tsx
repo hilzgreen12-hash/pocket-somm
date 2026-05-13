@@ -54,11 +54,11 @@ export default function ProfileTab() {
       <View style={styles.section}>
         <Text style={styles.subheading}>Wine Profile</Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/profile/wine')}>
-            <Text style={styles.buttonText}>Your Wine Preferences</Text>
+          <TouchableOpacity style={styles.buttonHalfWhite} onPress={() => gated('/profile/wine')}>
+            <Text style={styles.buttonTextWhite}>Your Wine Preferences</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/wines/chosen')}>
-            <Text style={styles.buttonText}>Your Wine Reviews</Text>
+          <TouchableOpacity style={styles.buttonHalfWhite} onPress={() => gated('/wines/chosen')}>
+            <Text style={styles.buttonTextWhite}>Your Wine Reviews</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=wine')}>
@@ -71,18 +71,18 @@ export default function ProfileTab() {
       <View style={styles.section}>
         <Text style={styles.subheading}>Chef Profile</Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/profile/recipe')}>
-            <Text style={styles.buttonText}>Your Recipe Preferences</Text>
+          <TouchableOpacity style={styles.buttonHalfWhite} onPress={() => gated('/profile/recipe')}>
+            <Text style={styles.buttonTextWhite}>Your Recipe Preferences</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => gated('/chef/archive?filter=favourites')}>
-            <Text style={styles.buttonText}>Your Favourite Recipes</Text>
+          <TouchableOpacity style={styles.buttonHalfWhite} onPress={() => gated('/chef/archive?filter=favourites')}>
+            <Text style={styles.buttonTextWhite}>Your Favourite Recipes</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity style={styles.buttonFullWhite} onPress={() => gated('/restaurants/reviews')}>
+          <Text style={styles.buttonTextWhite}>Your Restaurants</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/profile/personality?category=recipe')}>
           <Text style={styles.buttonText}>Your Foodie Personality</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => gated('/restaurants/reviews')}>
-          <Text style={styles.buttonText}>Your Restaurants</Text>
         </TouchableOpacity>
       </View>
 
@@ -104,11 +104,14 @@ const styles = StyleSheet.create({
   title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
+  buttonHalfWhite: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  buttonFullWhite: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  buttonTextWhite: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
   subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
 });

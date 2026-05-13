@@ -149,7 +149,7 @@ const styles = StyleSheet.create({
   skipLinkText: {
     color: '#FFFFFF',
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontSize: 15,
     textDecorationLine: 'underline',
   },
   link: {
@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: colors.error,
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },

@@ -176,7 +176,7 @@ const styles = StyleSheet.create({
   },
   wineProducer: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontSize: 15,
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.sm,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   },
   scoreHint: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 12,
+    fontSize: 13,
     color: colors.textMuted,
     marginBottom: spacing.lg,
   },

@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   tagline: {
-    fontSize: 18,
+    fontSize: 19,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: colors.gold,
     textAlign: 'center',
@@ -72,7 +72,7 @@ const styles = StyleSheet.create({
     marginVertical: spacing.lg,
   },
   body: {
-    fontSize: 17,
+    fontSize: 18,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: '#FFFFFF',
     lineHeight: 26,
