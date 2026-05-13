@@ -24,7 +24,18 @@ export default function CommunityTab() {
     setSignInPromptVisible(true);
   }
 
+  // Dismissing the prompt (tap X / tap outside) carries on with the
+  // pending action — same as scan/cellar/profile. Otherwise the user
+  // taps a gated button, dismisses the prompt and nothing happens.
   function dismissSignInPrompt() {
+    setSignInPromptVisible(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    action?.();
+  }
+
+  // Sign In / Create Account leave the tab — pending action is discarded.
+  function abortSignInPrompt() {
     setSignInPromptVisible(false);
     pendingActionRef.current = null;
   }
@@ -66,8 +77,8 @@ export default function CommunityTab() {
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={dismissSignInPrompt}
-        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
+        onSignIn={() => { abortSignInPrompt(); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { abortSignInPrompt(); router.push('/(auth)/sign-up'); }}
         onContinue={continueWithoutAccount}
       />
     </ScrollView>

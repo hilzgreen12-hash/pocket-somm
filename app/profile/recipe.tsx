@@ -24,7 +24,7 @@ const NUTRITIONAL_OPTIONS = ['Low Calorie', 'High Protein', 'Low Salt', 'High Fi
 export default function RecipeProfileScreen() {
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
   const isOnboarding = onboarding === '1';
-  const { preferences, updatePreferences } = usePreferences();
+  const { preferences, updatePreferences, isSaving } = usePreferences();
   const [concernsDraft, setConcernsDraft] = useState(preferences?.specificConcerns ?? '');
   const [dietaryOpen, setDietaryOpen] = useState(false);
   const [allergyOpen, setAllergyOpen] = useState(false);
@@ -37,8 +37,10 @@ export default function RecipeProfileScreen() {
   function handleSavePreferences() {
     // All chip pickers commit inline; commit any pending concerns draft
     // before flashing the confirmation so the bottom Save button covers
-    // everything the user might have changed.
+    // everything the user might have changed. Skip the flash if a save
+    // is still in flight — usePreferences.onError alerts on real failures.
     commitConcernsIfChanged();
+    if (isSaving) return;
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1800);
   }
@@ -256,7 +258,7 @@ export default function RecipeProfileScreen() {
           </>
         ) : (
           <TouchableOpacity style={styles.saveButton} onPress={handleSavePreferences} activeOpacity={0.7}>
-            <Text style={styles.saveButtonText}>{savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
+            <Text style={styles.saveButtonText}>{isSaving ? 'SAVING…' : savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
