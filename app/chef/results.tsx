@@ -116,12 +116,51 @@ export default function ChefResultsScreen() {
   const { wines: cellarWines } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
-  const { save: saveLabelSession } = useChefLabelHistory();
+  const { sessions: labelSessions, save: saveLabelSession } = useChefLabelHistory();
   const [archiving, setArchiving] = useState(false);
   const [archivedModalOpen, setArchivedModalOpen] = useState(false);
-  // Per-pairing save state — the user can save each recipe individually
-  // to their archive. Indexed by pairing position (0/1/2).
+  // Per-pairing save state for the in-flight transitions (idle → saving
+  // → saved) within this mount. The authoritative "already saved" answer
+  // is derived from the cookbook archive below so the state survives
+  // navigating away and back.
   const [pairingSaveStates, setPairingSaveStates] = useState<Record<number, 'idle' | 'saving' | 'saved'>>({});
+
+  // Set of dish names (normalised) that already live in the cookbook
+  // for the current wine. Used both to render the "Saved" state on a
+  // re-visit and to short-circuit handleSavePairing so a second tap
+  // can never create a duplicate row.
+  const savedDishNames = useMemo(() => {
+    const set = new Set<string>();
+    if (!wineDetailsConfirmed) return set;
+    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    const wantedProducer = norm(wineDetailsConfirmed.producer);
+    const wantedName = norm(wineDetailsConfirmed.wineName);
+    const wantedVintage = norm(wineDetailsConfirmed.vintage);
+    for (const sess of labelSessions) {
+      const sw = sess.wine;
+      if (!sw) continue;
+      if (
+        norm(sw.producer) === wantedProducer &&
+        norm(sw.wineName) === wantedName &&
+        norm(sw.vintage) === wantedVintage
+      ) {
+        for (const p of (sess.pairings ?? [])) {
+          if (p?.dishName) set.add(norm(p.dishName));
+        }
+      }
+    }
+    return set;
+  }, [labelSessions, wineDetailsConfirmed]);
+
+  function getSaveState(index: number): 'idle' | 'saving' | 'saved' {
+    const local = pairingSaveStates[index];
+    if (local === 'saving' || local === 'saved') return local;
+    const pairing = pairings[index];
+    if (pairing?.dishName && savedDishNames.has(pairing.dishName.trim().toLowerCase())) {
+      return 'saved';
+    }
+    return 'idle';
+  }
   const [renderedAt] = useState(() => new Date().toISOString());
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
@@ -155,7 +194,11 @@ export default function ChefResultsScreen() {
   async function handleSavePairing(index: number) {
     const pairing = pairings[index];
     if (!wineDetailsConfirmed || !pairing) return;
-    if (pairingSaveStates[index] && pairingSaveStates[index] !== 'idle') return;
+    // Already-saved short-circuit covers both in-flight saves and any
+    // pairing already in the cookbook for this wine identity. Without
+    // this a user who re-opened the result via View Last Result could
+    // tap Quick Save and create a duplicate row.
+    if (getSaveState(index) !== 'idle') return;
     if (!session) {
       setSignInPromptVisible(true);
       return;
@@ -286,7 +329,7 @@ export default function ChefResultsScreen() {
           <PairingCard
             key={i}
             pairing={p}
-            saveState={pairingSaveStates[i] ?? 'idle'}
+            saveState={getSaveState(i)}
             onSave={() => handleSavePairing(i)}
             isFromHistory={isFromHistory}
           />
