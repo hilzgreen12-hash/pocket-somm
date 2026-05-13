@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
+import { getWineIntelligence } from '../../src/api/label';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -219,11 +220,68 @@ export default function WishListScreen() {
     const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     setMoving(true);
     try {
+      // The wishlist row uses tasting_notes for the user-written note
+      // and user_notes for the "Discovered at" location. The cellar wine
+      // card reverses these: tasting_notes is the AI-generated Deep
+      // Tasting Note, user_notes is the users Additional Notes. Move
+      // the wishlist content into the cellar layout:
+      //   user note  → user_notes (Additional Notes)
+      //   location   → appended to user_notes
+      //   tasting_notes → AI deep note from wine-intelligence
+      const userWishlistNote = (moveWine.tasting_notes ?? '').trim();
+      const discoveredAt = (moveWine.user_notes ?? '').trim();
+      const mergedUserNotes =
+        [userWishlistNote, discoveredAt ? `Discovered at: ${discoveredAt}` : '']
+          .filter(Boolean)
+          .join('\n\n') || null;
+
+      // Best-effort AI intelligence pull so the cellar wine card lands
+      // with a real Vinster's Deep AI Tasting Note plus critic score,
+      // drinking window and estimated value. If the call fails (network,
+      // edge function error) we still complete the move with the rest
+      // of the fields and clear tasting_notes so the user-written note
+      // isn't shown under the AI heading.
+      let intel: Awaited<ReturnType<typeof getWineIntelligence>> | null = null;
+      try {
+        intel = await getWineIntelligence(
+          {
+            producer: moveWine.producer ?? '',
+            region: moveWine.region ?? '',
+            wineName: moveWine.wine_name || null,
+            vintage: moveWine.vintage || 'NV',
+          } as any,
+          userCurrency,
+        );
+      } catch {
+        intel = null;
+      }
+
       await updateWine.mutateAsync({
         id: confirm.id,
         updates: {
           is_wishlist: false,
           quantity: qty,
+          user_notes: mergedUserNotes,
+          ...(intel
+            ? {
+                critic_score: intel.criticScore,
+                critic_score_note: intel.criticScoreNote ?? null,
+                drinking_window_from: intel.drinkingWindowFrom,
+                drinking_window_to: intel.drinkingWindowTo,
+                drinking_window_status: intel.drinkingWindowStatus,
+                tasting_notes: intel.tastingNotes,
+                grape_variety: intel.grapeVariety ?? moveWine.grape_variety ?? null,
+                estimated_value: intel.estimatedValue,
+                estimated_value_currency: userCurrency,
+                estimated_value_at: intel.estimatedValue != null ? new Date().toISOString() : null,
+              }
+            : {
+                // No AI pull — clear tasting_notes so the wishlist users
+                // tasting note doesn't appear on the cellar card under
+                // the AI heading. The user can refresh from the wine
+                // detail screen later.
+                tasting_notes: null,
+              }),
           ...(validPrice != null
             ? { purchase_price: validPrice, purchase_price_currency: userCurrency }
             : {}),
