@@ -124,7 +124,12 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   const wineName = wine.vintage ? `${wine.vintage} ${wine.name}` : wine.name;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
