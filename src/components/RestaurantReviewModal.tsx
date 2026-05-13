@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
+import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
 import { colors, spacing } from '../constants/theme';
 
@@ -46,7 +47,21 @@ export function RestaurantReviewModal({ visible, sessionId, initialName, initial
           rating_overall: overall,
         })
         .eq('id', sessionId);
+      try {
+        await publishRestaurantSessionToCommunity({
+          id: sessionId,
+          restaurant_name: name.trim() || null,
+          restaurant_note: note.trim() || null,
+          rating_food: food,
+          rating_service: service,
+          rating_wine_list: wineList,
+          rating_overall: overall,
+        });
+      } catch (err) {
+        console.warn('[community] publishRestaurantSessionToCommunity failed (non-fatal):', err);
+      }
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
       onSaved();
     } finally {
       setSaving(false);

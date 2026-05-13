@@ -752,18 +752,17 @@ const styles = StyleSheet.create({
   },
   reviewRestaurantBtn: {
     marginTop: spacing.sm,
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
+    paddingVertical: 7,
     paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 8,
     alignItems: 'center',
   },
   reviewRestaurantBtnText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 15,
+    fontSize: 13,
     color: '#FFFFFF',
-    letterSpacing: 0.5,
   },
   list: {
     paddingHorizontal: spacing.md,

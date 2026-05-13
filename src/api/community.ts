@@ -193,3 +193,65 @@ export async function unpublishCommunityReview(id: string): Promise<void> {
   const { error } = await supabase.from('community_reviews').delete().eq('id', id);
   if (error) throw error;
 }
+
+// Auto-publish helper: idempotent insert/update keyed by
+// (user_id, source_table, source_id). Used to keep the user's community
+// uploads in lock-step with their local reviews — every save of a wine
+// or restaurant review syncs the corresponding community row.
+//
+// Failure is non-fatal: callers wrap this in try/catch and log so that
+// a community-feed hiccup never blocks a local save.
+export async function upsertMyCommunityReview(
+  input: CommunityReviewInput & { source_table: string; source_id: string },
+  displayName: string | null,
+): Promise<CommunityReview | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data, error } = await supabase
+    .from('community_reviews')
+    .upsert(
+      {
+        user_id: user.id,
+        display_name: displayName,
+        category: input.category,
+        source_table: input.source_table,
+        source_id: input.source_id,
+        title: input.title,
+        subtitle: input.subtitle ?? null,
+        rating: input.rating ?? null,
+        body: input.body ?? null,
+        metadata: input.metadata ?? {},
+      },
+      { onConflict: 'user_id,source_table,source_id' },
+    )
+    .select()
+    .single();
+  if (error) throw error;
+  return data as CommunityReview;
+}
+
+// Search the caller's own community uploads in a single category. Empty
+// query returns the full list (most recent first).
+export async function searchMyCommunityUploads(
+  category: CommunityCategory,
+  query: string,
+  limit = 50,
+): Promise<CommunityReview[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+  const term = query.trim();
+  let req = supabase
+    .from('community_reviews')
+    .select('*')
+    .eq('user_id', user.id)
+    .eq('category', category)
+    .order('created_at', { ascending: false })
+    .limit(limit);
+  if (term) {
+    const safe = term.replace(/[%,]/g, '');
+    req = req.or(`title.ilike.%${safe}%,subtitle.ilike.%${safe}%,body.ilike.%${safe}%`);
+  }
+  const { data, error } = await req;
+  if (error) throw error;
+  return (data ?? []) as CommunityReview[];
+}
