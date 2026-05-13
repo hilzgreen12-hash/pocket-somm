@@ -201,7 +201,14 @@ export default function WishListScreen() {
 
       // No rack — wine is in the cellar without a placement.
       setConfirm(null);
-      showAlert({ title: 'Added to cellar', body: `${moveWine.wine_name} has been moved to your cellar.` });
+      showAlert({
+        title: 'Added to cellar',
+        body: `${moveWine.wine_name} has been moved to your cellar.`,
+        buttons: [
+          { text: 'OK' },
+          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+        ],
+      });
     } catch (err) {
       showAlert({ title: 'Error', body: 'Could not move wine. Please try again.' });
     } finally {

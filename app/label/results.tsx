@@ -210,7 +210,14 @@ export default function LabelResultsScreen() {
     }
 
     setAddingToCellar(false);
-    showAlert({ title: 'Added to cellar', body: `${wine.wineName ?? wine.producer} has been saved.` });
+    showAlert({
+      title: 'Added to cellar',
+      body: `${wine.wineName ?? wine.producer} has been saved.`,
+      buttons: [
+        { text: 'OK' },
+        { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+      ],
+    });
   }
 
   async function performNewEntry() {
