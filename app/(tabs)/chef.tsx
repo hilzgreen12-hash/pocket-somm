@@ -104,6 +104,23 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
+        <Text style={styles.subheading}>Need a wine for your recipe?</Text>
+        <Text style={styles.sectionDesc}>
+          Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
+        </Text>
+        <TouchableOpacity onPress={handleViewLastPairing}>
+          <Text style={styles.lastResultLink}>View last result</Text>
+        </TouchableOpacity>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>
+            <Text style={styles.buttonText}>Find a Wine Pairing</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
         <Text style={styles.subheading}>Chosen your bottle first?</Text>
         <Text style={styles.sectionDesc}>
           Scan or upload a photo of the label to receive deep AI generated, top chef inspired recipe suggestions.
@@ -122,23 +139,6 @@ export default function ChefTab() {
         <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF', marginTop: spacing.sm }]} onPress={() => router.push('/chef/archive')}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Your Cookbook</Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.section}>
-        <Text style={styles.subheading}>Need a wine for your recipe?</Text>
-        <Text style={styles.sectionDesc}>
-          Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
-        </Text>
-        <TouchableOpacity onPress={handleViewLastPairing}>
-          <Text style={styles.lastResultLink}>View last result</Text>
-        </TouchableOpacity>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>
-            <Text style={styles.buttonText}>Find a Wine Pairing</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
