@@ -222,7 +222,7 @@ export default function LabelResultsScreen() {
       body: `${wine.wineName ?? wine.producer} has been saved.`,
       buttons: [
         { text: 'OK' },
-        { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+        { text: 'View in cellar', onPress: () => router.replace('/cellar/full-list') },
       ],
     });
   }
