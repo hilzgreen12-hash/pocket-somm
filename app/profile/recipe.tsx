@@ -164,7 +164,7 @@ export default function RecipeProfileScreen() {
         <View style={styles.section}>
           <TouchableOpacity onPress={() => toggle(setConcernsOpen)} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Specific Concerns</Text>
+              <Text style={styles.question}>Specific Requirements</Text>
               {!concernsOpen && (
                 <Text style={styles.selectionSummary} numberOfLines={2}>
                   {(preferences?.specificConcerns ?? '').trim() || 'None'}
@@ -181,7 +181,7 @@ export default function RecipeProfileScreen() {
                 value={concernsDraft}
                 onChangeText={setConcernsDraft}
                 onBlur={commitConcernsIfChanged}
-                placeholder="Type any specific concerns…"
+                placeholder="Type any specific requirements…"
                 placeholderTextColor={colors.textMuted}
                 multiline
                 numberOfLines={3}
