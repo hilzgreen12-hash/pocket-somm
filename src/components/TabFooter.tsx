@@ -23,14 +23,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.md,
+    paddingVertical: spacing.xs,
   },
   button: {
-    padding: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    paddingVertical: 4,
   },
   text: {
     fontFamily: 'CormorantGaramond_400Regular',
     color: '#FFFFFF',
-    fontSize: 20,
+    fontSize: 14,
   },
 });
