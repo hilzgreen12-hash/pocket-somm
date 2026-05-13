@@ -57,7 +57,13 @@ export default function LabelConfirmScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      automaticallyAdjustKeyboardInsets
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="interactive"
+    >
       <Text style={styles.heading}>Confirm Wine Details</Text>
       <Text style={styles.subheading}>Check the details we extracted and correct anything that looks wrong.</Text>
 

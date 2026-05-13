@@ -138,7 +138,13 @@ export default function AddWineScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="always"
+      automaticallyAdjustKeyboardInsets
+      keyboardDismissMode="interactive"
+    >
       <TouchableOpacity onPress={() => router.back()}>
         <Text style={styles.back}>Back</Text>
       </TouchableOpacity>
