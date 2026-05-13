@@ -231,30 +231,54 @@ ${dislikedGrapesLine}
 
     const wineListText = JSON.stringify(wines, null, 2);
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 8096,
-      system: [
-        {
-          type: 'text',
-          text: SYSTEM_PROMPT,
-          cache_control: { type: 'ephemeral' },
-        },
-      ],
-      messages: [
-        {
-          role: 'user',
-          content: `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`,
-        },
-      ],
-    });
+    const userPrompt = `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`;
 
-    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
+    // Call Claude with up to two attempts. Anthropic returns
+    // non-deterministic content so a malformed-JSON failure on the
+    // first try is often clean on the second. Distinct retry causes:
+    //  - response.content has no text block (rare; mostly when an
+    //    extended-thinking or tool_use block precedes)
+    //  - the {…} regex matches nothing (response was empty / cut off)
+    //  - JSON.parse throws on truncated output
+    // Previously any of these surfaced as a 500 and the client saw
+    // "Something went wrong" — the cause of the ~1-in-5 scan failures.
+    async function attemptClaudeCall(attempt: number): Promise<any> {
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 8096,
+        system: [
+          {
+            type: 'text',
+            text: SYSTEM_PROMPT,
+            cache_control: { type: 'ephemeral' },
+          },
+        ],
+        messages: [{ role: 'user', content: userPrompt }],
+      });
+      const textBlock = response.content.find((b) => b.type === 'text');
+      const text = textBlock?.type === 'text' ? textBlock.text : '';
+      const match = text.match(/\{[\s\S]*\}/);
+      if (!match) {
+        const snippet = text ? text.slice(0, 200) : `(no text block; content types: ${response.content.map((b) => b.type).join(', ')})`;
+        if (attempt < 2) {
+          console.warn(`[recommend] no JSON in Claude response (attempt ${attempt}), retrying. Snippet: ${snippet}`);
+          return attemptClaudeCall(attempt + 1);
+        }
+        throw new Error(`Claude returned no JSON after ${attempt} attempts. Snippet: ${snippet}`);
+      }
+      try {
+        return JSON.parse(match[0]);
+      } catch (parseErr) {
+        if (attempt < 2) {
+          console.warn(`[recommend] JSON parse failed (attempt ${attempt}), retrying. Detail:`, parseErr);
+          return attemptClaudeCall(attempt + 1);
+        }
+        const detail = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        throw new Error(`Claude returned malformed JSON after ${attempt} attempts: ${detail}`);
+      }
+    }
 
-    // Extract JSON object from response regardless of surrounding text
-    const match = text.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`No JSON found in response: ${text.slice(0, 200)}`);
-    const parsed = JSON.parse(match[0]);
+    const parsed = await attemptClaudeCall(1);
 
     return new Response(JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode }), {
       headers: { 'Content-Type': 'application/json' },
@@ -262,6 +286,15 @@ ${dislikedGrapesLine}
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('Recommend function error:', message);
-    return new Response(JSON.stringify({ error: message }), { status: 500 });
+    // Send a user-friendly message field alongside the raw error so the
+    // client's invokeFunction picks up the friendly text. The detail is
+    // kept in `error` for log diagnostics in production.
+    return new Response(
+      JSON.stringify({
+        error: message,
+        message: "Vinster had trouble reading the wine list this time. Please try again — usually a second attempt works.",
+      }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 });
