@@ -1,7 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, deleteCellarWine, archiveCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
+import { publishCellarWineReviewToCommunity } from '../services/communityPublish';
 import type { CellarWine } from '../types/wine';
+
+// Review fields that should trigger a community-feed publish when they
+// change. Keeping this list tight so generic edits (purchase price,
+// drinking-window tweaks, etc.) don't churn the feed.
+const REVIEW_FIELDS: ReadonlyArray<keyof CellarWine> = ['user_notes', 'review_score', 'review_location', 'review_date'];
+
+function touchesReview(updates: Partial<CellarWine>): boolean {
+  return REVIEW_FIELDS.some((k) => k in updates);
+}
 
 export function useCellar() {
   const { session } = useAuth();
@@ -26,7 +36,16 @@ export function useCellar() {
   });
 
   const updateWine = useMutation({
-    mutationFn: ({ id, updates }: { id: string; updates: Partial<CellarWine> }) => updateCellarWine(id, updates),
+    mutationFn: async ({ id, updates }: { id: string; updates: Partial<CellarWine> }) => {
+      await updateCellarWine(id, updates);
+      if (touchesReview(updates)) {
+        const existing = (qc.getQueryData<CellarWine[]>(['cellar', userId]) ?? []).find((w) => w.id === id);
+        if (existing) {
+          const merged = { ...existing, ...updates } as CellarWine;
+          try { await publishCellarWineReviewToCommunity(merged); } catch (err) { console.warn('[community] publishCellarWineReviewToCommunity failed (non-fatal):', err); }
+        }
+      }
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       // The wine card is shared between active and archived wines and reads
@@ -34,6 +53,7 @@ export function useCellar() {
       // query stays stale after edits made on an archived wine (purchase
       // price, estimated value, notes, etc.) and the UI shows old values.
       qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
+      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
     },
   });
 

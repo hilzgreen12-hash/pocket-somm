@@ -11,9 +11,9 @@ export interface SaveChosenWineInput {
   userScore: number | null;
 }
 
-export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<void> {
+export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<ChosenWine> {
   const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore } = input;
-  const { error } = await supabase.from('chosen_wines').insert({
+  const { data, error } = await supabase.from('chosen_wines').insert({
     user_id: userId,
     scan_session_id: scanSessionId,
     wine_name: wine.name,
@@ -34,8 +34,9 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     tasting_note: tastingNote || null,
     other_observations: otherObservations || null,
     user_score: userScore,
-  });
+  }).select().single();
   if (error) throw new Error(error.message);
+  return data as ChosenWine;
 }
 
 export interface UpdateChosenWineInput {
