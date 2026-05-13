@@ -55,7 +55,7 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   notes: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.textMuted,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     lineHeight: 19,

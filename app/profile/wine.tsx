@@ -261,8 +261,8 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   profileIntro: { marginBottom: spacing.sm, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
   profileHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 32, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xs, textAlign: 'center' },
-  profileBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
-  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
+  profileBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
+  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
   section: { marginBottom: spacing.sm },
   // Accordion styling intentionally mirrors app/(tabs)/scan.tsx so the
   // profile preferences screen looks and behaves the same way as the per-
@@ -273,7 +273,7 @@ const styles = StyleSheet.create({
   question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
   selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
   pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
-  pickerHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 12, color: colors.textMuted, marginBottom: spacing.sm },
+  pickerHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm },
   bubbleWrap: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, alignItems: 'center' },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
@@ -281,5 +281,5 @@ const styles = StyleSheet.create({
   skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
   softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
-  softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
+  softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
 });

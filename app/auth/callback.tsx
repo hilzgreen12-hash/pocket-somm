@@ -76,7 +76,7 @@ export default function AuthCallbackScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.text, textAlign: 'center' },
-  body: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  body: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.lg },
   buttonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
 });

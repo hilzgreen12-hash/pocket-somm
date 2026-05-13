@@ -69,11 +69,11 @@ export default function WelcomeTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.xs },
-  tagline: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
+  tagline: { fontSize: 19, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl },
   sectionTitle: { fontSize: 26, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginBottom: spacing.xs },
-  sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24 },
+  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24 },
   buttonSection: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },

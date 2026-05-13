@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   errorText: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: colors.error,
-    fontSize: 14,
+    fontSize: 15,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },

@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   timing: {
-    fontSize: 15,
+    fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     color: colors.gold,
     textAlign: 'center',

@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
   },
   rowHint: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 11,
+    fontSize: 12,
     color: colors.gold,
     marginLeft: spacing.sm,
     textTransform: 'uppercase',

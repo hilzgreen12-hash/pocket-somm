@@ -66,8 +66,8 @@ export default function CellarTab() {
           <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/full-list'))}>
-          <Text style={styles.buttonText}>Full Cellar List</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/full-list'))}>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Full Cellar List</Text>
         </TouchableOpacity>
 
         <Text style={[styles.sectionDesc, { marginTop: spacing.lg }]}>
@@ -151,7 +151,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.lg },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  sectionDesc: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
@@ -159,11 +159,11 @@ const styles = StyleSheet.create({
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
   buttonDisabled: { borderColor: colors.borderLight, opacity: 0.45 },
   buttonTextDisabled: { color: colors.textMuted, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
-  comingSoonNote: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
+  comingSoonNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
