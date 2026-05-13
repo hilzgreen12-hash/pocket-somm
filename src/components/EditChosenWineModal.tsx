@@ -61,6 +61,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   if (!wine) return null;
 
   const wineName = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
+  const reviewDate = wine.chosen_at
+    ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -73,6 +76,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
             <Text style={styles.heading}>{wineName}</Text>
             <Text style={styles.wineProducer}>{wine.producer}{wine.region ? ` · ${wine.region}` : ''}</Text>
+            {reviewDate ? <Text style={styles.reviewDate}>Reviewed {reviewDate}</Text> : null}
 
             <View style={styles.divider} />
 
@@ -190,6 +194,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.textMuted,
     textAlign: 'center',
+    marginBottom: spacing.xs,
+  },
+  reviewDate: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 12,
+    color: colors.gold,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
     marginBottom: spacing.sm,
   },
   divider: {
