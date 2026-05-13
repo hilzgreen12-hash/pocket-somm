@@ -111,42 +111,57 @@ export default function ChefArchiveScreen() {
     });
   }
 
-  function toggleAssign(collectionId: string) {
+  // Add-only assignment. Folder removal is intentionally not available
+  // from this modal — to remove a recipe from a folder the user
+  // long-presses the card and taps Remove from Folder, which lifts the
+  // recipe out of every folder it's in.
+  function handleAddToFolder(collectionId: string) {
     if (!assigning) return;
     const itemType = assigning.type;
     const itemId = assigning.session.id;
     const isMember = membershipMap.get(assigning.key)?.has(collectionId) ?? false;
-    if (isMember) {
+    if (isMember) return;
+    addItem.mutate(
+      { collectionId, itemType, itemId },
+      {
+        onError: (err) =>
+          showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' }),
+      },
+    );
+  }
+
+  function handleRemoveFromAllFolders(item: UnifiedItem) {
+    const memberIds = Array.from(membershipMap.get(item.key) ?? []);
+    if (memberIds.length === 0) {
+      showAlert({ title: 'Already in All', body: 'This recipe isn\'t in any folder — you\'ll find it in the All tab.' });
+      return;
+    }
+    for (const collectionId of memberIds) {
       removeItem.mutate(
-        { collectionId, itemType, itemId },
+        { collectionId, itemType: item.type, itemId: item.session.id },
         {
-          onError: (err) =>
-            showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
-        },
-      );
-    } else {
-      addItem.mutate(
-        { collectionId, itemType, itemId },
-        {
-          onError: (err) =>
-            showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' }),
+          onError: (err) => showAlert({ title: 'Could not remove from folder', body: err instanceof Error ? err.message : 'Please try again.' }),
         },
       );
     }
   }
 
-  function handleRemoveItem(item: UnifiedItem) {
+  function handleLongPressItem(item: UnifiedItem) {
     showAlert({
-      title: 'Remove from recipe archive?',
-      body: itemTitle(item),
+      title: 'Move Recipe',
+      body: itemRecipeName(item),
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Remove',
+          text: 'Remove from Folder',
+          onPress: () => handleRemoveFromAllFolders(item),
+        },
+        {
+          text: 'Delete from Cookbook',
           style: 'destructive',
           onPress: () => {
             removeLabel.mutate(item.session.id, {
-              onError: (err) => showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
+              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
             });
           },
         },
@@ -170,12 +185,15 @@ export default function ChefArchiveScreen() {
     });
   }
 
-  function itemTitle(item: UnifiedItem): string {
-    return wineHeaderLine(item.session.wine.producer, item.session.wine.wineName, item.session.wine.vintage);
+  // Recipe name comes from the first (and currently only) pairing on
+  // the session. Sessions are saved one-pairing-at-a-time, so this is
+  // effectively the dish name the user saved.
+  function itemRecipeName(item: UnifiedItem): string {
+    return item.session.pairings[0]?.dishName ?? 'Recipe';
   }
 
-  function itemSubtitle(item: UnifiedItem): string {
-    return item.session.pairings.map((p) => p.dishName).join(' · ');
+  function itemWineHeader(item: UnifiedItem): string {
+    return wineHeaderLine(item.session.wine.producer, item.session.wine.wineName, item.session.wine.vintage);
   }
 
   const isLoading = labelLoading;
@@ -293,7 +311,7 @@ export default function ChefArchiveScreen() {
                 key={item.key}
                 style={styles.card}
                 activeOpacity={0.9}
-                onLongPress={() => handleRemoveItem(item)}
+                onLongPress={() => handleLongPressItem(item)}
                 delayLongPress={400}
               >
                 <View style={styles.cardTopRow}>
@@ -307,8 +325,8 @@ export default function ChefArchiveScreen() {
                   </TouchableOpacity>
                 </View>
 
-                <Text style={styles.cardTitle}>{itemTitle(item)}</Text>
-                {itemSubtitle(item) ? <Text style={styles.cardSubtitle}>{itemSubtitle(item)}</Text> : null}
+                <Text style={styles.cardTitle}>{itemRecipeName(item)}</Text>
+                {itemWineHeader(item) ? <Text style={styles.cardSubtitle}>{itemWineHeader(item)}</Text> : null}
 
                 {memberFolderNames.length > 0 ? (
                   <View style={styles.folderBadgeRow}>
@@ -322,7 +340,7 @@ export default function ChefArchiveScreen() {
 
                 <View style={styles.cardActions}>
                   <TouchableOpacity onPress={() => setAssigning(item)}>
-                    <Text style={styles.assignLink}>{memberFolderNames.length > 0 ? 'Edit folders' : '+ Add to folder'}</Text>
+                    <Text style={styles.assignLink}>+ Add to folder</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewItem(item)}>
                     <Text style={styles.viewBtnText}>View</Text>
@@ -411,10 +429,11 @@ export default function ChefArchiveScreen() {
                     <TouchableOpacity
                       key={c.id}
                       style={[styles.assignRow, isMember && styles.assignRowActive]}
-                      onPress={() => toggleAssign(c.id)}
+                      onPress={() => handleAddToFolder(c.id)}
+                      disabled={isMember}
                     >
                       <Text style={[styles.assignRowText, isMember && styles.assignRowTextActive]}>{c.name}</Text>
-                      {isMember && <Text style={styles.assignCheck}>✓</Text>}
+                      {isMember && <Text style={styles.assignCheck}>Already added</Text>}
                     </TouchableOpacity>
                   );
                 })}
@@ -508,5 +527,5 @@ const styles = StyleSheet.create({
   assignRowActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
   assignRowText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.text },
   assignRowTextActive: { color: colors.gold },
-  assignCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold },
+  assignCheck: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, letterSpacing: 0.3 },
 });
