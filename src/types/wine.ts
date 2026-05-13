@@ -144,6 +144,7 @@ export interface CellarWine {
   review_score: number | null;
   review_location: string | null;
   review_date: string | null;
+  is_favourite: boolean;
   created_at: string;
   updated_at: string;
 }

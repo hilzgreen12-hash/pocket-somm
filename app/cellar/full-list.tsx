@@ -26,7 +26,13 @@ const SORT_OPTIONS: { value: SortMode; label: string }[] = [
 
 const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
 
-type FilterField = 'rack' | 'country' | 'colour' | 'sort' | null;
+type FilterField = 'rack' | 'country' | 'colour' | 'sort' | 'favourite' | null;
+
+type FavouriteFilter = 'all' | 'favourites';
+const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
+  { value: 'all', label: 'All wines' },
+  { value: 'favourites', label: 'Favourites only' },
+];
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
@@ -75,6 +81,7 @@ export default function FullCellarListScreen() {
   const [countryFilter, setCountryFilter] = useState<string>('All');     // 'All' | country canonical
   const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
   const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
 
   // Compute available filter options from the actual cellar
@@ -106,6 +113,7 @@ export default function FullCellarListScreen() {
     }
     if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
     if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
+    if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
     return true;
   });
 
@@ -131,6 +139,7 @@ export default function FullCellarListScreen() {
 
   const rackLabel = rackOptions.find((o) => o.value === rackFilter)?.label ?? 'All racks';
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added';
+  const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'rack') {
@@ -158,6 +167,14 @@ export default function FullCellarListScreen() {
         options: SORT_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
         selected: sortMode,
         onSelect: (v) => setSortMode(v as SortMode),
+      };
+    }
+    if (field === 'favourite') {
+      return {
+        title: 'Favourites',
+        options: FAVOURITE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        selected: favouriteFilter,
+        onSelect: (v) => setFavouriteFilter(v as FavouriteFilter),
       };
     }
     return null;
@@ -207,6 +224,10 @@ export default function FullCellarListScreen() {
           <Text style={styles.filterChipLabel}>Sort</Text>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
+          <Text style={styles.filterChipLabel}>Favourites</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rack')}>
           <Text style={styles.filterChipLabel}>Rack</Text>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{rackLabel}</Text>
@@ -253,7 +274,10 @@ export default function FullCellarListScreen() {
                 activeOpacity={0.7}
               >
                 <View style={styles.rowMain}>
-                  <Text style={styles.rowName} numberOfLines={1}>{headerLine}</Text>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {w.is_favourite ? <Text style={styles.rowStar}>★ </Text> : null}
+                    {headerLine}
+                  </Text>
                   {subParts.length > 0 && <Text style={styles.rowDetail} numberOfLines={1}>{subParts.join(' · ')}</Text>}
                 </View>
                 <View style={styles.rowRight}>
@@ -326,6 +350,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1, marginRight: spacing.md },
   rowName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  rowStar: { color: colors.gold, fontSize: 16 },
   rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
   rowRight: { alignItems: 'flex-end', gap: 2 },
   rowScore: { fontSize: 13, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },

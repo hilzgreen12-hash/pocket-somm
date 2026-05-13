@@ -499,11 +499,32 @@ export default function CellarWineDetail() {
     return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
   }
 
+  async function handleToggleFavourite() {
+    if (!wine) return;
+    try {
+      await updateWine.mutateAsync({
+        id: wine.id,
+        updates: { is_favourite: !wine.is_favourite },
+      });
+    } catch {
+      showAlert({ title: 'Could not update', body: 'Please try again.' });
+    }
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="always">
-      <TouchableOpacity style={styles.backRow} onPress={() => router.back()}>
-        <Text style={styles.backText}>← Back</Text>
-      </TouchableOpacity>
+      <View style={styles.topBar}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+          <Text style={styles.backText}>← Back</Text>
+        </TouchableOpacity>
+        {!isArchived && (
+          <TouchableOpacity onPress={handleToggleFavourite} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+            <Text style={[styles.favouriteStar, wine.is_favourite && styles.favouriteStarActive]}>
+              {wine.is_favourite ? '★' : '☆'}
+            </Text>
+          </TouchableOpacity>
+        )}
+      </View>
 
       <View style={styles.header}>
         <Text style={styles.headerLine}>
@@ -919,6 +940,9 @@ const styles = StyleSheet.create({
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
   backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
   backText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
+  favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerLine: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 28 },
   region: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4 },
