@@ -39,13 +39,13 @@ function PairingCard({
 
       {/* Quick-save sits just under the View Recipe toggle so the user can
           save without expanding the full recipe. Saved recipes land in the
-          Recipe Archive as Unfiled (no folder assignment, not starred). */}
+          Cookbook as Unfiled (no folder assignment, not starred). */}
       {!isFromHistory && (
         saveState === 'saved' ? (
           <View style={styles.cardSavedBlock}>
             <Text style={styles.cardSavedLabel}>Saved</Text>
             <TouchableOpacity onPress={() => router.push('/chef/archive')} activeOpacity={0.7}>
-              <Text style={styles.cardViewArchiveLink}>View in Recipe Archive</Text>
+              <Text style={styles.cardViewArchiveLink}>View in Your Cookbook</Text>
             </TouchableOpacity>
           </View>
         ) : (

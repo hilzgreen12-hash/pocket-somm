@@ -138,7 +138,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancel</Text>
+              <Text style={styles.cancelText}>Back</Text>
             </TouchableOpacity>
 
           </ScrollView>

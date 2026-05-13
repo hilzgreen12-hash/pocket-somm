@@ -158,8 +158,8 @@ export default function RecipeProfileScreen() {
             <View style={styles.accordionLeft}>
               <Text style={styles.question}>Specific Concerns</Text>
               {!concernsOpen && (
-                <Text style={styles.selectionSummary}>
-                  {(preferences?.specificConcerns ?? '').trim() ? 'Set' : 'None'}
+                <Text style={styles.selectionSummary} numberOfLines={2}>
+                  {(preferences?.specificConcerns ?? '').trim() || 'None'}
                 </Text>
               )}
             </View>

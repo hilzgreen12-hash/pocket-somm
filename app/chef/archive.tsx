@@ -164,7 +164,7 @@ export default function ChefArchiveScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{filter === FILTER_FAVOURITES ? 'Your Favourite Recipes' : 'Recipe Archive'}</Text>
+        <Text style={styles.title}>{filter === FILTER_FAVOURITES ? 'Your Favourite Recipes' : 'Your Cookbook'}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -194,7 +194,7 @@ export default function ChefArchiveScreen() {
         />
       ) : isLoading ? null : filteredItems.length === 0 ? (
         <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'No Recipe Archive Yet' : 'Nothing here'}</Text>
+          <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'Your Cookbook is Empty' : 'Nothing here'}</Text>
           <Text style={styles.emptyBody}>
             {filter === FILTER_ALL
               ? 'After scanning a wine label, save the chef-inspired recipes to your archive to keep them here.'

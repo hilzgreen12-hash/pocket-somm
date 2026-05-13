@@ -120,7 +120,7 @@ export default function ChefTab() {
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF', marginTop: spacing.sm }]} onPress={() => router.push('/chef/archive')}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Recipe Archive</Text>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Your Cookbook</Text>
         </TouchableOpacity>
       </View>
 
