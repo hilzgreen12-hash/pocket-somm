@@ -152,7 +152,6 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/rack/[rackId]" />
             <Stack.Screen name="cellar/[wineId]" />
             <Stack.Screen name="cellar/archive" />
-            <Stack.Screen name="scan/history" />
             <Stack.Screen name="profile/wine" />
             <Stack.Screen name="profile/recipe" />
             <Stack.Screen name="profile/personality" />

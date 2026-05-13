@@ -18,12 +18,11 @@ interface Props {
   scanSessionId?: string | null;
   initialRestaurantName?: string | null;
   initialCity?: string | null;
-  showReturnToArchive?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
 
-export function ChosenWineModal({ wine, visible, scanSessionId, initialRestaurantName, initialCity, showReturnToArchive, onClose, onSaved }: Props) {
+export function ChosenWineModal({ wine, visible, scanSessionId, initialRestaurantName, initialCity, onClose, onSaved }: Props) {
   const { session } = useAuth();
   const { save } = useChosenWines();
 
@@ -181,14 +180,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
                 <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
                   <Text style={styles.savedLink}>View in Your Profile</Text>
                 </TouchableOpacity>
-                {showReturnToArchive && (
-                  <>
-                    <Text style={styles.savedText}> · </Text>
-                    <TouchableOpacity onPress={() => { onClose(); router.push('/scan/history'); }}>
-                      <Text style={styles.savedLink}>Return to List Archive</Text>
-                    </TouchableOpacity>
-                  </>
-                )}
               </View>
             ) : (
               <TouchableOpacity
