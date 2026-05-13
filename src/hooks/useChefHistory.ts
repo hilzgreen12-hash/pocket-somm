@@ -8,6 +8,7 @@ import {
   insertChefPairingSession,
   listChefLabelSessions,
   listChefPairingSessions,
+  updateChefLabelSessionNotes,
 } from '../api/chef';
 import type { CellarRecommendation, GeneralRecommendation } from '../stores/foodPairingStore';
 import type { Pairing, WineDetailsComplete } from '../types/wine';
@@ -62,7 +63,12 @@ export function useChefLabelHistory() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['chef-label-sessions', userId] }),
   });
 
-  return { sessions, isLoading, save, remove };
+  const updateNotes = useMutation({
+    mutationFn: ({ id, notes }: { id: string; notes: string | null }) => updateChefLabelSessionNotes(id, notes),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['chef-label-sessions', userId] }),
+  });
+
+  return { sessions, isLoading, save, remove, updateNotes };
 }
 
 export function useChefPairingHistory() {

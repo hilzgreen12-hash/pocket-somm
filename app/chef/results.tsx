@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Keyboard } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -109,14 +109,56 @@ function findCellarMatch(wines: CellarWine[], wine: WineDetailsComplete): Cellar
 }
 
 export default function ChefResultsScreen() {
-  const { fromHistory, savedAt, city, from, wineId } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string; from?: string; wineId?: string }>();
+  const { fromHistory, sessionId, savedAt, city, from, wineId } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; savedAt?: string; city?: string; from?: string; wineId?: string }>();
   const isFromHistory = fromHistory === 'true';
   const isFromCellar = from === 'cellar' && !!wineId;
   const { wineDetailsConfirmed, pairings, filters, reset, setPairings, setError } = useLabelStore();
   const { wines: cellarWines } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
-  const { sessions: labelSessions, save: saveLabelSession } = useChefLabelHistory();
+  const { sessions: labelSessions, save: saveLabelSession, updateNotes } = useChefLabelHistory();
+
+  // When the user is viewing a saved cookbook entry, surface the
+  // session-level notes block. Notes are tied to the session row, not
+  // the individual pairing, since each saved chef_label_session carries
+  // a single pairing (see handleSavePairing).
+  const viewingSession = useMemo(
+    () => (isFromHistory && sessionId ? labelSessions.find((s) => s.id === sessionId) ?? null : null),
+    [isFromHistory, sessionId, labelSessions],
+  );
+
+  const [notesEditing, setNotesEditing] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
+  const [notesSaving, setNotesSaving] = useState(false);
+
+  useEffect(() => {
+    setNotesDraft(viewingSession?.user_notes ?? '');
+  }, [viewingSession?.user_notes, viewingSession?.id]);
+
+  async function handleSaveNotes() {
+    if (!viewingSession) return;
+    Keyboard.dismiss();
+    setNotesSaving(true);
+    try {
+      const trimmed = notesDraft.trim();
+      await updateNotes.mutateAsync({ id: viewingSession.id, notes: trimmed.length > 0 ? trimmed : null });
+      setNotesEditing(false);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setNotesSaving(false);
+    }
+  }
+
+  function handleCancelNotes() {
+    setNotesDraft(viewingSession?.user_notes ?? '');
+    setNotesEditing(false);
+  }
+
+  function formatNotesDate(iso: string | null | undefined): string | null {
+    if (!iso) return null;
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
   const [archiving, setArchiving] = useState(false);
   const [archivedModalOpen, setArchivedModalOpen] = useState(false);
   // Per-pairing save state for the in-flight transitions (idle → saving
@@ -334,6 +376,58 @@ export default function ChefResultsScreen() {
             isFromHistory={isFromHistory}
           />
         ))}
+
+        {/* Your Recipe Notes bubble — shown when viewing a saved cookbook
+            entry. Sits below the recipe card in matching surface colour. */}
+        {viewingSession && (
+          <View style={styles.notesCard}>
+            <View style={styles.notesHeader}>
+              <Text style={styles.notesTitle}>Your Recipe Notes</Text>
+              {viewingSession.user_notes_updated_at ? (
+                <Text style={styles.notesDate}>Updated {formatNotesDate(viewingSession.user_notes_updated_at)}</Text>
+              ) : null}
+            </View>
+
+            {notesEditing ? (
+              <>
+                <TextInput
+                  style={styles.notesInput}
+                  value={notesDraft}
+                  onChangeText={setNotesDraft}
+                  placeholder="Tweaks, swaps, who you cooked it for…"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  numberOfLines={5}
+                  textAlignVertical="top"
+                  autoFocus
+                />
+                <View style={styles.notesActions}>
+                  <TouchableOpacity onPress={handleCancelNotes} disabled={notesSaving}>
+                    <Text style={styles.notesCancel}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.notesSaveBtn, notesSaving && styles.notesSaveBtnDisabled]}
+                    onPress={handleSaveNotes}
+                    disabled={notesSaving}
+                  >
+                    <Text style={styles.notesSaveBtnText}>{notesSaving ? 'Saving…' : 'Save Notes'}</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : viewingSession.user_notes ? (
+              <>
+                <Text style={styles.notesBody}>{viewingSession.user_notes}</Text>
+                <TouchableOpacity onPress={() => setNotesEditing(true)}>
+                  <Text style={styles.notesEditLink}>Edit Notes</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity onPress={() => setNotesEditing(true)}>
+                <Text style={styles.notesEditLink}>+ Add Notes</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
       </View>
 
       {!isFromHistory && (
@@ -398,6 +492,18 @@ const styles = StyleSheet.create({
   cardSavedLabel: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, letterSpacing: 0.5 },
   cardViewArchiveLink: { color: colors.gold, fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, textDecorationLine: 'underline' },
   recipeIntro: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
+  notesCard: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginTop: spacing.md, marginBottom: spacing.md },
+  notesHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm },
+  notesTitle: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
+  notesDate: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  notesBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 22, marginBottom: spacing.sm },
+  notesInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.background, minHeight: 100, textAlignVertical: 'top' },
+  notesActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm },
+  notesCancel: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  notesSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
+  notesSaveBtnDisabled: { opacity: 0.6 },
+  notesSaveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  notesEditLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, alignSelf: 'flex-start' },
   recipeMeta: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   recipeSection: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   recipeItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },

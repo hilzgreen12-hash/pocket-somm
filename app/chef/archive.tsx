@@ -128,7 +128,15 @@ export default function ChefArchiveScreen() {
     setWineDetailsConfirmed(s.wine);
     setPairings(s.pairings);
     setFilters(s.filters ?? null);
-    router.push({ pathname: '/chef/results', params: { fromHistory: 'true', savedAt: s.saved_at, city: s.city ?? '' } });
+    router.push({
+      pathname: '/chef/results',
+      params: {
+        fromHistory: 'true',
+        sessionId: s.id,
+        savedAt: s.saved_at,
+        city: s.city ?? '',
+      },
+    });
   }
 
   function itemTitle(item: UnifiedItem): string {
