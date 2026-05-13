@@ -339,11 +339,17 @@ export default function ResultsScreen() {
                 <TouchableOpacity
                   style={[styles.chosenButton, chosenIndexes.has(i) && styles.chosenButtonDone]}
                   onPress={() => {
-                    if (!chosenIndexes.has(i)) setChosenModalWine(wine);
+                    if (chosenIndexes.has(i)) {
+                      // Wine has already been added — route to the reviews
+                      // list so the user can find it and tap to edit.
+                      router.push('/wines/chosen');
+                    } else {
+                      setChosenModalWine(wine);
+                    }
                   }}
                 >
                   <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
-                    {chosenIndexes.has(i) ? '✓ Added to Your Wine Reviews' : 'Review This Wine'}
+                    {chosenIndexes.has(i) ? 'View and Edit Your Wine Review' : 'Review This Wine'}
                   </Text>
                 </TouchableOpacity>
               )}
