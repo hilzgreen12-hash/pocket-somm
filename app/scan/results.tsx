@@ -10,6 +10,7 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
+import { useWishList } from '../../src/hooks/useCellar';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
@@ -38,6 +39,8 @@ export default function ResultsScreen() {
   const hasSaved = useRef(false);
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
+  const [wishlistIndexes, setWishlistIndexes] = useState<Set<number>>(new Set());
+  const { addWine: addToWishList } = useWishList();
   const [restaurantReviewVisible, setRestaurantReviewVisible] = useState(false);
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
@@ -138,6 +141,34 @@ export default function ResultsScreen() {
 
   const isSaved = !!autoSave.data;
   const isSaving = autoSave.isPending;
+
+  async function handleAddToWishlist(wine: WineRecommendation, i: number) {
+    if (!session || wishlistIndexes.has(i)) return;
+    try {
+      await addToWishList.mutateAsync({
+        user_id: session.user.id,
+        wine_name: wine.name,
+        producer: wine.producer,
+        region: wine.region ?? null,
+        vintage: wine.vintage ? String(wine.vintage) : null,
+        quantity: 1,
+        storage_location: null,
+        date_received: new Date().toISOString().split('T')[0],
+        critic_score: wine.criticScore ?? null,
+        drinking_window_from: wine.drinkingWindow?.from ?? null,
+        drinking_window_to: wine.drinkingWindow?.to ?? null,
+        drinking_window_status: 'unknown',
+        tasting_notes: null,
+        grape_variety: wine.grape ?? null,
+        label_image_path: null,
+        user_notes: null,
+        is_wishlist: true,
+      });
+      setWishlistIndexes((prev) => new Set([...prev, i]));
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
@@ -383,6 +414,19 @@ export default function ResultsScreen() {
                   {!noVintages && <VintageWindowBadge assessment={wine.vintageAssessment} window={wine.drinkingWindow} />}
                   <RarityBadge rarity={wine.rarityAssessment} />
                   <RationaleBlock text={wine.rationale} />
+
+                  {session && (
+                    <TouchableOpacity
+                      style={[styles.wishlistAddButton, wishlistIndexes.has(i) && styles.wishlistAddButtonDone]}
+                      onPress={() => handleAddToWishlist(wine, i)}
+                      disabled={wishlistIndexes.has(i) || addToWishList.isPending}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.wishlistAddButtonText, wishlistIndexes.has(i) && styles.wishlistAddButtonTextDone]}>
+                        {wishlistIndexes.has(i) ? '✓ Added to Wish List' : 'Add to Wish List'}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               )}
             </View>
@@ -720,6 +764,26 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: colors.gold,
     lineHeight: 20,
+  },
+  wishlistAddButton: {
+    marginTop: spacing.md,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  wishlistAddButtonDone: {
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(212,176,96,0.10)',
+  },
+  wishlistAddButtonText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 13,
+    color: '#FFFFFF',
+  },
+  wishlistAddButtonTextDone: {
+    color: colors.gold,
   },
   outsideNotice: {
     backgroundColor: 'rgba(180,140,60,0.12)',
