@@ -204,6 +204,9 @@ Deno.serve(async (req) => {
     const topScoringOverride = topScoringMode ? `
 TOP SCORING MODE — ACTIVE:
 The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, topPickReasons, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
+
+SUMMARY FIELD — TOP SCORING MODE:
+The top-level "summary" must open by framing the task as a critic-score sweep. Start with a phrase along the lines of "My task to sort through this list for the highest-scoring wines led me to…" — you may vary the exact wording (e.g. "Sorting this list for the highest critic scores led me to…", "Combing the list for the top-scoring bottles brought me to…") but it must always open by acknowledging that the task was to find the highest scorers. Then briefly explain what stood out about the three picks (1–2 sentences total).
 ` : '';
 
     const mergedStyleProfiles = [...new Set([...(styleProfiles ?? []), ...(profileStyleProfiles ?? [])])];
