@@ -162,7 +162,7 @@ export default function ReviewRequirementsScreen() {
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
 
-      <Text style={styles.label}>Specific Concerns</Text>
+      <Text style={styles.label}>Specific Requirements</Text>
       <TextInput
         style={styles.input}
         value={specificConcerns}
