@@ -44,7 +44,7 @@ export default function OnboardingScreen() {
           favouriteGrapes,
           dislikedRegions,
           dislikedGrapes,
-          defaultBudget: budget ?? undefined,
+          defaultBudget: budget,
         });
         router.replace('/(tabs)/scan');
       } catch (err) {

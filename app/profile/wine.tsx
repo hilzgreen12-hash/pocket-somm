@@ -131,7 +131,7 @@ export default function WineProfileScreen() {
           <View style={styles.bubbleWrap}>
             <Text style={styles.question}>Default Budget</Text>
             <BudgetSlider
-              value={preferences?.defaultBudget ?? 100}
+              value={preferences?.defaultBudget ?? null}
               onChange={(budget) => updatePreferences({ defaultBudget: budget })}
               currency={preferences?.defaultCurrency}
             />
