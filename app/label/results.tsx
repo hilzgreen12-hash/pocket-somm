@@ -235,12 +235,11 @@ export default function LabelResultsScreen() {
 
   async function performMerge() {
     if (!matchingExisting) return;
-    const qty = parseInt(quantity) || 1;
     setSaving(true);
     try {
       await updateWine.mutateAsync({
         id: matchingExisting.id,
-        updates: { quantity: matchingExisting.quantity + qty },
+        updates: { quantity: matchingExisting.quantity + 1 },
       });
       await performSaveFlow(matchingExisting.id);
     } catch (err) {
@@ -253,14 +252,14 @@ export default function LabelResultsScreen() {
   async function handleAddToCellar() {
     if (!session?.user.id) return;
     if (matchingExisting) {
-      const qty = parseInt(quantity) || 1;
       const existingQty = matchingExisting.quantity;
+      const wineLabel = `${matchingExisting.wine_name}${matchingExisting.vintage ? ` ${matchingExisting.vintage}` : ''}`;
       showAlert({
         title: 'Already in your cellar',
-        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${matchingExisting.wine_name}${matchingExisting.vintage ? ` ${matchingExisting.vintage}` : ''}. Add ${qty} more to that entry, or save as a separate one?`,
+        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel}. Add this bottle to that listing?`,
         buttons: [
-          { text: `Add ${qty} to existing`, onPress: performMerge },
-          { text: 'Save as separate', onPress: performNewEntry },
+          { text: 'Yes', onPress: performMerge },
+          { text: 'No, create a new line', onPress: performNewEntry },
           { text: 'Cancel', style: 'cancel' },
         ],
       });
