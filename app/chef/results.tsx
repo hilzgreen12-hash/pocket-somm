@@ -336,7 +336,17 @@ export default function ChefResultsScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
-        onPress={() => router.replace(isFromCellar ? `/cellar/${wineId}` as any : '/(tabs)/chef')}
+        onPress={() => {
+          // Back routing depends on where the user came from:
+          //  - Cellar wine card → land back on that wine.
+          //  - Cookbook entry (fromHistory) → land back on the cookbook
+          //    so the user keeps their place in the list rather than
+          //    being kicked all the way to the Chef tab.
+          //  - Fresh result from a label scan → Chef tab.
+          if (isFromCellar) router.replace(`/cellar/${wineId}` as any);
+          else if (isFromHistory) router.replace('/chef/archive');
+          else router.replace('/(tabs)/chef');
+        }}
         style={styles.backRow}
       >
         <Text style={styles.backLink}>Back</Text>
