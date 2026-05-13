@@ -1,18 +1,41 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { router } from 'expo-router';
 import { colors, spacing, typography } from '../../constants/theme';
 
 interface Props {
   onRequest: () => void;
+  // Override the default back behaviour (router.back) if a screen needs
+  // to route elsewhere — e.g. back to the wine-storage form rather than
+  // the OS-level previous view.
+  onBack?: () => void;
 }
 
-export function PermissionScreen({ onRequest }: Props) {
+export function PermissionScreen({ onRequest, onBack }: Props) {
+  function handleBack() {
+    if (onBack) {
+      onBack();
+      return;
+    }
+    if (router.canGoBack()) router.back();
+  }
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Camera Access</Text>
-      <Text style={styles.body}>Vinster needs your camera to scan wine lists.</Text>
-      <TouchableOpacity style={styles.button} onPress={onRequest}>
-        <Text style={styles.buttonText}>Grant Permission</Text>
+      <TouchableOpacity
+        style={styles.backRow}
+        onPress={handleBack}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+      >
+        <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
+
+      <View style={styles.body}>
+        <Text style={styles.title}>Camera Access</Text>
+        <Text style={styles.bodyText}>Vinster needs your camera to scan wine lists.</Text>
+        <TouchableOpacity style={styles.button} onPress={onRequest} activeOpacity={0.8}>
+          <Text style={styles.buttonText}>Grant Permission</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }
@@ -20,10 +43,24 @@ export function PermissionScreen({ onRequest }: Props) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: colors.background,
+  },
+  backRow: {
+    paddingTop: 56,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+    alignSelf: 'flex-start',
+  },
+  backLink: {
+    fontSize: 16,
+    fontFamily: 'CormorantGaramond_400Regular',
+    color: colors.textMuted,
+  },
+  body: {
+    flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: spacing.xl,
-    backgroundColor: colors.background,
+    paddingHorizontal: spacing.xl,
   },
   title: {
     fontSize: 22,
@@ -31,7 +68,7 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.sm,
   },
-  body: {
+  bodyText: {
     ...typography.body,
     fontFamily: 'CormorantGaramond_400Regular',
     color: colors.textMuted,
@@ -39,14 +76,17 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   button: {
-    backgroundColor: colors.gold,
-    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 12,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.md,
+    backgroundColor: 'transparent',
   },
   buttonText: {
-    color: '#fff',
+    color: colors.gold,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
+    letterSpacing: 0.3,
   },
 });
