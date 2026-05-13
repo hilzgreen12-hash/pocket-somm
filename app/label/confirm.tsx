@@ -140,6 +140,7 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
     marginBottom: spacing.xs,
+    textAlign: 'center',
   },
   subheading: {
     fontSize: 14,
@@ -147,6 +148,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginBottom: spacing.xl,
     lineHeight: 20,
+    textAlign: 'center',
   },
   label: {
     fontSize: 13,

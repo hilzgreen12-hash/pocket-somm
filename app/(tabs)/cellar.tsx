@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal, ActivityIndicator } from 'react-native';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -17,6 +17,7 @@ export default function CellarTab() {
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [addWineOpen, setAddWineOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
   function requireAuth(action: () => void) {
@@ -44,6 +45,11 @@ export default function CellarTab() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    // Show the scanning overlay so the user has a visual cue while the
+    // image is encoded and the OCR edge function runs — without it the
+    // app appears frozen for ~5–15s between the picker dismiss and the
+    // confirm screen.
+    setScanningLabel(true);
     try {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
@@ -51,6 +57,8 @@ export default function CellarTab() {
       setWineDetails(details);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
+    } finally {
+      setScanningLabel(false);
     }
     router.push('/label/confirm');
   }
@@ -133,6 +141,18 @@ export default function CellarTab() {
         </TouchableOpacity>
       </Modal>
 
+      <Modal visible={scanningLabel} transparent animationType="fade">
+        <View style={styles.scanningOverlay}>
+          <View style={styles.scanningSheet}>
+            <ActivityIndicator color={colors.gold} size="large" />
+            <Text style={styles.scanningTitle}>Reading your wine label…</Text>
+            <Text style={styles.scanningBody}>
+              Vinster is identifying the producer, region and vintage from your photo.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={dismissSignInPrompt}
@@ -148,6 +168,10 @@ export default function CellarTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  scanningOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  scanningSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.md, width: '100%' },
+  scanningTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
+  scanningBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
   title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.lg },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
