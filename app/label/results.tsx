@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -10,7 +10,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots } from '../../src/api/racks';
-import { formatCurrency } from '../../src/constants/currency';
+import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 
 function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
@@ -49,6 +49,7 @@ export default function LabelResultsScreen() {
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
+  const [purchasePrice, setPurchasePrice] = useState('');
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
 
@@ -89,6 +90,8 @@ export default function LabelResultsScreen() {
   }
 
   function buildWinePayload(userId: string) {
+    const parsedPrice = parseFloat(purchasePrice);
+    const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     return {
       user_id: userId,
       wine_name: wine.wineName ?? wine.producer,
@@ -113,6 +116,7 @@ export default function LabelResultsScreen() {
       estimated_value: intel.estimatedValue,
       estimated_value_currency: userCurrency,
       estimated_value_at: intel.estimatedValue != null ? new Date().toISOString() : null,
+      purchase_price: validPrice,
       purchase_price_currency: userCurrency,
     };
   }
@@ -434,6 +438,19 @@ export default function LabelResultsScreen() {
               </>
             )}
 
+            <Text style={styles.modalLabel}>Purchase price (optional)</Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
+              <TextInput
+                style={styles.priceInput}
+                value={purchasePrice}
+                onChangeText={setPurchasePrice}
+                placeholder="0.00"
+                placeholderTextColor={colors.textSubtle}
+                keyboardType="decimal-pad"
+              />
+            </View>
+
             <TouchableOpacity
               style={[styles.button, saving && styles.buttonDisabled]}
               onPress={handleAddToCellar}
@@ -509,6 +526,9 @@ const styles = StyleSheet.create({
   cancelButton: { alignItems: 'center', marginTop: spacing.md },
   cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
   modalHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm, lineHeight: 18 },
+  priceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, marginBottom: spacing.md },
+  priceCurrency: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginRight: spacing.xs },
+  priceInput: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, paddingVertical: spacing.sm },
   rackList: { gap: spacing.xs, marginBottom: spacing.md },
   rackOption: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },

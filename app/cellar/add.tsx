@@ -4,19 +4,24 @@ import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { colors, spacing } from '../../src/constants/theme';
+import { currencySymbol } from '../../src/constants/currency';
 
 export default function AddWineScreen() {
   const { wines, addWine, updateWine } = useCellar();
   const { session } = useAuth();
+  const { preferences } = usePreferences();
   const { setPendingWineId } = useRackStore();
+  const userCurrency = preferences?.defaultCurrency ?? 'GBP';
 
   const [wineName, setWineName] = useState('');
   const [producer, setProducer] = useState('');
   const [region, setRegion] = useState('');
   const [vintage, setVintage] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [purchasePrice, setPurchasePrice] = useState('');
   const [saving, setSaving] = useState(false);
 
   function findMatchingExisting() {
@@ -34,6 +39,8 @@ export default function AddWineScreen() {
 
   async function performNewEntry() {
     if (!session?.user.id) return;
+    const parsedPrice = parseFloat(purchasePrice);
+    const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     setSaving(true);
     try {
       const saved = await addWine.mutateAsync({
@@ -53,6 +60,8 @@ export default function AddWineScreen() {
         grape_variety: null,
         label_image_path: null,
         user_notes: null,
+        purchase_price: validPrice,
+        purchase_price_currency: validPrice != null ? userCurrency : null,
       });
       showAlert({
         title: 'Added to cellar',
@@ -194,6 +203,19 @@ export default function AddWineScreen() {
         keyboardType="number-pad"
       />
 
+      <Text style={styles.label}>Purchase price (optional)</Text>
+      <View style={styles.priceRow}>
+        <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
+        <TextInput
+          style={styles.priceInput}
+          value={purchasePrice}
+          onChangeText={setPurchasePrice}
+          placeholder="0.00"
+          placeholderTextColor={colors.textSubtle}
+          keyboardType="decimal-pad"
+        />
+      </View>
+
       <TouchableOpacity
         style={[styles.saveButton, saving && { opacity: 0.6 }]}
         onPress={handleSave}
@@ -221,6 +243,9 @@ const styles = StyleSheet.create({
   dividerText: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  priceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  priceCurrency: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginRight: spacing.xs },
+  priceInput: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, paddingVertical: spacing.md },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
 });
