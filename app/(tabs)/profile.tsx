@@ -26,7 +26,20 @@ export default function ProfileTab() {
     setSignInPromptVisible(true);
   }
 
+  // Dismissing the prompt (tap X / tap outside) is treated as "ignore the
+  // message and carry on" — same as scan/cellar. Otherwise the user taps a
+  // gated button, dismisses the prompt and nothing happens, forcing them
+  // to tap the same button a second time.
   function dismissSignInPrompt() {
+    setSignInPromptVisible(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    action?.();
+  }
+
+  // Sign In / Create Account interrupt the flow — pending action should
+  // be discarded since the user is leaving the tab.
+  function abortSignInPrompt() {
     setSignInPromptVisible(false);
     pendingActionRef.current = null;
   }
@@ -89,8 +102,8 @@ export default function ProfileTab() {
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={dismissSignInPrompt}
-        onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
-        onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
+        onSignIn={() => { abortSignInPrompt(); router.push('/(auth)/sign-in'); }}
+        onCreateAccount={() => { abortSignInPrompt(); router.push('/(auth)/sign-up'); }}
         onContinue={continueWithoutAccount}
       />
     </ScrollView>

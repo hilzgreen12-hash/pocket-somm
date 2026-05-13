@@ -22,7 +22,7 @@ const WINE_TYPE_LABELS: Record<string, string> = {
 export default function WineProfileScreen() {
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
   const isOnboarding = onboarding === '1';
-  const { preferences, updatePreferences } = usePreferences();
+  const { preferences, updatePreferences, isSaving } = usePreferences();
   const [colourOpen, setColourOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   const [regionalOpen, setRegionalOpen] = useState(false);
@@ -32,10 +32,11 @@ export default function WineProfileScreen() {
   const [savedFlash, setSavedFlash] = useState(false);
 
   function handleSavePreferences() {
-    // Every control on this screen already commits inline as the user
-    // edits — and a real failure surfaces via usePreferences.onError.
-    // The Save Preferences button gives users an explicit "I'm done"
-    // moment with a clear confirmation flash.
+    // Every control on this screen commits inline as the user edits, so
+    // the Save button is a confirmation moment rather than a real save.
+    // Don't flash "SAVED ✓" while a mutation is still in flight —
+    // usePreferences.onError surfaces a failure alert if one lands.
+    if (isSaving) return;
     setSavedFlash(true);
     setTimeout(() => setSavedFlash(false), 1800);
   }
@@ -246,7 +247,7 @@ export default function WineProfileScreen() {
           </>
         ) : (
           <TouchableOpacity style={styles.saveButton} onPress={handleSavePreferences} activeOpacity={0.7}>
-            <Text style={styles.saveButtonText}>{savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
+            <Text style={styles.saveButtonText}>{isSaving ? 'SAVING…' : savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
