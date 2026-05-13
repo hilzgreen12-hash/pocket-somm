@@ -163,6 +163,34 @@ export async function updateCellarWine(id: string, updates: Partial<CellarWine>)
   if (error) throw error;
 }
 
+// Look up an active wishlist row for this user that matches the wine
+// identity (producer + name + vintage, case-insensitive trimmed). Returns
+// null if no match — used by the wine-review sync flow so that saving or
+// editing a chosen_wine review pushes the same notes/score/location into
+// the wishlist entry if the user has one.
+export async function findMatchingWishlistWine(
+  userId: string,
+  identity: { producer: string | null; wineName: string; vintage: string | number | null }
+): Promise<CellarWine | null> {
+  const { data, error } = await supabase
+    .from('cellar_wines')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('is_wishlist', true)
+    .is('archived_at', null);
+  if (error) throw error;
+  const list = (data ?? []) as CellarWine[];
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  const wantedProducer = norm(identity.producer);
+  const wantedName = norm(identity.wineName);
+  const wantedVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
+  return list.find((w) =>
+    norm(w.producer) === wantedProducer &&
+    norm(w.wine_name) === wantedName &&
+    (w.vintage ?? '').trim() === wantedVintage
+  ) ?? null;
+}
+
 export async function deleteCellarWine(id: string): Promise<void> {
   const { error } = await supabase.from('cellar_wines').delete().eq('id', id);
   if (error) throw error;
