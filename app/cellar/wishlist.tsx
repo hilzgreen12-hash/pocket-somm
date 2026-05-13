@@ -249,14 +249,17 @@ export default function WishListScreen() {
         return;
       }
 
-      // No rack — wine is in the cellar without a placement.
+      // No rack — wine is in the cellar without a placement. Confirm
+      // the move and return the user to their Wish List (where they
+      // already were). The View in cellar option uses push so the back
+      // stack still holds the wish list for a one-tap return.
       setConfirm(null);
       showAlert({
-        title: 'Added to cellar',
-        body: `${moveWine.wine_name} has been moved to your cellar.`,
+        title: 'Moved to your cellar',
+        body: `${moveWine.wine_name} is now in your cellar.`,
         buttons: [
-          { text: 'OK' },
-          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+          { text: 'Back to Wish List' },
+          { text: 'View in cellar', onPress: () => router.push('/cellar/list') },
         ],
       });
     } catch (err) {
@@ -282,11 +285,11 @@ export default function WishListScreen() {
       await deleteWine.mutateAsync(confirm.id);
       setConfirm(null);
       showAlert({
-        title: 'Added to cellar',
+        title: 'Moved to your cellar',
         body: `Updated existing listing — you now have ${newQty} bottle${newQty === 1 ? '' : 's'}.`,
         buttons: [
-          { text: 'OK' },
-          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+          { text: 'Back to Wish List' },
+          { text: 'View in cellar', onPress: () => router.push('/cellar/list') },
         ],
       });
     } catch {
