@@ -13,7 +13,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, getWineIntelligence } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
-import { addCellarWineRemoval, listCellarWineRemovals, updateCellarWineRemoval } from '../../src/api/cellar';
+import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -42,63 +42,18 @@ const STATUS_LABELS: Record<string, string> = {
   unknown: 'Unknown',
 };
 
-function RemovalRow({ removal, onSaved }: { removal: { id: string; removed_at: string; count: number; note: string | null }; onSaved: () => void }) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(removal.note ?? '');
-  const [saving, setSaving] = useState(false);
-
-  async function handleSave() {
-    Keyboard.dismiss();
-    setSaving(true);
-    try {
-      await updateCellarWineRemoval(removal.id, { note: draft.trim() || null });
-      setEditing(false);
-      onSaved();
-    } catch {
-      showAlert({ title: 'Could not save', body: 'Please try again.' });
-    } finally {
-      setSaving(false);
-    }
-  }
-
+// Read-only summary row on the wine card. Bottle count and date only —
+// the note-editing affordance lives in the archive folder so this card
+// stays focused on the live cellar view.
+function RemovalRow({ removal }: { removal: { id: string; removed_at: string; count: number; note: string | null } }) {
   const dateLabel = new Date(removal.removed_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-
   return (
     <View style={styles.removalRow}>
       <View style={styles.removalHeader}>
         <Text style={styles.removalCount}>{removal.count} {removal.count === 1 ? 'bottle' : 'bottles'}</Text>
         <Text style={styles.removalDate}>{dateLabel}</Text>
       </View>
-      {editing ? (
-        <>
-          <TextInput
-            style={[styles.input, styles.removalInput]}
-            value={draft}
-            onChangeText={setDraft}
-            placeholder="Add a note for this removal — occasion, who you were with…"
-            placeholderTextColor={colors.textMuted}
-            multiline
-            numberOfLines={3}
-            textAlignVertical="top"
-            autoFocus
-          />
-          <View style={styles.noteActions}>
-            <TouchableOpacity onPress={() => { setEditing(false); setDraft(removal.note ?? ''); }}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.saveBtn, saving && styles.buttonDisabled]} onPress={handleSave} disabled={saving}>
-              <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save Note'}</Text>
-            </TouchableOpacity>
-          </View>
-        </>
-      ) : (
-        <>
-          {removal.note ? <Text style={styles.removalNoteText}>{removal.note}</Text> : null}
-          <TouchableOpacity onPress={() => setEditing(true)}>
-            <Text style={styles.editLink}>{removal.note ? 'Edit Note' : 'Add Note'}</Text>
-          </TouchableOpacity>
-        </>
-      )}
+      {removal.note ? <Text style={styles.removalNoteText}>{removal.note}</Text> : null}
     </View>
   );
 }
@@ -297,10 +252,24 @@ export default function CellarWineDetail() {
           buttons: [{ text: 'OK', onPress: () => router.back() }],
         });
       } else {
+        // Partial removal — decrement the live cellar row and clone an
+        // archive row carrying the bottles removed in this event. Without
+        // the clone, the "Bottles in My Archive" stat (which sums archived
+        // matching rows) wouldn't reflect the bottles the user just pulled.
         await updateWine.mutateAsync({
           id: wine!.id,
           updates: { quantity: newQuantity },
         });
+        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine!;
+        await addCellarWine({
+          ...rest,
+          quantity: count,
+          archived_at: `${removeDate}T12:00:00.000Z`,
+          is_wishlist: false,
+        });
+        if (session?.user.id) {
+          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+        }
         const slotsRemoved = await removeSlotsForWine(wine!.id, count);
         if (slotsRemoved > 0) {
           qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -894,8 +863,11 @@ export default function CellarWineDetail() {
             )}
           </View>
           {removals.map((ev) => (
-            <RemovalRow key={ev.id} removal={ev} onSaved={() => qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] })} />
+            <RemovalRow key={ev.id} removal={ev} />
           ))}
+          {!isArchived && (
+            <Text style={styles.removalArchiveHint}>Edit your removal history in your archive folder.</Text>
+          )}
         </View>
       )}
 
@@ -1086,7 +1058,7 @@ const styles = StyleSheet.create({
   removalCount: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
   removalDate: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   removalNoteText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 20, marginBottom: 4 },
-  removalInput: { minHeight: 70, textAlignVertical: 'top' },
+  removalArchiveHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   removeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   removeModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   removeModalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm, lineHeight: 28 },

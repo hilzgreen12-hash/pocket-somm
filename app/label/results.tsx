@@ -287,6 +287,8 @@ export default function LabelResultsScreen() {
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
 
+      <Text style={styles.pageTitle}>Wine Intel</Text>
+
       <View style={styles.header}>
         <Text style={styles.producer}>{wine.producer}</Text>
         {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
@@ -490,6 +492,7 @@ const styles = StyleSheet.create({
   linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm, alignSelf: 'flex-start' },
   backLink: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  pageTitle: { fontSize: 26, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   producer: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   wineName: { fontSize: 19, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, marginTop: 2 },
