@@ -68,13 +68,28 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
     ? `\nSoft Preferences (NUDGES, NOT HARD RULES — pairing quality comes first):\n${softParts.map((s) => `- ${s}`).join('\n')}\n`
     : '';
 
+  // Diversity nudge: unless the user has explicitly opted in to only
+  // European cuisines, one of the three recipes should pick up
+  // East / South Asian flavours so the set doesn't skew exclusively
+  // Mediterranean / French. Stops short of a fully traditional Asian
+  // dish (which assumes specialist ingredients and techniques home
+  // cooks may not have) — we want Asian-inspired Western/fusion.
+  const EUROPEAN_CUISINES = new Set(['Italian', 'French', 'Spanish', 'Greek', 'Mediterranean']);
+  const userPickedOnlyEuropean =
+    !!regionalPreferences &&
+    regionalPreferences.length > 0 &&
+    regionalPreferences.every((c) => EUROPEAN_CUISINES.has(c));
+  const asianBlock = userPickedOnlyEuropean
+    ? ''
+    : '\nDiversity (HARD RULE): exactly ONE of the three recipes must be Asian-influenced. Borrow flavours, sauces or techniques from East or South Asian cooking (e.g. miso, soy, ginger, fish sauce, gochujang, ponzu, tamarind, lemongrass, sesame, yuzu, garam masala, cumin/coriander) but keep the format approachable for a home cook who is not an Asian-cuisine specialist. Think Asian-inspired Western or fusion plate — not a fully traditional dish. Avoid recipes requiring from-scratch curry pastes, homemade ramen broth, hand-rolled dumplings, sushi rice or wok-fire-only techniques. The other two recipes can take any other direction the wine suggests.\n';
+
   return `You are a world-class sommelier and food pairing expert. Analyse this wine and suggest three outstanding dish pairings with full chef-inspired recipes.
 
 Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}${softBlock}${difficultyBlock}${diversityBlock}${timeBlock}
+${constraintBlock}${softBlock}${asianBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:
