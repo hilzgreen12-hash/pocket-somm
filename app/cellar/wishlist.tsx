@@ -317,7 +317,7 @@ export default function WishListScreen() {
         body: `${moveWine.wine_name} is now in your cellar.`,
         buttons: [
           { text: 'Back to Wish List' },
-          { text: 'View in cellar', onPress: () => router.push('/cellar/full-list') },
+          { text: 'View in cellar', onPress: () => router.push('/cellar/list') },
         ],
       });
     } catch (err) {
@@ -378,7 +378,7 @@ export default function WishListScreen() {
         body: `Updated existing listing — you now have ${newQty} bottle${newQty === 1 ? '' : 's'}.`,
         buttons: [
           { text: 'Back to Wish List' },
-          { text: 'View in cellar', onPress: () => router.push('/cellar/full-list') },
+          { text: 'View in cellar', onPress: () => router.push('/cellar/list') },
         ],
       });
     } catch {

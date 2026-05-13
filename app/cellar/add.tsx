@@ -74,7 +74,7 @@ export default function AddWineScreen() {
               router.replace('/cellar/racks');
             },
           },
-          { text: 'View in cellar', onPress: () => router.replace('/cellar/full-list') },
+          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
           { text: 'Not now', style: 'cancel', onPress: () => router.back() },
         ],
       });
@@ -98,7 +98,7 @@ export default function AddWineScreen() {
         body: `Updated existing listing — you now have ${currentQty + addQty} bottle${currentQty + addQty === 1 ? '' : 's'}.`,
         buttons: [
           { text: 'OK', onPress: () => router.back() },
-          { text: 'View in cellar', onPress: () => router.replace('/cellar/full-list') },
+          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
         ],
       });
     } catch {

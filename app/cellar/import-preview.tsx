@@ -76,7 +76,7 @@ export default function ImportPreviewScreen() {
       showAlert({
         title: 'Cellar updated',
         body: `${wines.length} wine${wines.length > 1 ? 's' : ''} added to your cellar.`,
-        buttons: [{ text: 'OK', onPress: () => router.replace('/cellar/full-list') }],
+        buttons: [{ text: 'OK', onPress: () => router.replace('/cellar/list') }],
       });
     } catch {
       showAlert({ title: 'Error', body: 'Could not save all wines. Please try again.' });

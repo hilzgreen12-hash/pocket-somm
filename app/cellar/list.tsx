@@ -1,179 +1,186 @@
-import { useState, useEffect, useMemo } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { showAlert } from '../../src/components/AppAlert';
-import { useQueryClient } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
-import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
-import { getWineIntelligence } from '../../src/api/label';
-import { usePreferences } from '../../src/hooks/usePreferences';
-import { colors, spacing } from '../../src/constants/theme';
-import { formatCurrency } from '../../src/constants/currency';
-import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
+import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
+import { supabase } from '../../src/api/supabase';
+import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { inferWineStyle } from '../../src/utils/wineStyle';
+import { inferCountry } from '../../src/utils/wineCountry';
+import { formatCurrency } from '../../src/constants/currency';
+import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
-const CONCURRENCY = 3;
+type SortMode = 'recent' | 'score' | 'value';
 
-function fmtMultiCurrency(totals: Record<string, number>): string {
-  return Object.entries(totals)
-    .map(([code, amt]) => formatCurrency(amt, code, { decimals: 0 }))
-    .join(' · ');
-}
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'recent', label: 'Recently added' },
+  { value: 'score',  label: 'Score: high to low' },
+  { value: 'value',  label: 'Estimated value: high to low' },
+];
 
-function groupBy<T, K extends string>(items: T[], key: (t: T) => K | null): Map<K, T[]> {
-  const out = new Map<K, T[]>();
-  for (const item of items) {
-    const k = key(item);
-    if (k == null) continue;
-    const list = out.get(k) ?? [];
-    list.push(item);
-    out.set(k, list);
-  }
-  return out;
-}
+const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
 
-function pct(n: number, total: number): string {
-  if (total === 0) return '0%';
-  return `${Math.round((n / total) * 100)}%`;
-}
+type FilterField = 'rack' | 'country' | 'colour' | 'sort' | 'favourite' | null;
 
-export default function CellarStatsScreen() {
+type FavouriteFilter = 'all' | 'favourites';
+const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
+  { value: 'all', label: 'All wines' },
+  { value: 'favourites', label: 'Favourites only' },
+];
+
+export default function FullCellarListScreen() {
   const { session } = useAuth();
   const { wines, isLoading } = useCellar();
-  const { preferences } = usePreferences();
+  const { racks } = useRacks();
   const qc = useQueryClient();
 
-  const [calculating, setCalculating] = useState(false);
-  const [calcProgress, setCalcProgress] = useState({ done: 0, total: 0 });
-
-  // Heal any wines stuck with stale flags but still assigned to a rack.
-  useEffect(() => {
-    if (!session?.user.id) return;
-    repairRackedWines(session.user.id).then((fixed) => {
-      if (fixed > 0) {
-        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-        qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-      }
+  function handleLongPressWine(wine: CellarWine) {
+    showAlert({
+      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
+      body: 'Permanently remove this wine from your records? This can\'t be undone.',
+      buttons: [
+        {
+          text: 'Delete wine',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearWineFromRacks(wine.id);
+              const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
+              if (error) throw error;
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+              qc.invalidateQueries({ queryKey: ['rack-slots'] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
     });
-  }, [session?.user.id]);
-
-  const totalWines = wines.length;
-  const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-
-  // Multi-currency totals so wines with different currencies don't merge.
-  const purchaseByCurrency: Record<string, number> = {};
-  const valueByCurrency: Record<string, number> = {};
-  for (const w of wines) {
-    if (w.purchase_price != null) {
-      const code = (w.purchase_price_currency ?? 'GBP').toUpperCase();
-      purchaseByCurrency[code] = (purchaseByCurrency[code] ?? 0) + Number(w.purchase_price) * w.quantity;
-    }
-    if (w.estimated_value != null) {
-      const code = (w.estimated_value_currency ?? 'GBP').toUpperCase();
-      valueByCurrency[code] = (valueByCurrency[code] ?? 0) + Number(w.estimated_value) * w.quantity;
-    }
   }
-  const purchaseTotal = fmtMultiCurrency(purchaseByCurrency);
-  const valueTotal = fmtMultiCurrency(valueByCurrency);
 
-  const winesWithEstimate = wines.filter((w) => w.estimated_value != null);
-  const winesNeedingEstimate = wines.filter((w) => w.estimated_value == null);
-  const lastEstimateAt = useMemo(() => {
-    let latest: string | null = null;
+  const rackIds = racks.map((r) => r.id);
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+
+  const wineToRackId: Record<string, string> = {};
+  for (const slot of slotAssignments) wineToRackId[slot.cellar_wine_id] = slot.rack_id;
+
+  const [rackFilter, setRackFilter] = useState<string>('All');           // 'All' | rackId | 'Unassigned'
+  const [countryFilter, setCountryFilter] = useState<string>('All');     // 'All' | country canonical
+  const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
+  const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+
+  // Compute available filter options from the actual cellar
+  const availableCountries = useMemo(() => {
+    const set = new Set<string>();
     for (const w of wines) {
-      if (w.estimated_value_at && (!latest || w.estimated_value_at > latest)) {
-        latest = w.estimated_value_at;
-      }
+      const c = inferCountry(w.region);
+      if (c) set.add(c);
     }
-    return latest;
+    return ['All', ...Array.from(set).sort()];
   }, [wines]);
-  const lastEstimateDate = lastEstimateAt
-    ? new Date(lastEstimateAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-    : null;
 
-  // Top 3 regions by bottle count
-  const regionCounts: Record<string, number> = {};
-  for (const w of wines) {
-    if (!w.region) continue;
-    const key = w.region.trim();
-    if (!key) continue;
-    regionCounts[key] = (regionCounts[key] ?? 0) + (w.quantity ?? 0);
-  }
-  const topRegions = Object.entries(regionCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
-
-  // Style breakdown — uses explicit style column if present, falls back to a
-  // grape/region heuristic. Wines that can't be classified bucket as "Other".
-  const styleBuckets: Record<'Red' | 'White' | 'Sparkling' | 'Other', number> = {
-    Red: 0, White: 0, Sparkling: 0, Other: 0,
+  const wineStyle = (w: CellarWine): 'Red' | 'White' | 'Sparkling' | 'Other' => {
+    const s = inferWineStyle({ style: (w as any).style, region: w.region, grape_variety: w.grape_variety });
+    if (s === 'Red') return 'Red';
+    if (s === 'White') return 'White';
+    if (s === 'Sparkling') return 'Sparkling';
+    return 'Other';
   };
-  for (const w of wines) {
-    const style = inferWineStyle({ style: (w as any).style, region: w.region, grape_variety: w.grape_variety });
-    if (style === 'Red') styleBuckets.Red += w.quantity;
-    else if (style === 'White') styleBuckets.White += w.quantity;
-    else if (style === 'Sparkling') styleBuckets.Sparkling += w.quantity;
-    else styleBuckets.Other += w.quantity;
-  }
 
-  // Condition breakdown — four buckets matching the rack drinking-window
-  // statuses: Peak / Approaching / Too Young / Declining.
-  const sumByStatus = (status: string) =>
-    wines.filter((w) => w.drinking_window_status === status).reduce((s, w) => s + w.quantity, 0);
-  const peakCount = sumByStatus('peak');
-  const approachingCount = sumByStatus('approaching');
-  const tooYoungCount = sumByStatus('too_young');
-  const decliningCount = sumByStatus('declining');
-
-  async function processBatch(items: CellarWine[]) {
-    const currency = preferences?.defaultCurrency ?? 'GBP';
-    let done = 0;
-    setCalcProgress({ done: 0, total: items.length });
-
-    // Simple concurrency-bounded loop so we don't fire 30 requests at once
-    let cursor = 0;
-    async function worker() {
-      while (cursor < items.length) {
-        const myIdx = cursor++;
-        const w = items[myIdx];
-        try {
-          const intel = await getWineIntelligence({
-            producer: w.producer ?? '',
-            region: w.region ?? '',
-            wineName: w.wine_name || null,
-            vintage: w.vintage || 'NV',
-          } as any, currency);
-          await updateCellarWine(w.id, {
-            estimated_value: intel.estimatedValue,
-            estimated_value_currency: currency,
-            estimated_value_at: new Date().toISOString(),
-          });
-        } catch {
-          // Skip this wine on error — partial progress is better than failing the lot
-        } finally {
-          done += 1;
-          setCalcProgress({ done, total: items.length });
-        }
+  // Apply filters
+  const filtered = wines.filter((w) => {
+    if (rackFilter !== 'All') {
+      if (rackFilter === 'Unassigned') {
+        if (wineToRackId[w.id]) return false;
+      } else if (wineToRackId[w.id] !== rackFilter) {
+        return false;
       }
     }
-    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => worker()));
-    qc.invalidateQueries({ queryKey: ['cellar'] });
+    if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
+    if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
+    if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
+    return true;
+  });
+
+  // Sort
+  const sorted = [...filtered].sort((a, b) => {
+    if (sortMode === 'score') {
+      return (b.critic_score ?? -1) - (a.critic_score ?? -1);
+    }
+    if (sortMode === 'value') {
+      return Number(b.estimated_value ?? 0) - Number(a.estimated_value ?? 0);
+    }
+    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+  });
+
+  const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+
+  const rackOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [{ value: 'All', label: 'All racks' }];
+    for (const r of racks) opts.push({ value: r.id, label: r.name });
+    opts.push({ value: 'Unassigned', label: 'Not in a rack' });
+    return opts;
+  }, [racks]);
+
+  const rackLabel = rackOptions.find((o) => o.value === rackFilter)?.label ?? 'All racks';
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added';
+  const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
+
+  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
+    if (field === 'rack') {
+      return { title: 'Filter by rack', options: rackOptions, selected: rackFilter, onSelect: setRackFilter };
+    }
+    if (field === 'country') {
+      return {
+        title: 'Filter by country',
+        options: availableCountries.map((c) => ({ value: c, label: c === 'All' ? 'All countries' : c })),
+        selected: countryFilter,
+        onSelect: setCountryFilter,
+      };
+    }
+    if (field === 'colour') {
+      return {
+        title: 'Filter by colour',
+        options: COLOUR_OPTIONS.map((c) => ({ value: c, label: c === 'All' ? 'All colours' : c })),
+        selected: colourFilter,
+        onSelect: setColourFilter,
+      };
+    }
+    if (field === 'sort') {
+      return {
+        title: 'Sort',
+        options: SORT_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
+        selected: sortMode,
+        onSelect: (v) => setSortMode(v as SortMode),
+      };
+    }
+    if (field === 'favourite') {
+      return {
+        title: 'Favourites',
+        options: FAVOURITE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        selected: favouriteFilter,
+        onSelect: (v) => setFavouriteFilter(v as FavouriteFilter),
+      };
+    }
+    return null;
   }
 
-  async function handleCalculate() {
-    const targets = winesNeedingEstimate.length > 0 ? winesNeedingEstimate : wines;
-    if (targets.length === 0) return;
-    setCalculating(true);
-    try {
-      await processBatch(targets);
-    } catch {
-      showAlert({ title: 'Could not finish', body: 'Some wines could not be valued. Please try again.' });
-    } finally {
-      setCalculating(false);
-    }
-  }
+  const activeDropdown = dropdownConfig(openDropdown);
 
   if (isLoading) {
     return (
@@ -183,215 +190,190 @@ export default function CellarStatsScreen() {
     );
   }
 
-  if (calculating) {
-    const pctVal = calcProgress.total === 0 ? 0 : Math.round((calcProgress.done / calcProgress.total) * 100);
-    return (
-      <View style={styles.center}>
-        <Text style={styles.calcTitle}>Valuing your cellar…</Text>
-        <Text style={styles.calcSubtitle}>This can take up to a minute.</Text>
-        <Text style={styles.calcPercent}>{pctVal}%</Text>
-        <Text style={styles.calcCount}>{calcProgress.done} of {calcProgress.total}</Text>
-      </View>
-    );
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>Back</Text>
+          <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Cellar Statistics</Text>
+        <Text style={styles.title}>Full Cellar List</Text>
         <View style={{ width: 40 }} />
       </View>
 
       {!session ? (
         <ArchiveSignInPrompt
-          title="Sign in to view your stats"
-          body="Cellar statistics live with your account — sign in to see them."
+          title="Sign in to view your cellar"
+          body="Track every bottle in your collection — sign in to see your full cellar list."
         />
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+        <>
 
-          {wines.length === 0 && (
-            <View style={styles.emptyBanner}>
-              <Text style={styles.emptyBannerTitle}>Your cellar is empty</Text>
-              <Text style={styles.emptyBannerBody}>
-                Add wines to your cellar and these stats will fill in automatically. The fields below show you what's tracked.
-              </Text>
-            </View>
+      {/* Summary row */}
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryText}>
+          {filtered.length} {filtered.length === 1 ? 'wine' : 'wines'} · {totalBottles} {totalBottles === 1 ? 'bottle' : 'bottles'}
+        </Text>
+      </View>
+
+      {/* Filter row — Sort first so the most common interaction (changing
+          order) is closest to the user's thumb. Rack / Country / Colour
+          follow in descending likelihood of use. */}
+      <Text style={styles.filterHint}>Swipe to see all filters →</Text>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.filterScroll}
+        contentContainerStyle={styles.filterRow}
+      >
+        <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setOpenDropdown('sort')}>
+          <Text style={styles.filterChipLabel}>Sort</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
+          <Text style={styles.filterChipLabel}>Favourites</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rack')}>
+          <Text style={styles.filterChipLabel}>Rack</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{rackLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('country')}>
+          <Text style={styles.filterChipLabel}>Country</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{countryFilter === 'All' ? 'All' : countryFilter}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('colour')}>
+          <Text style={styles.filterChipLabel}>Colour</Text>
+          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
+        </TouchableOpacity>
+      </ScrollView>
+
+      {sorted.length === 0 ? (
+        <View style={styles.empty}>
+          {wines.length === 0 ? (
+            <>
+              <Text style={styles.emptyTitle}>Your cellar is empty</Text>
+              <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>
+            </>
+          ) : (
+            <>
+              <Text style={styles.emptyTitle}>No wines match</Text>
+              <Text style={styles.emptyBody}>Try clearing some filters to see more of your cellar.</Text>
+            </>
           )}
-
-          {/* Top quick numbers */}
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{totalWines}</Text>
-              <Text style={styles.statLabel}>Wines</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{totalBottles}</Text>
-              <Text style={styles.statLabel}>Bottles</Text>
-            </View>
-          </View>
-
-          {/* Value block */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Cellar Value</Text>
-
-            <View style={styles.valueRow}>
-              <Text style={styles.valueLabel}>Total Purchase Value</Text>
-              <Text style={[styles.valueAmount, !purchaseTotal && styles.valueAmountMuted]}>
-                {purchaseTotal || '—'}
-              </Text>
-            </View>
-            {!purchaseTotal && (
-              <Text style={styles.valueHint}>
-                Add a purchase price to individual wines from their wine card to see this total.
-              </Text>
-            )}
-
-            <View style={styles.valueDivider} />
-
-            <View style={styles.valueRow}>
-              <Text style={styles.valueLabel}>Total Estimated Current Value</Text>
-              <Text style={[styles.valueAmount, !valueTotal && styles.valueAmountMuted]}>
-                {valueTotal || '—'}
-              </Text>
-            </View>
-
-            {wines.length === 0 ? null : winesWithEstimate.length === 0 ? (
-              <TouchableOpacity style={styles.calcBtn} onPress={handleCalculate} activeOpacity={0.8}>
-                <Text style={styles.calcBtnText}>Calculate</Text>
-              </TouchableOpacity>
-            ) : winesNeedingEstimate.length > 0 ? (
-              <View style={styles.estimateMetaStack}>
-                {lastEstimateDate ? (
-                  <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
-                ) : null}
-                <Text style={styles.estimateUpdateNote}>
-                  You've added {winesNeedingEstimate.length} wine{winesNeedingEstimate.length === 1 ? '' : 's'} since your last valuation
-                </Text>
-                <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                  <Text style={styles.recalcLink}>
-                    Add {winesNeedingEstimate.length} wine{winesNeedingEstimate.length === 1 ? '' : 's'} to total cellar value
+        </View>
+      ) : (
+        <ScrollView
+          style={styles.listScroll}
+          contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: 60 }}
+        >
+          {sorted.map((w) => {
+            const headerLine = wineHeaderLine(w.producer, w.wine_name, w.vintage);
+            const subParts = [w.region, w.grape_variety].filter(Boolean);
+            const valueText = w.estimated_value != null
+              ? formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })
+              : null;
+            return (
+              <TouchableOpacity
+                key={w.id}
+                style={styles.row}
+                onPress={() => router.push(`/cellar/${w.id}`)}
+                onLongPress={() => handleLongPressWine(w)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <View style={styles.rowMain}>
+                  <Text style={styles.rowName} numberOfLines={1}>
+                    {w.is_favourite ? <Text style={styles.rowStar}>★ </Text> : null}
+                    {headerLine}
                   </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.estimateMeta}>
-                {lastEstimateDate ? (
-                  <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
-                ) : null}
-                <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                  <Text style={styles.recalcLink}>Recalculate</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </View>
-
-          {/* Condition */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Condition</Text>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Peak</Text>
-              <Text style={styles.breakdownCount}>{peakCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(peakCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Approaching</Text>
-              <Text style={styles.breakdownCount}>{approachingCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(approachingCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Too Young</Text>
-              <Text style={styles.breakdownCount}>{tooYoungCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(tooYoungCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Declining</Text>
-              <Text style={styles.breakdownCount}>{decliningCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(decliningCount, totalBottles)}</Text>
-            </View>
-          </View>
-
-          {/* Most Represented Regions */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Most Represented Regions</Text>
-            {topRegions.length === 0 ? (
-              <Text style={styles.muted}>No region data yet.</Text>
-            ) : (
-              topRegions.map(([region, count], i) => (
-                <View key={region} style={styles.breakdownRow}>
-                  <Text style={styles.breakdownRank}>{i + 1}.</Text>
-                  <Text style={styles.breakdownLabel}>{region}</Text>
-                  <Text style={styles.breakdownPct}>{pct(count, totalBottles)}</Text>
+                  {subParts.length > 0 && <Text style={styles.rowDetail} numberOfLines={1}>{subParts.join(' · ')}</Text>}
                 </View>
-              ))
-            )}
-          </View>
-
-          {/* Style Breakdown */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Style</Text>
-            {(['Red', 'White', 'Sparkling', 'Other'] as const).map((bucket) => (
-              <View key={bucket} style={styles.breakdownRow}>
-                <Text style={styles.breakdownLabel}>{bucket}</Text>
-                <Text style={styles.breakdownCount}>{styleBuckets[bucket]}</Text>
-                <Text style={styles.breakdownPct}>{pct(styleBuckets[bucket], totalBottles)}</Text>
-              </View>
-            ))}
-            {styleBuckets.Other > 0 && (
-              <Text style={styles.muted}>
-                "Other" includes rosé, fortified, and wines without enough info to classify.
-              </Text>
-            )}
-          </View>
-
+                <View style={styles.rowRight}>
+                  {w.critic_score != null && <Text style={styles.rowScore}>{w.critic_score} pts</Text>}
+                  {valueText && <Text style={styles.rowValue}>{valueText}</Text>}
+                  <Text style={styles.rowQty}>{w.quantity} btl</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
         </ScrollView>
       )}
+        </>
+      )}
+
+      <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            {activeDropdown && (
+              <>
+                <Text style={styles.modalTitle}>{activeDropdown.title}</Text>
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {activeDropdown.options.map((opt) => {
+                    const active = activeDropdown.selected === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.modalOption, active && styles.modalOptionActive]}
+                        onPress={() => {
+                          activeDropdown.onSelect(opt.value);
+                          setOpenDropdown(null);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>{opt.label}</Text>
+                        {active && <Text style={styles.modalOptionCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity style={styles.modalCancel} onPress={() => setOpenDropdown(null)}>
+                  <Text style={styles.modalCancelText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
-  title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
+  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
+  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.8 },
+  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, letterSpacing: 0.3 },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
+  listScroll: { flex: 1 },
+  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
+  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  sortChip: { borderColor: colors.gold },
+  filterChipLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterChipValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  emptyBanner: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 4 },
-  emptyBannerTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  emptyBannerBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20 },
-  statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
-  stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.lg },
-  statValue: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: 2 },
-  statLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  sectionTitle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
-  valueRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  valueLabel: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, flexShrink: 1 },
-  valueAmount: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginLeft: spacing.md },
-  valueAmountMuted: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' },
-  valueHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 17, marginTop: 4 },
-  valueDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  calcBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
-  calcBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  estimateMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
-  estimateMetaStack: { marginTop: spacing.sm, gap: 4 },
-  estimateUpdateNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 18 },
-  lastEstimate: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
-  recalcLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  breakdownRank: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 14, color: colors.gold, width: 24 },
-  breakdownLabel: { flex: 1, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.text },
-  breakdownCount: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, width: 50, textAlign: 'right' },
-  breakdownPct: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.gold, width: 60, textAlign: 'right' },
-  muted: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 17, marginTop: spacing.xs },
-  calcTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  calcSubtitle: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
-  calcPercent: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 56, color: colors.gold, marginBottom: spacing.xs },
-  calcCount: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
+  emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowMain: { flex: 1, marginRight: spacing.md },
+  rowName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  rowStar: { color: colors.gold, fontSize: 16 },
+  rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
+  rowRight: { alignItems: 'flex-end', gap: 2 },
+  rowScore: { fontSize: 13, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
+  rowValue: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  rowQty: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  modalOptionText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text },
+  modalOptionTextActive: { color: colors.gold },
+  modalOptionCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
+  modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  modalCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
 });
