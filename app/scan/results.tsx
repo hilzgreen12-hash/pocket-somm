@@ -120,27 +120,12 @@ export default function ResultsScreen() {
     );
   }
 
-  function handleSaveToArchive() {
-    if (!recommendation || !extractedWines || hasSaved.current) return;
-    hasSaved.current = true;
-    autoSave.mutate(
-      { extractedWines, recommendation, restaurantNameOverride: restaurantName },
-      {
-        onError: (err) => {
-          hasSaved.current = false;
-          showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-        },
-      },
-    );
-  }
-
-  // Auto-fire on mount removed by request — the user wants the explicit
-  // "Save to Archive" button to be visible until they tap it, rather than
-  // arriving on a screen that already says "Saved" without any user
-  // action.
+  // The List Archive is gone — autoSave still fires from
+  // handleSaveRestaurant so a scan with a restaurant name lands in
+  // Your Restaurants, but there's no longer an explicit save button or
+  // post-save confirmation block on this screen.
 
   const isSaved = !!autoSave.data;
-  const isSaving = autoSave.isPending;
 
   async function handleAddToWishlist(wine: WineRecommendation, i: number) {
     if (!session || wishlistIndexes.has(i)) return;
@@ -255,7 +240,7 @@ export default function ResultsScreen() {
             {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
           </View>
         )}
-        <Text style={styles.heading}>Vinster{'\n'}Recommends</Text>
+        <Text style={styles.heading}>Vinster Recommends</Text>
         {recommendation.topScoringMode && (
           <View style={styles.topScoringBanner}>
             <Text style={styles.topScoringBannerTitle}>Top Scoring Mode</Text>
@@ -272,50 +257,59 @@ export default function ResultsScreen() {
         ) : null}
       </View>
 
-      {/* Dining location — editable on fresh scans. Restaurant entry
-          auto-saves the scan so it appears in Your Restaurants without
-          the user having to also tap Save to Archive. */}
+      {/* Dining card — promoted to a prominent block to drive
+          engagement with the Your Restaurants feature. Tap to add or
+          change a restaurant name; auto-saves the scan so the entry
+          lands in Your Restaurants. Once a name is captured, a clear
+          CTA opens that screen for a full review. */}
       {!isFromHistory && (
-        <View style={styles.locationBlock}>
+        <View style={styles.restaurantCard}>
+          <Text style={styles.restaurantCardLabel}>Dining at</Text>
           <TouchableOpacity
-            style={styles.locationRow}
+            style={styles.restaurantNameRow}
             onPress={() => setEditingRestaurant(true)}
             activeOpacity={0.7}
           >
             <Text style={styles.locationPin}>📍</Text>
             {editingRestaurant ? (
               <TextInput
-                style={styles.locationInput}
+                style={styles.restaurantNameInput}
                 value={restaurantName}
                 onChangeText={setRestaurantName}
                 placeholder="Restaurant name"
-                placeholderTextColor="rgba(255,255,255,0.30)"
+                placeholderTextColor="rgba(255,255,255,0.45)"
                 autoFocus
                 onBlur={handleSaveRestaurant}
                 onSubmitEditing={handleSaveRestaurant}
                 returnKeyType="done"
               />
             ) : (
-              <Text style={styles.locationText}>
-                {restaurantName || 'Add restaurant name'}
+              <Text
+                style={[
+                  styles.restaurantNameDisplay,
+                  !restaurantName && styles.restaurantNamePlaceholder,
+                ]}
+              >
+                {restaurantName || 'Tap to add restaurant name'}
               </Text>
             )}
           </TouchableOpacity>
 
-          {/* Cross-link to Your Restaurants — sits directly under the
-              input. Surfaces once the scan has been saved so the
-              destination has a row to render. */}
-          {restaurantName.trim().length > 0 && isSaved && (
+          {restaurantName.trim().length > 0 && isSaved ? (
             <TouchableOpacity
-              style={styles.reviewRestaurantLink}
+              style={styles.reviewRestaurantBtn}
               onPress={() => {
                 qc.invalidateQueries({ queryKey: ['scan-archive'] });
                 router.push('/restaurants/reviews');
               }}
-              activeOpacity={0.7}
+              activeOpacity={0.8}
             >
-              <Text style={styles.reviewRestaurantLinkText}>Review restaurant in your profile →</Text>
+              <Text style={styles.reviewRestaurantBtnText}>Review this restaurant →</Text>
             </TouchableOpacity>
+          ) : (
+            <Text style={styles.restaurantHint}>
+              Capture the restaurant so you can review the food, atmosphere and service in Your Restaurants.
+            </Text>
           )}
         </View>
       )}
@@ -443,35 +437,6 @@ export default function ResultsScreen() {
         </TouchableOpacity>
       )}
 
-      {(isSaved || isFromHistory) ? (
-        <View style={styles.savedBlock}>
-          <Text style={styles.savedLabel}>Saved</Text>
-          <TouchableOpacity
-            onPress={() => {
-              // Force the archive query to refetch so a just-saved scan
-              // shows up on the destination screen — without this, react-
-              // query's cache can briefly return the pre-save snapshot.
-              qc.invalidateQueries({ queryKey: ['scan-archive'] });
-              router.push('/scan/history');
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.viewProfileLink}>View in List Archive</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <TouchableOpacity
-          style={styles.saveButton}
-          onPress={handleSaveToArchive}
-          disabled={isSaving}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.saveButtonText}>
-            {isSaving ? 'Saving…' : 'Save to Archive'}
-          </Text>
-        </TouchableOpacity>
-      )}
-
       {!isFromHistory && (
         <TouchableOpacity
           style={styles.alternativeButton}
@@ -487,7 +452,6 @@ export default function ResultsScreen() {
         scanSessionId={isFromHistory ? (sessionId ?? null) : (autoSave.data?.[0]?.sessionId ?? null)}
         initialRestaurantName={isFromHistory ? (historyRestaurant ?? null) : (restaurantName || null)}
         initialCity={isFromHistory ? (historyCity ?? null) : (autoSave.data?.[0]?.city ?? null)}
-        showReturnToArchive={isFromHistory}
         onClose={() => setChosenModalWine(null)}
         onSaved={() => {
           const idx = recommendation!.wines.indexOf(chosenModalWine!);
@@ -532,26 +496,27 @@ const styles = StyleSheet.create({
   stampRow: {
     alignItems: 'center',
     marginBottom: spacing.md,
-    gap: 2,
+    gap: spacing.xs,
   },
   stampDate: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 13,
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 18,
     color: colors.gold,
     textTransform: 'uppercase',
-    letterSpacing: 1,
+    letterSpacing: 1.5,
   },
   stampLocation: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 15,
-    color: colors.textMuted,
+    fontSize: 20,
+    color: colors.text,
     textAlign: 'center',
   },
   heading: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 42,
-    color: colors.text,
-    letterSpacing: 1.5,
+    fontSize: 22,
+    color: colors.textMuted,
+    letterSpacing: 1,
+    textTransform: 'uppercase',
     marginBottom: spacing.md,
     textAlign: 'center',
   },
@@ -593,43 +558,75 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 24,
   },
-  locationBlock: {
-    paddingBottom: spacing.md,
+  restaurantCard: {
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.lg,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+    borderRadius: 14,
+    padding: spacing.md,
+    backgroundColor: 'rgba(212,176,96,0.06)',
   },
-  locationRow: {
+  restaurantCardLabel: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 12,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+    marginBottom: spacing.xs,
+  },
+  restaurantNameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: spacing.md,
-    gap: 6,
+    gap: 8,
+    paddingVertical: spacing.xs,
   },
   locationPin: {
-    fontSize: 14,
+    fontSize: 18,
   },
-  reviewRestaurantLink: {
-    // Indent so the text sits roughly under the input, clear of the pin.
-    paddingLeft: spacing.md + 14 + 6,
-    paddingRight: spacing.md,
-    paddingTop: 2,
-  },
-  reviewRestaurantLinkText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 15,
-    color: colors.gold,
-    textDecorationLine: 'underline',
-  },
-  locationText: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 16,
-    color: '#FFFFFF',
-  },
-  locationInput: {
+  restaurantNameDisplay: {
     flex: 1,
-    fontFamily: 'CormorantGaramond_400Regular',
-    fontSize: 15,
-    color: '#FFFFFF',
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 20,
+    color: colors.text,
+    letterSpacing: 0.3,
+  },
+  restaurantNamePlaceholder: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.50)',
+    letterSpacing: 0,
+  },
+  restaurantNameInput: {
+    flex: 1,
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 20,
+    color: colors.text,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255,255,255,0.30)',
     paddingVertical: 2,
+  },
+  restaurantHint: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    color: colors.textMuted,
+    marginTop: spacing.sm,
+    lineHeight: 20,
+  },
+  reviewRestaurantBtn: {
+    marginTop: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+  },
+  reviewRestaurantBtnText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 15,
+    color: colors.gold,
+    letterSpacing: 0.5,
   },
   list: {
     paddingHorizontal: spacing.md,
@@ -838,44 +835,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 16,
-  },
-  saveButton: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    borderWidth: 1,
-    borderColor: colors.gold,
-    borderRadius: 14,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  saveButtonDone: {
-    backgroundColor: 'rgba(212,176,96,0.10)',
-  },
-  savedBlock: {
-    alignItems: 'center',
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    gap: 4,
-  },
-  savedLabel: {
-    color: colors.gold,
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 16,
-    letterSpacing: 0.5,
-  },
-  viewProfileLink: {
-    color: colors.gold,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 15,
-    textDecorationLine: 'underline',
-  },
-  saveButtonText: {
-    color: colors.gold,
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 16,
-  },
-  saveButtonTextDone: {
-    color: colors.gold,
   },
   savedConfirm: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
