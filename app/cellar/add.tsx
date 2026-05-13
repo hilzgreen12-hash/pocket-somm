@@ -59,6 +59,7 @@ export default function AddWineScreen() {
               router.replace('/cellar/racks');
             },
           },
+          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
           { text: 'Not now', style: 'cancel', onPress: () => router.back() },
         ],
       });
