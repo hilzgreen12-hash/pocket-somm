@@ -17,7 +17,6 @@ import { VintageWindowBadge } from '../../src/components/results/VintageWindowBa
 import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { RationaleBlock } from '../../src/components/results/RationaleBlock';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
-import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { colors, spacing } from '../../src/constants/theme';
 import type { WineRecommendation } from '../../src/types/wine';
 
@@ -41,7 +40,6 @@ export default function ResultsScreen() {
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   const [wishlistIndexes, setWishlistIndexes] = useState<Set<number>>(new Set());
   const { addWine: addToWishList } = useWishList();
-  const [restaurantReviewVisible, setRestaurantReviewVisible] = useState(false);
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
   const [renderedAt] = useState(() => new Date().toISOString());
@@ -58,6 +56,24 @@ export default function ResultsScreen() {
     const detected = autoSave.data?.[0]?.restaurantName;
     if (detected && !restaurantName) setRestaurantName(detected);
   }, [autoSave.data]);
+
+  // Pre-fill restaurant name from the URL params when the user came
+  // back to a result via View Last Result. Without this the input
+  // shows the empty placeholder even though the saved entry already
+  // has a restaurant on it. hasSaved is flipped to true when the URL
+  // also carries a sessionId so we route to update rather than insert.
+  useEffect(() => {
+    if (historyRestaurant && !restaurantName) {
+      setRestaurantName(historyRestaurant);
+    }
+    if (sessionId) hasSaved.current = true;
+  }, [historyRestaurant, sessionId]);
+
+  // Effective scan_sessions id used by every restaurant-edit path on
+  // this screen. Prefers the URL sessionId (set when the user came in
+  // via View Last Result or the archive), falling back to whatever
+  // autoSave landed in this session.
+  const effectiveSessionId = sessionId ?? autoSave.data?.[0]?.sessionId ?? null;
 
   // Fetch a fresh GPS reading on mount so the stamp can show the user's
   // city in real time, before the server-side autoSave round-trip lands.
@@ -97,27 +113,34 @@ export default function ResultsScreen() {
   async function handleSaveRestaurant() {
     setEditingRestaurant(false);
     const trimmed = restaurantName.trim();
-    const sid = autoSave.data?.[0]?.sessionId;
-    if (sid) {
-      // Row already saved — just update the restaurant name on it.
-      await supabase.from('scan_sessions').update({ restaurant_name: trimmed || null }).eq('id', sid);
-      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+    if (effectiveSessionId) {
+      // Row already in scan_sessions — just update the restaurant name.
+      // Covers both the in-session autoSave path and View Last Result
+      // re-opens where the sessionId came in via URL params.
+      try {
+        const { error } = await supabase
+          .from('scan_sessions')
+          .update({ restaurant_name: trimmed || null })
+          .eq('id', effectiveSessionId);
+        if (error) throw error;
+        qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      } catch (err) {
+        showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
       return;
     }
-    // No row yet — auto-trigger the save so the restaurant entry lands
-    // in Your Restaurants without the user having to also tap Save to
-    // Archive. Skips silently if the user cleared the field.
-    if (trimmed.length === 0 || hasSaved.current || !recommendation || !extractedWines) return;
+    // No row yet — promote this scan to scan_sessions so the entry
+    // lands in Your Restaurants. Skip if there's no name to save and no
+    // recommendation to save against.
+    if (trimmed.length === 0 || !recommendation || !extractedWines) return;
+    if (hasSaved.current) return;
     hasSaved.current = true;
-    autoSave.mutate(
-      { extractedWines, recommendation, restaurantNameOverride: trimmed },
-      {
-        onError: (err) => {
-          hasSaved.current = false;
-          showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-        },
-      },
-    );
+    try {
+      await autoSave.mutateAsync({ extractedWines, recommendation, restaurantNameOverride: trimmed });
+    } catch (err) {
+      hasSaved.current = false;
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   // The List Archive is gone — autoSave still fires from
@@ -257,62 +280,69 @@ export default function ResultsScreen() {
         ) : null}
       </View>
 
-      {/* Dining card — promoted to a prominent block to drive
-          engagement with the Your Restaurants feature. Tap to add or
-          change a restaurant name; auto-saves the scan so the entry
-          lands in Your Restaurants. Once a name is captured, a clear
-          CTA opens that screen for a full review. */}
-      {!isFromHistory && (
-        <View style={styles.restaurantCard}>
-          <Text style={styles.restaurantCardLabel}>Dining at</Text>
-          <TouchableOpacity
-            style={styles.restaurantNameRow}
-            onPress={() => setEditingRestaurant(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.locationPin}>📍</Text>
-            {editingRestaurant ? (
-              <TextInput
-                style={styles.restaurantNameInput}
-                value={restaurantName}
-                onChangeText={setRestaurantName}
-                placeholder="Restaurant name"
-                placeholderTextColor="rgba(255,255,255,0.45)"
-                autoFocus
-                onBlur={handleSaveRestaurant}
-                onSubmitEditing={handleSaveRestaurant}
-                returnKeyType="done"
-              />
-            ) : (
-              <Text
-                style={[
-                  styles.restaurantNameDisplay,
-                  !restaurantName && styles.restaurantNamePlaceholder,
-                ]}
-              >
-                {restaurantName || 'Tap to add restaurant name'}
-              </Text>
-            )}
-          </TouchableOpacity>
-
-          {restaurantName.trim().length > 0 && isSaved ? (
-            <TouchableOpacity
-              style={styles.reviewRestaurantBtn}
-              onPress={() => {
-                qc.invalidateQueries({ queryKey: ['scan-archive'] });
-                router.push('/restaurants/reviews');
-              }}
-              activeOpacity={0.8}
-            >
-              <Text style={styles.reviewRestaurantBtnText}>Review this restaurant →</Text>
-            </TouchableOpacity>
+      {/* Dining card — prominent restaurant entry / review CTA. Shown
+          for fresh scans AND when a saved result is reopened via View
+          Last Result, so the user can always add or edit the
+          restaurant. Typing a name promotes the scan to scan_sessions
+          so the row appears in Your Restaurants. The Review CTA
+          navigates to Your Restaurants where the user can edit the
+          full review (food, atmosphere, service). */}
+      <View style={styles.restaurantCard}>
+        <Text style={styles.restaurantCardLabel}>Dining at</Text>
+        <TouchableOpacity
+          style={styles.restaurantNameRow}
+          onPress={() => setEditingRestaurant(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.locationPin}>📍</Text>
+          {editingRestaurant ? (
+            <TextInput
+              style={styles.restaurantNameInput}
+              value={restaurantName}
+              onChangeText={setRestaurantName}
+              placeholder="Restaurant name"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              autoFocus
+              onBlur={handleSaveRestaurant}
+              onSubmitEditing={handleSaveRestaurant}
+              returnKeyType="done"
+            />
           ) : (
-            <Text style={styles.restaurantHint}>
-              Capture the restaurant so you can review the food, atmosphere and service in Your Restaurants.
+            <Text
+              style={[
+                styles.restaurantNameDisplay,
+                !restaurantName && styles.restaurantNamePlaceholder,
+              ]}
+            >
+              {restaurantName || 'Tap to add restaurant name'}
             </Text>
           )}
-        </View>
-      )}
+        </TouchableOpacity>
+
+        {restaurantName.trim().length > 0 ? (
+          <TouchableOpacity
+            style={styles.reviewRestaurantBtn}
+            onPress={async () => {
+              // Make sure the scan_sessions row is in place (and
+              // carries the latest restaurant name) before we route
+              // to Your Restaurants. Without this, a user who taps
+              // the CTA before onBlur fires lands on an empty list.
+              await handleSaveRestaurant();
+              qc.invalidateQueries({ queryKey: ['scan-archive'] });
+              router.push('/restaurants/reviews');
+            }}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.reviewRestaurantBtnText}>
+              {effectiveSessionId ? 'Edit restaurant review →' : 'Review this restaurant →'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <Text style={styles.restaurantHint}>
+            Capture the restaurant so you can review the food, atmosphere and service in Your Restaurants.
+          </Text>
+        )}
+      </View>
 
       {/* Wine accordions */}
       <View style={styles.list}>
@@ -428,15 +458,6 @@ export default function ResultsScreen() {
         })}
       </View>
 
-      {isFromHistory && sessionId && (
-        <TouchableOpacity
-          style={styles.restaurantButton}
-          onPress={() => setRestaurantReviewVisible(true)}
-        >
-          <Text style={styles.restaurantButtonText}>Review this Restaurant</Text>
-        </TouchableOpacity>
-      )}
-
       {!isFromHistory && (
         <TouchableOpacity
           style={styles.alternativeButton}
@@ -459,15 +480,6 @@ export default function ResultsScreen() {
           setChosenModalWine(null);
         }}
       />
-
-      {sessionId && (
-        <RestaurantReviewModal
-          visible={restaurantReviewVisible}
-          sessionId={sessionId}
-          onClose={() => setRestaurantReviewVisible(false)}
-          onSaved={() => setRestaurantReviewVisible(false)}
-        />
-      )}
 
     </ScrollView>
   );
@@ -805,20 +817,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 24,
-  },
-  restaurantButton: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 14,
-  },
-  restaurantButtonText: {
-    color: colors.text,
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 16,
   },
   alternativeButton: {
     marginHorizontal: spacing.md,

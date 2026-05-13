@@ -155,6 +155,11 @@ export default function ScanTab() {
       if (last.savedAt) params.set('date', last.savedAt);
       if (last.restaurantName) params.set('restaurant', last.restaurantName);
       if (last.city) params.set('city', last.city);
+      // Pass the scan_sessions id through if the autoSave already
+      // promoted this cached scan to the cloud. Lets the results
+      // screen target the right row when the user edits the
+      // restaurant name on a re-opened result.
+      if (last.sessionId) params.set('sessionId', last.sessionId);
       router.push(`/scan/results?${params.toString()}`);
     } catch {
       showAlert({
