@@ -1,30 +1,35 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, Keyboard } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useCellar } from '../../src/hooks/useCellar';
-import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
+import { RecipeShareCard, RECIPE_SHARE_QR_URL } from '../../src/components/RecipeShareCard';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
-import type { Pairing, CellarWine, WineDetailsComplete } from '../../src/types/wine';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
 
 function PairingCard({
   pairing,
   saveState,
   onSave,
   isFromHistory,
+  onShare,
+  sharing,
 }: {
   pairing: Pairing;
   saveState: 'idle' | 'saving' | 'saved';
   onSave: () => void;
   isFromHistory: boolean;
+  onShare: () => void;
+  sharing: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
 
@@ -33,6 +38,7 @@ function PairingCard({
       <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.8}>
         <Text style={styles.dishName}>{pairing.dishName}</Text>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
+        <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
         <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
         <Text style={styles.toggle}>{expanded ? 'Hide Recipe' : 'View Recipe'}</Text>
       </TouchableOpacity>
@@ -65,7 +71,6 @@ function PairingCard({
       {expanded && (
         <View style={styles.recipe}>
           <Text style={styles.recipeIntro}>{pairing.introduction}</Text>
-          <Text style={styles.recipeMeta}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
 
           <Text style={styles.recipeSection}>Ingredients</Text>
           {pairing.recipe.ingredients.map((ing, i) => (
@@ -76,36 +81,21 @@ function PairingCard({
           {pairing.recipe.instructions.map((step, i) => (
             <Text key={i} style={styles.recipeItem}>{step}</Text>
           ))}
+
+          <TouchableOpacity
+            style={[styles.cardShareButton, sharing && styles.cardSaveButtonDisabled]}
+            onPress={onShare}
+            disabled={sharing}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.cardShareButtonText}>
+              {sharing ? 'Preparing…' : 'Share Recipe'}
+            </Text>
+          </TouchableOpacity>
         </View>
       )}
     </View>
   );
-}
-
-function findCellarMatch(wines: CellarWine[], wine: WineDetailsComplete): CellarWine | null {
-  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-  const producer = norm(wine.producer);
-  const vintage = norm(wine.vintage);
-  const wineName = norm(wine.wineName);
-  if (!producer) return null;
-
-  // Strongest match: producer + wine name + vintage all align
-  let match = wines.find((w) =>
-    norm(w.producer) === producer &&
-    norm(w.vintage) === vintage &&
-    norm(w.wine_name) === wineName,
-  );
-  if (match) return match;
-
-  // Drop wine name (label wine name is often null/empty)
-  match = wines.find((w) =>
-    norm(w.producer) === producer &&
-    norm(w.vintage) === vintage,
-  );
-  if (match) return match;
-
-  // Producer-only fallback (shouldn't happen often)
-  return wines.find((w) => norm(w.producer) === producer) ?? null;
 }
 
 export default function ChefResultsScreen() {
@@ -113,7 +103,6 @@ export default function ChefResultsScreen() {
   const isFromHistory = fromHistory === 'true';
   const isFromCellar = from === 'cellar' && !!wineId;
   const { wineDetailsConfirmed, pairings, filters, reset, setPairings, setError } = useLabelStore();
-  const { wines: cellarWines } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
   const { sessions: labelSessions, save: saveLabelSession, updateNotes } = useChefLabelHistory();
@@ -159,8 +148,52 @@ export default function ChefResultsScreen() {
     if (!iso) return null;
     return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   }
-  const [archiving, setArchiving] = useState(false);
-  const [archivedModalOpen, setArchivedModalOpen] = useState(false);
+
+  // Share-card render state. We keep a single off-screen RecipeShareCard
+  // and point it at whichever pairing the user just tapped Share on.
+  // sharingIndex tracks which card is in flight so the button can show
+  // "Preparing..." without freezing all three.
+  const shareCardRef = useRef<View>(null);
+  const [sharingIndex, setSharingIndex] = useState<number | null>(null);
+  const [sharePairing, setSharePairing] = useState<Pairing | null>(null);
+
+  async function handleSharePairing(idx: number) {
+    const pairing = pairings[idx];
+    if (!pairing || sharingIndex !== null) return;
+    setSharingIndex(idx);
+    setSharePairing(pairing);
+    try {
+      // Prefetch the remote QR so it's in cache when view-shot snapshots
+      // the card. Without this the QR can appear blank on Android.
+      try { await Image.prefetch(RECIPE_SHARE_QR_URL); } catch { /* non-fatal */ }
+      // Give RN one paint to mount the off-screen card with the new
+      // pairing data before we capture.
+      await new Promise((r) => setTimeout(r, 250));
+      if (!shareCardRef.current) throw new Error('Share card not ready');
+      const uri = await captureRef(shareCardRef, {
+        format: 'png',
+        quality: 1,
+        width: 1080,
+        height: 1920,
+        result: 'tmpfile',
+      });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: `Share ${pairing.dishName}`,
+          UTI: 'public.png',
+        });
+      } else {
+        showAlert({ title: 'Sharing unavailable', body: 'This device cannot open the share sheet.' });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not share recipe', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharingIndex(null);
+      setSharePairing(null);
+    }
+  }
+
   // Per-pairing save state for the in-flight transitions (idle → saving
   // → saved) within this mount. The authoritative "already saved" answer
   // is derived from the cookbook archive below so the state survives
@@ -228,11 +261,6 @@ export default function ChefResultsScreen() {
     : null;
   const stampLocation = (city ?? '').trim() || null;
 
-  const cellarMatch = useMemo(
-    () => (wineDetailsConfirmed ? findCellarMatch(cellarWines, wineDetailsConfirmed) : null),
-    [cellarWines, wineDetailsConfirmed],
-  );
-
   async function handleSavePairing(index: number) {
     const pairing = pairings[index];
     if (!wineDetailsConfirmed || !pairing) return;
@@ -276,52 +304,6 @@ export default function ChefResultsScreen() {
   const wine = wineDetailsConfirmed;
   const headerLine = wineHeaderLine(wine.producer, wine.wineName, wine.vintage);
 
-  async function handleRemoveFromCellar() {
-    if (!cellarMatch || !session?.user.id) return;
-    setArchiving(true);
-    try {
-      const removedAt = new Date().toISOString();
-      await addCellarWineRemoval({
-        cellarWineId: cellarMatch.id,
-        removedAt,
-        count: 1,
-        note: 'Archived from Chef pairing',
-      });
-
-      if (cellarMatch.quantity <= 1) {
-        // Last bottle — archive the existing row directly.
-        await updateCellarWine(cellarMatch.id, {
-          quantity: 0,
-          archived_at: removedAt,
-        });
-      } else {
-        // Multiple bottles — decrement the live cellar row by one and clone
-        // a separate archived row carrying the single removed bottle so the
-        // user can edit its quantity in the archived area later.
-        await updateCellarWine(cellarMatch.id, { quantity: cellarMatch.quantity - 1 });
-        const { id, created_at, updated_at, ...rest } = cellarMatch;
-        await addCellarWine({
-          ...rest,
-          quantity: 1,
-          archived_at: removedAt,
-          is_wishlist: false,
-        });
-      }
-
-      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['cellar-removals', cellarMatch.id] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
-
-      setArchivedModalOpen(true);
-    } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setArchiving(false);
-    }
-  }
-
   if (regenerating) {
     return (
       <SearchProgress
@@ -363,16 +345,6 @@ export default function ChefResultsScreen() {
         <Text style={styles.headerLine}>{headerLine}</Text>
         {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
 
-        {cellarMatch && (
-          <TouchableOpacity
-            style={[styles.removeBtn, archiving && styles.removeBtnDisabled]}
-            onPress={handleRemoveFromCellar}
-            disabled={archiving}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.removeBtnText}>{archiving ? 'Archiving…' : 'Remove This Wine From My Cellar'}</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       <View style={styles.section}>
@@ -384,6 +356,8 @@ export default function ChefResultsScreen() {
             saveState={getSaveState(i)}
             onSave={() => handleSavePairing(i)}
             isFromHistory={isFromHistory}
+            onShare={() => handleSharePairing(i)}
+            sharing={sharingIndex === i}
           />
         ))}
 
@@ -446,20 +420,6 @@ export default function ChefResultsScreen() {
         </TouchableOpacity>
       )}
 
-      <Modal visible={archivedModalOpen} transparent animationType="fade" onRequestClose={() => setArchivedModalOpen(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>Wine has been Archived</Text>
-            <Text style={styles.modalBody}>
-              One bottle has been moved to your cellar archive. You can update the quantity in the archived wines area if you removed more than one.
-            </Text>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setArchivedModalOpen(false)}>
-              <Text style={styles.modalButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={() => setSignInPromptVisible(false)}
@@ -467,6 +427,18 @@ export default function ChefResultsScreen() {
         onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
         onContinue={() => setSignInPromptVisible(false)}
       />
+
+      {/* Off-screen branded share card. Mounted only while a share is in
+          flight so the remote QR image gets a fresh render each time. */}
+      {sharePairing && (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <RecipeShareCard
+            ref={shareCardRef}
+            pairing={sharePairing}
+            wineHeader={wineDetailsConfirmed ? wineHeaderLine(wineDetailsConfirmed.producer, wineDetailsConfirmed.wineName, wineDetailsConfirmed.vintage) : null}
+          />
+        </View>
+      )}
     </ScrollView>
   );
 }
@@ -484,20 +456,21 @@ const styles = StyleSheet.create({
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerLine: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.5 },
   region: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs },
-  removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.md, alignSelf: 'flex-start' },
-  removeBtnDisabled: { opacity: 0.6 },
-  removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14 },
   section: { padding: spacing.xl },
   sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
   dishName: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
   chefInspiration: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: 2 },
+  recipeMetaInline: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, marginTop: 4, letterSpacing: 0.3 },
   pairingNotes: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.sm },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   cardSaveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   cardSaveButtonDisabled: { opacity: 0.6 },
   cardSaveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, letterSpacing: 0.3 },
+  cardShareButton: { marginTop: spacing.md, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  cardShareButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, letterSpacing: 0.3 },
+  shareCardWrap: { position: 'absolute', top: 100000, left: 0, opacity: 0 },
   cardSavedBlock: { alignItems: 'center', marginTop: spacing.md, gap: 4 },
   cardSavedLabel: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, letterSpacing: 0.5 },
   cardViewArchiveLink: { color: colors.gold, fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, textDecorationLine: 'underline' },
@@ -514,15 +487,8 @@ const styles = StyleSheet.create({
   notesSaveBtnDisabled: { opacity: 0.6 },
   notesSaveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   notesEditLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, alignSelf: 'flex-start' },
-  recipeMeta: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   recipeSection: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   recipeItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
   regenLink: { alignItems: 'center', paddingVertical: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm },
   regenLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
-  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
 });
