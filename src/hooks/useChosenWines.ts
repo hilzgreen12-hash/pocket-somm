@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { saveChosenWine, fetchChosenWines, updateChosenWine, type SaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
+import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
 import { syncReviewToCellar } from '../services/reviewSync';
 import { publishChosenWineToCommunity } from '../services/communityPublish';
 import type { ChosenWine } from '../types/wine';
@@ -64,5 +64,26 @@ export function useChosenWines() {
     },
   });
 
-  return { chosenWines, isLoading, save, update };
+  const saveManual = useMutation({
+    mutationFn: async (input: ManualSaveChosenWineInput) => {
+      const row = await saveManualChosenWine(userId!, input);
+      // Sync to a matching cellar/wishlist row when one exists, same as
+      // the scan-driven save path.
+      await syncReviewToCellar(
+        userId!,
+        { producer: input.producer, wineName: input.wineName, vintage: input.vintage },
+        { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
+        { setReviewDate: true },
+      );
+      try { await publishChosenWineToCommunity(row); } catch (err) { console.warn('[community] publishChosenWineToCommunity (manual) failed (non-fatal):', err); }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+      qc.invalidateQueries({ queryKey: ['wishlist', userId] });
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
+    },
+  });
+
+  return { chosenWines, isLoading, save, update, saveManual };
 }

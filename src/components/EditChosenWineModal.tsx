@@ -20,18 +20,22 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
+  const [listPrice, setListPrice] = useState('');
   const [tastingNote, setTastingNote] = useState('');
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
+  const [isFavourite, setIsFavourite] = useState(false);
   const [vinsterNotesOpen, setVinsterNotesOpen] = useState(false);
 
   useEffect(() => {
     if (visible && wine) {
       setRestaurant(wine.restaurant_name ?? '');
       setCity(wine.city ?? '');
+      setListPrice(wine.menu_price != null ? String(wine.menu_price) : '');
       setTastingNote(wine.tasting_note ?? '');
       setOtherObservations(wine.other_observations ?? '');
       setUserScore(wine.user_score ?? null);
+      setIsFavourite(!!wine.is_favourite);
       setVinsterNotesOpen(false);
     }
   }, [visible, wine]);
@@ -41,6 +45,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
     // bug can't strand the user on this modal.
     Keyboard.dismiss();
+    const trimmedPrice = listPrice.trim();
+    const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
     await update.mutateAsync({
       id: wine.id,
       input: {
@@ -49,6 +55,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         tastingNote,
         otherObservations,
         userScore,
+        listPrice: Number.isFinite(parsedPrice) ? parsedPrice : null,
+        isFavourite,
         // Identity passed through so the post-update sync can push the
         // new values onto a matching wishlist row if one exists.
         producer: wine.producer,
@@ -63,6 +71,11 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   if (!wine) return null;
 
   const wineName = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
+  const currencySymbol = (() => {
+    const cur = (wine.currency ?? 'GBP').toUpperCase();
+    const map: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', NZD: 'NZ$', JPY: '¥', CHF: 'Fr', HKD: 'HK$', SGD: 'S$' };
+    return map[cur] ?? `${cur} `;
+  })();
   const reviewDate = wine.chosen_at
     ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
@@ -92,6 +105,15 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
+          <TouchableOpacity
+            style={styles.favouriteBtn}
+            onPress={() => setIsFavourite((v) => !v)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
+          </TouchableOpacity>
+
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
 
             <Text style={styles.heading}>{wineName}</Text>
@@ -118,6 +140,21 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               onChangeText={setCity}
               placeholder="City"
               placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.fieldLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
+            <TextInput
+              style={styles.input}
+              value={listPrice}
+              onChangeText={(text) => {
+                const cleaned = text.replace(/[^0-9.]/g, '');
+                const parts = cleaned.split('.');
+                const normalised = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+                setListPrice(normalised);
+              }}
+              placeholder={wine.menu_price != null ? String(wine.menu_price) : 'e.g. 65'}
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
             />
 
             {hasVinsterNotes ? (
@@ -255,6 +292,20 @@ const styles = StyleSheet.create({
   sheet: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  favouriteBtn: {
+    position: 'absolute',
+    top: 56,
+    right: spacing.xl,
+    zIndex: 10,
+    padding: 4,
+  },
+  favouriteStar: {
+    fontSize: 30,
+    color: colors.textMuted,
+  },
+  favouriteStarActive: {
+    color: colors.gold,
   },
   content: {
     padding: spacing.xl,

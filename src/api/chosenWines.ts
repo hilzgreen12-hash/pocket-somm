@@ -9,10 +9,59 @@ export interface SaveChosenWineInput {
   tastingNote: string;
   otherObservations: string;
   userScore: number | null;
+  listPrice: number | null;
+  isFavourite: boolean;
+}
+
+// Manual entry path — used by the +Add flow on Your Wine Reviews, where
+// the user enters every field by hand (no scan, no Vinster recommendation
+// to seed from). Mirrors saveChosenWine's row shape but accepts flat
+// strings and skips the WineRecommendation-only metadata.
+export interface ManualSaveChosenWineInput {
+  wineName: string;
+  producer: string;
+  region: string;
+  vintage: number | null;
+  restaurantName: string;
+  city: string;
+  listPrice: number | null;
+  currency: string;
+  tastingNote: string;
+  otherObservations: string;
+  userScore: number | null;
+  isFavourite: boolean;
+}
+
+export async function saveManualChosenWine(userId: string, input: ManualSaveChosenWineInput): Promise<ChosenWine> {
+  const { data, error } = await supabase.from('chosen_wines').insert({
+    user_id: userId,
+    scan_session_id: null,
+    wine_name: input.wineName.trim(),
+    producer: input.producer.trim() || null,
+    region: input.region.trim() || null,
+    appellation: null,
+    grape: null,
+    vintage: input.vintage,
+    menu_price: input.listPrice,
+    currency: input.currency,
+    critic_score: null,
+    rationale: null,
+    vintage_assessment: null,
+    drinking_window: null,
+    rarity_assessment: null,
+    restaurant_name: input.restaurantName.trim() || null,
+    city: input.city.trim() || null,
+    tasting_note: input.tastingNote.trim() || null,
+    other_observations: input.otherObservations.trim() || null,
+    user_score: input.userScore,
+    is_favourite: input.isFavourite,
+  }).select().single();
+  if (error) throw new Error(error.message);
+  return data as ChosenWine;
 }
 
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<ChosenWine> {
-  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore } = input;
+  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore, listPrice, isFavourite } = input;
   const { data, error } = await supabase.from('chosen_wines').insert({
     user_id: userId,
     scan_session_id: scanSessionId,
@@ -22,7 +71,9 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     appellation: wine.appellation ?? null,
     grape: wine.grape ?? null,
     vintage: wine.vintage,
-    menu_price: wine.menuPrice,
+    // List price the user confirmed in the review modal, falling back
+    // to the price Vinster pulled off the menu for the scan.
+    menu_price: listPrice ?? wine.menuPrice,
     currency: wine.currency,
     critic_score: wine.criticScore,
     rationale: wine.rationale,
@@ -34,6 +85,7 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     tasting_note: tastingNote || null,
     other_observations: otherObservations || null,
     user_score: userScore,
+    is_favourite: isFavourite,
   }).select().single();
   if (error) throw new Error(error.message);
   return data as ChosenWine;
@@ -45,6 +97,8 @@ export interface UpdateChosenWineInput {
   tastingNote: string;
   otherObservations: string;
   userScore: number | null;
+  listPrice: number | null;
+  isFavourite: boolean;
   // Identity carried through so the post-update sync can find any
   // matching wishlist row without an extra round-trip. The chosen_wines
   // update endpoint itself doesn't change these fields.
@@ -60,6 +114,8 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
     tasting_note: input.tastingNote || null,
     other_observations: input.otherObservations || null,
     user_score: input.userScore,
+    menu_price: input.listPrice,
+    is_favourite: input.isFavourite,
   }).eq('id', id);
   if (error) throw new Error(error.message);
 }
