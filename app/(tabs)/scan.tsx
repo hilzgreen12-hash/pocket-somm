@@ -320,16 +320,13 @@ export default function ScanTab() {
           <TouchableOpacity activeOpacity={1} style={styles.introSheet} onPress={() => {}}>
             <Text style={styles.introTitle}>Welcome to the List</Text>
             <Text style={styles.introBody}>
-              Photograph a restaurant's wine list — up to <Text style={styles.introBodyEmph}>80 wines per scan</Text> — and Vinster picks three sommelier-style recommendations.
+              Scan a wine list or upload screenshots — Vinster reads <Text style={styles.introBodyEmph}>up to 80 wines per session</Text>. If a list is longer, only the first 80 are scored, so focus your photos on the section you care about (reds, by the glass, under £100…) and keep them clear and well-lit.
             </Text>
             <Text style={styles.introBody}>
-              Each pick is scored on critic ratings, vintage quality, drinking window and value, then weighted against the wine type, style, food pairing and budget you set above. Hard rules from your profile (regional dislikes, etc.) are always respected. Tap <Text style={styles.introBodyEmph}>Top Scoring Wines</Text> to ignore preferences and surface the highest-rated bottles instead.
+              Each of your three picks is scored on critic ratings, vintage quality, drinking window and value, then weighted against the wine type, style, food pairing and budget you set above. Hard rules from your profile (regional dislikes, etc.) are always respected.
             </Text>
             <Text style={styles.introBody}>
               After scanning, add the restaurant name on the results page to save the visit to <Text style={styles.introBodyEmph}>Your Restaurants</Text> — where you can review the food, service and atmosphere any time.
-            </Text>
-            <Text style={styles.introBody}>
-              For best results, capture a clear, well-lit photo with the full wine list in frame.
             </Text>
 
             <TouchableOpacity style={styles.introPrimaryBtn} onPress={dismissIntro} activeOpacity={0.8}>
