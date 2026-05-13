@@ -108,12 +108,27 @@ export default function ExtractingScreen() {
     try {
       // Step 1: OCR
       setStage('reading');
-      let wines;
+      let wines: ExtractedWine[];
       if (imageUris) {
-        // Multiple screenshots — run OCR in parallel and merge
-        const results = await Promise.all(imageUris.map(extractWineList));
+        // Multiple screenshots — run OCR in parallel and merge. Use
+        // allSettled so one bad image (timeout, parse failure on a
+        // dense page) doesn't sink the whole batch; we surface a
+        // generic error only when every image failed.
+        const results = await Promise.allSettled(imageUris.map(extractWineList));
+        const fulfilled: ExtractedWine[] = [];
+        const failures: string[] = [];
+        for (const r of results) {
+          if (r.status === 'fulfilled') fulfilled.push(...r.value);
+          else failures.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
+        }
+        if (fulfilled.length === 0) {
+          throw new Error(
+            failures[0] ??
+            'No wines could be extracted from the uploaded images. Try fewer, clearer shots.'
+          );
+        }
         const seen = new Set<string>();
-        wines = results.flat().filter((w) => {
+        wines = fulfilled.filter((w) => {
           const key = `${w.name}__${w.producer}`.toLowerCase();
           if (seen.has(key)) return false;
           seen.add(key);
