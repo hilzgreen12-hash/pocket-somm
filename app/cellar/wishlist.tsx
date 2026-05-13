@@ -328,14 +328,45 @@ export default function WishListScreen() {
   }
 
   async function performMergeFromWishlist(existingId: string, existingQty: number) {
-    if (!confirm || confirm.kind !== 'move') return;
+    if (!confirm || confirm.kind !== 'move' || !moveWine) return;
     const qty = parseInt(moveQuantity) || 1;
     const newQty = existingQty + qty;
+    const parsedPrice = parseFloat(movePurchasePrice);
+    const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     setMoving(true);
     try {
+      // Fill-gaps merge: the user explicitly tapped "Yes, add to
+      // listing" which means the existing cellar row is the source of
+      // truth. Don't overwrite curated content (AI tasting note,
+      // critic data, existing user notes, existing purchase price).
+      // Only carry across wishlist-side content that lands in an
+      // otherwise empty cellar field, so the user doesn't lose
+      // anything they wrote on the wishlist when no equivalent already
+      // exists on the cellar row.
+      const existingCellar = cellarWines.find((w) => w.id === existingId);
+      const userWishlistNote = (moveWine.tasting_notes ?? '').trim();
+      const discoveredAt = (moveWine.user_notes ?? '').trim();
+      const mergedWishlistNotes =
+        [userWishlistNote, discoveredAt ? `Discovered at: ${discoveredAt}` : '']
+          .filter(Boolean)
+          .join('\n\n');
+      const existingUserNotes = (existingCellar?.user_notes ?? '').trim();
+      const userNotesUpdate =
+        existingUserNotes.length === 0 && mergedWishlistNotes.length > 0
+          ? { user_notes: mergedWishlistNotes }
+          : {};
+      const purchasePriceUpdate =
+        existingCellar?.purchase_price == null && validPrice != null
+          ? { purchase_price: validPrice, purchase_price_currency: userCurrency }
+          : {};
+
       await updateCellarWine.mutateAsync({
         id: existingId,
-        updates: { quantity: newQty },
+        updates: {
+          quantity: newQty,
+          ...userNotesUpdate,
+          ...purchasePriceUpdate,
+        },
       });
       // The wishlist row is no longer needed — the wine now lives in the
       // existing cellar listing. Hard delete (not archive) so it doesn't
