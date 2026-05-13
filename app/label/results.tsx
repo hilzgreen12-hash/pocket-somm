@@ -216,15 +216,14 @@ export default function LabelResultsScreen() {
       return;
     }
 
+    // No rack — route the user straight to the full cellar wine card
+    // so they land on the same surface they see from Full Cellar List.
+    // The intel preview screen they came from is missing the cellar
+    // inputs (Additional Notes, Find a Recipe, Archive controls etc.),
+    // and the previous "Added to cellar — OK / View in cellar" alert
+    // forced an extra tap before the user could actually use the wine.
     setAddingToCellar(false);
-    showAlert({
-      title: 'Added to cellar',
-      body: `${wine.wineName ?? wine.producer} has been saved.`,
-      buttons: [
-        { text: 'OK' },
-        { text: 'View in cellar', onPress: () => router.replace('/cellar/full-list') },
-      ],
-    });
+    router.replace(`/cellar/${savedWineId}` as any);
   }
 
   async function performNewEntry() {
