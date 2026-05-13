@@ -15,6 +15,7 @@ import { generatePairings, getWineIntelligence } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWineRemoval, listCellarWineRemovals, updateCellarWineRemoval } from '../../src/api/cellar';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
+import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
@@ -111,6 +112,10 @@ export default function CellarWineDetail() {
   // stays visible when entering via Full Cellar List, where it acts as a
   // legitimate shortcut to the rack.
   const cameFromRack = from === 'rack';
+  // Coming in via Profile → Wine Reviews — the chef-pairing button on
+  // this card is swapped for a Post Review to Community CTA so the user
+  // can share what they just wrote with other Vinster users.
+  const cameFromReviews = from === 'reviews';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
   const { racks } = useRacks();
@@ -157,6 +162,8 @@ export default function CellarWineDetail() {
   const [addingBottles, setAddingBottles] = useState(false);
 
   const [findingPairings, setFindingPairings] = useState(false);
+  const [postingReview, setPostingReview] = useState(false);
+  const [reviewPosted, setReviewPosted] = useState(false);
 
   const [editingPrice, setEditingPrice] = useState(false);
   const [purchasePriceDraft, setPurchasePriceDraft] = useState(wine?.purchase_price != null ? String(wine.purchase_price) : '');
@@ -470,6 +477,68 @@ export default function CellarWineDetail() {
     }
   }
 
+  async function handlePostToCommunity() {
+    if (!wine || postingReview || reviewPosted) return;
+    if (!session?.user.id) {
+      showAlert({ title: 'Sign in required', body: 'You need an account to post a review to the community.' });
+      return;
+    }
+    const titleParts = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean);
+    const title = titleParts.join(' · ').trim() || wine.wine_name || 'Wine review';
+    const subtitleParts = [wine.region, wine.grape_variety].filter(Boolean);
+    const subtitle = subtitleParts.join(' · ') || null;
+    const body = (wine.user_notes ?? '').trim() || null;
+    showAlert({
+      title: 'Share with the community?',
+      body: `Post your review of ${title} to the Vinster community feed. Other users will be able to read your notes and rating.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Post',
+          onPress: async () => {
+            setPostingReview(true);
+            try {
+              const displayName = (session.user.email ?? '').split('@')[0] || null;
+              await publishCommunityReview(
+                {
+                  category: 'wine',
+                  source_table: 'cellar_wines',
+                  source_id: wine.id,
+                  title,
+                  subtitle,
+                  rating: wine.review_score,
+                  body,
+                  metadata: {
+                    producer: wine.producer ?? null,
+                    region: wine.region ?? null,
+                    vintage: wine.vintage ?? null,
+                    grape_variety: wine.grape_variety ?? null,
+                    critic_score: wine.critic_score ?? null,
+                    review_date: wine.review_date ?? null,
+                  },
+                },
+                displayName,
+              );
+              setReviewPosted(true);
+              showAlert({ title: 'Posted to community', body: 'Thanks for sharing your review — it now appears in the Vinster community feed.' });
+            } catch (err) {
+              const detail = err instanceof Error ? err.message : String(err);
+              const alreadyPosted = detail.toLowerCase().includes('community_reviews_source_unique') || detail.toLowerCase().includes('duplicate');
+              if (alreadyPosted) {
+                setReviewPosted(true);
+                showAlert({ title: 'Already shared', body: 'You\'ve already posted a review of this wine to the community.' });
+              } else {
+                showAlert({ title: 'Could not post', body: detail });
+              }
+            } finally {
+              setPostingReview(false);
+            }
+          },
+        },
+      ],
+    });
+  }
+
   function handleFindPairings() {
     if (!wine) return;
     // Route through the same per-search preferences screen that the Chef
@@ -649,9 +718,22 @@ export default function CellarWineDetail() {
           {rackRemovalMsg && (
             <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
           )}
-          <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
-            <Text style={styles.chefBtnText}>Chef, find me a recipe for this wine</Text>
-          </TouchableOpacity>
+          {cameFromReviews ? (
+            <TouchableOpacity
+              style={[styles.chefBtn, (postingReview || reviewPosted) && styles.chefBtnDisabled]}
+              onPress={handlePostToCommunity}
+              disabled={postingReview || reviewPosted}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.chefBtnText}>
+                {reviewPosted ? '✓ Posted to Community' : postingReview ? 'Posting…' : 'Post Review To Community'}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
+              <Text style={styles.chefBtnText}>Chef, find me a recipe for this wine</Text>
+            </TouchableOpacity>
+          )}
         </>
       )}
 
@@ -1017,6 +1099,7 @@ const styles = StyleSheet.create({
   removeModalOkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   rackRemovalMsg: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
+  chefBtnDisabled: { opacity: 0.6 },
   chefBtnText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
