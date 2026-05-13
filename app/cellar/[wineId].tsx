@@ -14,6 +14,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, getWineIntelligence } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWineRemoval, listCellarWineRemovals, updateCellarWineRemoval } from '../../src/api/cellar';
+import { findMatchingChosenWine, patchChosenWine } from '../../src/api/chosenWines';
 import { supabase } from '../../src/api/supabase';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
@@ -385,6 +386,33 @@ export default function CellarWineDetail() {
           review_date: dateTrim || null,
         },
       });
+      // Mirror the review fields onto any matching chosen_wines (review)
+      // row so the user's wine reviews stay in lock-step with edits made
+      // here. Same identity match (producer + name + vintage) used by
+      // the wishlist sync. Best-effort — sync failures don't undo the
+      // cellar update.
+      if (session?.user.id && wine) {
+        try {
+          const match = await findMatchingChosenWine(session.user.id, {
+            producer: wine.producer,
+            wineName: wine.wine_name,
+            vintage: wine.vintage,
+          });
+          if (match) {
+            const idx = locationTrim.indexOf(',');
+            const restaurantName = idx === -1 ? locationTrim : locationTrim.slice(0, idx).trim();
+            const city = idx === -1 ? '' : locationTrim.slice(idx + 1).trim();
+            await patchChosenWine(match.id, {
+              user_score: parsedScore,
+              restaurant_name: restaurantName || null,
+              city: city || null,
+            });
+            qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+          }
+        } catch (err) {
+          console.warn('[wine-detail review → chosen sync] failed:', err);
+        }
+      }
       setReviewExpanded(false);
     } catch {
       showAlert({ title: 'Could not save review', body: 'Please try again.' });
