@@ -157,6 +157,11 @@ export default function ChosenWinesScreen() {
                     {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
                     <Text style={styles.metaText}> · {item.source === 'restaurant' ? 'Restaurant' : 'Cellar'}</Text>
                   </View>
+                  <View style={styles.saveToCommunityRow}>
+                    <Text style={styles.saveToCommunityText}>
+                      Save to Community <Text style={styles.comingSoonInline}>(coming soon)</Text>
+                    </Text>
+                  </View>
                 </TouchableOpacity>
               );
             })
@@ -198,4 +203,24 @@ const styles = StyleSheet.create({
   sortChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   sortChipText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   sortChipTextActive: { color: colors.gold },
+  saveToCommunityRow: {
+    marginTop: spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: colors.border,
+    paddingTop: spacing.sm,
+    alignItems: 'center',
+  },
+  saveToCommunityText: {
+    fontSize: 13,
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    color: 'rgba(212,176,96,0.45)',
+    letterSpacing: 0.3,
+  },
+  comingSoonInline: {
+    fontSize: 12,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    color: colors.textMuted,
+    textTransform: 'lowercase',
+    letterSpacing: 0.5,
+  },
 });
