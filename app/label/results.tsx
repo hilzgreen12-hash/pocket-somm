@@ -231,7 +231,10 @@ export default function LabelResultsScreen() {
       const saved = await addWine.mutateAsync(buildWinePayload(session.user.id));
       await performSaveFlow(saved.id);
     } catch (err) {
-      showAlert({ title: 'Error', body: 'Could not save to cellar. Please try again.' });
+      // Surface the underlying error so RLS / FK / schema failures are
+      // visible instead of swallowed under a generic message.
+      const detail = err instanceof Error ? err.message : String(err);
+      showAlert({ title: 'Could not save to cellar', body: detail });
     } finally {
       setSaving(false);
     }
@@ -247,7 +250,8 @@ export default function LabelResultsScreen() {
       });
       await performSaveFlow(matchingExisting.id);
     } catch (err) {
-      showAlert({ title: 'Error', body: 'Could not save to cellar. Please try again.' });
+      const detail = err instanceof Error ? err.message : String(err);
+      showAlert({ title: 'Could not save to cellar', body: detail });
     } finally {
       setSaving(false);
     }
