@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabFooter } from '../../src/components/TabFooter';
@@ -62,6 +62,7 @@ export default function ScanTab() {
   const [hasLastSearch, setHasLastSearch] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [signInPromptShown, setSignInPromptShown] = useState(false);
+  const [introVisible, setIntroVisible] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
   const lastSyncedBudgetRef = useRef<number | null | undefined>(undefined);
 
@@ -69,7 +70,25 @@ export default function ScanTab() {
     AsyncStorage.getItem('vinster_scan_history').then((raw) => {
       try { setHasLastSearch(!!(raw && JSON.parse(raw).length)); } catch { /* ignore */ }
     });
+    // Show the welcome popup every time the tab gains focus, until the
+    // user explicitly opts out via "Don't show this again". A simple
+    // dismiss closes for the visit only — the popup reappears on the
+    // next focus.
+    AsyncStorage.getItem('vinster_list_intro_dismissed').then((value) => {
+      if (value !== 'true') setIntroVisible(true);
+    });
   }, []));
+
+  function dismissIntro() {
+    setIntroVisible(false);
+  }
+
+  async function dontShowIntroAgain() {
+    try {
+      await AsyncStorage.setItem('vinster_list_intro_dismissed', 'true');
+    } catch { /* AsyncStorage unavailable — fall back to in-session dismiss */ }
+    setIntroVisible(false);
+  }
 
   // Sync the scan tab's budget to the profile default any time the
   // profile default changes (first load, profile edit, account switch).
@@ -291,6 +310,39 @@ export default function ScanTab() {
 
       </View>
 
+      <Modal
+        visible={introVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={dismissIntro}
+      >
+        <TouchableOpacity style={styles.introOverlay} activeOpacity={1} onPress={dismissIntro}>
+          <TouchableOpacity activeOpacity={1} style={styles.introSheet} onPress={() => {}}>
+            <Text style={styles.introTitle}>Welcome to the List</Text>
+            <Text style={styles.introBody}>
+              Photograph a restaurant's wine list and Vinster picks three sommelier-style recommendations tailored to your preferences.
+            </Text>
+            <Text style={styles.introBody}>
+              Set your wine type, style, food pairing and budget above before scanning so Vinster can rank wines that match. Tap <Text style={styles.introBodyEmph}>Top Scoring Wines</Text> to skip preferences and surface the highest-rated bottles instead.
+            </Text>
+            <Text style={styles.introBody}>
+              After scanning, add the restaurant name on the results page to save the visit to <Text style={styles.introBodyEmph}>Your Restaurants</Text> — where you can review the food, service and atmosphere any time.
+            </Text>
+            <Text style={styles.introBody}>
+              For best results, capture a clear, well-lit photo of the full wine list.
+            </Text>
+
+            <TouchableOpacity style={styles.introPrimaryBtn} onPress={dismissIntro} activeOpacity={0.8}>
+              <Text style={styles.introPrimaryBtnText}>Got it</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.introDismissBtn} onPress={dontShowIntroAgain} activeOpacity={0.7}>
+              <Text style={styles.introDismissText}>Don't show this again</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={dismissSignInPrompt}
@@ -451,5 +503,67 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  introOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.65)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  introSheet: {
+    backgroundColor: colors.background,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.lg,
+    width: '100%',
+    maxWidth: 420,
+  },
+  introTitle: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 26,
+    color: colors.gold,
+    textAlign: 'center',
+    letterSpacing: 0.5,
+    marginBottom: spacing.md,
+  },
+  introBody: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 16,
+    color: '#FFFFFF',
+    lineHeight: 23,
+    marginBottom: spacing.sm,
+  },
+  introBodyEmph: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontStyle: 'normal',
+    color: colors.gold,
+  },
+  introPrimaryBtn: {
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 12,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+    marginTop: spacing.md,
+  },
+  introPrimaryBtnText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+    color: colors.gold,
+    letterSpacing: 0.5,
+  },
+  introDismissBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: 4,
+  },
+  introDismissText: {
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 14,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
   },
 });
