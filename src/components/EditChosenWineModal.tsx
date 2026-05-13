@@ -23,6 +23,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [tastingNote, setTastingNote] = useState('');
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
+  const [vinsterNotesOpen, setVinsterNotesOpen] = useState(false);
 
   useEffect(() => {
     if (visible && wine) {
@@ -31,6 +32,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
       setTastingNote(wine.tasting_note ?? '');
       setOtherObservations(wine.other_observations ?? '');
       setUserScore(wine.user_score ?? null);
+      setVinsterNotesOpen(false);
     }
   }, [visible, wine]);
 
@@ -64,9 +66,27 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const reviewDate = wine.chosen_at
     ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
     : null;
+  // Vinster captured the wine card analysis at save time — surface it
+  // here as an expandable block so the user can revisit what Vinster
+  // said about THIS specific wine on the original recommendation list.
+  const hasVinsterNotes =
+    wine.critic_score != null ||
+    !!wine.rationale ||
+    !!wine.vintage_assessment ||
+    !!wine.drinking_window ||
+    !!wine.rarity_assessment;
+  const drinkingRange =
+    wine.drinking_window?.from && wine.drinking_window?.to
+      ? `${wine.drinking_window.from}–${wine.drinking_window.to}`
+      : null;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+      onRequestClose={onClose}
+    >
       <KeyboardAvoidingView
         style={styles.overlay}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -99,6 +119,70 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               placeholder="City"
               placeholderTextColor={colors.textMuted}
             />
+
+            {hasVinsterNotes ? (
+              <View style={styles.vinsterWrap}>
+                <TouchableOpacity
+                  onPress={() => setVinsterNotesOpen((v) => !v)}
+                  activeOpacity={0.7}
+                  style={styles.vinsterLink}
+                >
+                  <Text style={styles.vinsterLinkText}>
+                    {vinsterNotesOpen ? 'Hide Vinster’s notes for this wine' : 'View Vinster’s notes for this wine →'}
+                  </Text>
+                </TouchableOpacity>
+
+                {vinsterNotesOpen ? (
+                  <View style={styles.vinsterBlock}>
+                    {wine.critic_score != null ? (
+                      <View style={styles.vinsterRow}>
+                        <Text style={styles.vinsterLabel}>Critic Score</Text>
+                        <Text style={styles.vinsterScore}>{wine.critic_score} <Text style={styles.vinsterScoreUnit}>pts</Text></Text>
+                      </View>
+                    ) : null}
+
+                    {wine.drinking_window ? (
+                      <View style={styles.vinsterField}>
+                        <Text style={styles.vinsterLabel}>Drinking Window</Text>
+                        <Text style={styles.vinsterFieldValue}>
+                          {drinkingRange ? `${drinkingRange} · ` : ''}{wine.drinking_window.status}
+                        </Text>
+                        {wine.drinking_window.notes ? (
+                          <Text style={styles.vinsterFieldBody}>{wine.drinking_window.notes}</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {wine.vintage_assessment ? (
+                      <View style={styles.vinsterField}>
+                        <Text style={styles.vinsterLabel}>Vintage</Text>
+                        <Text style={styles.vinsterFieldValue}>{wine.vintage_assessment.label}</Text>
+                        {wine.vintage_assessment.notes ? (
+                          <Text style={styles.vinsterFieldBody}>{wine.vintage_assessment.notes}</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {wine.rarity_assessment ? (
+                      <View style={styles.vinsterField}>
+                        <Text style={styles.vinsterLabel}>Rarity</Text>
+                        <Text style={styles.vinsterFieldValue}>{wine.rarity_assessment.label}</Text>
+                        {wine.rarity_assessment.notes ? (
+                          <Text style={styles.vinsterFieldBody}>{wine.rarity_assessment.notes}</Text>
+                        ) : null}
+                      </View>
+                    ) : null}
+
+                    {wine.rationale ? (
+                      <View style={styles.vinsterField}>
+                        <Text style={styles.vinsterLabel}>Sommelier’s Note</Text>
+                        <Text style={styles.vinsterFieldBody}>{wine.rationale}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
 
             <View style={styles.divider} />
 
@@ -166,20 +250,16 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    justifyContent: 'flex-end',
+    backgroundColor: colors.background,
   },
   sheet: {
+    flex: 1,
     backgroundColor: colors.background,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '92%',
-    borderTopWidth: 1,
-    borderColor: colors.border,
   },
   content: {
     padding: spacing.xl,
-    paddingBottom: 40,
+    paddingTop: 64,
+    paddingBottom: 60,
   },
   heading: {
     fontFamily: 'CormorantGaramond_700Bold',
@@ -234,6 +314,66 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
+  },
+  vinsterWrap: {
+    marginTop: spacing.xs,
+    marginBottom: spacing.sm,
+  },
+  vinsterLink: {
+    alignItems: 'flex-start',
+    paddingVertical: spacing.xs,
+  },
+  vinsterLinkText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 14,
+    color: colors.gold,
+    letterSpacing: 0.3,
+  },
+  vinsterBlock: {
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 12,
+    padding: spacing.md,
+    marginTop: spacing.xs,
+    gap: spacing.sm,
+    backgroundColor: 'rgba(212,176,96,0.06)',
+  },
+  vinsterRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+  },
+  vinsterLabel: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 11,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom: 2,
+  },
+  vinsterScore: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 22,
+    color: colors.gold,
+  },
+  vinsterScoreUnit: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 14,
+    color: colors.gold,
+  },
+  vinsterField: {
+    gap: 2,
+  },
+  vinsterFieldValue: {
+    fontFamily: 'CormorantGaramond_700Bold',
+    fontSize: 15,
+    color: colors.text,
+  },
+  vinsterFieldBody: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 15,
+    color: colors.textMuted,
+    lineHeight: 21,
   },
   noteInput: {
     minHeight: 80,
