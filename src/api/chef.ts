@@ -10,6 +10,8 @@ export interface ChefLabelSession {
   pairings: Pairing[];
   city: string | null;
   is_starred?: boolean;
+  user_notes?: string | null;
+  user_notes_updated_at?: string | null;
 }
 
 export interface ChefPairingSession {
@@ -27,11 +29,22 @@ export interface ChefPairingSession {
 export async function listChefLabelSessions(userId: string): Promise<ChefLabelSession[]> {
   const { data, error } = await supabase
     .from('chef_label_sessions')
-    .select('id, saved_at, wine, filters, pairings, city, is_starred')
+    .select('id, saved_at, wine, filters, pairings, city, is_starred, user_notes, user_notes_updated_at')
     .eq('user_id', userId)
     .order('saved_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as ChefLabelSession[];
+}
+
+export async function updateChefLabelSessionNotes(id: string, userNotes: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('chef_label_sessions')
+    .update({
+      user_notes: userNotes,
+      user_notes_updated_at: userNotes != null ? new Date().toISOString() : null,
+    })
+    .eq('id', id);
+  if (error) throw error;
 }
 
 export async function insertChefLabelSession(input: {
