@@ -41,7 +41,18 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     Keyboard.dismiss();
     await update.mutateAsync({
       id: wine.id,
-      input: { restaurantName: restaurant, city, tastingNote, otherObservations, userScore },
+      input: {
+        restaurantName: restaurant,
+        city,
+        tastingNote,
+        otherObservations,
+        userScore,
+        // Identity passed through so the post-update sync can push the
+        // new values onto a matching wishlist row if one exists.
+        producer: wine.producer,
+        wineName: wine.wine_name,
+        vintage: wine.vintage,
+      },
     });
     onSaved();
     onClose();
