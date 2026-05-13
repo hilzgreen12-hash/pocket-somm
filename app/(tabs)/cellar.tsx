@@ -74,7 +74,7 @@ export default function CellarTab() {
           <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/full-list'))}>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Full Cellar List</Text>
         </TouchableOpacity>
 
@@ -82,7 +82,7 @@ export default function CellarTab() {
           View your cellar stats and your virtual storage racks, edit your cellar.
         </Text>
         <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
             <Text style={styles.buttonText}>Quick Cellar Stats</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
