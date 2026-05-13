@@ -320,16 +320,16 @@ export default function ScanTab() {
           <TouchableOpacity activeOpacity={1} style={styles.introSheet} onPress={() => {}}>
             <Text style={styles.introTitle}>Welcome to the List</Text>
             <Text style={styles.introBody}>
-              Photograph a restaurant's wine list and Vinster picks three sommelier-style recommendations tailored to your preferences.
+              Photograph a restaurant's wine list — up to <Text style={styles.introBodyEmph}>80 wines per scan</Text> — and Vinster picks three sommelier-style recommendations.
             </Text>
             <Text style={styles.introBody}>
-              Set your wine type, style, food pairing and budget above before scanning so Vinster can rank wines that match. Tap <Text style={styles.introBodyEmph}>Top Scoring Wines</Text> to skip preferences and surface the highest-rated bottles instead.
+              Each pick is scored on critic ratings, vintage quality, drinking window and value, then weighted against the wine type, style, food pairing and budget you set above. Hard rules from your profile (regional dislikes, etc.) are always respected. Tap <Text style={styles.introBodyEmph}>Top Scoring Wines</Text> to ignore preferences and surface the highest-rated bottles instead.
             </Text>
             <Text style={styles.introBody}>
               After scanning, add the restaurant name on the results page to save the visit to <Text style={styles.introBodyEmph}>Your Restaurants</Text> — where you can review the food, service and atmosphere any time.
             </Text>
             <Text style={styles.introBody}>
-              For best results, capture a clear, well-lit photo of the full wine list.
+              For best results, capture a clear, well-lit photo with the full wine list in frame.
             </Text>
 
             <TouchableOpacity style={styles.introPrimaryBtn} onPress={dismissIntro} activeOpacity={0.8}>
