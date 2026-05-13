@@ -28,18 +28,22 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
+  const [listPrice, setListPrice] = useState('');
   const [tastingNote, setTastingNote] = useState('');
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
+  const [isFavourite, setIsFavourite] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (visible) {
       setRestaurant(initialRestaurantName ?? '');
       setCity(initialCity ?? '');
+      setListPrice(wine?.menuPrice != null ? String(wine.menuPrice) : '');
       setTastingNote('');
       setOtherObservations('');
       setUserScore(null);
+      setIsFavourite(false);
       setSaved(false);
 
       // If we don't already have a city (e.g. fresh scan that hasn't been
@@ -64,7 +68,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         })();
       }
     }
-  }, [visible, initialRestaurantName, initialCity]);
+  }, [visible, initialRestaurantName, initialCity, wine?.menuPrice]);
 
   async function handleSave() {
     if (!wine || !session) return;
@@ -73,6 +77,8 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     // input) and the user has to tap a second time to actually save.
     Keyboard.dismiss();
     try {
+      const trimmedPrice = listPrice.trim();
+      const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
       await save.mutateAsync({
         wine,
         scanSessionId: scanSessionId ?? null,
@@ -81,6 +87,8 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         tastingNote,
         otherObservations,
         userScore,
+        listPrice: Number.isFinite(parsedPrice) ? parsedPrice : null,
+        isFavourite,
       });
       setSaved(true);
       onSaved();
@@ -92,6 +100,14 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   if (!wine) return null;
 
   const wineName = wine.vintage ? `${wine.vintage} ${wine.name}` : wine.name;
+
+  // Match the symbol on the recommendation card so the "List Price" the
+  // user sees aligns with the menu currency captured at scan time.
+  const currencySymbol = (() => {
+    const cur = (wine.currency ?? 'GBP').toUpperCase();
+    const map: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', NZD: 'NZ$', JPY: '¥', CHF: 'Fr', HKD: 'HK$', SGD: 'S$' };
+    return map[cur] ?? `${cur} `;
+  })();
 
   return (
     <Modal
@@ -105,6 +121,15 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
+          <TouchableOpacity
+            style={styles.favouriteBtn}
+            onPress={() => setIsFavourite((v) => !v)}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
+          </TouchableOpacity>
+
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
 
             <Text style={styles.heading}>{wineName}</Text>
@@ -130,6 +155,23 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
               onChangeText={setCity}
               placeholder="City"
               placeholderTextColor={colors.textMuted}
+            />
+
+            <Text style={styles.fieldLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
+            <TextInput
+              style={styles.input}
+              value={listPrice}
+              onChangeText={(text) => {
+                // Allow digits and a single decimal point only; the menu
+                // price from the scan can be non-integer (e.g. 24.50).
+                const cleaned = text.replace(/[^0-9.]/g, '');
+                const parts = cleaned.split('.');
+                const normalised = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+                setListPrice(normalised);
+              }}
+              placeholder={wine.menuPrice != null ? String(wine.menuPrice) : 'e.g. 65'}
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
             />
 
             <View style={styles.divider} />
@@ -208,6 +250,20 @@ const styles = StyleSheet.create({
   sheet: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+  favouriteBtn: {
+    position: 'absolute',
+    top: 56,
+    right: spacing.xl,
+    zIndex: 10,
+    padding: 4,
+  },
+  favouriteStar: {
+    fontSize: 30,
+    color: colors.textMuted,
+  },
+  favouriteStarActive: {
+    color: colors.gold,
   },
   content: {
     padding: spacing.xl,

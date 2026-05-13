@@ -223,6 +223,7 @@ export interface ChosenWine {
   tasting_note: string | null;
   other_observations: string | null;
   user_score: number | null;
+  is_favourite: boolean;
 }
 
 export interface PricingData {

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
+import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
@@ -17,6 +18,14 @@ function locationLine(wine: ChosenWine): string {
   return parts.join(', ');
 }
 
+function formatListPrice(wine: ChosenWine): string | null {
+  if (wine.menu_price == null) return null;
+  const cur = (wine.currency ?? 'GBP').toUpperCase();
+  const map: Record<string, string> = { GBP: '£', USD: '$', EUR: '€', AUD: 'A$', CAD: 'C$', NZD: 'NZ$', JPY: '¥', CHF: 'Fr', HKD: 'HK$', SGD: 'S$' };
+  const sym = map[cur] ?? `${cur} `;
+  return `${sym}${wine.menu_price}`;
+}
+
 type ReviewItem =
   | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
@@ -25,7 +34,8 @@ export default function ChosenWinesScreen() {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines: cellarWines } = useCellar();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
-  const [sortBy, setSortBy] = useState<'date' | 'score'>('date');
+  const [addOpen, setAddOpen] = useState(false);
+  const [sortBy, setSortBy] = useState<'date' | 'city' | 'score'>('date');
   const [filterBy, setFilterBy] = useState<'all' | 'cellar' | 'restaurant'>('all');
 
   // Cellar wines that have ANY user-supplied review content count as a
@@ -44,11 +54,27 @@ export default function ChosenWinesScreen() {
 
   const filtered = filterBy === 'all' ? items : items.filter((i) => i.source === filterBy);
 
+  // For city sort we read off the chosen_wines.city for restaurant
+  // reviews; cellar reviews keep the location they were drunk at in the
+  // free-text review_location. Rows with no city sort to the bottom.
+  function cityFor(item: ReviewItem): string {
+    if (item.source === 'restaurant') return (item.wine as ChosenWine).city?.trim() ?? '';
+    return (item.wine as CellarWine).review_location?.trim() ?? '';
+  }
+
   const sorted = [...filtered].sort((a, b) => {
     if (sortBy === 'score') {
       const ar = a.score ?? -1;
       const br = b.score ?? -1;
       if (ar !== br) return br - ar;
+    } else if (sortBy === 'city') {
+      const ac = cityFor(a).toLowerCase();
+      const bc = cityFor(b).toLowerCase();
+      const aEmpty = ac.length === 0;
+      const bEmpty = bc.length === 0;
+      if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
+      const cmp = ac.localeCompare(bc);
+      if (cmp !== 0) return cmp;
     }
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
@@ -64,19 +90,30 @@ export default function ChosenWinesScreen() {
         onSaved={() => setEditingWine(null)}
       />
 
+      <AddChosenWineModal
+        visible={addOpen}
+        onClose={() => setAddOpen(false)}
+        onSaved={() => setAddOpen(false)}
+      />
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={() => setAddOpen(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+        >
+          <Text style={styles.addLink}>+ Add</Text>
+        </TouchableOpacity>
       </View>
 
       {isLoading ? null : !hasAnything ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>
-            When you choose a wine from a Vinster recommendation, tap "Review This Wine" to record it here — with your tasting notes, score, and where you drank it. Notes you save on cellar wines also appear here.
+            When you choose a wine from a Vinster recommendation, tap "Review This Wine" to record it here — or tap + Add at the top to enter a wine by hand. Notes you save on cellar wines also appear here.
           </Text>
         </View>
       ) : (
@@ -89,6 +126,13 @@ export default function ChosenWinesScreen() {
               activeOpacity={0.7}
             >
               <Text style={[styles.sortChipText, sortBy === 'date' && styles.sortChipTextActive]}>Date</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortChip, sortBy === 'city' && styles.sortChipActive]}
+              onPress={() => setSortBy('city')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, sortBy === 'city' && styles.sortChipTextActive]}>City</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.sortChip, sortBy === 'score' && styles.sortChipActive]}
@@ -147,14 +191,22 @@ export default function ChosenWinesScreen() {
                     <Text style={styles.wineNameCompact} numberOfLines={2}>
                       {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                     </Text>
-                    {item.score != null && (
-                      <Text style={styles.scoreCompact}>{item.score}</Text>
-                    )}
+                    <View style={styles.scoreCluster}>
+                      {item.source === 'restaurant' && (item.wine as ChosenWine).is_favourite ? (
+                        <Text style={styles.favouriteStar}>★</Text>
+                      ) : null}
+                      {item.score != null && (
+                        <Text style={styles.scoreCompact}>{item.score}</Text>
+                      )}
+                    </View>
                   </View>
                   {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
                   <View style={styles.cardCompactMetaRow}>
                     <Text style={styles.metaText}>{formatDate(item.date)}</Text>
                     {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
+                    {item.source === 'restaurant' && formatListPrice(item.wine as ChosenWine) ? (
+                      <Text style={styles.metaText}> · {formatListPrice(item.wine as ChosenWine)}</Text>
+                    ) : null}
                     <Text style={styles.metaText}> · {item.source === 'restaurant' ? 'Restaurant' : 'Cellar'}</Text>
                   </View>
                   <View style={styles.saveToCommunityRow}>
@@ -185,6 +237,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
+  addLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, width: 50, textAlign: 'right' },
   title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
@@ -195,6 +248,8 @@ const styles = StyleSheet.create({
   wineNameCompact: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
   scoreCompact: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
+  scoreCluster: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  favouriteStar: { fontSize: 18, color: colors.gold },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
