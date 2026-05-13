@@ -31,6 +31,10 @@ export default function ChefArchiveScreen() {
 
   const [filter, setFilter] = useState<string>(initialFilter === 'favourites' ? FILTER_FAVOURITES : FILTER_ALL);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  // Remembered when the user taps "+ Create new folder" from inside the
+  // Add to Folder modal — once the folder is created we add this recipe
+  // to it automatically, so the user doesn't have to find it again.
+  const [pendingAssignAfterCreate, setPendingAssignAfterCreate] = useState<UnifiedItem | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
   const [manageFolder, setManageFolder] = useState<ChefArchiveCollection | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
@@ -59,16 +63,31 @@ export default function ChefArchiveScreen() {
     return allItems.filter((i) => membershipMap.get(i.key)?.has(filter));
   }, [filter, allItems, membershipMap]);
 
-  function handleCreateFolder() {
+  async function handleCreateFolder() {
     const trimmed = newFolderName.trim();
     if (!trimmed) return;
-    create.mutate(trimmed, {
-      onSuccess: () => {
-        setNewFolderOpen(false);
-        setNewFolderName('');
-      },
-      onError: (err) => showAlert({ title: 'Could not create', body: err instanceof Error ? err.message : 'Please try again.' }),
-    });
+    try {
+      const newFolder = await create.mutateAsync(trimmed);
+      setNewFolderOpen(false);
+      setNewFolderName('');
+      // If the user came here from the Add to Folder modal, auto-add the
+      // recipe to the freshly created folder so the action they started
+      // actually finishes.
+      if (pendingAssignAfterCreate && newFolder?.id) {
+        try {
+          await addItem.mutateAsync({
+            collectionId: newFolder.id,
+            itemType: pendingAssignAfterCreate.type,
+            itemId: pendingAssignAfterCreate.session.id,
+          });
+        } catch (err) {
+          showAlert({ title: 'Folder created — could not add recipe', body: err instanceof Error ? err.message : 'Please try again.' });
+        }
+        setPendingAssignAfterCreate(null);
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not create', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   function handleRenameFolder() {
@@ -98,9 +117,21 @@ export default function ChefArchiveScreen() {
     const itemId = assigning.session.id;
     const isMember = membershipMap.get(assigning.key)?.has(collectionId) ?? false;
     if (isMember) {
-      removeItem.mutate({ collectionId, itemType, itemId });
+      removeItem.mutate(
+        { collectionId, itemType, itemId },
+        {
+          onError: (err) =>
+            showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' }),
+        },
+      );
     } else {
-      addItem.mutate({ collectionId, itemType, itemId });
+      addItem.mutate(
+        { collectionId, itemType, itemId },
+        {
+          onError: (err) =>
+            showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' }),
+        },
+      );
     }
   }
 
@@ -304,8 +335,17 @@ export default function ChefArchiveScreen() {
       )}
 
       {/* New folder modal */}
-      <Modal visible={newFolderOpen} transparent animationType="fade" onRequestClose={() => setNewFolderOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setNewFolderOpen(false)}>
+      <Modal
+        visible={newFolderOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setNewFolderOpen(false); setPendingAssignAfterCreate(null); }}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => { setNewFolderOpen(false); setPendingAssignAfterCreate(null); }}
+        >
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>New folder</Text>
             <TextInput
@@ -321,7 +361,10 @@ export default function ChefArchiveScreen() {
             <TouchableOpacity style={styles.modalConfirm} onPress={handleCreateFolder}>
               <Text style={styles.modalConfirmText}>Create</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.modalCancel} onPress={() => setNewFolderOpen(false)}>
+            <TouchableOpacity
+              style={styles.modalCancel}
+              onPress={() => { setNewFolderOpen(false); setPendingAssignAfterCreate(null); }}
+            >
               <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -379,7 +422,15 @@ export default function ChefArchiveScreen() {
             )}
             <TouchableOpacity
               style={styles.modalCancel}
-              onPress={() => { setAssigning(null); setNewFolderOpen(true); }}
+              onPress={() => {
+                // Carry the recipe-being-assigned forward so the
+                // post-create flow can auto-add it once the new folder
+                // exists. Without this the user creates the folder and
+                // the recipe they started with stays unfiled.
+                if (assigning) setPendingAssignAfterCreate(assigning);
+                setAssigning(null);
+                setNewFolderOpen(true);
+              }}
             >
               <Text style={styles.modalNewFolderText}>+ Create new folder</Text>
             </TouchableOpacity>

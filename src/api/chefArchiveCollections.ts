@@ -69,11 +69,13 @@ export async function addChefItemToCollection(
     itemType === 'label'
       ? { collection_id: collectionId, label_session_id: itemId, pairing_session_id: null }
       : { collection_id: collectionId, label_session_id: null, pairing_session_id: itemId };
-  const { error } = await supabase.from('chef_archive_collection_items').upsert(row, {
-    onConflict:
-      itemType === 'label' ? 'collection_id,label_session_id' : 'collection_id,pairing_session_id',
-  });
-  if (error) throw error;
+  // Plain INSERT — the table has partial unique indexes (one for label
+  // rows, one for pairing rows) which don't reliably match against
+  // supabase-js's `upsert` onConflict target, leading to silent failures
+  // when adding to existing folders. Catching the duplicate-key code
+  // (23505) makes the call idempotent without relying on ON CONFLICT.
+  const { error } = await supabase.from('chef_archive_collection_items').insert(row);
+  if (error && error.code !== '23505') throw error;
 }
 
 export async function removeChefItemFromCollection(
