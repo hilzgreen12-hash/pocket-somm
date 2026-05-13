@@ -5,6 +5,8 @@ import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { currencySymbol } from '../../src/constants/currency';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -148,9 +150,12 @@ export default function WishListScreen() {
   const { wines, isLoading, updateWine, deleteWine } = useWishList();
   const { wines: cellarWines, updateWine: updateCellarWine } = useCellar();
   const { racks } = useRacks();
+  const { preferences } = usePreferences();
   const { setPendingWineId, setPendingStorageType } = useRackStore();
+  const userCurrency = preferences?.defaultCurrency ?? 'GBP';
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
   const [moveQuantity, setMoveQuantity] = useState('1');
+  const [movePurchasePrice, setMovePurchasePrice] = useState('');
   const [moveSelectedRackId, setMoveSelectedRackId] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
 
@@ -171,6 +176,7 @@ export default function WishListScreen() {
   function handleMoveToCellar(id: string) {
     const w = wines.find((x) => x.id === id);
     setMoveQuantity(String(w?.quantity ?? 1));
+    setMovePurchasePrice(w?.purchase_price != null ? String(w.purchase_price) : '');
     setMoveSelectedRackId(null);
     setConfirm({ kind: 'move', id });
   }
@@ -206,11 +212,19 @@ export default function WishListScreen() {
   async function performMove() {
     if (!confirm || confirm.kind !== 'move' || !moveWine) return;
     const qty = parseInt(moveQuantity) || 1;
+    const parsedPrice = parseFloat(movePurchasePrice);
+    const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
     setMoving(true);
     try {
       await updateWine.mutateAsync({
         id: confirm.id,
-        updates: { is_wishlist: false, quantity: qty },
+        updates: {
+          is_wishlist: false,
+          quantity: qty,
+          ...(validPrice != null
+            ? { purchase_price: validPrice, purchase_price_currency: userCurrency }
+            : {}),
+        },
       });
 
       // "+ Create new rack" → kick the user into the rack-photograph flow
@@ -363,6 +377,19 @@ export default function WishListScreen() {
               placeholderTextColor={colors.textMuted}
             />
 
+            <Text style={styles.moveLabel}>Purchase price (optional)</Text>
+            <View style={styles.priceRow}>
+              <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
+              <TextInput
+                style={styles.priceInput}
+                value={movePurchasePrice}
+                onChangeText={setMovePurchasePrice}
+                placeholder="0.00"
+                placeholderTextColor={colors.textSubtle}
+                keyboardType="decimal-pad"
+              />
+            </View>
+
             <Text style={styles.moveLabel}>Storage location (optional)</Text>
             <Text style={styles.moveHint}>Pick a rack to place this bottle in now, or save without and assign later.</Text>
             <View style={styles.rackList}>
@@ -491,6 +518,9 @@ const styles = StyleSheet.create({
   moveLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   moveHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: -spacing.xs, marginBottom: spacing.sm, lineHeight: 18 },
   moveInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
+  priceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, marginBottom: spacing.md, backgroundColor: colors.surface },
+  priceCurrency: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginRight: spacing.xs },
+  priceInput: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, paddingVertical: spacing.sm },
   rackList: { gap: spacing.xs, marginBottom: spacing.md },
   rackOption: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },
