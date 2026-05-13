@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { router } from 'expo-router';
-import { useWishList } from '../../src/hooks/useCellar';
+import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -146,6 +146,7 @@ type ConfirmAction =
 export default function WishListScreen() {
   const { session } = useAuth();
   const { wines, isLoading, updateWine, deleteWine } = useWishList();
+  const { wines: cellarWines, updateWine: updateCellarWine } = useCellar();
   const { racks } = useRacks();
   const { setPendingWineId, setPendingStorageType } = useRackStore();
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
@@ -154,6 +155,18 @@ export default function WishListScreen() {
   const [moving, setMoving] = useState(false);
 
   const moveWine = confirm?.kind === 'move' ? wines.find((w) => w.id === confirm.id) ?? null : null;
+
+  function findMatchingCellarWine(w: CellarWine) {
+    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    const wantedProducer = norm(w.producer);
+    const wantedName = norm(w.wine_name);
+    const wantedVintage = (w.vintage ?? '').trim();
+    return cellarWines.find((c) =>
+      norm(c.producer) === wantedProducer &&
+      norm(c.wine_name) === wantedName &&
+      (c.vintage ?? '').trim() === wantedVintage
+    ) ?? null;
+  }
 
   function handleMoveToCellar(id: string) {
     const w = wines.find((x) => x.id === id);
@@ -171,6 +184,26 @@ export default function WishListScreen() {
   }
 
   async function handleConfirmMove() {
+    if (!confirm || confirm.kind !== 'move' || !moveWine) return;
+    const match = findMatchingCellarWine(moveWine);
+    if (match) {
+      const existingQty = match.quantity;
+      const wineLabel = `${match.wine_name}${match.vintage ? ` ${match.vintage}` : ''}`;
+      showAlert({
+        title: 'Already in your cellar',
+        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel}. Add this bottle to that listing?`,
+        buttons: [
+          { text: 'Yes', onPress: () => performMergeFromWishlist(match.id, existingQty) },
+          { text: 'No, create a new line', onPress: performMove },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await performMove();
+  }
+
+  async function performMove() {
     if (!confirm || confirm.kind !== 'move' || !moveWine) return;
     const qty = parseInt(moveQuantity) || 1;
     setMoving(true);
@@ -211,6 +244,36 @@ export default function WishListScreen() {
       });
     } catch (err) {
       showAlert({ title: 'Error', body: 'Could not move wine. Please try again.' });
+    } finally {
+      setMoving(false);
+    }
+  }
+
+  async function performMergeFromWishlist(existingId: string, existingQty: number) {
+    if (!confirm || confirm.kind !== 'move') return;
+    const qty = parseInt(moveQuantity) || 1;
+    const newQty = existingQty + qty;
+    setMoving(true);
+    try {
+      await updateCellarWine.mutateAsync({
+        id: existingId,
+        updates: { quantity: newQty },
+      });
+      // The wishlist row is no longer needed — the wine now lives in the
+      // existing cellar listing. Hard delete (not archive) so it doesn't
+      // resurface in the wishlist or the archive.
+      await deleteWine.mutateAsync(confirm.id);
+      setConfirm(null);
+      showAlert({
+        title: 'Added to cellar',
+        body: `Updated existing listing — you now have ${newQty} bottle${newQty === 1 ? '' : 's'}.`,
+        buttons: [
+          { text: 'OK' },
+          { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
+        ],
+      });
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not update listing. Please try again.' });
     } finally {
       setMoving(false);
     }
