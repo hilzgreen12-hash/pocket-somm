@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Activi
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
-import { findMatchingChosenWine, patchChosenWine } from '../../src/api/chosenWines';
+import { syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -302,46 +302,22 @@ export default function WishListScreen() {
     setConfirm(null);
   }
 
-  // Wishlist note / location edits are mirrored back onto any matching
-  // chosen_wines (review) row so the review stays in lock-step with the
-  // wishlist. Last-edit-wins: whichever side the user touched last
-  // overwrites the other.
-  async function syncWishlistEditToReview(
+  // Wishlist edits are mirrored to any matching chosen_wines (review)
+  // row so reviews stay in lock-step. Best-effort: sync failures don't
+  // surface — the wishlist save itself has already succeeded.
+  async function syncWishlistEditToChosen(
     wine: typeof wines[number],
-    fields: { tasting_note?: string | null; location?: string | null }
+    fields: Parameters<typeof syncEditToChosen>[2]
   ) {
     if (!session) return;
     try {
-      const match = await findMatchingChosenWine(session.user.id, {
-        producer: wine.producer,
-        wineName: wine.wine_name,
-        vintage: wine.vintage,
-      });
-      if (!match) return;
-      const updates: Record<string, string | null> = {};
-      if (fields.tasting_note !== undefined) {
-        updates.tasting_note = fields.tasting_note;
-      }
-      if (fields.location !== undefined) {
-        // Split "Restaurant, City" back into separate fields. If there's
-        // no comma the whole string is treated as the restaurant name.
-        const raw = fields.location ?? '';
-        const idx = raw.indexOf(',');
-        if (idx === -1) {
-          updates.restaurant_name = raw.trim() || null;
-          updates.city = null;
-        } else {
-          updates.restaurant_name = raw.slice(0, idx).trim() || null;
-          updates.city = raw.slice(idx + 1).trim() || null;
-        }
-      }
-      if (Object.keys(updates).length === 0) return;
-      await patchChosenWine(match.id, updates);
+      await syncEditToChosen(
+        session.user.id,
+        { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage },
+        fields,
+      );
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
     } catch (err) {
-      // Sync failure shouldn't surface to the user — they've already
-      // saved on the wishlist side. Log so it shows up in TestFlight
-      // / Sentry but don't interrupt.
       console.warn('[wishlist→review sync] failed:', err);
     }
   }
@@ -351,7 +327,7 @@ export default function WishListScreen() {
     const wine = wines.find((w) => w.id === id);
     updateWine.mutate({ id, updates: { tasting_notes: trimmed } }, {
       onSuccess: () => {
-        if (wine) syncWishlistEditToReview(wine, { tasting_note: trimmed });
+        if (wine) syncWishlistEditToChosen(wine, { tastingNote: trimmed ?? '' });
       },
     });
   }
@@ -359,9 +335,10 @@ export default function WishListScreen() {
   function handleUpdateLocation(id: string, location: string) {
     const trimmed = location.trim() || null;
     const wine = wines.find((w) => w.id === id);
+    const { restaurantName, city } = splitLocationString(trimmed);
     updateWine.mutate({ id, updates: { user_notes: trimmed } }, {
       onSuccess: () => {
-        if (wine) syncWishlistEditToReview(wine, { location: trimmed });
+        if (wine) syncWishlistEditToChosen(wine, { restaurantName, city });
       },
     });
   }
