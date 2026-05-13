@@ -132,7 +132,7 @@ export default function ChosenWinesScreen() {
               const w = item.wine;
               const onPress = item.source === 'restaurant'
                 ? () => setEditingWine(item.wine as ChosenWine)
-                : () => router.push(`/cellar/${(item.wine as CellarWine).id}` as any);
+                : () => router.push(`/cellar/${(item.wine as CellarWine).id}?from=reviews` as any);
               const locText = item.source === 'restaurant'
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
