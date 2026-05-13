@@ -322,12 +322,6 @@ export default function ScanTab() {
             <Text style={styles.introBody}>
               Scan a wine list or upload screenshots. Vinster works best with <Text style={styles.introBodyEmph}>around 80 wines or fewer per session</Text> — bigger lists may not process at all, so focus your photos on the section you care about (reds, by the glass, under £100…) and keep them clear and well-lit.
             </Text>
-            <Text style={styles.introBody}>
-              Each of your three picks is scored on critic ratings, vintage quality, drinking window and value, then weighted against the wine type, style, food pairing and budget you set above. Hard rules from your profile (regional dislikes, etc.) are always respected.
-            </Text>
-            <Text style={styles.introBody}>
-              After scanning, add the restaurant name on the results page to save the visit to <Text style={styles.introBodyEmph}>Your Restaurants</Text> — where you can review the food, service and atmosphere any time.
-            </Text>
 
             <TouchableOpacity style={styles.introPrimaryBtn} onPress={dismissIntro} activeOpacity={0.8}>
               <Text style={styles.introPrimaryBtnText}>Got it</Text>
