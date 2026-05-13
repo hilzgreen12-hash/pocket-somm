@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, Animated, StyleSheet } from 'react-native';
+import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
 
 interface Props {
@@ -19,6 +19,17 @@ const ENCOURAGEMENT = [
   'Almost ready — a final twirl of the glass…',
 ];
 
+// Lines that rotate in *after* the main animation completes so the
+// screen never looks stalled when the API call runs longer than the
+// estimated duration. Cycled every PAST_CAP_INTERVAL ms.
+const PAST_CAP_LINES = [
+  'Cross-checking vintages…',
+  'Verifying critic scores…',
+  'Tasting one more time — almost there…',
+  'Final pass — won\'t be long…',
+];
+const PAST_CAP_INTERVAL = 8000;
+
 function pickTitle(initial: string, pct: number): string {
   if (pct < 22) return initial;
   if (pct < 45) return ENCOURAGEMENT[0];
@@ -29,24 +40,49 @@ function pickTitle(initial: string, pct: number): string {
 
 export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Props) {
   const progress = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
   const [pct, setPct] = useState(0);
+  const [pastCap, setPastCap] = useState(false);
+  const [pastCapIdx, setPastCapIdx] = useState(0);
 
   useEffect(() => {
     const id = progress.addListener(({ value }) => setPct(Math.round(value)));
     Animated.timing(progress, {
-      toValue: 85,
+      toValue: 92,
       duration: durationMs,
       useNativeDriver: false,
-    }).start();
+    }).start(({ finished }) => {
+      if (finished) setPastCap(true);
+    });
     return () => progress.removeListener(id);
   }, []);
+
+  // Once the main animation has finished, pulse the fill bar so the
+  // screen never looks frozen — and start rotating past-cap messages.
+  useEffect(() => {
+    if (!pastCap) return;
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, { toValue: 0.4, duration: 750, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+        Animated.timing(pulse, { toValue: 1, duration: 750, easing: Easing.inOut(Easing.quad), useNativeDriver: true }),
+      ]),
+    );
+    loop.start();
+    const rotate = setInterval(() => {
+      setPastCapIdx((i) => (i + 1) % PAST_CAP_LINES.length);
+    }, PAST_CAP_INTERVAL);
+    return () => {
+      loop.stop();
+      clearInterval(rotate);
+    };
+  }, [pastCap]);
 
   const widthPercent = progress.interpolate({
     inputRange: [0, 100],
     outputRange: ['0%', '100%'],
   });
 
-  const dynamicTitle = pickTitle(title, pct);
+  const dynamicTitle = pastCap ? PAST_CAP_LINES[pastCapIdx] : pickTitle(title, pct);
 
   return (
     <View style={styles.container}>
@@ -54,7 +90,7 @@ export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Pr
 
       <View style={styles.progressWrap}>
         <View style={styles.track}>
-          <Animated.View style={[styles.fill, { width: widthPercent }]} />
+          <Animated.View style={[styles.fill, { width: widthPercent, opacity: pulse }]} />
         </View>
         <Text style={styles.percent}>{pct}%</Text>
       </View>

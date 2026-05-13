@@ -243,6 +243,7 @@ export default function ChefResultsScreen() {
         title="Crafting your pairings…"
         subtitle="Vinster needs up to a minute for your result"
         body="A fresh set of three chef-inspired dishes coming up"
+        durationMs={55000}
       />
     );
   }

@@ -86,6 +86,7 @@ export default function FindPairingScreen() {
         body={mode === 'cellar'
           ? 'Our sommelier is searching your cellar for the ideal match'
           : 'Our sommelier is selecting the perfect wine style for your dish'}
+        durationMs={60000}
       />
     );
   }

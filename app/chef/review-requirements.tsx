@@ -100,6 +100,7 @@ export default function ReviewRequirementsScreen() {
         title="Crafting your pairings…"
         subtitle="Vinster needs up to a minute for your result"
         body="Our sommelier is selecting three chef-inspired dishes to complement your wine"
+        durationMs={65000}
       />
     );
   }
