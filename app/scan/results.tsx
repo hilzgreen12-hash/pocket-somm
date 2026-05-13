@@ -295,7 +295,7 @@ export default function ResultsScreen() {
           const isOpen = openIndex === i;
           const isTop = i === 0;
           return (
-            <View key={wine.name + i} style={[styles.card, isTop && styles.cardTop]}>
+            <View key={wine.name + i} style={styles.card}>
 
               {/* Collapsed row — always visible */}
               <TouchableOpacity
@@ -305,7 +305,7 @@ export default function ResultsScreen() {
               >
                 <View style={styles.rowLeft}>
                   <View style={styles.rankRow}>
-                    <Text style={[styles.rankLabel, isTop && styles.rankLabelTop]}>
+                    <Text style={styles.rankLabel}>
                       {RANK_LABELS[i] ?? `#${i + 1}`}
                     </Text>
                     {wine.criticScore > 0 && (
@@ -587,14 +587,10 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: 'transparent',
     borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
+    borderWidth: 1.5,
+    borderColor: colors.gold,
     marginBottom: spacing.md,
     overflow: 'hidden',
-  },
-  cardTop: {
-    borderColor: colors.gold,
-    borderWidth: 1.5,
   },
   row: {
     flexDirection: 'row',
@@ -621,9 +617,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     textAlign: 'center',
-  },
-  rankLabelTop: {
-    color: colors.text,
   },
   wineName: {
     fontSize: 18,
