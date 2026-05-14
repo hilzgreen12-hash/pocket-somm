@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
@@ -8,6 +7,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
 import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
@@ -51,7 +51,6 @@ export default function RacksScreen() {
   const { racks, isLoading, remove: removeRack } = useRacks();
   const { wines } = useCellar();
   const { setPendingStorageType } = useRackStore();
-  const [typeModalOpen, setTypeModalOpen] = useState(false);
 
   function handleLongPressRack(rack: WineRack) {
     showAlert({
@@ -89,9 +88,13 @@ export default function RacksScreen() {
     winesByRack[slot.rack_id] = list;
   }
 
+  // useCellar returns wines newest-first, so the three most recent
+  // additions are just the head of the list — they update and roll off
+  // automatically as the cellar query refreshes.
+  const recentAdditions = wines.slice(0, 3);
+
   function handleAddType(type: 'rack' | 'fridge') {
     setPendingStorageType(type);
-    setTypeModalOpen(false);
     router.push('/cellar/rack/camera');
   }
 
@@ -110,9 +113,7 @@ export default function RacksScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wines</Text>
-        <TouchableOpacity onPress={() => setTypeModalOpen(true)}>
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       {!session ? (
@@ -121,59 +122,63 @@ export default function RacksScreen() {
           body="Build virtual wine racks that mirror your home storage — sign in to keep them."
         />
       ) : (
-        <FlatList
-          data={racks}
-          keyExtractor={(r) => r.id}
-          renderItem={({ item }) => (
-            <RackRow rack={item} wines={winesByRack[item.id] ?? []} onLongPress={() => handleLongPressRack(item)} />
-          )}
-          ItemSeparatorComponent={() => <View style={styles.separator} />}
-          ListHeaderComponent={<Text style={styles.subHeader}>Your Storage</Text>}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No storage yet</Text>
-              <Text style={styles.emptyBody}>Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
-              <Text style={styles.emptyNote}>Vinster maps your storage as a rectangular grid — non-rectangular or alternative-shaped racks will need to be approximated to a grid layout.</Text>
-              <TouchableOpacity style={styles.emptyButtonGold} onPress={() => handleAddType('rack')}>
-                <Text style={styles.emptyButtonGoldText}>Add Wine Rack</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.emptyButtonGold, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
-                <Text style={styles.emptyButtonGoldText}>Add Wine Fridge</Text>
-              </TouchableOpacity>
-            </View>
-          }
-          ListFooterComponent={
-            <View style={styles.footer}>
-              <View style={styles.footerDivider} />
-              <TouchableOpacity style={styles.fullListButton} onPress={() => router.push('/cellar/list')}>
-                <Text style={styles.fullListButtonText}>Full Cellar List</Text>
-              </TouchableOpacity>
-            </View>
-          }
-          contentContainerStyle={{ paddingBottom: 80 }}
-        />
-      )}
+        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+          <Text style={styles.subHeader}>Your Storage</Text>
 
-      <Modal visible={typeModalOpen} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>What are you adding?</Text>
-            <Text style={styles.modalBody}>Photograph your storage and Vinster will map the grid for you.</Text>
+          {racks.map((rack) => (
+            <RackRow
+              key={rack.id}
+              rack={rack}
+              wines={winesByRack[rack.id] ?? []}
+              onLongPress={() => handleLongPressRack(rack)}
+            />
+          ))}
 
-            <TouchableOpacity style={styles.typeButton} onPress={() => handleAddType('rack')}>
-              <Text style={styles.typeButtonText}>Wine Rack</Text>
+          <View style={styles.storageInfo}>
+            <Text style={styles.storageBlurb}>
+              Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.
+            </Text>
+            <Text style={styles.storageNote}>
+              Vinster maps your storage as a rectangular grid, alternative shaped racks will be approximated to fit the layout.
+            </Text>
+            <TouchableOpacity style={styles.addButton} onPress={() => handleAddType('rack')}>
+              <Text style={styles.addButtonText}>Add Wine Rack</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={[styles.typeButton, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
-              <Text style={styles.typeButtonText}>Wine Fridge</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cancelButton} onPress={() => setTypeModalOpen(false)}>
-              <Text style={styles.cancelText}>Cancel</Text>
+            <TouchableOpacity style={[styles.addButton, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
+              <Text style={styles.addButtonText}>Add Wine Fridge</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      </Modal>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.subHeader}>Cellar List</Text>
+
+          <View style={styles.cellarListSection}>
+            <TouchableOpacity style={styles.fullListButton} onPress={() => router.push('/cellar/list')}>
+              <Text style={styles.fullListButtonText}>Full Cellar List</Text>
+            </TouchableOpacity>
+
+            {recentAdditions.length > 0 && (
+              <>
+                <Text style={styles.recentLabel}>Recently added</Text>
+                {recentAdditions.map((w) => (
+                  <TouchableOpacity
+                    key={w.id}
+                    style={styles.recentRow}
+                    onPress={() => router.push(`/cellar/${w.id}`)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.recentName} numberOfLines={1}>
+                      {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
+                    </Text>
+                    {w.region ? <Text style={styles.recentDetail} numberOfLines={1}>{w.region}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </>
+            )}
+          </View>
+        </ScrollView>
+      )}
     </View>
   );
 }
@@ -183,9 +188,9 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  addLink: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF' },
-  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg },
+  title: { flex: 1, fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  subHeader: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
   rowName: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3 },
   rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 4 },
@@ -194,27 +199,17 @@ const styles = StyleSheet.create({
   homeToLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   homeToBlurb: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 19 },
   arrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
-  separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
-  subHeader: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm, letterSpacing: 0.3 },
-  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  footerDivider: { height: 1, backgroundColor: colors.border, marginBottom: spacing.lg },
+  storageInfo: { paddingHorizontal: spacing.xl, paddingTop: spacing.md },
+  storageBlurb: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
+  storageNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.lg },
+  addButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  addButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  cellarListSection: { paddingHorizontal: spacing.xl },
   fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   fullListButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
-  empty: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
-  emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
-  emptyNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.xl },
-  emptyButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
-  emptyButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
-  emptyButtonGold: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
-  emptyButtonGoldText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  modalContent: { backgroundColor: colors.surface, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48 },
-  modalTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.xs },
-  modalBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },
-  typeButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md },
-  typeButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17, color: '#FFFFFF' },
-  typeButtonSub: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, marginTop: 2 },
-  cancelButton: { alignItems: 'center', marginTop: spacing.lg },
-  cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
+  recentLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.xs },
+  recentRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  recentName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  recentDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
 });

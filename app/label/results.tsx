@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
+import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -315,7 +316,7 @@ export default function LabelResultsScreen() {
       />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Tasting Notes</Text>
+        <VinstersNoteHeading />
         <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
       </View>
 

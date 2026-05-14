@@ -446,7 +446,11 @@ export default function WishListScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        {/* Wish List is a flow destination — reached either directly from
+            the Cellar tab or at the end of the add-a-wine flow. Back
+            always returns to the Cellar tab rather than popping back
+            through the add steps. */}
+        <TouchableOpacity onPress={() => router.replace('/(tabs)/cellar')}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Wish List</Text>
