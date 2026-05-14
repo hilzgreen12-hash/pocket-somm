@@ -68,6 +68,10 @@ export default function CommunityProfileScreen() {
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
 
+        {/* Community is still in build — previewable but faded and
+            non-interactive. The Back button above stays usable. */}
+        <View pointerEvents="none" style={styles.muted}>
+
         <View style={styles.intro}>
           <Text style={styles.heading}>Your Community Profile</Text>
           <Text style={styles.subheading}>This is what other Vinster users see when they come across your reviews. Your username can be edited in your account and your personality sketches can be uploaded from Your Profile.</Text>
@@ -101,6 +105,7 @@ export default function CommunityProfileScreen() {
             />
           </>
         )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -145,6 +150,9 @@ function PersonalityBlock({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Community isn't live yet — content is shown faded and the wrapper is
+  // pointerEvents="none" so it can't be used, only previewed.
+  muted: { opacity: 0.5 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   backRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
   backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },

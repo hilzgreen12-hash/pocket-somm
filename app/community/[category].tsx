@@ -56,6 +56,12 @@ export default function CommunityCategoryScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
 
+        {/* Community is still in build — the screen is previewable but
+            faded and non-interactive. pointerEvents="none" lets the
+            ScrollView keep scrolling while every control inside is inert;
+            the Back button above stays outside this wrapper. */}
+        <View pointerEvents="none" style={styles.muted}>
+
         <View style={styles.intro}>
           <Text style={styles.heading}>{title}</Text>
           {subtitle ? <Text style={styles.subheading}>{subtitle}</Text> : null}
@@ -112,6 +118,7 @@ export default function CommunityCategoryScreen() {
             )}
           </View>
         )}
+        </View>
       </ScrollView>
     </View>
   );
@@ -119,6 +126,9 @@ export default function CommunityCategoryScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Community isn't live yet — content is shown faded and the wrapper is
+  // pointerEvents="none" so it can't be used, only previewed.
+  muted: { opacity: 0.5 },
   backRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   intro: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center', gap: spacing.xs },
