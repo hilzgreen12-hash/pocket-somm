@@ -18,6 +18,7 @@ import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../..
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import { SearchProgress } from '../../src/components/SearchProgress';
+import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { colors, spacing } from '../../src/constants/theme';
 import { formatCurrency } from '../../src/constants/currency';
 import type { WineDetailsComplete } from '../../src/types/wine';
@@ -708,7 +709,7 @@ export default function CellarWineDetail() {
 
       {wine.tasting_notes && (
         <View style={styles.tastingBlock}>
-          <Text style={styles.tastingTitle}>Vinster's Deep AI Tasting Note</Text>
+          <VinstersNoteHeading />
           <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
         </View>
       )}
@@ -1027,7 +1028,6 @@ const styles = StyleSheet.create({
   region: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4 },
   grape: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: 2 },
   tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  tastingTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   infoValue: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right' },
