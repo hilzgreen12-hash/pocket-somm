@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
@@ -33,6 +33,10 @@ export default function ChefArchiveScreen() {
   // to it automatically, so the user doesn't have to find it again.
   const [pendingAssignAfterCreate, setPendingAssignAfterCreate] = useState<UnifiedItem | null>(null);
   const [newFolderName, setNewFolderName] = useState('');
+  // Synchronous guard: the keyboard's return key (onSubmitEditing) and the
+  // modal's "Create" button both call handleCreateFolder — without this,
+  // doing both before the await resolves would create two folders.
+  const creatingFolderRef = useRef(false);
   const [manageFolder, setManageFolder] = useState<ChefArchiveCollection | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [assigning, setAssigning] = useState<UnifiedItem | null>(null);
@@ -62,7 +66,8 @@ export default function ChefArchiveScreen() {
 
   async function handleCreateFolder() {
     const trimmed = newFolderName.trim();
-    if (!trimmed) return;
+    if (!trimmed || creatingFolderRef.current) return;
+    creatingFolderRef.current = true;
     try {
       const newFolder = await create.mutateAsync(trimmed);
       setNewFolderOpen(false);
@@ -84,6 +89,8 @@ export default function ChefArchiveScreen() {
       }
     } catch (err) {
       showAlert({ title: 'Could not create', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      creatingFolderRef.current = false;
     }
   }
 
@@ -374,8 +381,12 @@ export default function ChefArchiveScreen() {
               onSubmitEditing={handleCreateFolder}
               returnKeyType="done"
             />
-            <TouchableOpacity style={styles.modalConfirm} onPress={handleCreateFolder}>
-              <Text style={styles.modalConfirmText}>Create</Text>
+            <TouchableOpacity
+              style={[styles.modalConfirm, create.isPending && { opacity: 0.6 }]}
+              onPress={handleCreateFolder}
+              disabled={create.isPending}
+            >
+              <Text style={styles.modalConfirmText}>{create.isPending ? 'Creating…' : 'Create'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.modalCancel}
