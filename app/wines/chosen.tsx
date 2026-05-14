@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -26,6 +26,21 @@ function formatListPrice(wine: ChosenWine): string | null {
   return `${sym}${wine.menu_price}`;
 }
 
+function normKey(s: string | null | undefined): string {
+  return (s ?? '').trim().toLowerCase();
+}
+
+// Identity key for cross-referencing a review against wishlist/cellar
+// rows — producer + name + vintage, normalised. Mirrors the matching
+// used by reviewSync.
+function wineIdentityKey(
+  producer: string | null | undefined,
+  wineName: string | null | undefined,
+  vintage: string | number | null | undefined,
+): string {
+  return `${normKey(producer)}|${normKey(wineName)}|${normKey(vintage != null ? String(vintage) : '')}`;
+}
+
 type ReviewItem =
   | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
@@ -33,6 +48,7 @@ type ReviewItem =
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading } = useChosenWines();
   const { wines: cellarWines } = useCellar();
+  const { wines: wishlistWines } = useWishList();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'city' | 'score'>('date');
@@ -78,6 +94,28 @@ export default function ChosenWinesScreen() {
     }
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
+
+  // A review's wine may also live in the wishlist or cellar. Match by
+  // identity so each card can note when it was added there. date_received
+  // is the user-set acquisition date; fall back to created_at when blank.
+  const cellarByIdentity = new Map(
+    cellarWines.map((w) => [wineIdentityKey(w.producer, w.wine_name, w.vintage), w] as const),
+  );
+  const wishlistByIdentity = new Map(
+    wishlistWines.map((w) => [wineIdentityKey(w.producer, w.wine_name, w.vintage), w] as const),
+  );
+
+  function addedNote(item: ReviewItem): { kind: 'cellar' | 'wish list'; date: string } | null {
+    if (item.source === 'cellar') {
+      return { kind: 'cellar', date: item.wine.date_received ?? item.wine.created_at };
+    }
+    const key = wineIdentityKey(item.wine.producer, item.wine.wine_name, item.wine.vintage);
+    const cellarMatch = cellarByIdentity.get(key);
+    if (cellarMatch) return { kind: 'cellar', date: cellarMatch.date_received ?? cellarMatch.created_at };
+    const wishMatch = wishlistByIdentity.get(key);
+    if (wishMatch) return { kind: 'wish list', date: wishMatch.date_received ?? wishMatch.created_at };
+    return null;
+  }
 
   const hasAnything = items.length > 0;
 
@@ -180,6 +218,7 @@ export default function ChosenWinesScreen() {
               const locText = item.source === 'restaurant'
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
+              const note = addedNote(item);
               return (
                 <TouchableOpacity
                   key={`${item.source}-${w.id}`}
@@ -209,6 +248,11 @@ export default function ChosenWinesScreen() {
                     ) : null}
                     <Text style={styles.metaText}> · {item.source === 'restaurant' ? 'Restaurant' : 'Cellar'}</Text>
                   </View>
+                  {note ? (
+                    <Text style={styles.addedNote}>
+                      You added this to your {note.kind} on {formatDate(note.date)}
+                    </Text>
+                  ) : null}
                   <View style={styles.saveToCommunityRow}>
                     <Text style={styles.saveToCommunityText}>
                       Save to Community <Text style={styles.comingSoonInline}>(coming soon)</Text>
@@ -251,6 +295,7 @@ const styles = StyleSheet.create({
   scoreCluster: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   favouriteStar: { fontSize: 18, color: colors.gold },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  addedNote: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: spacing.xs },
   emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
   sortLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: spacing.xs },

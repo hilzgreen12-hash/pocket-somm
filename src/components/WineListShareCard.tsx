@@ -55,9 +55,14 @@ export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaur
             <View key={i} style={styles.wineRow}>
               <View style={styles.rankRow}>
                 <Text style={styles.rankLabel}>{RANK_LABELS[i] ?? `#${i + 1}`}</Text>
-                {w.criticScore > 0 ? (
-                  <Text style={styles.scoreText}>{w.criticScore} <Text style={styles.scoreUnit}>pts</Text></Text>
-                ) : null}
+                <View style={styles.scoreCol}>
+                  {w.criticScore > 0 ? (
+                    <Text style={styles.scoreText}>{w.criticScore} <Text style={styles.scoreUnit}>pts</Text></Text>
+                  ) : null}
+                  {w.menuPrice != null ? (
+                    <Text style={styles.priceText}>£{w.menuPrice}</Text>
+                  ) : null}
+                </View>
               </View>
               <Text style={styles.wineName} numberOfLines={2}>{wineLine(w)}</Text>
               <Text style={styles.wineDetail} numberOfLines={2}>{detailLine(w)}</Text>
@@ -111,10 +116,12 @@ const styles = StyleSheet.create({
     paddingVertical: 22,
     backgroundColor: 'rgba(0,0,0,0.12)',
   },
-  rankRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 10 },
+  rankRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 },
   rankLabel: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold, textTransform: 'uppercase', letterSpacing: 3 },
+  scoreCol: { alignItems: 'flex-end' },
   scoreText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 30, color: '#FFFFFF' },
   scoreUnit: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 20, color: 'rgba(255,255,255,0.75)' },
+  priceText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: 'rgba(255,255,255,0.85)', marginTop: 2 },
   wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 30, color: '#FFFFFF', lineHeight: 36, marginBottom: 6 },
   wineDetail: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 22, color: 'rgba(255,255,255,0.85)', lineHeight: 28 },
   footer: { alignItems: 'center', marginTop: 24 },
