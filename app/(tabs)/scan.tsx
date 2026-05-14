@@ -237,7 +237,7 @@ export default function ScanTab() {
 
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
-        <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Review and revisit restaurants, and those bottles you drank in them, as you go.</Text>
+        <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Review and revisit restaurants, and those bottles you drank in them.</Text>
       </View>
 
       <View style={styles.body}>

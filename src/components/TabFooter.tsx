@@ -32,6 +32,6 @@ const styles = StyleSheet.create({
   text: {
     fontFamily: 'CormorantGaramond_400Regular',
     color: '#FFFFFF',
-    fontSize: 14,
+    fontSize: 15,
   },
 });

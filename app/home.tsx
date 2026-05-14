@@ -7,10 +7,10 @@ import { colors, spacing } from '../src/constants/theme';
 // The four main destinations. The Profile tab was retired — its contents
 // now live under About You, which sits in the fixed footer below.
 const TILES = [
-  { label: 'List', route: '/(tabs)/scan' },
-  { label: 'Chef', route: '/(tabs)/chef' },
-  { label: 'Cellar', route: '/(tabs)/cellar' },
-  { label: 'Community', route: '/(tabs)/community' },
+  { label: 'List', desc: 'scan a wine list', route: '/(tabs)/scan' },
+  { label: 'Chef', desc: 'get cooking', route: '/(tabs)/chef' },
+  { label: 'Cellar', desc: 'build your collection', route: '/(tabs)/cellar' },
+  { label: 'Community', desc: 'connect and share', route: '/(tabs)/community' },
 ] as const;
 
 export default function HomeScreen() {
@@ -35,7 +35,8 @@ export default function HomeScreen() {
               onPress={() => router.push(tile.route as any)}
               activeOpacity={0.8}
             >
-              <Text style={styles.tileText}>{tile.label}</Text>
+              <Text style={styles.tileTitle}>{tile.label}</Text>
+              <Text style={styles.tileDesc}>{tile.desc}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -47,7 +48,7 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background },
+  container: { flex: 1, backgroundColor: colors.background, paddingBottom: spacing.xxl },
   content: { flex: 1, paddingHorizontal: spacing.xl, justifyContent: 'center' },
   hero: { alignItems: 'center', marginBottom: spacing.xxl },
   appName: {
@@ -77,11 +78,20 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
   },
-  tileText: {
+  tileTitle: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 22,
     color: colors.gold,
     letterSpacing: 1,
+    textAlign: 'center',
+  },
+  tileDesc: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 13,
+    color: colors.gold,
+    textAlign: 'center',
+    marginTop: 6,
   },
 });
