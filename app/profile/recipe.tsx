@@ -210,9 +210,9 @@ const styles = StyleSheet.create({
   // preference UI consistency.
   accordionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: 4 },
   accordionLeft: { flex: 1, alignItems: 'center' },
-  chevron: { fontSize: 14, color: '#FFFFFF', marginLeft: spacing.sm },
-  question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
-  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  chevron: { fontSize: 16, color: '#FFFFFF', marginLeft: spacing.sm },
+  question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
+  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
   pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
   pickerHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, marginBottom: spacing.sm },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },

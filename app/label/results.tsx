@@ -3,14 +3,14 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal 
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
-import { assignSlots } from '../../src/api/racks';
+import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 
@@ -53,6 +53,17 @@ export default function LabelResultsScreen() {
   const [purchasePrice, setPurchasePrice] = useState('');
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
+  // Only used when the user came in from a tapped empty rack slot.
+  const [placeCount, setPlaceCount] = useState('1');
+  const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
+
+  // When the user came in from a specific empty rack slot, load that
+  // rack's slots so a multi-bottle placement can skip any occupied ones.
+  const { data: pendingRackSlots = [] } = useQuery({
+    queryKey: ['rack-slots', pendingSlot?.rackId],
+    queryFn: () => getRackSlots(pendingSlot!.rackId),
+    enabled: !!pendingSlot,
+  });
 
   if (!wineDetailsConfirmed || !intelligence) {
     return (
@@ -184,22 +195,38 @@ export default function LabelResultsScreen() {
   // (which references `wine.wineName`) to re-render with a null wine,
   // crashing into the ErrorBoundary as "Something Went Wrong". The store
   // will be naturally replaced on the next label scan.
-  async function performSaveFlow(savedWineId: string) {
+  async function performSaveFlow(savedWineId: string, mode: 'new' | 'merge', baseQuantity: number) {
     if (pendingSlot) {
-      // User came in from a specific empty rack slot — assign that one slot.
-      // Adding more bottles to this wine is done from the wine card or by
-      // tapping further slots on the rack.
-      const slots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, 1, 'Vertical');
-      await assignSlots(pendingSlot.rackId, slots, savedWineId);
+      // User came in from a specific empty rack slot. Place the requested
+      // number of bottles from that slot — skipping any occupied slots in
+      // the path — and set the wine's quantity to match what was placed.
+      const requested = Math.max(1, parseInt(placeCount, 10) || 1);
+      const allSlots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, requested, placeOrientation);
+      const occupied = new Set(
+        pendingRackSlots.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`),
+      );
+      const freeSlots = allSlots.filter((s) => !occupied.has(`${s.row},${s.col}`));
+      // The tapped slot is empty by definition; fall back to it if a race
+      // somehow leaves nothing free.
+      const placed = freeSlots.length > 0 ? freeSlots : allSlots.slice(0, 1);
+      await assignSlots(pendingSlot.rackId, placed, savedWineId);
+      const targetQuantity = mode === 'new' ? placed.length : baseQuantity + placed.length;
+      if (targetQuantity !== baseQuantity) {
+        await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: targetQuantity } });
+      }
       qc.invalidateQueries({ queryKey: ['rack-slots', pendingSlot.rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       setPendingSlot(null);
       setAddingToCellar(false);
       // Camera/confirm now use router.replace so the stack is short by the
-      // time we land here. A clean router.replace to the destination keeps
-      // the back-stack tidy and doesn't push extra entries.
+      // time we land here. A clean router.replace keeps the back-stack tidy.
       router.replace(`/cellar/rack/${pendingSlot.rackId}`);
       return;
+    }
+
+    // Non-slot paths: a merge adds one bottle onto the existing wine.
+    if (mode === 'merge') {
+      await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + 1 } });
     }
 
     if (selectedRackId === '__new__') {
@@ -232,7 +259,7 @@ export default function LabelResultsScreen() {
     setSaving(true);
     try {
       const saved = await addWine.mutateAsync(buildWinePayload(session.user.id));
-      await performSaveFlow(saved.id);
+      await performSaveFlow(saved.id, 'new', 1);
     } catch (err) {
       // Surface the underlying error so RLS / FK / schema failures are
       // visible instead of swallowed under a generic message.
@@ -247,11 +274,9 @@ export default function LabelResultsScreen() {
     if (!matchingExisting) return;
     setSaving(true);
     try {
-      await updateWine.mutateAsync({
-        id: matchingExisting.id,
-        updates: { quantity: matchingExisting.quantity + 1 },
-      });
-      await performSaveFlow(matchingExisting.id);
+      // Quantity is reconciled inside performSaveFlow — it differs for the
+      // place-in-slot path (adds the placed count) vs the non-slot paths.
+      await performSaveFlow(matchingExisting.id, 'merge', matchingExisting.quantity);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       showAlert({ title: 'Could not save to cellar', body: detail });
@@ -409,10 +434,41 @@ export default function LabelResultsScreen() {
             <Text style={styles.modalTitle}>Add to Cellar</Text>
             <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
 
-            {/* Bottle count is no longer asked here. Save without placing
-                creates 1 bottle (editable later from the wine card). Place-
-                in-rack flows ask for quantity on the rack grid AFTER the
-                user has picked a slot, so the count maps directly to slots. */}
+            {/* Came in from a tapped empty slot — ask how many bottles and
+                which way they run so the placement maps to real slots. The
+                save-without-a-slot paths still create 1 bottle, editable
+                later from the wine card. */}
+            {pendingSlot && (
+              <>
+                <Text style={styles.modalLabel}>Number of bottles</Text>
+                <TextInput
+                  style={styles.countInput}
+                  value={placeCount}
+                  onChangeText={(t) => setPlaceCount(t.replace(/[^0-9]/g, ''))}
+                  placeholder="1"
+                  placeholderTextColor={colors.textSubtle}
+                  keyboardType="number-pad"
+                />
+                <Text style={styles.modalLabel}>Orientation</Text>
+                <Text style={styles.modalHint}>Which way the bottles run from the slot you tapped.</Text>
+                <View style={styles.orientationRow}>
+                  <TouchableOpacity
+                    style={[styles.orientationBtn, placeOrientation === 'Vertical' && styles.orientationBtnActive]}
+                    onPress={() => setPlaceOrientation('Vertical')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.orientationBtnText, placeOrientation === 'Vertical' && styles.orientationBtnTextActive]}>Vertical</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.orientationBtn, placeOrientation === 'Horizontal' && styles.orientationBtnActive]}
+                    onPress={() => setPlaceOrientation('Horizontal')}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.orientationBtnText, placeOrientation === 'Horizontal' && styles.orientationBtnTextActive]}>Horizontal</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
 
             {!pendingSlot && (
               <>
@@ -539,6 +595,12 @@ const styles = StyleSheet.create({
   priceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, marginBottom: spacing.md },
   priceCurrency: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginRight: spacing.xs },
   priceInput: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, paddingVertical: spacing.sm },
+  countInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, marginBottom: spacing.md },
+  orientationRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  orientationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  orientationBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
+  orientationBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  orientationBtnTextActive: { color: colors.gold },
   rackList: { gap: spacing.xs, marginBottom: spacing.md },
   rackOption: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   rackOptionActive: { borderColor: colors.gold, backgroundColor: colors.gold + '22' },

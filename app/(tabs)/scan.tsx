@@ -237,7 +237,7 @@ export default function ScanTab() {
 
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
-        <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Review and revisit restaurants, and those bottles you drank in them.</Text>
+        <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Revisit and review restaurants, and those bottles you drank in them.</Text>
       </View>
 
       <View style={styles.body}>
@@ -430,13 +430,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   chevron: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#FFFFFF',
     marginLeft: spacing.sm,
   },
   question: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 15,
+    fontSize: 17,
     color: '#FFFFFF',
     textAlign: 'center',
   },
@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   },
   selectionSummary: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 14,
+    fontSize: 16,
     color: '#FFFFFF',
     marginTop: 2,
     textAlign: 'center',
