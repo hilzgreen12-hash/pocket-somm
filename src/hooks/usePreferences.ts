@@ -16,7 +16,7 @@ export function usePreferences() {
       if (!userId) return null;
       const { data, error } = await supabase
         .from('profiles')
-        .select('style_preferences, default_budget, default_currency, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks, specific_concerns, regional_preferences, nutritional_preferences')
+        .select('style_preferences, default_budget, default_currency, default_wine_types, favourite_regions, favourite_grapes, disliked_regions, disliked_grapes, dietary_needs, allergy_risks, specific_concerns, regional_preferences, nutritional_preferences, onboarding_completed')
         .eq('user_id', userId)
         .single();
       if (error) {
@@ -37,6 +37,7 @@ export function usePreferences() {
         specificConcerns: data.specific_concerns ?? '',
         regionalPreferences: data.regional_preferences ?? [],
         nutritionalPreferences: data.nutritional_preferences ?? [],
+        onboardingCompleted: data.onboarding_completed ?? false,
       } as UserPreferences;
     },
   });
@@ -59,6 +60,7 @@ export function usePreferences() {
         ...(updates.specificConcerns !== undefined && { specific_concerns: updates.specificConcerns }),
         ...(updates.regionalPreferences !== undefined && { regional_preferences: updates.regionalPreferences }),
         ...(updates.nutritionalPreferences !== undefined && { nutritional_preferences: updates.nutritionalPreferences }),
+        ...(updates.onboardingCompleted !== undefined && { onboarding_completed: updates.onboardingCompleted }),
       });
       if (error) throw new Error(error.message);
     },
