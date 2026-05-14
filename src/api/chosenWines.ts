@@ -156,6 +156,39 @@ export async function findMatchingChosenWine(
   ) ?? null;
 }
 
+// Create a chosen_wines row from a review made directly on a cellar
+// bottle. Used when the user reviews a wine they own but have never
+// reviewed via a List scan — without this the review would live only on
+// cellar_wines and never surface in Your Wine Reviews. Relies on column
+// defaults for currency / chosen_at / is_favourite.
+export async function createChosenWineFromReview(
+  userId: string,
+  identity: { producer: string | null; wineName: string; vintage: string | number | null },
+  fields: { userScore?: number | null; restaurantName?: string; city?: string; reviewDate?: string; tastingNote?: string },
+  region: string | null,
+): Promise<void> {
+  const v = identity.vintage;
+  const vintageInt =
+    v == null || v === '' || !Number.isFinite(Number(v)) ? null : Math.trunc(Number(v));
+  const row: Record<string, unknown> = {
+    user_id: userId,
+    scan_session_id: null,
+    wine_name: identity.wineName.trim(),
+    producer: identity.producer?.trim() || null,
+    region: region?.trim() || null,
+    vintage: vintageInt,
+    restaurant_name: fields.restaurantName?.trim() || null,
+    city: fields.city?.trim() || null,
+    tasting_note: fields.tastingNote?.trim() || null,
+    user_score: fields.userScore ?? null,
+  };
+  // chosen_at defaults to now(); when the user gave a drink date, use
+  // that instead so Your Wine Reviews sorts by when the wine was drunk.
+  if (fields.reviewDate) row.chosen_at = fields.reviewDate;
+  const { error } = await supabase.from('chosen_wines').insert(row);
+  if (error) throw new Error(error.message);
+}
+
 // Partial update used by the wishlist→review sync path. Lets the caller
 // touch only the fields that actually changed on the wishlist side rather
 // than overwriting everything with the EditChosenWineModal payload shape.

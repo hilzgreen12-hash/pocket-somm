@@ -21,7 +21,6 @@ export default function TabsLayout() {
       <Tabs.Screen name="chef" options={{ title: 'Chef', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="cellar" options={{ title: 'Cellar', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
-      <Tabs.Screen name="profile" options={{ title: 'Profile', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="welcome" options={{ href: null }} />
     </Tabs>
   );

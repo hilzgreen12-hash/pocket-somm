@@ -77,7 +77,7 @@ export default function CommunityProfileScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Username</Text>
           <Text style={styles.usernameText}>{username}</Text>
-          <Text style={styles.helper}>Change it under Account → Username.</Text>
+          <Text style={styles.helper}>Change it under About You → Username.</Text>
         </View>
 
         {loading ? (

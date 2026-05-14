@@ -78,6 +78,10 @@ export default function CellarTab() {
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Full Cellar List</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wine Reviews</Text>
+        </TouchableOpacity>
+
         <Text style={[styles.sectionDesc, { marginTop: spacing.lg }]}>
           View your cellar stats and your virtual storage racks, edit your cellar.
         </Text>

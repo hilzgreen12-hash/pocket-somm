@@ -237,7 +237,7 @@ export default function ScanTab() {
 
       <View style={styles.header}>
         <Text style={styles.appName}>List</Text>
-        <Text style={styles.subtitle}>Set your preferences below, then scan or update a wine list to generate recommendations. Any pre-set dislikes in your profile remain hard rules which you can edit any time.</Text>
+        <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Review and revisit restaurants, and those bottles you drank in them, as you go.</Text>
       </View>
 
       <View style={styles.body}>
@@ -301,16 +301,20 @@ export default function ScanTab() {
           </View>
         </TouchableOpacity>
 
-        <TouchableOpacity style={styles.lastResultButton} onPress={handleViewLastSearch}>
-          <Text style={styles.lastResultText}>View Last Result</Text>
-        </TouchableOpacity>
-
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>
             <Text style={styles.buttonHalfText}>Scan Wine List</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
             <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Screenshot / Photo'}</Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.buttonRow}>
+          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/restaurants/reviews')}>
+            <Text style={styles.buttonHalfText}>Your Restaurants</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastSearch}>
+            <Text style={styles.buttonHalfText}>View Last Result</Text>
           </TouchableOpacity>
         </View>
 
@@ -474,22 +478,6 @@ const styles = StyleSheet.create({
   buttonHalfText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: colors.gold,
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  lastResultButton: {
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-    marginBottom: spacing.xs,
-  },
-  lastResultText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    color: '#FFFFFF',
     fontSize: 14,
     textAlign: 'center',
   },

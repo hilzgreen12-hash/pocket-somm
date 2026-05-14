@@ -134,7 +134,7 @@ export default function AccountScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.heading}>Account</Text>
+        <Text style={styles.heading}>About You</Text>
         <ArchiveSignInPrompt
           title="Sign in to manage your account"
           body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
@@ -165,7 +165,7 @@ export default function AccountScreen() {
         <Text style={styles.backText}>Back</Text>
       </TouchableOpacity>
 
-      <Text style={styles.heading}>Account</Text>
+      <Text style={styles.heading}>About You</Text>
 
       <Text style={styles.thanks}>You're one of the first 10,000 users — thank you for being here. Your subscription is on us.</Text>
 
@@ -223,6 +223,23 @@ export default function AccountScreen() {
             </View>
           </View>
         )}
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
+        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=wine')} activeOpacity={0.7}>
+          <Text style={styles.personalityButtonText}>Your Wine Personality</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=recipe')} activeOpacity={0.7}>
+          <Text style={styles.personalityButtonText}>Your Foodie Personality</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/wine')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Wine Preferences</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
@@ -357,26 +374,30 @@ const styles = StyleSheet.create({
   backButton: { marginBottom: spacing.sm, alignSelf: 'flex-start' },
   backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
   heading: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
-  thanks: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', lineHeight: 22, paddingHorizontal: spacing.md },
+  thanks: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   block: { gap: 4 },
-  blockHeading: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  blockHeading: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
+  personalityButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
+  prefButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  rowLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  rowValue: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
-  rowValueSmall: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular' },
-  rowValueLink: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  rowLabel: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  rowValue: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
+  rowValueSmall: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular' },
+  rowValueLink: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   editLinkBtn: { alignSelf: 'flex-end', marginTop: 2 },
-  editLinkText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  editLinkText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   editPanel: { marginTop: spacing.sm, gap: 4 },
-  fieldLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
   editActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md, marginTop: 4 },
   cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md, minWidth: 70, alignItems: 'center' },
   saveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 4 },
-  toggleLabel: { flex: 1, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 18 },
+  toggleLabel: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 20 },
   signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginTop: spacing.xs, marginBottom: 6 },
   signOutText: { color: colors.gold, fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold' },
   deleteButton: { alignItems: 'center', paddingVertical: 4 },
