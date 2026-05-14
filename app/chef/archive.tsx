@@ -3,7 +3,6 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput 
 import { router, useLocalSearchParams } from 'expo-router';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useChefArchiveCollections } from '../../src/hooks/useChefArchiveCollections';
-import { useLabelStore } from '../../src/stores/labelStore';
 import { useAuth } from '../../src/hooks/useAuth';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
@@ -26,8 +25,6 @@ export default function ChefArchiveScreen() {
   const { session } = useAuth();
   const { sessions: labelSessions, isLoading: labelLoading, remove: removeLabel } = useChefLabelHistory();
   const { collections, membershipMap, create, rename, remove, addItem, removeItem, toggleStar } = useChefArchiveCollections();
-
-  const { setWineDetailsConfirmed, setPairings, setFilters } = useLabelStore();
 
   const [filter, setFilter] = useState<string>(initialFilter === 'favourites' ? FILTER_FAVOURITES : FILTER_ALL);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
@@ -171,9 +168,10 @@ export default function ChefArchiveScreen() {
 
   function handleViewItem(item: UnifiedItem) {
     const s = item.session;
-    setWineDetailsConfirmed(s.wine);
-    setPairings(s.pairings);
-    setFilters(s.filters ?? null);
+    // Don't write to the label store here — the results screen reads a
+    // history view straight from the chef_label_session row by id.
+    // Writing the store used to clobber an un-saved fresh result still
+    // sitting on the nav stack.
     router.push({
       pathname: '/chef/results',
       params: {

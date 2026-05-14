@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -102,10 +102,10 @@ export default function ChefResultsScreen() {
   const { fromHistory, sessionId, savedAt, city, from, wineId } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; savedAt?: string; city?: string; from?: string; wineId?: string }>();
   const isFromHistory = fromHistory === 'true';
   const isFromCellar = from === 'cellar' && !!wineId;
-  const { wineDetailsConfirmed, pairings, filters, reset, setPairings, setError } = useLabelStore();
+  const { wineDetailsConfirmed, pairings: freshPairings, filters, reset, setPairings, setError } = useLabelStore();
   const { session } = useAuth();
   const qc = useQueryClient();
-  const { sessions: labelSessions, save: saveLabelSession, updateNotes } = useChefLabelHistory();
+  const { sessions: labelSessions, isLoading: labelLoading, save: saveLabelSession, updateNotes } = useChefLabelHistory();
 
   // When the user is viewing a saved cookbook entry, surface the
   // session-level notes block. Notes are tied to the session row, not
@@ -115,6 +115,15 @@ export default function ChefResultsScreen() {
     () => (isFromHistory && sessionId ? labelSessions.find((s) => s.id === sessionId) ?? null : null),
     [isFromHistory, sessionId, labelSessions],
   );
+
+  // Fresh results live in the label store; a saved cookbook entry is read
+  // straight from its chef_label_session row (viewingSession). Keeping the
+  // two sources separate means opening a cookbook entry never overwrites
+  // an un-saved fresh result still mounted on the nav stack — previously
+  // setPairings() from the archive clobbered it, so navigating back showed
+  // only the one recipe that had been saved.
+  const wine = isFromHistory ? (viewingSession?.wine ?? null) : wineDetailsConfirmed;
+  const pairings = isFromHistory ? (viewingSession?.pairings ?? []) : freshPairings;
 
   const [notesEditing, setNotesEditing] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
@@ -206,11 +215,11 @@ export default function ChefResultsScreen() {
   // can never create a duplicate row.
   const savedDishNames = useMemo(() => {
     const set = new Set<string>();
-    if (!wineDetailsConfirmed) return set;
+    if (!wine) return set;
     const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-    const wantedProducer = norm(wineDetailsConfirmed.producer);
-    const wantedName = norm(wineDetailsConfirmed.wineName);
-    const wantedVintage = norm(wineDetailsConfirmed.vintage);
+    const wantedProducer = norm(wine.producer);
+    const wantedName = norm(wine.wineName);
+    const wantedVintage = norm(wine.vintage);
     for (const sess of labelSessions) {
       const sw = sess.wine;
       if (!sw) continue;
@@ -225,7 +234,7 @@ export default function ChefResultsScreen() {
       }
     }
     return set;
-  }, [labelSessions, wineDetailsConfirmed]);
+  }, [labelSessions, wine]);
 
   function getSaveState(index: number): 'idle' | 'saving' | 'saved' {
     const local = pairingSaveStates[index];
@@ -241,12 +250,12 @@ export default function ChefResultsScreen() {
   const [regenerating, setRegenerating] = useState(false);
 
   async function handleRegenerate() {
-    if (!wineDetailsConfirmed || regenerating) return;
+    if (!wine || regenerating) return;
     setRegenerating(true);
     try {
-      const fresh = await generatePairings(wineDetailsConfirmed, (filters ?? {}) as any);
+      const fresh = await generatePairings(wine, (filters ?? {}) as any);
       setPairings(fresh);
-      setSaveState('idle');
+      setPairingSaveStates({});
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Could not regenerate', body: 'Please try again in a moment.' });
@@ -263,7 +272,7 @@ export default function ChefResultsScreen() {
 
   async function handleSavePairing(index: number) {
     const pairing = pairings[index];
-    if (!wineDetailsConfirmed || !pairing) return;
+    if (!wine || !pairing) return;
     // Already-saved short-circuit covers both in-flight saves and any
     // pairing already in the cookbook for this wine identity. Without
     // this a user who re-opened the result via View Last Result could
@@ -276,7 +285,7 @@ export default function ChefResultsScreen() {
     setPairingSaveStates((s) => ({ ...s, [index]: 'saving' }));
     try {
       await saveLabelSession.mutateAsync({
-        wine: wineDetailsConfirmed,
+        wine,
         filters: filters ?? null,
         // Save just this one pairing as its own archive entry, so each
         // recipe lives independently in the archive (can be starred,
@@ -290,7 +299,18 @@ export default function ChefResultsScreen() {
     }
   }
 
-  if (!wineDetailsConfirmed || pairings.length === 0) {
+  // A cookbook entry opened by id may still be resolving from the
+  // chef-label-sessions cache on first paint — show a spinner rather than
+  // flashing the "No pairings" fallback.
+  if (isFromHistory && !viewingSession && labelLoading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.gold} size="large" />
+      </View>
+    );
+  }
+
+  if (!wine || pairings.length === 0) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>No pairings available.</Text>
@@ -301,7 +321,6 @@ export default function ChefResultsScreen() {
     );
   }
 
-  const wine = wineDetailsConfirmed;
   const headerLine = wineHeaderLine(wine.producer, wine.wineName, wine.vintage);
 
   if (regenerating) {
@@ -435,7 +454,7 @@ export default function ChefResultsScreen() {
           <RecipeShareCard
             ref={shareCardRef}
             pairing={sharePairing}
-            wineHeader={wineDetailsConfirmed ? wineHeaderLine(wineDetailsConfirmed.producer, wineDetailsConfirmed.wineName, wineDetailsConfirmed.vintage) : null}
+            wineHeader={wine ? wineHeaderLine(wine.producer, wine.wineName, wine.vintage) : null}
           />
         </View>
       )}

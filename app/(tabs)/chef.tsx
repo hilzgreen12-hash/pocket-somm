@@ -17,7 +17,7 @@ export default function ChefTab() {
   // Match the Cellar / Community tabs so the header sits at a consistent
   // height across the bottom-nav surfaces.
   const paddingTop = Math.max(60, height * 0.13);
-  const { setImage, setWineDetails, setError, setWineDetailsConfirmed, setPairings, setFilters, pairings, wineDetailsConfirmed } = useLabelStore();
+  const { setImage, setWineDetails, setError, pairings, wineDetailsConfirmed } = useLabelStore();
   const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
   const { sessions: labelSessions } = useChefLabelHistory();
   const { sessions: pairingSessions } = useChefPairingHistory();
@@ -57,13 +57,12 @@ export default function ChefTab() {
       setMessage({ title: 'No previous search', body: 'Once you save a label scan to your archive, you can come back here to revisit it.' });
       return;
     }
-    setWineDetailsConfirmed(last.wine);
-    setPairings(last.pairings);
-    setFilters(last.filters ?? null);
+    // History view — the results screen reads the saved session by id.
     router.push({
       pathname: '/chef/results',
       params: {
         fromHistory: 'true',
+        sessionId: last.id,
         savedAt: last.saved_at,
         city: last.city ?? '',
       },
