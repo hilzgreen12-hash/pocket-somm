@@ -109,7 +109,7 @@ export default function RacksScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>My Storage</Text>
+        <Text style={styles.title}>Your Wines</Text>
         <TouchableOpacity onPress={() => setTypeModalOpen(true)}>
           <Text style={styles.addLink}>+ Add</Text>
         </TouchableOpacity>
@@ -117,21 +117,9 @@ export default function RacksScreen() {
 
       {!session ? (
         <ArchiveSignInPrompt
-          title="Sign in to view your storage"
+          title="Sign in to view your wines"
           body="Build virtual wine racks that mirror your home storage — sign in to keep them."
         />
-      ) : racks.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyTitle}>No storage yet</Text>
-          <Text style={styles.emptyBody}>Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
-          <Text style={styles.emptyNote}>Vinster maps your storage as a rectangular grid — non-rectangular or alternative-shaped racks will need to be approximated to a grid layout.</Text>
-          <TouchableOpacity style={styles.emptyButtonGold} onPress={() => handleAddType('rack')}>
-            <Text style={styles.emptyButtonGoldText}>Add Wine Rack</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.emptyButtonGold, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
-            <Text style={styles.emptyButtonGoldText}>Add Wine Fridge</Text>
-          </TouchableOpacity>
-        </View>
       ) : (
         <FlatList
           data={racks}
@@ -140,6 +128,28 @@ export default function RacksScreen() {
             <RackRow rack={item} wines={winesByRack[item.id] ?? []} onLongPress={() => handleLongPressRack(item)} />
           )}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
+          ListHeaderComponent={<Text style={styles.subHeader}>Your Storage</Text>}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No storage yet</Text>
+              <Text style={styles.emptyBody}>Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.</Text>
+              <Text style={styles.emptyNote}>Vinster maps your storage as a rectangular grid — non-rectangular or alternative-shaped racks will need to be approximated to a grid layout.</Text>
+              <TouchableOpacity style={styles.emptyButtonGold} onPress={() => handleAddType('rack')}>
+                <Text style={styles.emptyButtonGoldText}>Add Wine Rack</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.emptyButtonGold, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
+                <Text style={styles.emptyButtonGoldText}>Add Wine Fridge</Text>
+              </TouchableOpacity>
+            </View>
+          }
+          ListFooterComponent={
+            <View style={styles.footer}>
+              <View style={styles.footerDivider} />
+              <TouchableOpacity style={styles.fullListButton} onPress={() => router.push('/cellar/list')}>
+                <Text style={styles.fullListButtonText}>Full Cellar List</Text>
+              </TouchableOpacity>
+            </View>
+          }
           contentContainerStyle={{ paddingBottom: 80 }}
         />
       )}
@@ -185,7 +195,12 @@ const styles = StyleSheet.create({
   homeToBlurb: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 19 },
   arrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
   separator: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  subHeader: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm, letterSpacing: 0.3 },
+  footer: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
+  footerDivider: { height: 1, backgroundColor: colors.border, marginBottom: spacing.lg },
+  fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  fullListButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  empty: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
   emptyNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.xl },
