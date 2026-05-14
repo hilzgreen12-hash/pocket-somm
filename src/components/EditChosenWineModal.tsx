@@ -171,6 +171,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
                 {vinsterNotesOpen ? (
                   <View style={styles.vinsterBlock}>
+                    <Text style={styles.vinsterIntro}>Vinster sifted dozens of sources to present to you:</Text>
                     {wine.critic_score != null ? (
                       <View style={styles.vinsterRow}>
                         <Text style={styles.vinsterLabel}>Critic Score</Text>
@@ -376,9 +377,15 @@ const styles = StyleSheet.create({
   },
   vinsterLinkText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 14,
+    fontSize: 16,
     color: colors.gold,
     letterSpacing: 0.3,
+  },
+  vinsterIntro: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 14,
+    color: colors.gold,
+    lineHeight: 19,
   },
   vinsterBlock: {
     borderWidth: 1,
