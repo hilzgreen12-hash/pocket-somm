@@ -87,13 +87,14 @@ export default function CellarTab() {
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Quick Cellar Stats</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/wishlist'))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Wish List</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/archive'))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Archived Wines</Text>
-        </TouchableOpacity>
+        <View style={[styles.buttonRow, { marginTop: spacing.xs }]}>
+          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/wishlist'))}>
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Wish List</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/archive'))}>
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Archived Wines</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.divider} />

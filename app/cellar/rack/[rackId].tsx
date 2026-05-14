@@ -329,7 +329,11 @@ export default function RackGridScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        {/* A rack can be reached at the end of a scan / rack-build flow,
+            so router.back() can land on a scanner screen (or no-op).
+            Navigate to the Cellar tab — it's always at the base of these
+            stacks, so this pops the whole flow off, scanners included. */}
+        <TouchableOpacity onPress={() => router.navigate('/(tabs)/cellar')}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>

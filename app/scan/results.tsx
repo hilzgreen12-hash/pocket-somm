@@ -381,41 +381,60 @@ export default function ResultsScreen() {
             <Text style={styles.restaurantNameDisplay}>{restaurantName}</Text>
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.restaurantNameRow}
-            onPress={() => setEditingRestaurant(true)}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.locationPin}>📍</Text>
-            {editingRestaurant ? (
-              <TextInput
-                style={styles.restaurantNameInput}
-                value={restaurantName}
-                onChangeText={setRestaurantName}
-                placeholder="Restaurant name"
-                placeholderTextColor="rgba(255,255,255,0.45)"
-                autoFocus
-                onBlur={handleSaveRestaurant}
-                onSubmitEditing={handleSaveRestaurant}
-                returnKeyType="done"
-              />
-            ) : (
-              <Text
-                style={[
-                  styles.restaurantNameDisplay,
-                  !restaurantName && styles.restaurantNamePlaceholder,
-                ]}
+          <>
+            <TouchableOpacity
+              style={styles.restaurantNameRow}
+              onPress={() => setEditingRestaurant(true)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.locationPin}>📍</Text>
+              {editingRestaurant ? (
+                <TextInput
+                  style={styles.restaurantNameInput}
+                  value={restaurantName}
+                  onChangeText={setRestaurantName}
+                  placeholder="Restaurant name"
+                  placeholderTextColor="rgba(255,255,255,0.45)"
+                  autoFocus
+                  onBlur={handleSaveRestaurant}
+                  onSubmitEditing={handleSaveRestaurant}
+                  returnKeyType="done"
+                />
+              ) : (
+                <Text
+                  style={[
+                    styles.restaurantNameDisplay,
+                    !restaurantName && styles.restaurantNamePlaceholder,
+                  ]}
+                >
+                  {restaurantName || 'Tap to add restaurant name'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {/* Explicit Save for the restaurant input. The keyboard return
+                key fires onSubmitEditing, but onBlur is unreliable on
+                Android — without this an unticked name could be lost.
+                handleSaveRestaurant's inFlightSaveRef guard means tapping
+                Save and hitting return can't double-save. */}
+            {editingRestaurant && restaurantName.trim().length > 0 && (
+              <TouchableOpacity
+                style={[styles.reviewRestaurantBtn, autoSave.isPending && { opacity: 0.6 }]}
+                onPress={handleSaveRestaurant}
+                disabled={autoSave.isPending}
+                activeOpacity={0.85}
               >
-                {restaurantName || 'Tap to add restaurant name'}
-              </Text>
+                <Text style={styles.reviewRestaurantBtnText}>{autoSave.isPending ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
             )}
-          </TouchableOpacity>
+          </>
         )}
 
-        {/* Once a restaurant name has been entered, a single CTA both
-            persists the scan to scan_sessions (via handleSaveRestaurant)
-            and routes to Your Restaurants for the full review. */}
-        {restaurantName.trim().length > 0 && (
+        {/* Once a restaurant name has been entered AND the input is no
+            longer being edited, a single CTA persists the scan to
+            scan_sessions and routes to Your Restaurants. While editing,
+            the Save button above is the action instead. */}
+        {restaurantName.trim().length > 0 && !editingRestaurant && (
           <TouchableOpacity
             style={styles.reviewRestaurantBtn}
             onPress={async () => {
