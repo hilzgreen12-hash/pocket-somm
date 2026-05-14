@@ -9,17 +9,13 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { colors, spacing } from '../../src/constants/theme';
 
+// Split lists kept separate so each selection is routed to its own
+// profile column (dietary_needs / allergy_risks) — the UI shows them as
+// a single combined picker, but downstream consumers still read the two
+// fields independently.
 const DIETARY_OPTIONS = ['Vegetarian', 'Vegan', 'Pescatarian'];
-const ALLERGY_OPTIONS = ['Nut Free', 'Dairy Free', 'Gluten Free'];
-
-const REGIONAL_CUISINES = [
-  'Italian', 'French', 'Spanish', 'Greek', 'Mediterranean',
-  'Mexican', 'Tex-Mex', 'Cajun & Creole', 'American Comfort', 'Caribbean',
-  'Brazilian', 'Argentinian', 'Chinese', 'Japanese', 'Korean',
-  'Thai', 'Vietnamese', 'Indian', 'Middle Eastern', 'Moroccan',
-];
-
-const NUTRITIONAL_OPTIONS = ['Low Calorie', 'High Protein', 'Low Salt', 'High Fibre'];
+const ALLERGEN_OPTIONS = ['Nut Free', 'Dairy Free', 'Gluten Free'];
+const DIETARY_AND_ALLERGEN_OPTIONS = [...DIETARY_OPTIONS, ...ALLERGEN_OPTIONS];
 
 export default function RecipeProfileScreen() {
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
@@ -27,15 +23,12 @@ export default function RecipeProfileScreen() {
   const { preferences, updatePreferences, isSaving } = usePreferences();
   const [concernsDraft, setConcernsDraft] = useState(preferences?.specificConcerns ?? '');
   const [dietaryOpen, setDietaryOpen] = useState(false);
-  const [allergyOpen, setAllergyOpen] = useState(false);
-  const [cuisineOpen, setCuisineOpen] = useState(false);
-  const [nutritionalOpen, setNutritionalOpen] = useState(false);
   const [concernsOpen, setConcernsOpen] = useState(false);
   const [concernsSaved, setConcernsSaved] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
 
   function handleSavePreferences() {
-    // All chip pickers commit inline; commit any pending concerns draft
+    // The chip picker commits inline; commit any pending concerns draft
     // before flashing the confirmation so the bottom Save button covers
     // everything the user might have changed. Skip the flash if a save
     // is still in flight — usePreferences.onError alerts on real failures.
@@ -89,8 +82,7 @@ export default function RecipeProfileScreen() {
 
   const dietary = preferences?.dietaryNeeds ?? [];
   const allergy = preferences?.allergyRisks ?? [];
-  const cuisine = preferences?.regionalPreferences ?? [];
-  const nutritional = preferences?.nutritionalPreferences ?? [];
+  const dietaryAndAllergens = [...dietary, ...allergy];
 
   function summary(values: string[], noneLabel: string) {
     if (values.length === 0) return noneLabel;
@@ -113,49 +105,30 @@ export default function RecipeProfileScreen() {
 
         <View style={styles.profileIntro}>
           <Text style={styles.profileHeading}>Recipe Preferences</Text>
-          <Text style={styles.profileBody}>Set your recipe preferences so Vinster can generate the best recipe and food pairing recommendations for you — over time your food choices will inform our guidance.</Text>
+          <Text style={styles.profileBody}>Tell Vinster about any dietary needs, allergens or specific requirements — these are hard rules it will always respect when generating recipes and pairings.</Text>
           <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>
-
-        {/* Hard rules first */}
 
         <View style={styles.section}>
           <TouchableOpacity onPress={() => toggle(setDietaryOpen)} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Dietary Needs</Text>
+              <Text style={styles.question}>Dietary Needs & Allergens</Text>
               {!dietaryOpen && (
-                <Text style={styles.selectionSummary}>{summary(dietary, 'None')}</Text>
+                <Text style={styles.selectionSummary}>{summary(dietaryAndAllergens, 'None')}</Text>
               )}
             </View>
             <Text style={styles.chevron}>{dietaryOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
           {dietaryOpen && (
             <View style={styles.pickerWrap}>
+              <Text style={styles.pickerHint}>Vinster will never include these in a recipe or pairing.</Text>
               <ChipPicker
-                options={DIETARY_OPTIONS}
-                selected={dietary}
-                onChange={(v) => updatePreferences({ dietaryNeeds: v })}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setAllergyOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Allergy Risk</Text>
-              {!allergyOpen && (
-                <Text style={styles.selectionSummary}>{summary(allergy, 'None')}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{allergyOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {allergyOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={ALLERGY_OPTIONS}
-                selected={allergy}
-                onChange={(v) => updatePreferences({ allergyRisks: v })}
+                options={DIETARY_AND_ALLERGEN_OPTIONS}
+                selected={dietaryAndAllergens}
+                onChange={(v) => updatePreferences({
+                  dietaryNeeds: v.filter((x) => DIETARY_OPTIONS.includes(x)),
+                  allergyRisks: v.filter((x) => ALLERGEN_OPTIONS.includes(x)),
+                })}
               />
             </View>
           )}
@@ -194,55 +167,6 @@ export default function RecipeProfileScreen() {
               >
                 <Text style={styles.concernsSaveBtnText}>{concernsSaved ? 'Saved ✓' : 'Save'}</Text>
               </TouchableOpacity>
-            </View>
-          )}
-        </View>
-
-        <View style={styles.softDivider}>
-          <Text style={styles.softHeading}>Soft Preferences</Text>
-          <Text style={styles.softSubheading}>Vinster will lean toward these but not enforce them strictly.</Text>
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setCuisineOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Regional Preferences</Text>
-              {!cuisineOpen && (
-                <Text style={styles.selectionSummary}>{summary(cuisine, 'I like them all')}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{cuisineOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {cuisineOpen && (
-            <View style={styles.pickerWrap}>
-              <Text style={styles.pickerHint}>Pick up to 5 cuisines you enjoy.</Text>
-              <ChipPicker
-                options={REGIONAL_CUISINES}
-                selected={cuisine}
-                onChange={(v) => updatePreferences({ regionalPreferences: v })}
-                max={5}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setNutritionalOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Nutritional Preferences</Text>
-              {!nutritionalOpen && (
-                <Text style={styles.selectionSummary}>{summary(nutritional, 'No preference')}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{nutritionalOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {nutritionalOpen && (
-            <View style={styles.pickerWrap}>
-              <ChipPicker
-                options={NUTRITIONAL_OPTIONS}
-                selected={nutritional}
-                onChange={(v) => updatePreferences({ nutritionalPreferences: v })}
-              />
             </View>
           )}
         </View>
@@ -298,7 +222,4 @@ const styles = StyleSheet.create({
   concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
   concernsSaveBtn: { alignSelf: 'flex-end', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: 6, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   concernsSaveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
-  softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
-  softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
-  softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
 });

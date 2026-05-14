@@ -7,26 +7,14 @@ if (Platform.OS === 'android') {
 import { router, useLocalSearchParams } from 'expo-router';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ChipPicker } from '../../src/components/preferences/ChipPicker';
-import { StylePicker } from '../../src/components/preferences/StylePicker';
-import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
-import { WineTypePicker, WineType } from '../../src/components/preferences/WineTypePicker';
 import { WINE_REGIONS } from '../../src/constants/wineRegions';
 import { GRAPE_VARIETIES } from '../../src/constants/grapeVarieties';
-import { STYLE_PROFILES } from '../../src/constants/styleProfiles';
 import { colors, spacing } from '../../src/constants/theme';
-
-const WINE_TYPE_LABELS: Record<string, string> = {
-  red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling',
-};
 
 export default function WineProfileScreen() {
   const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
   const isOnboarding = onboarding === '1';
   const { preferences, updatePreferences, isSaving } = usePreferences();
-  const [colourOpen, setColourOpen] = useState(false);
-  const [styleOpen, setStyleOpen] = useState(false);
-  const [regionalOpen, setRegionalOpen] = useState(false);
-  const [varietalOpen, setVarietalOpen] = useState(false);
   const [regionalDislikesOpen, setRegionalDislikesOpen] = useState(false);
   const [varietalDislikesOpen, setVarietalDislikesOpen] = useState(false);
   const [savedFlash, setSavedFlash] = useState(false);
@@ -46,18 +34,6 @@ export default function WineProfileScreen() {
     setter((v) => !v);
   }
 
-  const wineTypes = (preferences?.wineTypes ?? []) as WineType[];
-  const wineTypeSummary = wineTypes.length > 0
-    ? wineTypes.map((t) => WINE_TYPE_LABELS[t]).join(', ')
-    : 'I like them all';
-
-  const styleProfiles = preferences?.styleProfiles ?? [];
-  const styleSummary = styleProfiles.length > 0
-    ? styleProfiles.map((id) => STYLE_PROFILES.find((s) => s.id === id)?.label ?? id).join(', ')
-    : 'I like them all';
-
-  const favRegions = preferences?.favouriteRegions ?? [];
-  const favGrapes = preferences?.favouriteGrapes ?? [];
   const disRegions = preferences?.dislikedRegions ?? [];
   const disGrapes = preferences?.dislikedGrapes ?? [];
 
@@ -76,11 +52,9 @@ export default function WineProfileScreen() {
 
         <View style={styles.profileIntro}>
           <Text style={styles.profileHeading}>Wine Preferences</Text>
-          <Text style={styles.profileBody}>Set your wine preferences so Vinster can generate the best recommendations for you — over time your wine choices will inform our guidance, making our suggestions even more tailored.</Text>
+          <Text style={styles.profileBody}>Tell Vinster which regions and grapes to rule out — these are hard rules it will never recommend. Everything else you can fine-tune per search.</Text>
           <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>
-
-        {/* Hard rules first — what Vinster will never recommend */}
 
         <View style={styles.section}>
           <TouchableOpacity onPress={() => toggle(setRegionalDislikesOpen)} activeOpacity={0.7} style={styles.accordionRow}>
@@ -123,108 +97,6 @@ export default function WineProfileScreen() {
                 selected={disGrapes}
                 onChange={(v) => updatePreferences({ dislikedGrapes: v })}
                 max={5}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.bubbleWrap}>
-            <Text style={styles.question}>Default Budget</Text>
-            <BudgetSlider
-              value={preferences?.defaultBudget ?? null}
-              onChange={(budget) => updatePreferences({ defaultBudget: budget })}
-              currency={preferences?.defaultCurrency}
-            />
-          </View>
-        </View>
-
-        <View style={styles.softDivider}>
-          <Text style={styles.softHeading}>Soft Preferences</Text>
-          <Text style={styles.softSubheading}>Vinster will lean toward these but not enforce them strictly. You can override these per-search.</Text>
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setColourOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Colour Preference</Text>
-              {!colourOpen && (
-                <Text style={styles.selectionSummary}>{wineTypeSummary}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{colourOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {colourOpen && (
-            <View style={styles.pickerWrap}>
-              <WineTypePicker
-                selected={wineTypes}
-                onChange={(v) => updatePreferences({ wineTypes: v })}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setRegionalOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Regional Preference</Text>
-              {!regionalOpen && (
-                <Text style={styles.selectionSummary}>{summary(favRegions, 'I like them all')}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{regionalOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {regionalOpen && (
-            <View style={styles.pickerWrap}>
-              <Text style={styles.pickerHint}>Select up to 5.</Text>
-              <ChipPicker
-                options={WINE_REGIONS}
-                selected={favRegions}
-                onChange={(v) => updatePreferences({ favouriteRegions: v })}
-                max={5}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setVarietalOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Varietal Preferences</Text>
-              {!varietalOpen && (
-                <Text style={styles.selectionSummary}>{summary(favGrapes, 'I like them all')}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{varietalOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {varietalOpen && (
-            <View style={styles.pickerWrap}>
-              <Text style={styles.pickerHint}>Select up to 5.</Text>
-              <ChipPicker
-                options={GRAPE_VARIETIES}
-                selected={favGrapes}
-                onChange={(v) => updatePreferences({ favouriteGrapes: v })}
-                max={5}
-              />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggle(setStyleOpen)} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Style Preference</Text>
-              {!styleOpen && (
-                <Text style={styles.selectionSummary}>{styleSummary}</Text>
-              )}
-            </View>
-            <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {styleOpen && (
-            <View style={styles.pickerWrap}>
-              <StylePicker
-                selected={styleProfiles}
-                onChange={(profiles) => updatePreferences({ styleProfiles: profiles })}
               />
             </View>
           )}
@@ -275,12 +147,8 @@ const styles = StyleSheet.create({
   selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
   pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
   pickerHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, marginBottom: spacing.sm },
-  bubbleWrap: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, alignItems: 'center' },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
   saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
   skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  softDivider: { paddingVertical: spacing.md, marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, alignItems: 'center' },
-  softHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
-  softSubheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
 });
