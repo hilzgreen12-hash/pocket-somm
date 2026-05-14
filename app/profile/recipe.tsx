@@ -104,7 +104,7 @@ export default function RecipeProfileScreen() {
         </TouchableOpacity>
 
         <View style={styles.profileIntro}>
-          <Text style={styles.profileHeading}>Recipe Preferences</Text>
+          <Text style={styles.profileHeading}>Recipe Requirements</Text>
           <Text style={styles.profileBody}>Tell Vinster about any dietary needs, allergens or specific requirements — these are hard rules it will always respect when generating recipes and pairings.</Text>
           <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>

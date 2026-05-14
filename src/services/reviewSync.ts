@@ -13,7 +13,7 @@
 // callers typically log and swallow.
 
 import { findMatchingWishlistWine, updateCellarWine } from '../api/cellar';
-import { findMatchingChosenWine, patchChosenWine } from '../api/chosenWines';
+import { findMatchingChosenWine, patchChosenWine, createChosenWineFromReview } from '../api/chosenWines';
 import { supabase } from '../api/supabase';
 import type { CellarWine } from '../types/wine';
 
@@ -99,16 +99,27 @@ export async function syncReviewToCellar(
 }
 
 // Push an edit made on a wishlist (or wine-detail review form) onto a
-// matching chosen_wines row, if one exists. Patches only the fields
-// the caller asked about so the rest of the review (other_observations
-// etc.) is preserved.
+// matching chosen_wines row. Patches only the fields the caller asked
+// about so the rest of the review (other_observations etc.) is
+// preserved.
+//
+// When no matching row exists: the wishlist path leaves it (a wishlist
+// item isn't a review). The cellar wine-detail review form passes
+// createIfMissing so the review becomes a first-class chosen_wines row
+// and shows up in Your Wine Reviews.
 export async function syncEditToChosen(
   userId: string,
   identity: ReviewIdentity,
-  fields: ReviewFields
+  fields: ReviewFields,
+  options: { createIfMissing?: boolean; region?: string | null } = {}
 ): Promise<void> {
   const match = await findMatchingChosenWine(userId, identity);
-  if (!match) return;
+  if (!match) {
+    if (options.createIfMissing) {
+      await createChosenWineFromReview(userId, identity, fields, options.region ?? null);
+    }
+    return;
+  }
   const updates: Record<string, string | number | null> = {};
   if (fields.tastingNote !== undefined) updates.tasting_note = fields.tastingNote.trim() || null;
   if (fields.userScore !== undefined) updates.user_score = fields.userScore;

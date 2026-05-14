@@ -9,7 +9,7 @@ export function TabFooter() {
   return (
     <View style={styles.row}>
       <TouchableOpacity style={styles.button} onPress={() => router.push('/account')}>
-        <Text style={styles.text}>Account</Text>
+        <Text style={styles.text}>About You</Text>
       </TouchableOpacity>
       <TouchableOpacity style={styles.button} onPress={() => router.push('/about')}>
         <Text style={styles.text}>About Vinster</Text>

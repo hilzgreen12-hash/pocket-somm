@@ -98,18 +98,18 @@ const styles = StyleSheet.create({
   backButton: { marginBottom: spacing.xl },
   backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.textMuted },
   heading: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5, marginBottom: spacing.md },
-  intro: { fontSize: 19, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 26, marginBottom: spacing.md },
-  founderBlurb: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 26, marginBottom: spacing.xl },
+  intro: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 28, marginBottom: spacing.md },
+  founderBlurb: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 28, marginBottom: spacing.xl },
   section: { marginBottom: spacing.xl, paddingBottom: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
-  sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
-  sectionBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 24 },
+  sectionTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
+  sectionBody: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 27 },
   // Subsection sits inside its parent section with no separator above it —
   // by design, since "How Recommendations Are Scored" reads as a subheading
   // under "How List Works" rather than a standalone section.
   subsection: { marginTop: spacing.lg },
-  subsectionTitle: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
+  subsectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
   feedbackSection: { marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
-  feedbackHeading: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: spacing.xs, letterSpacing: 0.5 },
-  feedbackBody: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 24 },
+  feedbackHeading: { fontSize: 19, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: spacing.xs, letterSpacing: 0.5 },
+  feedbackBody: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 26 },
   feedbackLink: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', textDecorationLine: 'underline' },
 });
