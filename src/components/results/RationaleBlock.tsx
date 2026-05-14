@@ -24,7 +24,7 @@ const styles = StyleSheet.create({
     borderLeftColor: colors.gold,
   },
   label: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.gold,
     textTransform: 'uppercase',
@@ -34,7 +34,8 @@ const styles = StyleSheet.create({
   text: {
     ...typography.body,
     fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 17,
     color: colors.text,
-    lineHeight: 23,
+    lineHeight: 25,
   },
 });

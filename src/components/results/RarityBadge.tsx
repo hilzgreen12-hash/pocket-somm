@@ -44,24 +44,24 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   star: {
-    fontSize: 13,
-    lineHeight: 20,
+    fontSize: 15,
+    lineHeight: 23,
     color: colors.text,
   },
   textGroup: {
     flex: 1,
   },
   label: {
-    fontSize: 13,
+    fontSize: 16,
     fontFamily: 'CormorantGaramond_600SemiBold',
     letterSpacing: 0.2,
     marginBottom: 2,
     color: colors.text,
   },
   notes: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    lineHeight: 19,
+    fontFamily: 'CormorantGaramond_400Regular',
+    lineHeight: 22,
   },
 });

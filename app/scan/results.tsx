@@ -412,7 +412,10 @@ export default function ResultsScreen() {
           </TouchableOpacity>
         )}
 
-        {restaurantName.trim().length > 0 ? (
+        {/* Once a restaurant name has been entered, a single CTA both
+            persists the scan to scan_sessions (via handleSaveRestaurant)
+            and routes to Your Restaurants for the full review. */}
+        {restaurantName.trim().length > 0 && (
           <TouchableOpacity
             style={styles.reviewRestaurantBtn}
             onPress={async () => {
@@ -426,12 +429,8 @@ export default function ResultsScreen() {
             }}
             activeOpacity={0.8}
           >
-            <Text style={styles.reviewRestaurantBtnText}>Add or Edit Review →</Text>
+            <Text style={styles.reviewRestaurantBtnText}>Review or Edit Your Restaurant →</Text>
           </TouchableOpacity>
-        ) : (
-          <Text style={styles.restaurantHint}>
-            Capture the restaurant so you can review the food, atmosphere and service in Your Restaurants.
-          </Text>
         )}
       </View>
 
@@ -707,7 +706,7 @@ const styles = StyleSheet.create({
   restaurantCardLabel: {
     fontFamily: 'CormorantGaramond_700Bold',
     fontSize: 12,
-    color: colors.gold,
+    color: colors.text,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     marginBottom: spacing.xs,
@@ -794,7 +793,7 @@ const styles = StyleSheet.create({
     marginBottom: 3,
   },
   rankLabel: {
-    fontSize: 19,
+    fontSize: 21,
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
     textTransform: 'uppercase',
@@ -802,7 +801,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   wineName: {
-    fontSize: 18,
+    fontSize: 21,
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
     letterSpacing: -0.2,
@@ -810,7 +809,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   wineProducer: {
-    fontSize: 13,
+    fontSize: 16,
     fontFamily: 'CormorantGaramond_400Regular',
     color: colors.text,
     letterSpacing: 0.2,
@@ -821,7 +820,7 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   price: {
-    fontSize: 18,
+    fontSize: 21,
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
   },
@@ -830,12 +829,12 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   scoreText: {
-    fontSize: 19,
+    fontSize: 21,
     fontFamily: 'CormorantGaramond_700Bold',
     color: colors.text,
   },
   scoreUnit: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.text,
     fontFamily: 'CormorantGaramond_600SemiBold',
   },
@@ -870,7 +869,7 @@ const styles = StyleSheet.create({
   },
   chosenButtonText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 13,
+    fontSize: 15,
     color: '#FFFFFF',
   },
   chosenButtonTextDone: {
@@ -893,7 +892,7 @@ const styles = StyleSheet.create({
   },
   topPickReasonText: {
     flex: 1,
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: colors.gold,
     lineHeight: 20,
@@ -912,7 +911,7 @@ const styles = StyleSheet.create({
   },
   wishlistAddButtonText: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 13,
+    fontSize: 15,
     color: '#FFFFFF',
   },
   wishlistAddButtonTextDone: {
@@ -928,10 +927,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   outsideText: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    fontSize: 14,
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 16,
     color: colors.gold,
-    lineHeight: 19,
+    lineHeight: 22,
   },
   scoreNote: {
     marginHorizontal: spacing.md,
@@ -959,7 +958,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   savedConfirm: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 15,
     color: colors.gold,
     textAlign: 'center',
