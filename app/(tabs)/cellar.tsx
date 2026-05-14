@@ -14,7 +14,7 @@ export default function CellarTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(60, height * 0.13);
   const { session } = useAuth();
-  const { setImage, setWineDetails, setError } = useLabelStore();
+  const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
   const [addWineOpen, setAddWineOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
@@ -118,7 +118,7 @@ export default function CellarTab() {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>Add a wine</Text>
-            <Text style={styles.modalBody}>Scan the label or upload a photo and Vinster will pull in the details.</Text>
+            <Text style={styles.modalBody}>Scan the label or upload a photo and Vinster will pull in the details — or enter them yourself.</Text>
             <TouchableOpacity
               style={styles.modalButton}
               onPress={() => { setAddWineOpen(false); router.push('/label/camera'); }}
@@ -130,6 +130,18 @@ export default function CellarTab() {
               onPress={() => { setAddWineOpen(false); handleUpload(); }}
             >
               <Text style={styles.modalButtonText}>Upload Screenshot / Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, { marginTop: spacing.sm }]}
+              onPress={() => {
+                setAddWineOpen(false);
+                // Clear any prior scan so Confirm Wine Details opens blank
+                // for the user to fill in by hand.
+                resetLabelStore();
+                router.push('/label/confirm?manual=1');
+              }}
+            >
+              <Text style={styles.modalButtonText}>Manual Input</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>

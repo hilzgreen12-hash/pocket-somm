@@ -11,8 +11,11 @@ import type { WineDetailsComplete } from '../../src/types/wine';
 
 export default function LabelConfirmScreen() {
   useKeepAwake();
-  const { context } = useLocalSearchParams<{ context?: string }>();
+  const { context, manual } = useLocalSearchParams<{ context?: string; manual?: string }>();
   const contextQuery = context === 'wishlist' ? '?context=wishlist' : '';
+  // Reached straight from Cellar → Add Wine → Manual Input: no scan
+  // happened, so the form opens blank and there's nothing to "scan again".
+  const isManual = manual === '1';
   const { wineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
   const { preferences } = usePreferences();
 
@@ -65,7 +68,11 @@ export default function LabelConfirmScreen() {
       keyboardDismissMode="interactive"
     >
       <Text style={styles.heading}>Confirm Wine Details</Text>
-      <Text style={styles.subheading}>Check the details we extracted and correct anything that looks wrong.</Text>
+      <Text style={styles.subheading}>
+        {isManual
+          ? "Enter the wine's details below."
+          : 'Check the details we extracted and correct anything that looks wrong.'}
+      </Text>
 
       <Text style={styles.label}>Producer</Text>
       <TextInput
@@ -125,9 +132,15 @@ export default function LabelConfirmScreen() {
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.backButton} onPress={() => router.replace(`/label/camera${contextQuery}`)}>
-        <Text style={styles.backText}>Scan Again</Text>
-      </TouchableOpacity>
+      {isManual ? (
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Text style={styles.backText}>Cancel</Text>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace(`/label/camera${contextQuery}`)}>
+          <Text style={styles.backText}>Scan Again</Text>
+        </TouchableOpacity>
+      )}
     </ScrollView>
   );
 }

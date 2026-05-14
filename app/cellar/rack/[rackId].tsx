@@ -441,7 +441,7 @@ export default function RackGridScreen() {
         {winesInRack.length > 0 && (
           <View style={styles.wineList}>
             <Text style={styles.wineListHeading}>Wines in this rack</Text>
-            <Text style={styles.wineListHint}>Tap a wine to highlight its position. Long-press a slot in the rack to move it.</Text>
+            <Text style={styles.wineListHint}>Tap an empty slot to add a wine, tap a wine to highlight its position. Long-press a slot in the rack to move it.</Text>
 
             <View style={styles.searchRow}>
               <TextInput

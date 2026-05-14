@@ -1,7 +1,10 @@
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
+import { usePersonalityPrompt } from '../src/hooks/usePersonalityPrompt';
 import { TabFooter } from '../src/components/TabFooter';
+import { PersonalityPromptModal } from '../src/components/PersonalityPromptModal';
 import { colors, spacing } from '../src/constants/theme';
 
 // The four main destinations. The Profile tab was retired — its contents
@@ -16,6 +19,12 @@ const TILES = [
 export default function HomeScreen() {
   const { session } = useAuth();
   const username = (session?.user.user_metadata?.display_name ?? '').trim();
+
+  // Nudge the user to generate a personality sketch once they've earned
+  // one. Dismissing only hides it for this session — it returns on the
+  // next app-open until they generate it.
+  const personalityCategory = usePersonalityPrompt();
+  const [promptDismissed, setPromptDismissed] = useState(false);
 
   return (
     <View style={styles.container}>
@@ -43,6 +52,16 @@ export default function HomeScreen() {
       </View>
 
       <TabFooter />
+
+      <PersonalityPromptModal
+        visible={!!personalityCategory && !promptDismissed}
+        category={personalityCategory ?? 'wine'}
+        onGenerate={() => {
+          setPromptDismissed(true);
+          router.push(`/profile/personality?category=${personalityCategory}` as any);
+        }}
+        onDismiss={() => setPromptDismissed(true)}
+      />
     </View>
   );
 }

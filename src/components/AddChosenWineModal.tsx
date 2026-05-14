@@ -7,7 +7,9 @@ import { showAlert } from './AppAlert';
 import { CityAutocomplete } from './CityAutocomplete';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
+import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
 import { colors, spacing } from '../constants/theme';
+import type { ChosenWine } from '../types/wine';
 
 // Manual-entry counterpart to ChosenWineModal. Used by the +Add link on
 // Your Wine Reviews so the user can record a wine they drank without
@@ -22,7 +24,7 @@ interface Props {
 
 export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
   const { session } = useAuth();
-  const { saveManual } = useChosenWines();
+  const { saveManual, update, chosenWines } = useChosenWines();
 
   const [producer, setProducer] = useState('');
   const [wineName, setWineName] = useState('');
@@ -62,25 +64,75 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
       return;
     }
     Keyboard.dismiss();
+    // If this wine is already in Your Wine Reviews, let the user choose
+    // rather than silently adding a duplicate row.
+    const existing = findExistingReview(chosenWines, { producer, wineName, vintage });
+    if (existing) {
+      showAlert({
+        title: "You've reviewed this wine before",
+        body: `You already have a review for ${wineName.trim()}. Update it, add a new dated tasting to it, or start a fresh review?`,
+        buttons: [
+          { text: 'Update review', onPress: () => { void doSave('update', existing); } },
+          { text: 'Add to review', onPress: () => { void doSave('append', existing); } },
+          { text: 'Create new', onPress: () => { void doSave('create', null); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await doSave('create', null);
+  }
+
+  async function doSave(mode: 'create' | 'update' | 'append', existing: ChosenWine | null) {
+    if (!session) return;
     const trimmedPrice = listPrice.trim();
     const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
+    const price = Number.isFinite(parsedPrice) ? parsedPrice : null;
     const trimmedVintage = vintage.trim();
     const parsedVintage = trimmedVintage ? parseInt(trimmedVintage, 10) : NaN;
+    const vintageNum = Number.isFinite(parsedVintage) ? parsedVintage : null;
     try {
-      await saveManual.mutateAsync({
-        wineName,
-        producer,
-        region,
-        vintage: Number.isFinite(parsedVintage) ? parsedVintage : null,
-        restaurantName: restaurant,
-        city,
-        listPrice: Number.isFinite(parsedPrice) ? parsedPrice : null,
-        currency: 'GBP',
-        tastingNote,
-        otherObservations,
-        userScore,
-        isFavourite,
-      });
+      if (mode === 'create' || !existing) {
+        await saveManual.mutateAsync({
+          wineName,
+          producer,
+          region,
+          vintage: vintageNum,
+          restaurantName: restaurant,
+          city,
+          listPrice: price,
+          currency: 'GBP',
+          tastingNote,
+          otherObservations,
+          userScore,
+          isFavourite,
+        });
+      } else {
+        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
+        if (mode === 'update') {
+          await update.mutateAsync({
+            id: existing.id,
+            input: { restaurantName: restaurant, city, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
+          });
+        } else {
+          // Append a dated tasting onto the existing review, leaving its
+          // original where/when/price intact.
+          const label = todayLabel();
+          await update.mutateAsync({
+            id: existing.id,
+            input: {
+              restaurantName: existing.restaurant_name ?? '',
+              city: existing.city ?? '',
+              tastingNote: appendDatedEntry(existing.tasting_note, tastingNote, label),
+              otherObservations: appendDatedEntry(existing.other_observations, otherObservations, label),
+              userScore: userScore != null ? userScore : existing.user_score,
+              listPrice: existing.menu_price,
+              isFavourite: existing.is_favourite || isFavourite,
+              ...identity,
+            },
+          });
+        }
+      }
       onSaved();
       onClose();
     } catch (err) {
@@ -238,10 +290,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
             <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSave}
-              disabled={saveManual.isPending}
+              disabled={saveManual.isPending || update.isPending}
             >
               <Text style={styles.saveButtonText}>
-                {saveManual.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
+                {saveManual.isPending || update.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
               </Text>
             </TouchableOpacity>
 
