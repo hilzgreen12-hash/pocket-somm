@@ -96,7 +96,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>
-          Set your food preferences in your profile to ensure Vinster's recommendations are tailored to your tastes and dietary concerns.
+          Tell Vinster what you're cooking and they'll offer you a wine pairing from your cellar or beyond. Select your bottle first for celebrity chef inspired recipe recommendations, tailored to your needs and wants.
         </Text>
       </View>
 
