@@ -1,8 +1,6 @@
 import { useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useAuth } from '../src/hooks/useAuth';
 import { colors, spacing } from '../src/constants/theme';
 
 interface Slide {
@@ -38,17 +36,12 @@ export default function OnboardingTour() {
   const { width } = useWindowDimensions();
   const [index, setIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
-  const { session } = useAuth();
 
-  async function finish() {
-    // Per-user flag so a fresh sign-up on a device that's previously seen
-    // the tour still gets the tour for the new account.
-    const userKey = session?.user.id ? `vinster_tour_seen_${session.user.id}` : 'vinster_tour_seen';
-    await AsyncStorage.setItem(userKey, 'true');
-    // After the tour, push the user straight into Wine Preferences in
-    // onboarding mode — they'll then move on to Recipe Preferences and
-    // finally land on the List tab. Bypasses the old welcome-profile step.
-    router.replace('/profile/wine?onboarding=1');
+  function finish() {
+    // After the tour, the consolidated onboarding setup page collects
+    // the user's preferences and marks onboarding_completed — which is
+    // what index.tsx checks to route returning users straight to /home.
+    router.replace('/onboarding');
   }
 
   function handleNext() {

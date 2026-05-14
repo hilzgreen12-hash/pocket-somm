@@ -14,4 +14,5 @@ export interface UserPreferences {
   specificConcerns: string;
   regionalPreferences: string[];
   nutritionalPreferences: string[];
+  onboardingCompleted: boolean;
 }
