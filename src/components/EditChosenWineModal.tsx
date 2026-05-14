@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { CityAutocomplete } from './CityAutocomplete';
+import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import type { ChosenWine } from '../types/wine';
 
@@ -16,7 +17,7 @@ interface Props {
 }
 
 export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
-  const { update } = useChosenWines();
+  const { update, remove } = useChosenWines();
 
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
@@ -66,6 +67,28 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     });
     onSaved();
     onClose();
+  }
+
+  function handleDelete() {
+    if (!wine) return;
+    const label = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
+    showAlert({
+      title: 'Delete review?',
+      body: `${label}\n\nThis permanently removes your review.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete review',
+          style: 'destructive',
+          onPress: () => {
+            remove.mutate(wine.id, {
+              onSuccess: () => { onSaved(); onClose(); },
+              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
+            });
+          },
+        },
+      ],
+    });
   }
 
   if (!wine) return null;
@@ -278,6 +301,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               <Text style={styles.cancelText}>Back</Text>
             </TouchableOpacity>
 
+            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} disabled={remove.isPending}>
+              <Text style={styles.deleteText}>{remove.isPending ? 'Deleting…' : 'Delete this review'}</Text>
+            </TouchableOpacity>
+
           </ScrollView>
         </View>
       </KeyboardAvoidingView>
@@ -467,5 +494,16 @@ const styles = StyleSheet.create({
     fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 14,
     color: colors.textMuted,
+  },
+  deleteButton: {
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  deleteText: {
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 14,
+    color: colors.gold,
+    textDecorationLine: 'underline',
   },
 });
