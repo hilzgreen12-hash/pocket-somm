@@ -5,6 +5,7 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
+import { showAlert } from '../../src/components/AppAlert';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
@@ -46,8 +47,8 @@ type ReviewItem =
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
-  const { chosenWines, isLoading } = useChosenWines();
-  const { wines: cellarWines } = useCellar();
+  const { chosenWines, isLoading, remove } = useChosenWines();
+  const { wines: cellarWines, updateWine } = useCellar();
   const { wines: wishlistWines } = useWishList();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -115,6 +116,45 @@ export default function ChosenWinesScreen() {
     const wishMatch = wishlistByIdentity.get(key);
     if (wishMatch) return { kind: 'wish list', date: wishMatch.date_received ?? wishMatch.created_at };
     return null;
+  }
+
+  // Long-press a review to delete it. A restaurant review is its own
+  // chosen_wines row, so it's deleted outright. A cellar review lives on
+  // the cellar_wines row, so we only clear the review fields — the bottle
+  // stays in the cellar.
+  function handleLongPressReview(item: ReviewItem) {
+    const w = item.wine;
+    const label = wineHeaderLine(w.producer, w.wine_name, w.vintage);
+    const onError = (err: unknown) => showAlert({
+      title: 'Could not delete',
+      body: err instanceof Error ? err.message : 'Please try again.',
+    });
+    showAlert({
+      title: 'Delete review?',
+      body: item.source === 'restaurant'
+        ? `${label}\n\nThis permanently removes your review.`
+        : `${label}\n\nThis clears your review — the bottle stays in your cellar.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete review',
+          style: 'destructive',
+          onPress: () => {
+            if (item.source === 'restaurant') {
+              remove.mutate(item.wine.id, { onError });
+            } else {
+              updateWine.mutate(
+                {
+                  id: item.wine.id,
+                  updates: { user_notes: null, review_score: null, review_location: null, review_date: null },
+                },
+                { onError },
+              );
+            }
+          },
+        },
+      ],
+    });
   }
 
   const hasAnything = items.length > 0;
@@ -224,6 +264,8 @@ export default function ChosenWinesScreen() {
                   key={`${item.source}-${w.id}`}
                   style={styles.cardCompact}
                   onPress={onPress}
+                  onLongPress={() => handleLongPressReview(item)}
+                  delayLongPress={400}
                   activeOpacity={0.7}
                 >
                   <View style={styles.cardCompactRow}>

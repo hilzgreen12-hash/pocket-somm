@@ -179,11 +179,11 @@ export default function ChefResultsScreen() {
       // pairing data before we capture.
       await new Promise((r) => setTimeout(r, 250));
       if (!shareCardRef.current) throw new Error('Share card not ready');
+      // No fixed width/height — capture the card at its natural size so
+      // the full recipe is shared, however long it runs.
       const uri = await captureRef(shareCardRef, {
         format: 'png',
         quality: 1,
-        width: 1080,
-        height: 1920,
         result: 'tmpfile',
       });
       if (await Sharing.isAvailableAsync()) {

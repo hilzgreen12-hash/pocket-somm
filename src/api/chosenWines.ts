@@ -120,6 +120,11 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
   if (error) throw new Error(error.message);
 }
 
+export async function deleteChosenWine(id: string): Promise<void> {
+  const { error } = await supabase.from('chosen_wines').delete().eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
   const { data, error } = await supabase
     .from('chosen_wines')

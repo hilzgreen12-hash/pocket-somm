@@ -2,9 +2,10 @@ import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/theme';
 
-// Branded 4:5 portrait card (1080×1350) for sharing personality sketches.
-// Rendered off-screen by the personality screen, captured to PNG with
-// react-native-view-shot, and dropped into the native share sheet.
+// Branded card for sharing personality sketches — 1080 wide and as tall
+// as the sketch needs (a fixed height clipped longer ones). Rendered
+// off-screen by the personality screen, captured at its natural size
+// with react-native-view-shot, and dropped into the native share sheet.
 
 interface Props {
   title: string | null;
@@ -40,25 +41,21 @@ export const PersonalityShareCard = forwardRef<View, Props>(({ title, body, cate
 });
 
 const CARD_WIDTH = 1080;
-const CARD_HEIGHT = 1350;
 const PADDING = 90;
 
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
-    backgroundColor: '#0E0E0E',
+    backgroundColor: colors.background,
     padding: 28,
   },
   inner: {
-    flex: 1,
     borderWidth: 4,
     borderColor: colors.gold,
     borderRadius: 36,
     paddingHorizontal: PADDING,
     paddingVertical: PADDING - 16,
-    backgroundColor: '#141414',
-    justifyContent: 'space-between',
+    backgroundColor: colors.background,
   },
   topRow: {
     alignItems: 'center',
@@ -78,13 +75,13 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(212,176,96,0.55)',
+    backgroundColor: 'rgba(224,184,74,0.55)',
     marginVertical: 36,
   },
   subhead: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 32,
-    color: 'rgba(212,176,96,0.85)',
+    color: 'rgba(224,184,74,0.85)',
     textTransform: 'uppercase',
     letterSpacing: 6,
     textAlign: 'center',
@@ -100,7 +97,6 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   body: {
-    flex: 1,
     fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 36,
     color: '#FFFFFF',

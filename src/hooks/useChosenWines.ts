@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
+import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
 import { syncReviewToCellar } from '../services/reviewSync';
 import { publishChosenWineToCommunity } from '../services/communityPublish';
 import type { ChosenWine } from '../types/wine';
@@ -85,5 +85,13 @@ export function useChosenWines() {
     },
   });
 
-  return { chosenWines, isLoading, save, update, saveManual };
+  const remove = useMutation({
+    mutationFn: (id: string) => deleteChosenWine(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+      qc.invalidateQueries({ queryKey: ['my-community-uploads', userId] });
+    },
+  });
+
+  return { chosenWines, isLoading, save, update, saveManual, remove };
 }

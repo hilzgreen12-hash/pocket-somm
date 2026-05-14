@@ -3,10 +3,11 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors } from '../constants/theme';
 import type { Pairing } from '../types/wine';
 
-// Branded portrait card (1080×1920) for sharing a single recipe via the
-// native share sheet. Rendered off-screen by chef/results, captured with
-// react-native-view-shot, and handed to expo-sharing so users can email
-// the recipe to themselves, post it to WhatsApp / SMS, or print it.
+// Branded card for sharing a single recipe via the native share sheet —
+// 1080 wide and as tall as the recipe needs (recipes vary in length, so a
+// fixed height clipped the method). Rendered off-screen by chef/results,
+// captured at its natural size with react-native-view-shot, and handed to
+// expo-sharing so users can email the recipe, post it to WhatsApp, etc.
 //
 // The bottom-right corner carries a remote QR code that points at the
 // Vinster install URL — recipients can scan it to grab the app.
@@ -83,17 +84,14 @@ export const RECIPE_SHARE_QR_URL = QR_URL;
 export const RECIPE_SHARE_INSTALL_URL = INSTALL_URL;
 
 const CARD_WIDTH = 1080;
-const CARD_HEIGHT = 1920;
 
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    height: CARD_HEIGHT,
     backgroundColor: colors.background,
     padding: 28,
   },
   inner: {
-    flex: 1,
     borderWidth: 4,
     borderColor: colors.gold,
     borderRadius: 36,

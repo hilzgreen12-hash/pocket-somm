@@ -239,11 +239,11 @@ export default function PersonalityScreen() {
       // native share sheet. Falls back to text-only share if capture fails
       // or if expo-sharing isn't available on this device.
       if (shareCardRef.current) {
+        // No fixed width/height — capture the card at its natural size so
+        // the whole sketch is shared, however long it runs.
         const uri = await captureRef(shareCardRef, {
           format: 'png',
           quality: 1,
-          width: 1080,
-          height: 1350,
           result: 'tmpfile',
         });
         if (await Sharing.isAvailableAsync()) {
@@ -352,8 +352,8 @@ export default function PersonalityScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {/* Off-screen branded share card — sits at native render size so the
-          capture comes out at 1080×1350 regardless of screen size. */}
+      {/* Off-screen branded share card — rendered at its natural size (1080
+          wide, height grows with the sketch) so the capture is never clipped. */}
       {text ? (
         <View style={styles.offscreenShareWrap} pointerEvents="none">
           {(() => {

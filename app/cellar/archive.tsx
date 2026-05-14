@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -33,6 +34,18 @@ function ArchiveCard({ wine, onPress, onLongPress }: { wine: CellarWine; onPress
 export default function CellarArchiveScreen() {
   const { session } = useAuth();
   const { wines, isLoading, deleteWine } = useArchive();
+  const [search, setSearch] = useState('');
+
+  const q = search.trim().toLowerCase();
+  const filtered = q
+    ? wines.filter((w) => {
+        const hay = [w.producer, w.wine_name, w.region, w.vintage]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
+      })
+    : wines;
 
   function handleLongPressWine(wine: CellarWine) {
     const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
@@ -87,16 +100,31 @@ export default function CellarArchiveScreen() {
           <Text style={styles.emptyBody}>Wines you archive from your cellar will appear here with the date they were removed and the option to add a note for each removal.</Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          {wines.map((wine) => (
-            <ArchiveCard
-              key={wine.id}
-              wine={wine}
-              onPress={() => router.push(`/cellar/${wine.id}` as any)}
-              onLongPress={() => handleLongPressWine(wine)}
-            />
-          ))}
-        </ScrollView>
+        <>
+          <TextInput
+            style={styles.searchInput}
+            value={search}
+            onChangeText={setSearch}
+            placeholder="Search archived wines"
+            placeholderTextColor={colors.textMuted}
+          />
+          {filtered.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyBody}>No archived wines match your search.</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+              {filtered.map((wine) => (
+                <ArchiveCard
+                  key={wine.id}
+                  wine={wine}
+                  onPress={() => router.push(`/cellar/${wine.id}` as any)}
+                  onLongPress={() => handleLongPressWine(wine)}
+                />
+              ))}
+            </ScrollView>
+          )}
+        </>
       )}
     </View>
   );
@@ -111,6 +139,7 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  searchInput: { marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
   headerLine: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 22 },
   region: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4 },
