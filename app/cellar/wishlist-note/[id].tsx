@@ -1,0 +1,161 @@
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useWishList } from '../../../src/hooks/useCellar';
+import { useAuth } from '../../../src/hooks/useAuth';
+import { syncEditToChosen } from '../../../src/services/reviewSync';
+import { splitLocationString } from '../../../src/services/reviewSync';
+import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { showAlert } from '../../../src/components/AppAlert';
+import { colors, spacing } from '../../../src/constants/theme';
+
+// Dedicated screen for viewing and editing a wish-list wine's note and
+// the "Discovered at" location. Reached from the Wish List card. Keeps
+// the wish-list screen itself a clean compact list (like Your Wine
+// Reviews), and mirrors saved edits to any matching chosen_wines review.
+export default function WishlistNoteScreen() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const { session } = useAuth();
+  const { wines, isLoading, updateWine } = useWishList();
+  const qc = useQueryClient();
+
+  const wine = wines.find((w) => w.id === id) ?? null;
+  const [note, setNote] = useState('');
+  const [location, setLocation] = useState('');
+  const [initialised, setInitialised] = useState(false);
+
+  // Seed the fields once the wine has loaded; don't fight subsequent
+  // edits by re-syncing from the cached row on every render.
+  useEffect(() => {
+    if (wine && !initialised) {
+      setNote(wine.tasting_notes ?? '');
+      setLocation(wine.user_notes ?? '');
+      setInitialised(true);
+    }
+  }, [wine, initialised]);
+
+  const noteDirty = wine ? (note ?? '') !== (wine.tasting_notes ?? '') : false;
+  const locationDirty = wine ? (location ?? '') !== (wine.user_notes ?? '') : false;
+  const dirty = noteDirty || locationDirty;
+
+  async function handleSave() {
+    if (!wine || !dirty) return;
+    const trimmedNote = note.trim() || null;
+    const trimmedLocation = location.trim() || null;
+    try {
+      const updates: { tasting_notes?: string | null; user_notes?: string | null } = {};
+      if (noteDirty) updates.tasting_notes = trimmedNote;
+      if (locationDirty) updates.user_notes = trimmedLocation;
+      await updateWine.mutateAsync({ id: wine.id, updates });
+      // Mirror the edits to any matching chosen_wines review row so the
+      // user's note + location stay in lock-step across wish list and
+      // reviews. Best-effort: a sync failure shouldn't block the save.
+      if (session) {
+        try {
+          const fields: Parameters<typeof syncEditToChosen>[2] = {};
+          if (noteDirty) fields.tastingNote = trimmedNote ?? '';
+          if (locationDirty) {
+            const { restaurantName, city } = splitLocationString(trimmedLocation);
+            fields.restaurantName = restaurantName;
+            fields.city = city;
+          }
+          await syncEditToChosen(
+            session.user.id,
+            { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage },
+            fields,
+          );
+          qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+        } catch (err) {
+          console.warn('[wishlist-note→review sync] failed:', err);
+        }
+      }
+      router.back();
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  if (isLoading || (!wine && !initialised)) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator color={colors.gold} />
+      </View>
+    );
+  }
+
+  if (!wine) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.backText}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Wish List Wine</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.empty}>
+          <Text style={styles.emptyBody}>Couldn't find this wish-list wine.</Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text style={styles.backText}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Wish List Wine</Text>
+        <TouchableOpacity onPress={handleSave} disabled={!dirty || updateWine.isPending}>
+          <Text style={[styles.saveText, (!dirty || updateWine.isPending) && { opacity: 0.4 }]}>
+            {updateWine.isPending ? 'Saving…' : 'Save'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+        <Text style={styles.wineHeader}>{wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}</Text>
+        {wine.region ? <Text style={styles.wineDetail}>{wine.region}</Text> : null}
+
+        <Text style={styles.fieldLabel}>Discovered at</Text>
+        <TextInput
+          style={styles.locationInput}
+          value={location}
+          onChangeText={setLocation}
+          placeholder="Restaurant, city…"
+          placeholderTextColor={colors.textMuted}
+        />
+
+        <Text style={styles.fieldLabel}>Note</Text>
+        <TextInput
+          style={styles.noteInput}
+          value={note}
+          onChangeText={setNote}
+          placeholder="Your tasting note, where you've seen it, why you'd like to try it…"
+          placeholderTextColor={colors.textMuted}
+          multiline
+          textAlignVertical="top"
+          autoFocus={!wine.tasting_notes && !wine.user_notes}
+        />
+      </ScrollView>
+    </KeyboardAvoidingView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
+  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
+  saveText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, width: 60, textAlign: 'right' },
+  wineHeader: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 4 },
+  wineDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },
+  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
+  locationInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 200, lineHeight: 22 },
+  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
+  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center' },
+});
