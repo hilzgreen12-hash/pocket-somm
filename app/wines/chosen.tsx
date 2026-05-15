@@ -1,11 +1,14 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
@@ -50,8 +53,14 @@ export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
   const { wines: wishlistWines } = useWishList();
+  const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
+  // chosen path takes over (manual reuses the existing AddChosenWineModal;
+  // scan + upload feed into the label flow with context=reviews).
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [sortBy, setSortBy] = useState<'date' | 'city' | 'score'>('date');
   const [filterBy, setFilterBy] = useState<'all' | 'cellar' | 'restaurant'>('all');
 
@@ -159,6 +168,52 @@ export default function ChosenWinesScreen() {
 
   const hasAnything = items.length > 0;
 
+  function handleChooseScan() {
+    setChooserOpen(false);
+    router.push('/label/camera?context=reviews');
+  }
+
+  function handleChooseManual() {
+    setChooserOpen(false);
+    setAddOpen(true);
+  }
+
+  // Gallery path — pick a photo, run it through the same OCR pipeline the
+  // camera uses, then hand control to /label/confirm exactly as a live
+  // capture would. Errors land on confirm so the user can edit details by
+  // hand if scanLabel failed.
+  async function handleChooseUpload() {
+    setChooserOpen(false);
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        showAlert({ title: 'Photo access needed', body: 'Enable photo access in Settings to upload a wine label image.' });
+        return;
+      }
+      const picked = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        quality: 1,
+      });
+      if (picked.canceled || !picked.assets?.[0]) return;
+      const uri = picked.assets[0].uri;
+      setUploading(true);
+      try {
+        const base64 = await prepareImageBase64(uri);
+        setImage(uri, base64);
+        const details = await scanLabel(base64);
+        setWineDetails(details);
+        router.push('/label/confirm?context=reviews');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to scan label');
+        router.push('/label/confirm?context=reviews');
+      } finally {
+        setUploading(false);
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   return (
     <View style={styles.container}>
       <EditChosenWineModal
@@ -174,13 +229,43 @@ export default function ChosenWinesScreen() {
         onSaved={() => setAddOpen(false)}
       />
 
+      <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
+            <Text style={styles.chooserTitle}>Add a review</Text>
+            <Text style={styles.chooserBody}>How would you like to log this wine?</Text>
+            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseScan} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Scan a label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseUpload} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Upload screenshot or photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseManual} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Manual input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setChooserOpen(false)} style={styles.chooserCancel}>
+              <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Fullscreen overlay while the chosen photo is being read. Sits
+          above the screen so the user can't tap "+ Add" again mid-scan. */}
+      {uploading ? (
+        <View style={styles.uploadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.uploadingText}>Reading the label…</Text>
+        </View>
+      ) : null}
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
         <TouchableOpacity
-          onPress={() => setAddOpen(true)}
+          onPress={() => setChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Text style={styles.addLink}>+ Add</Text>
@@ -365,4 +450,14 @@ const styles = StyleSheet.create({
     textTransform: 'lowercase',
     letterSpacing: 0.5,
   },
+  chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  chooserTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  chooserBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  chooserBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  chooserBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  chooserCancel: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: 4 },
+  chooserCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  uploadingText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, letterSpacing: 0.5 },
 });

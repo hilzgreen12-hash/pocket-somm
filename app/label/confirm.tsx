@@ -12,7 +12,9 @@ import type { WineDetailsComplete } from '../../src/types/wine';
 export default function LabelConfirmScreen() {
   useKeepAwake();
   const { context, manual } = useLocalSearchParams<{ context?: string; manual?: string }>();
-  const contextQuery = context === 'wishlist' ? '?context=wishlist' : '';
+  // Forward any context (wishlist / reviews / …) so /label/results knows
+  // which flow we're in for back routing and which action set to show.
+  const contextQuery = context ? `?context=${context}` : '';
   // Reached straight from Cellar → Add Wine → Manual Input: no scan
   // happened, so the form opens blank and there's nothing to "scan again".
   const isManual = manual === '1';

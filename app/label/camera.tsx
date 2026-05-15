@@ -14,7 +14,9 @@ import { colors, spacing } from '../../src/constants/theme';
 
 export default function LabelCameraScreen() {
   const { context } = useLocalSearchParams<{ context?: string }>();
-  const contextQuery = context === 'wishlist' ? '?context=wishlist' : '';
+  // Forward any context (wishlist / reviews / …) to downstream label
+  // screens so the back button + post-save routing know where to land.
+  const contextQuery = context ? `?context=${context}` : '';
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);

@@ -6,6 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
+import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -37,10 +38,15 @@ function DrinkingWindowBadge({ status, from, to }: { status: string; from: numbe
 export default function LabelResultsScreen() {
   const { context } = useLocalSearchParams<{ context?: string }>();
   const isWishlistFlow = context === 'wishlist';
+  // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
+  // a review, so the action area collapses to a single "Review this Wine"
+  // and the back + post-save routing land on /wines/chosen.
+  const isReviewsFlow = context === 'reviews';
   const { wineDetailsConfirmed, intelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
+  const { saveManual } = useChosenWines();
   const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
@@ -49,10 +55,18 @@ export default function LabelResultsScreen() {
 
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
+  const [addingReview, setAddingReview] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   const [purchasePrice, setPurchasePrice] = useState('');
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
+  // Review-without-adding form state — captured in a Modal and saved to
+  // chosen_wines without touching cellar or wishlist inventory.
+  const [reviewNote, setReviewNote] = useState('');
+  const [reviewRestaurant, setReviewRestaurant] = useState('');
+  const [reviewCity, setReviewCity] = useState('');
+  const [reviewScore, setReviewScore] = useState('');
+  const [reviewListPrice, setReviewListPrice] = useState('');
   // Only used when the user came in from a tapped empty rack slot.
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
@@ -285,6 +299,53 @@ export default function LabelResultsScreen() {
     }
   }
 
+  async function handleSaveReview() {
+    if (!session?.user.id) return;
+    setSaving(true);
+    try {
+      const parsedScore = parseInt(reviewScore, 10);
+      const validScore = !Number.isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 100 ? parsedScore : null;
+      const parsedPrice = parseFloat(reviewListPrice);
+      const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
+      const parsedVintage = parseInt(wine.vintage, 10);
+      const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;
+      await saveManual.mutateAsync({
+        wineName: wine.wineName ?? wine.producer,
+        producer: wine.producer,
+        region: wine.region,
+        vintage: validVintage,
+        restaurantName: reviewRestaurant,
+        city: reviewCity,
+        listPrice: validPrice,
+        currency: userCurrency,
+        tastingNote: reviewNote,
+        otherObservations: '',
+        userScore: validScore,
+        isFavourite: false,
+      });
+      setAddingReview(false);
+      if (isReviewsFlow) {
+        // Entered from Your Wine Reviews — go straight back there so the
+        // user sees the new review land in the list.
+        router.replace('/wines/chosen');
+      } else {
+        showAlert({
+          title: 'Review saved',
+          body: 'Your tasting note is in Your Wine Reviews.',
+          buttons: [
+            { text: 'View reviews', onPress: () => router.replace('/wines/chosen') },
+            { text: 'Done', style: 'cancel', onPress: () => router.replace('/(tabs)/cellar') },
+          ],
+        });
+      }
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      showAlert({ title: 'Could not save review', body: detail });
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function handleAddToCellar() {
     if (!session?.user.id) return;
     if (matchingExisting) {
@@ -308,7 +369,11 @@ export default function LabelResultsScreen() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
         style={styles.backRow}
-        onPress={() => router.replace(isWishlistFlow ? '/cellar/wishlist' : '/(tabs)/cellar')}
+        onPress={() => router.replace(
+          isWishlistFlow ? '/cellar/wishlist'
+          : isReviewsFlow ? '/wines/chosen'
+          : '/(tabs)/cellar'
+        )}
       >
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
@@ -346,22 +411,28 @@ export default function LabelResultsScreen() {
       </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Estimated Value</Text>
-        {!showEstimate ? (
-          <TouchableOpacity style={styles.estimateButton} onPress={() => setShowEstimate(true)}>
-            <Text style={styles.estimateButtonText}>Generate estimated value</Text>
-          </TouchableOpacity>
-        ) : intel.estimatedValue != null ? (
-          <View>
+        {/* Compact header: label on the left, yellow Generate link on the
+            right. After the user taps Generate the section expands below
+            with the value (or the "not enough data" caption). */}
+        <View style={styles.estimateHeaderRow}>
+          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Estimated Value</Text>
+          {!showEstimate && (
+            <TouchableOpacity onPress={() => setShowEstimate(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.estimateGenerateLink}>Generate</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        {showEstimate && (intel.estimatedValue != null ? (
+          <View style={{ marginTop: spacing.sm }}>
             <Text style={styles.estimateValue}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
             <Text style={styles.estimateCaption}>per bottle · AI estimate based on producer, region, and vintage</Text>
           </View>
         ) : (
-          <View>
+          <View style={{ marginTop: spacing.sm }}>
             <Text style={styles.estimateUnavailable}>Not enough market data</Text>
             <Text style={styles.estimateCaption}>This wine is too obscure for Vinster to estimate reliably. Add a purchase price when saving to your cellar to track value yourself.</Text>
           </View>
-        )}
+        ))}
       </View>
 
       <View style={styles.section}>
@@ -392,14 +463,39 @@ export default function LabelResultsScreen() {
             <Text style={styles.discardText}>Cancel</Text>
           </TouchableOpacity>
         </>
+      ) : isReviewsFlow ? (
+        // User entered via Your Wine Reviews "+ Add" → Scan / Upload. The
+        // intent is to capture a review, not park inventory — show only
+        // the Review action.
+        <>
+          <View style={styles.singleActionRow}>
+            <TouchableOpacity
+              style={[styles.singleActionButton, saving && { opacity: 0.6 }]}
+              onPress={() => setAddingReview(true)}
+              disabled={saving}
+            >
+              <Text style={styles.singleActionButtonText}>Review this Wine</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/wines/chosen')}>
+            <Text style={styles.discardText}>Cancel</Text>
+          </TouchableOpacity>
+        </>
       ) : (
         <>
-          <View style={styles.actionRow}>
-            <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToCellar(true)}>
-              <Text style={styles.actionButtonText}>Add to Cellar</Text>
+          {/* Stacked actions — primary path is Add to Cellar (yellow). The
+              two white buttons below cover the lighter commitments: save
+              for later (Wish List) and capture-only (Review without adding,
+              writes a chosen_wines review with no inventory side effect). */}
+          <View style={styles.actionStack}>
+            <TouchableOpacity style={styles.primaryAddBtn} onPress={() => setAddingToCellar(true)} activeOpacity={0.8}>
+              <Text style={styles.primaryAddBtnText}>Add to Cellar</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton} onPress={() => setAddingToWishList(true)}>
-              <Text style={styles.actionButtonText}>Add to Wish List</Text>
+            <TouchableOpacity style={styles.secondaryAddBtn} onPress={() => setAddingToWishList(true)} activeOpacity={0.8}>
+              <Text style={styles.secondaryAddBtnText}>Add to Wish List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryAddBtn} onPress={() => setAddingReview(true)} activeOpacity={0.8}>
+              <Text style={styles.secondaryAddBtnText}>Review without adding</Text>
             </TouchableOpacity>
           </View>
 
@@ -425,6 +521,86 @@ export default function LabelResultsScreen() {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      </Modal>
+
+      <Modal visible={addingReview} transparent animationType="slide" onRequestClose={() => !saving && setAddingReview(false)}>
+        <View style={styles.modalOverlay}>
+          <ScrollView
+            contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
+            keyboardShouldPersistTaps="handled"
+            automaticallyAdjustKeyboardInsets
+          >
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Review this Wine</Text>
+              <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
+              <Text style={styles.modalHint}>Save your tasting note for this wine without adding it to your cellar or wish list.</Text>
+
+              <Text style={styles.modalLabel}>Tasting note</Text>
+              <TextInput
+                style={styles.reviewNoteInput}
+                value={reviewNote}
+                onChangeText={setReviewNote}
+                placeholder="What did you think?"
+                placeholderTextColor={colors.textSubtle}
+                multiline
+                textAlignVertical="top"
+              />
+
+              <Text style={styles.modalLabel}>Restaurant (optional)</Text>
+              <TextInput
+                style={styles.countInput}
+                value={reviewRestaurant}
+                onChangeText={setReviewRestaurant}
+                placeholder="Where did you drink it?"
+                placeholderTextColor={colors.textSubtle}
+              />
+
+              <Text style={styles.modalLabel}>City (optional)</Text>
+              <TextInput
+                style={styles.countInput}
+                value={reviewCity}
+                onChangeText={setReviewCity}
+                placeholder="City"
+                placeholderTextColor={colors.textSubtle}
+              />
+
+              <Text style={styles.modalLabel}>Your score (0–100, optional)</Text>
+              <TextInput
+                style={styles.countInput}
+                value={reviewScore}
+                onChangeText={(t) => setReviewScore(t.replace(/[^0-9]/g, '').slice(0, 3))}
+                placeholder="—"
+                placeholderTextColor={colors.textSubtle}
+                keyboardType="number-pad"
+              />
+
+              <Text style={styles.modalLabel}>List price (optional)</Text>
+              <View style={styles.priceRow}>
+                <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
+                <TextInput
+                  style={styles.priceInput}
+                  value={reviewListPrice}
+                  onChangeText={setReviewListPrice}
+                  placeholder="0.00"
+                  placeholderTextColor={colors.textSubtle}
+                  keyboardType="decimal-pad"
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, saving && styles.buttonDisabled]}
+                onPress={handleSaveReview}
+                disabled={saving}
+              >
+                <Text style={styles.buttonText}>{saving ? 'Saving…' : 'Save Review'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={styles.cancelButton} onPress={() => setAddingReview(false)} disabled={saving}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
         </View>
       </Modal>
 
@@ -564,8 +740,8 @@ const styles = StyleSheet.create({
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   tastingNotes: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22 },
-  estimateButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  estimateButtonText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.3 },
+  estimateHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  estimateGenerateLink: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.3 },
   estimateValue: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, letterSpacing: 0.5 },
   estimateUnavailable: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   estimateCaption: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, lineHeight: 19 },
@@ -573,9 +749,12 @@ const styles = StyleSheet.create({
   communityLabel: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: 'rgba(212,176,96,0.45)', letterSpacing: 0.3 },
   communityComingSoon: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textTransform: 'lowercase', letterSpacing: 0.5 },
   communityCaption: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.xs, lineHeight: 19 },
-  actionRow: { flexDirection: 'row', gap: spacing.sm, marginHorizontal: spacing.xl, marginTop: spacing.xl },
-  actionButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 8, padding: spacing.md, alignItems: 'center' },
-  actionButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  actionStack: { marginHorizontal: spacing.xl, marginTop: spacing.xl, gap: spacing.sm },
+  primaryAddBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
+  primaryAddBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, letterSpacing: 0.3 },
+  secondaryAddBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center' },
+  secondaryAddBtnText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  reviewNoteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 100, lineHeight: 22, marginBottom: spacing.md },
   singleActionRow: { marginHorizontal: spacing.xl, marginTop: spacing.xl },
   singleActionButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   singleActionButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, textAlign: 'center' },
