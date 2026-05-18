@@ -1,11 +1,25 @@
+import { useEffect, useState } from 'react';
 import { Redirect } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { supabase } from '../src/api/supabase';
+
+// Local key written by /age-gate. We only check for presence here — the
+// gate screen validates the date of birth itself and stores the result.
+const AGE_GATE_KEY = 'vinster_age_verified_at';
 
 export default function Index() {
   const { session, loading } = useAuth();
   const userId = session?.user.id;
+
+  // null = still checking, true = verified, false = not yet verified.
+  // Routing waits for this resolves before deciding where to send the user
+  // so an unverified user can't briefly see content before the gate.
+  const [ageVerified, setAgeVerified] = useState<boolean | null>(null);
+  useEffect(() => {
+    AsyncStorage.getItem(AGE_GATE_KEY).then((v) => setAgeVerified(!!v)).catch(() => setAgeVerified(false));
+  }, []);
 
   // onboarding_completed lives on the profile (server-side) so it
   // survives a cache clear — a returning user who clears their cache
@@ -24,7 +38,12 @@ export default function Index() {
     },
   });
 
-  if (loading) return null;
+  if (loading || ageVerified === null) return null;
+
+  // Age gate runs before anything else — app stores require a neutral
+  // age-verification screen for alcohol apps, and we don't want to show
+  // any wine content (welcome page included) to an unverified user.
+  if (!ageVerified) return <Redirect href="/age-gate" />;
 
   // Not signed in → public welcome page.
   if (!session) return <Redirect href="/welcome" />;

@@ -79,6 +79,10 @@ export default function AboutScreen() {
         </View>
       ))}
 
+      <TouchableOpacity style={styles.privacyLinkRow} onPress={() => router.push('/legal/privacy')} activeOpacity={0.7}>
+        <Text style={styles.privacyLinkText}>Privacy Policy →</Text>
+      </TouchableOpacity>
+
       <View style={styles.feedbackSection}>
         <Text style={styles.feedbackHeading}>Get in touch</Text>
         <Text style={styles.feedbackBody}>
@@ -108,6 +112,8 @@ const styles = StyleSheet.create({
   // under "How List Works" rather than a standalone section.
   subsection: { marginTop: spacing.lg },
   subsectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
+  privacyLinkRow: { paddingVertical: spacing.md, alignItems: 'center' },
+  privacyLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.5, textDecorationLine: 'underline' },
   feedbackSection: { marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
   feedbackHeading: { fontSize: 19, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: spacing.xs, letterSpacing: 0.5 },
   feedbackBody: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 26 },
