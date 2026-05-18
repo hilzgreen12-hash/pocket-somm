@@ -59,7 +59,12 @@ export default function LabelResultsScreen() {
   const [addingReview, setAddingReview] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   const [purchasePrice, setPurchasePrice] = useState('');
-  const [bottleSizeMl, setBottleSizeMl] = useState(750);
+  // Pre-populate the bottle size picker from the label scanner. Lazy init
+  // reads the labelStore once at mount; the user can still adjust the
+  // chip selection afterwards on the Add modals.
+  const [bottleSizeMl, setBottleSizeMl] = useState<number>(() =>
+    useLabelStore.getState().wineDetailsConfirmed?.bottleSizeMl ?? 750
+  );
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
   // Review-without-adding form state — captured in a Modal and saved to
