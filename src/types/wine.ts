@@ -57,6 +57,10 @@ export interface WineDetails {
   wineName: string | null;
   vintage: string | null;
   style: string | null;
+  // Bottle volume in millilitres if the scanner can read it off the label
+  // (most labels print "750ml" / "75cl" / "1.5L" near the ABV). null when
+  // not detected — the user picks a size manually in that case.
+  bottleSizeMl: number | null;
 }
 
 export interface WineDetailsComplete {
@@ -65,6 +69,7 @@ export interface WineDetailsComplete {
   wineName: string | null;
   vintage: string;
   style?: string | null;
+  bottleSizeMl?: number | null;
 }
 
 export interface WineIntelligence {
