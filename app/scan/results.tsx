@@ -267,11 +267,12 @@ export default function ResultsScreen() {
       // Stories. Falls back to a plain-text share if capture fails or
       // expo-sharing isn't available on this device.
       if (shareCardRef.current) {
+        // No forced width/height — capture the card at its natural size
+        // so the wine fonts can breathe and there's no fixed-height empty
+        // space at top or bottom.
         const uri = await captureRef(shareCardRef, {
           format: 'png',
           quality: 1,
-          width: 1080,
-          height: 1350,
           result: 'tmpfile',
         });
         if (await Sharing.isAvailableAsync()) {
