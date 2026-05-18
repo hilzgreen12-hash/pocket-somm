@@ -12,7 +12,7 @@ import type { Pairing } from '../types/wine';
 // The bottom-right corner carries a remote QR code that points at the
 // Vinster install URL — recipients can scan it to grab the app.
 
-const INSTALL_URL = 'https://vinster.app';
+const INSTALL_URL = 'https://vinsterapp.com';
 const QR_SIZE = 240;
 const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&format=png&margin=0&data=${encodeURIComponent(INSTALL_URL)}`;
 

@@ -6,7 +6,7 @@
 > `app/legal/privacy.tsx` in sync — when one changes, update the other
 > and bump the version line at the top.
 >
-> This is the text you publish at https://vinster.app/privacy (or
+> This is the text you publish at https://vinsterapp.com/privacy (or
 > equivalent) for the App Store / Play Store privacy-policy URL field.
 
 ---

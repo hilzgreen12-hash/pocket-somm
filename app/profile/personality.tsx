@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -66,8 +67,17 @@ export default function PersonalityScreen() {
   const [publishState, setPublishState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const shareCardRef = useRef<View>(null);
 
-  // Hydrate cached sketch + last-generated timestamp so we can gate the
-  // "I've evolved" button on whether the user has added enough new material.
+  // When the user has the current sketch on screen, mark it acknowledged
+  // so the "your personality is ready" popup on the home screen stops
+  // firing for this version. A future regeneration will advance
+  // lastGeneratedAt past the stored ack and the popup will return.
+  useEffect(() => {
+    if (text && lastGeneratedAt) {
+      AsyncStorage.setItem(`vinster_personality_acked_${cat}`, lastGeneratedAt).catch(() => {});
+    }
+  }, [text, lastGeneratedAt, cat]);
+
+  // Hydrate cached sketch + last-generated timestamp.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (!session?.user.id) return;
