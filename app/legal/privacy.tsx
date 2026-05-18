@@ -3,8 +3,8 @@ import { router } from 'expo-router';
 import { colors, spacing } from '../../src/constants/theme';
 
 // Vinster privacy policy — in-app surface for the same text that must
-// also be hosted at a public URL (e.g. https://vinster.app/privacy) for
-// the App Store / Play Store submission. Edit both together so they
+// also be hosted at a public URL (e.g. https://vinsterapp.com/privacy)
+// for the App Store / Play Store submission. Edit both together so they
 // don't drift.
 
 const POLICY_VERSION = 'Version 1.0 · Last updated May 2026';

@@ -1,7 +1,8 @@
-import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { router } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { usePersonalityPrompt } from '../src/hooks/usePersonalityPrompt';
 import { TabFooter } from '../src/components/TabFooter';
@@ -9,6 +10,13 @@ import { PersonalityPromptModal } from '../src/components/PersonalityPromptModal
 import { supabase } from '../src/api/supabase';
 import { splitPersonality } from '../src/utils/personalityText';
 import { colors, spacing } from '../src/constants/theme';
+
+// Per-category AsyncStorage key — set to the timestamp of the most recent
+// sketch the user has viewed for that category. Popup re-appears whenever
+// the live sketch's timestamp is newer than (or absent from) the ack.
+function ackKey(category: 'wine' | 'recipe') {
+  return `vinster_personality_acked_${category}`;
+}
 
 // --- Tile motifs ----------------------------------------------------------
 // Each motif is a small geometric mark drawn with bordered Views so the
@@ -27,20 +35,26 @@ function ListMotif() {
 }
 
 function ChefMotif() {
+  // Classic chef's hat — a wider puff (rounded top, flat bottom) sitting
+  // on a narrower band. Both outlined in gold so the silhouette reads at
+  // the small tile size.
   return (
-    <View style={motifStyles.chefRow}>
-      <View style={motifStyles.chefHandle} />
-      <View style={motifStyles.chefPot} />
-      <View style={motifStyles.chefHandle} />
+    <View style={motifStyles.chefStack}>
+      <View style={motifStyles.chefPuff} />
+      <View style={motifStyles.chefBand} />
     </View>
   );
 }
 
 function CellarMotif() {
+  // Wine bottle lying on its side — small solid cork on the left, a thin
+  // neck, then a fuller rounded body. Reads horizontally as a single
+  // bottle silhouette.
   return (
-    <View style={motifStyles.cellarStack}>
-      <View style={motifStyles.cellarNeck} />
-      <View style={motifStyles.cellarBody} />
+    <View style={motifStyles.bottleRow}>
+      <View style={motifStyles.bottleCork} />
+      <View style={motifStyles.bottleNeck} />
+      <View style={motifStyles.bottleBody} />
     </View>
   );
 }
@@ -57,12 +71,15 @@ function CommunityMotif() {
 const motifStyles = StyleSheet.create({
   listBox: { width: 30, height: 34, borderWidth: 1, borderColor: colors.gold, borderRadius: 3, paddingVertical: 6, justifyContent: 'space-between' },
   listLine: { height: 1.5, backgroundColor: colors.gold, marginHorizontal: 5, borderRadius: 1 },
-  chefRow: { flexDirection: 'row', alignItems: 'center', width: 38 },
-  chefHandle: { width: 5, height: 5, borderWidth: 1, borderColor: colors.gold, borderRadius: 2.5 },
-  chefPot: { flex: 1, height: 24, borderWidth: 1, borderColor: colors.gold, borderRadius: 4, marginHorizontal: -1 },
-  cellarStack: { alignItems: 'center' },
-  cellarNeck: { width: 6, height: 8, borderWidth: 1, borderColor: colors.gold, borderBottomWidth: 0, borderTopLeftRadius: 1, borderTopRightRadius: 1 },
-  cellarBody: { width: 20, height: 24, borderWidth: 1, borderColor: colors.gold, borderRadius: 4, marginTop: -1 },
+  chefStack: { alignItems: 'center' },
+  // Puff: wider rounded-top rectangle with no bottom border so it flows
+  // into the band. Band: narrower rectangle below.
+  chefPuff: { width: 28, height: 20, borderWidth: 1, borderColor: colors.gold, borderTopLeftRadius: 12, borderTopRightRadius: 12, borderBottomWidth: 0 },
+  chefBand: { width: 22, height: 6, borderWidth: 1, borderColor: colors.gold, borderBottomLeftRadius: 2, borderBottomRightRadius: 2 },
+  bottleRow: { flexDirection: 'row', alignItems: 'center' },
+  bottleCork: { width: 3, height: 5, backgroundColor: colors.gold, borderRadius: 1 },
+  bottleNeck: { width: 8, height: 7, borderWidth: 1, borderColor: colors.gold, marginLeft: 1 },
+  bottleBody: { width: 20, height: 15, borderWidth: 1, borderColor: colors.gold, borderRadius: 3, marginLeft: -1 },
   commRow: { flexDirection: 'row', height: 22, width: 36 },
   commCircle: { width: 22, height: 22, borderWidth: 1, borderColor: colors.gold, borderRadius: 11 },
   commCircleOverlap: { marginLeft: -8 },
@@ -75,10 +92,12 @@ const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: 
   { label: 'Community', desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
 ];
 
-// --- Featured personality strip -------------------------------------------
-// Picks the most-recently-generated sketch (wine or recipe) and surfaces
-// its title as a tappable card above the grid. Returns null when neither
-// sketch exists, so brand-new users see the cleaner version of the home.
+// --- Featured personality (popup-driven) ----------------------------------
+// Returns the most-recently-generated sketch (wine or recipe) so the home
+// can decide whether to surface the "your personality is ready" popup.
+// Includes the generation timestamp so the popup can re-fire after Vinster
+// updates the sketch — never bug users about a sketch they've already
+// acknowledged, but never miss a fresh one either.
 function useFeaturedPersonality(userId: string | undefined) {
   return useQuery({
     queryKey: ['home-featured-personality', userId],
@@ -94,11 +113,10 @@ function useFeaturedPersonality(userId: string | undefined) {
       if (data.last_wine_personality) candidates.push({ category: 'wine', text: data.last_wine_personality, at: data.last_wine_personality_at });
       if (data.last_recipe_personality) candidates.push({ category: 'recipe', text: data.last_recipe_personality, at: data.last_recipe_personality_at });
       if (candidates.length === 0) return null;
-      // Most recent first; nulls drop to the bottom via a sentinel string.
       candidates.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
       const top = candidates[0];
       const { title } = splitPersonality(top.text);
-      return { category: top.category, title: title ?? '' };
+      return { category: top.category, title: title ?? '', at: top.at };
     },
   });
 }
@@ -113,6 +131,35 @@ export default function HomeScreen() {
   // next app-open until they generate it.
   const personalityCategory = usePersonalityPrompt();
   const [promptDismissed, setPromptDismissed] = useState(false);
+
+  // "Your personality is ready" popup — fires when Vinster has generated
+  // a sketch the user hasn't viewed yet (or has generated a NEW sketch
+  // since the last view). Dismiss-for-now closes the popup but it returns
+  // every time the home regains focus until the user actually views the
+  // sketch. View = navigate to /profile/personality; the personality
+  // screen itself writes the ack timestamp so the popup stops re-firing.
+  const [readyPopupVisible, setReadyPopupVisible] = useState(false);
+  useFocusEffect(useCallback(() => {
+    let cancelled = false;
+    (async () => {
+      if (!featured?.at) { if (!cancelled) setReadyPopupVisible(false); return; }
+      const ackedAt = await AsyncStorage.getItem(ackKey(featured.category));
+      const needsAck = !ackedAt || (featured.at ?? '') > ackedAt;
+      if (!cancelled) setReadyPopupVisible(needsAck);
+    })();
+    return () => { cancelled = true; };
+  }, [featured?.at, featured?.category]));
+
+  function handleViewReady() {
+    if (!featured) return;
+    setReadyPopupVisible(false);
+    router.push(`/profile/personality?category=${featured.category}` as any);
+  }
+  function handleDismissReady() {
+    // Local-state dismiss only — leaves the AsyncStorage ack untouched so
+    // the popup reappears the next time the user lands on home.
+    setReadyPopupVisible(false);
+  }
 
   return (
     <View style={styles.container}>
@@ -132,22 +179,6 @@ export default function HomeScreen() {
             {username ? `Welcome, ${username}` : 'Welcome'}
           </Text>
         </View>
-
-        {featured?.title ? (
-          <TouchableOpacity
-            style={styles.featured}
-            onPress={() => router.push(`/profile/personality?category=${featured.category}` as any)}
-            activeOpacity={0.85}
-          >
-            <View style={styles.featuredBody}>
-              <Text style={styles.featuredLabel}>
-                {featured.category === 'wine' ? 'YOUR WINE PERSONALITY' : 'YOUR FOODIE PERSONALITY'}
-              </Text>
-              <Text style={styles.featuredTitle} numberOfLines={1}>{featured.title}</Text>
-            </View>
-            <Text style={styles.featuredArrow}>→</Text>
-          </TouchableOpacity>
-        ) : null}
 
         <View style={styles.grid}>
           {TILES.map((tile) => {
@@ -183,13 +214,45 @@ export default function HomeScreen() {
         }}
         onDismiss={() => setPromptDismissed(true)}
       />
+
+      {/* "Your personality is ready" popup — surfaces a freshly generated
+          sketch each time the user lands on home, until they view it. */}
+      <Modal
+        visible={readyPopupVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleDismissReady}
+      >
+        <TouchableOpacity style={styles.readyOverlay} activeOpacity={1} onPress={handleDismissReady}>
+          <TouchableOpacity activeOpacity={1} style={styles.readySheet} onPress={() => {}}>
+            <Text style={styles.readyLabel}>
+              {featured?.category === 'wine' ? 'YOUR WINE PERSONALITY' : 'YOUR FOODIE PERSONALITY'}
+            </Text>
+            <Text style={styles.readyHeading}>Your sketch is ready</Text>
+            {featured?.title ? (
+              <Text style={styles.readyTitle} numberOfLines={2}>"{featured.title}"</Text>
+            ) : null}
+            <Text style={styles.readyBody}>
+              Vinster has sketched a fresh personality for you — take a look, share it with friends, or just enjoy it.
+            </Text>
+            <TouchableOpacity style={styles.readyPrimaryBtn} onPress={handleViewReady} activeOpacity={0.8}>
+              <Text style={styles.readyPrimaryBtnText}>View my personality</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.readyDismissBtn} onPress={handleDismissReady} activeOpacity={0.7}>
+              <Text style={styles.readyDismissBtnText}>Not now</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingBottom: spacing.xxl },
-  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, paddingBottom: spacing.lg },
+  // Top padding doubled (48 → 96) so VINSTER sits comfortably below the
+  // status bar / notch instead of crowding the top edge.
+  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl * 2, paddingBottom: spacing.lg },
 
   // Hero — bigger letter-spacing on VINSTER, italic gold tagline, and a
   // small decorative rule with a diamond marker so the brand block reads
@@ -202,13 +265,18 @@ const styles = StyleSheet.create({
   ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm, fontFamily: 'CormorantGaramond_600SemiBold' },
   welcome: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: '#FFFFFF', marginTop: spacing.xs },
 
-  // Featured strip — only renders when the user has at least one sketch.
-  // Reads as a "your AI has been working" reward block.
-  featured: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.lg, marginBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: 'rgba(224,184,74,0.06)' },
-  featuredBody: { flex: 1 },
-  featuredLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 11, color: 'rgba(224,184,74,0.75)', letterSpacing: 1.8, marginBottom: 2 },
-  featuredTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold, letterSpacing: 0.5 },
-  featuredArrow: { fontSize: 22, color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold' },
+  // "Your personality is ready" popup styles — centred sheet over a dim
+  // overlay; tapping outside or "Not now" dismisses for this session.
+  readyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  readySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  readyLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 11, color: 'rgba(224,184,74,0.75)', letterSpacing: 1.8, textAlign: 'center', marginBottom: spacing.xs },
+  readyHeading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  readyTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, textAlign: 'center', lineHeight: 32, marginBottom: spacing.md },
+  readyBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  readyPrimaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  readyPrimaryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  readyDismissBtn: { alignItems: 'center', paddingVertical: spacing.sm },
+  readyDismissBtnText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 
   // Tiles — motif at top, big gold label, short divider, italic tagline,
   // and a subtle → in the corner to telegraph navigation.
