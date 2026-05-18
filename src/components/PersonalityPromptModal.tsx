@@ -54,7 +54,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   body: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 19,
     color: '#FFFFFF',
     textAlign: 'center',

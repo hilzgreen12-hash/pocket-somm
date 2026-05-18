@@ -356,7 +356,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   modalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   modalButtonDanger: { borderColor: colors.gold },

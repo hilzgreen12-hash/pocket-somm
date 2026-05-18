@@ -8,6 +8,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { colors, spacing } from '../../src/constants/theme';
 import { currencySymbol } from '../../src/constants/currency';
+import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 
 export default function AddWineScreen() {
   const { wines, addWine, updateWine } = useCellar();
@@ -21,6 +22,7 @@ export default function AddWineScreen() {
   const [region, setRegion] = useState('');
   const [vintage, setVintage] = useState('');
   const [quantity, setQuantity] = useState('1');
+  const [bottleSizeMl, setBottleSizeMl] = useState(750);
   const [purchasePrice, setPurchasePrice] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -62,6 +64,7 @@ export default function AddWineScreen() {
         user_notes: null,
         purchase_price: validPrice,
         purchase_price_currency: validPrice != null ? userCurrency : null,
+        bottle_size_ml: bottleSizeMl,
       });
       showAlert({
         title: 'Added to cellar',
@@ -209,6 +212,11 @@ export default function AddWineScreen() {
         keyboardType="number-pad"
       />
 
+      <Text style={styles.label}>Bottle size</Text>
+      <View style={styles.bottleSizeWrap}>
+        <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
+      </View>
+
       <Text style={styles.label}>Purchase price (optional)</Text>
       <View style={styles.priceRow}>
         <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
@@ -249,6 +257,7 @@ const styles = StyleSheet.create({
   dividerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  bottleSizeWrap: { marginBottom: spacing.lg },
   priceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginBottom: spacing.lg },
   priceCurrency: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginRight: spacing.xs },
   priceInput: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, paddingVertical: spacing.md },

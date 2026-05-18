@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -13,6 +13,7 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
 import { inferCountry } from '../../src/utils/wineCountry';
 import { formatCurrency } from '../../src/constants/currency';
+import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import type { CellarWine } from '../../src/types/wine';
 
@@ -83,6 +84,7 @@ export default function FullCellarListScreen() {
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+  const [search, setSearch] = useState('');
 
   // Compute available filter options from the actual cellar
   const availableCountries = useMemo(() => {
@@ -102,7 +104,9 @@ export default function FullCellarListScreen() {
     return 'Other';
   };
 
-  // Apply filters
+  // Apply filters. The search query is applied last so the chips still
+  // own their truth — typing a query just narrows whatever filters are on.
+  const q = search.trim().toLowerCase();
   const filtered = wines.filter((w) => {
     if (rackFilter !== 'All') {
       if (rackFilter === 'Unassigned') {
@@ -114,6 +118,13 @@ export default function FullCellarListScreen() {
     if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
     if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
     if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
+    if (q) {
+      const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
 
@@ -247,6 +258,26 @@ export default function FullCellarListScreen() {
         </TouchableOpacity>
       </ScrollView>
 
+      {/* Search sits below the filter chips and narrows whatever the chips
+          already filter — handy when there are dozens of wines in the
+          selected rack / colour / country. */}
+      <View style={styles.searchRow}>
+        <TextInput
+          style={styles.searchInput}
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search producer, wine, region…"
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="search"
+          clearButtonMode="while-editing"
+        />
+        {search.length > 0 && (
+          <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.searchClearText}>✕</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
       {sorted.length === 0 ? (
         <View style={styles.empty}>
           {wines.length === 0 ? (
@@ -268,7 +299,13 @@ export default function FullCellarListScreen() {
         >
           {sorted.map((w) => {
             const headerLine = wineHeaderLine(w.producer, w.wine_name, w.vintage);
+            // Bottle size appended to the region line only when it's
+            // non-standard — 750ml is the default, mentioning it on every
+            // row is noise. A magnum stands out by being labelled.
             const subParts = [w.region, w.grape_variety].filter(Boolean);
+            if (w.bottle_size_ml && w.bottle_size_ml !== 750) {
+              subParts.push(bottleSizeLabel(w.bottle_size_ml));
+            }
             const valueText = w.estimated_value != null
               ? formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })
               : null;
@@ -354,6 +391,10 @@ const styles = StyleSheet.create({
   sortChip: { borderColor: colors.gold },
   filterChipLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
+  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  searchClear: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  searchClearText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 20 },

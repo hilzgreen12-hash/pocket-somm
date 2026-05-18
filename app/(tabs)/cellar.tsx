@@ -8,6 +8,13 @@ import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
+import { HelpButton } from '../../src/components/HelpButton';
+
+const CELLAR_HELP = `Add Wine/Generate Wine Intel – This function will return a wine's critic score, tasting and quality notes, drinking window, and market price, then give you the option to add to it to your cellar.
+
+Your Wines: Wine Racks and Cellar List – Now this is cool, Vinster builds virtual wine racks that mirror your home storage using quick scan functions. Keep track of where your wines are, and see what's ready for drinking.
+
+Keep track of your wine reviews, as well as wish list and archived wines, and see all of your cellar stats in one place.`;
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function CellarTab() {
@@ -67,25 +74,32 @@ export default function CellarTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <Text style={styles.title}>Cellar</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Cellar</Text>
+        <HelpButton title="How Cellar works" body={CELLAR_HELP} />
+      </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
-          <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
+        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => setAddWineOpen(true))}>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wines</Text>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wines: Wine Racks and Cellar List</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wine Reviews</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Quick Cellar Stats</Text>
-        </TouchableOpacity>
+        {/* Two half-width rows below Your Wines: Quick Cellar Stats sits
+            above Wish List on the left, Your Wine Reviews sits above
+            Archived Wines on the right. */}
+        <View style={[styles.buttonRow, { marginTop: spacing.lg }]}>
+          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Quick Cellar Stats</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
+            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wine Reviews</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={[styles.buttonRow, { marginTop: spacing.xs }]}>
           <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/wishlist'))}>
@@ -181,12 +195,13 @@ const styles = StyleSheet.create({
   scanningOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   scanningSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.md, width: '100%' },
   scanningTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  scanningBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
-  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.xs },
+  scanningBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
+  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   subtitle: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
@@ -194,11 +209,11 @@ const styles = StyleSheet.create({
   buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
   buttonDisabled: { borderColor: colors.borderLight, opacity: 0.45 },
   buttonTextDisabled: { color: colors.textMuted, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
-  comingSoonNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
+  comingSoonNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },

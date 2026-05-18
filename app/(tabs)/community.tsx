@@ -4,6 +4,13 @@ import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
+import { HelpButton } from '../../src/components/HelpButton';
+
+const COMMUNITY_HELP = `Community is where Vinster users will share wine reviews, restaurant finds and personality sketches with friends.
+
+It's not live yet. We're building it carefully so it stays warm and high-signal rather than noisy.
+
+In the meantime, anything you post — your reviews, your wine and foodie personalities — is being saved, and will surface here when Community opens up.`;
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 
@@ -51,7 +58,10 @@ export default function CommunityTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <Text style={styles.title}>Community</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>Community</Text>
+        <HelpButton title="How Community works" body={COMMUNITY_HELP} />
+      </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
@@ -90,11 +100,12 @@ export default function CommunityTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
+  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  comingSoonNotice: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
+  comingSoonNotice: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
 });

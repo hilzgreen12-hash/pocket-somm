@@ -3,6 +3,14 @@ import { supabase } from '../api/supabase';
 import { showAlert } from '../components/AppAlert';
 import { useAuth } from './useAuth';
 import type { UserPreferences } from '../types/preferences';
+import { STYLE_PROFILES } from '../constants/styleProfiles';
+
+// IDs that are still selectable on the StylePicker. Older accounts may have
+// saved ids that we've since dropped (Champagne & Sparkling, Rosé, Orange
+// Wine, Sweet & Dessert, Sherry & Fortified) — those now live on the wine-
+// type picker instead. Drop ghost ids from the in-memory preferences so the
+// summary counts and downstream prompts don't carry dead values.
+const VALID_STYLE_IDS = new Set<string>(STYLE_PROFILES.map((p) => p.id));
 
 export function usePreferences() {
   const { session } = useAuth();
@@ -23,9 +31,28 @@ export function usePreferences() {
         if (error.code === 'PGRST116') return null; // no profile row yet — new user
         throw new Error(error.message); // real error — surface to caller
       }
+
+      // One-time prune of retired style ids. If the row still holds any,
+      // write the cleaned list back so future reads + the API prompt stay
+      // honest. Fire-and-forget — a write failure here is non-fatal; the
+      // returned in-memory list is already clean so the UI is correct.
+      const rawStyles: string[] = data.style_preferences ?? [];
+      const cleanedStyles = rawStyles.filter((id) => VALID_STYLE_IDS.has(id));
+      if (cleanedStyles.length !== rawStyles.length) {
+        supabase
+          .from('profiles')
+          .update({ style_preferences: cleanedStyles })
+          .eq('user_id', userId)
+          .then(({ error: pruneError }) => {
+            if (pruneError) {
+              console.warn('[preferences] retired-style-id prune failed (non-fatal):', pruneError.message);
+            }
+          });
+      }
+
       return {
         wineTypes: data.default_wine_types ?? [],
-        styleProfiles: data.style_preferences ?? [],
+        styleProfiles: cleanedStyles,
         defaultBudget: data.default_budget ?? null,
         defaultCurrency: data.default_currency ?? 'GBP',
         favouriteRegions: data.favourite_regions ?? [],

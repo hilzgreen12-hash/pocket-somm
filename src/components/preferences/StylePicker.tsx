@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { STYLE_PROFILES } from '../../constants/styleProfiles';
+import { colors, spacing } from '../../constants/theme';
 
 const MAX = 5;
 
@@ -9,6 +10,11 @@ interface Props {
   onChange: (profiles: string[]) => void;
 }
 
+// Full-width chip picker — each style sits in its own bubble with the
+// label and description stacked inside. Active state is the same gold
+// border + gold-tinted fill used on the wine-type picker, so the two
+// selectors feel like one family. Tick removed; the bubble is its own
+// indicator.
 export function StylePicker({ selected, onChange }: Props) {
   const [local, setLocal] = useState(selected);
 
@@ -37,11 +43,12 @@ export function StylePicker({ selected, onChange }: Props) {
 
   return (
     <View>
-      <TouchableOpacity style={styles.row} onPress={selectAny} activeOpacity={0.6}>
-        <View style={styles.rowInner}>
-          <Text style={[styles.label, anyActive && styles.labelActive]}>Any</Text>
-          {anyActive && <Text style={styles.checkmark}>✓</Text>}
-        </View>
+      <TouchableOpacity
+        style={[styles.chip, anyActive && styles.chipActive]}
+        onPress={selectAny}
+        activeOpacity={0.7}
+      >
+        <Text style={[styles.label, anyActive && styles.labelActive]}>Any</Text>
       </TouchableOpacity>
       {STYLE_PROFILES.map((profile) => {
         const active = local.includes(profile.id);
@@ -49,18 +56,17 @@ export function StylePicker({ selected, onChange }: Props) {
         return (
           <TouchableOpacity
             key={profile.id}
-            style={[styles.row, atMax && { opacity: 0.35 }]}
+            style={[styles.chip, active && styles.chipActive, atMax && { opacity: 0.35 }]}
             onPress={() => toggle(profile.id)}
-            activeOpacity={0.6}
+            activeOpacity={0.7}
             disabled={atMax}
           >
-            <View style={styles.rowInner}>
-              <Text style={[styles.label, active && styles.labelActive]}>
-                {profile.label}
-              </Text>
-              {active && <Text style={styles.checkmark}>✓</Text>}
-            </View>
-            <Text style={styles.description}>{profile.description}</Text>
+            <Text style={[styles.label, active && styles.labelActive]}>
+              {profile.label}
+            </Text>
+            <Text style={[styles.description, active && styles.descriptionActive]}>
+              {profile.description}
+            </Text>
           </TouchableOpacity>
         );
       })}
@@ -69,34 +75,38 @@ export function StylePicker({ selected, onChange }: Props) {
 }
 
 const styles = StyleSheet.create({
-  row: {
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.08)',
+  // Bubble matches WineTypePicker's chip styling, just full-width so it
+  // can carry label + description on two lines.
+  chip: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.borderLight,
+    backgroundColor: colors.surfaceElevated,
+    marginBottom: spacing.sm,
   },
-  rowInner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  chipActive: {
+    borderColor: colors.gold,
+    backgroundColor: colors.gold + '22',
   },
   label: {
     fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 14,
+    fontSize: 17,
     color: '#FFFFFF',
-    marginBottom: 2,
   },
   labelActive: {
-    color: '#FFFFFF',
-  },
-  checkmark: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    fontWeight: '600',
+    color: colors.gold,
   },
   description: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    fontSize: 11,
-    color: '#FFFFFF',
-    lineHeight: 16,
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.75)',
+    marginTop: 2,
+    lineHeight: 19,
+  },
+  descriptionActive: {
+    color: colors.gold,
+    opacity: 0.85,
   },
 });

@@ -5,6 +5,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabFooter } from '../../src/components/TabFooter';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
+import { HelpButton } from '../../src/components/HelpButton';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 if (Platform.OS === 'android') {
@@ -20,6 +21,16 @@ import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
+
+const LIST_HELP = `Scan a wine list or upload a screenshot, and Vinster (powered by Anthropic's Claude AI) reads every bottle on the page.
+
+It then weighs each one against the preferences you've set — wine type, style, the food you're eating, your budget — and against everything it's learned about your taste from past scans and reviews, before recommending three.
+
+For each recommendation Vinster pulls in critic scores, vintage notes, value compared to market prices, and drinking windows.
+
+Tap "Review This Wine" on the one you actually ordered. It goes into Your Wine Reviews and quietly helps Vinster get to know you a little better for next time.
+
+You can also review the restaurants you've visited, all saved within Your Restaurants and ready to share with the Vinster community.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
@@ -46,6 +57,7 @@ export default function ScanTab() {
 
   const WINE_TYPE_LABELS: Record<string, string> = {
     red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling',
+    orange: 'Orange', 'sweet-fortified': 'Sweet & Fortified',
   };
 
   const wineTypeLabel = wineTypes.length > 0
@@ -236,7 +248,10 @@ export default function ScanTab() {
     >
 
       <View style={styles.header}>
-        <Text style={styles.appName}>List</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.appName}>List</Text>
+          <HelpButton title="How List works" body={LIST_HELP} />
+        </View>
         <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Revisit and review restaurants, and those bottles you drank in them.</Text>
       </View>
 
@@ -382,6 +397,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     letterSpacing: 1.5,
   },
+  // Row container so the gold "i" sits inline with the centred title.
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   subtitle: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 17,
@@ -515,7 +532,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   introBody: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 16,
     color: '#FFFFFF',
     lineHeight: 23,
