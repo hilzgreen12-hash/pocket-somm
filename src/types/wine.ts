@@ -166,6 +166,11 @@ export interface WineRack {
   cols: number;
   storage_type: 'rack' | 'fridge';
   created_at: string;
+  // Optional large-format row that sits above the standard grid. Both
+  // null = no special row. Slots in this row use row_index = -1 in
+  // rack_slots; columns 0..large_format_cols-1.
+  large_format_cols: number | null;
+  large_format_bottle_size_ml: number | null;
 }
 
 export interface RackSlot {

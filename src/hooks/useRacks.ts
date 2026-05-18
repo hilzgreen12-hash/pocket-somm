@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getRacks, createRack, deleteRack, renameRack, wipeRackContents, getRackSlots, assignSlot, clearSlot } from '../api/racks';
+import { getRacks, createRack, deleteRack, renameRack, wipeRackContents, getRackSlots, assignSlot, clearSlot, type LargeFormatRowSpec } from '../api/racks';
 
 export function useRacks() {
   const { session } = useAuth();
@@ -14,8 +14,8 @@ export function useRacks() {
   });
 
   const create = useMutation({
-    mutationFn: ({ name, rows, cols, storageType }: { name: string; rows: number; cols: number; storageType?: 'rack' | 'fridge' }) =>
-      createRack(userId, name, rows, cols, storageType),
+    mutationFn: ({ name, rows, cols, storageType, largeFormat }: { name: string; rows: number; cols: number; storageType?: 'rack' | 'fridge'; largeFormat?: LargeFormatRowSpec | null }) =>
+      createRack(userId, name, rows, cols, storageType, largeFormat),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['racks', userId] }),
   });
 

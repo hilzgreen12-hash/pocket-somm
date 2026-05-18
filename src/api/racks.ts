@@ -29,10 +29,27 @@ export async function getRacks(userId: string): Promise<WineRack[]> {
   return data ?? [];
 }
 
-export async function createRack(userId: string, name: string, rows: number, cols: number, storageType: 'rack' | 'fridge' = 'rack'): Promise<WineRack> {
+// Optional large-format row spec — passed when the user enabled "Insert
+// large-format row" on the Confirm Rack/Fridge screen. Stored as two
+// columns on wine_racks; both null when no large-format row.
+export interface LargeFormatRowSpec { cols: number; bottleSizeMl: number }
+
+export async function createRack(
+  userId: string,
+  name: string,
+  rows: number,
+  cols: number,
+  storageType: 'rack' | 'fridge' = 'rack',
+  largeFormat?: LargeFormatRowSpec | null,
+): Promise<WineRack> {
+  const insert: Record<string, unknown> = { user_id: userId, name, rows, cols, storage_type: storageType };
+  if (largeFormat) {
+    insert.large_format_cols = largeFormat.cols;
+    insert.large_format_bottle_size_ml = largeFormat.bottleSizeMl;
+  }
   const { data, error } = await supabase
     .from('wine_racks')
-    .insert({ user_id: userId, name, rows, cols, storage_type: storageType })
+    .insert(insert)
     .select()
     .single();
   if (error) throw error;
