@@ -13,6 +13,35 @@ import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/revie
 import { colors, spacing } from '../constants/theme';
 import type { WineRecommendation, ChosenWine } from '../types/wine';
 
+// Today's date as yyyy-mm-dd (local time). Default Date for the review's
+// drinking date — the most useful value 99% of the time since users
+// review wines right after drinking them.
+function todayIso(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// One-line summary for the collapsed "Discovered At" row. Combines whatever
+// the user has into a readable phrase so they don't need to expand the
+// editor unless something looks wrong.
+function formatDiscoveredSummary(restaurant: string, city: string, dateIso: string): string {
+  const place = [restaurant, city].map((s) => s.trim()).filter(Boolean).join(', ');
+  let prettyDate = '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
+    const d = new Date(dateIso + 'T00:00:00');
+    if (!Number.isNaN(d.getTime())) {
+      prettyDate = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  }
+  if (place && prettyDate) return `${place} · ${prettyDate}`;
+  if (place) return place;
+  if (prettyDate) return prettyDate;
+  return 'Tap edit to add location';
+}
+
 interface Props {
   wine: WineRecommendation | null;
   visible: boolean;
@@ -35,6 +64,14 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   const [userScore, setUserScore] = useState<number | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Drinking date — defaults to today, editable via the Discovered At
+  // (edit) link. Stored as yyyy-mm-dd; pre-filled on every open so the
+  // value always matches "today" if the user didn't touch it.
+  const [reviewDate, setReviewDate] = useState(todayIso());
+  // Discovered-At editor starts collapsed — the previous screen already
+  // captured the restaurant and city, so we assume they're correct unless
+  // the user opens the editor to adjust.
+  const [editingLocation, setEditingLocation] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -46,6 +83,8 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       setUserScore(null);
       setIsFavourite(false);
       setSaved(false);
+      setReviewDate(todayIso());
+      setEditingLocation(false);
 
       // If we don't already have a city (e.g. fresh scan that hasn't been
       // saved yet), try a quick GPS reverse-geocode to pre-fill it. Best
@@ -117,6 +156,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
           userScore,
           listPrice: price,
           isFavourite,
+          reviewDate,
         });
       } else {
         const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
@@ -191,42 +231,49 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Where did you drink it?</Text>
+            {/* Discovered At — collapsed by default. The previous screen
+                already captured restaurant + city, so we surface a tidy
+                one-line summary with a subtle (edit) link rather than
+                rebuilding the inputs every time. */}
+            <View style={styles.discoveredRow}>
+              <Text style={styles.discoveredLabel}>Discovered At</Text>
+              <TouchableOpacity onPress={() => setEditingLocation((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.editLink}>{editingLocation ? '(done)' : '(edit)'}</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.discoveredSummary}>{formatDiscoveredSummary(restaurant, city, reviewDate)}</Text>
 
-            <Text style={styles.fieldLabel}>Restaurant name</Text>
-            <TextInput
-              style={styles.input}
-              value={restaurant}
-              onChangeText={setRestaurant}
-              placeholder="e.g. The Clove Club"
-              placeholderTextColor={colors.textMuted}
-            />
-
-            <Text style={styles.fieldLabel}>City</Text>
-            <CityAutocomplete
-              style={styles.input}
-              value={city}
-              onChangeText={setCity}
-              placeholder="City"
-              placeholderTextColor={colors.textMuted}
-            />
-
-            <Text style={styles.fieldLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
-            <TextInput
-              style={styles.input}
-              value={listPrice}
-              onChangeText={(text) => {
-                // Allow digits and a single decimal point only; the menu
-                // price from the scan can be non-integer (e.g. 24.50).
-                const cleaned = text.replace(/[^0-9.]/g, '');
-                const parts = cleaned.split('.');
-                const normalised = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
-                setListPrice(normalised);
-              }}
-              placeholder={wine.menuPrice != null ? String(wine.menuPrice) : 'e.g. 65'}
-              placeholderTextColor={colors.textMuted}
-              keyboardType="decimal-pad"
-            />
+            {editingLocation && (
+              <View style={styles.locationEditor}>
+                <Text style={styles.fieldLabel}>Restaurant name</Text>
+                <TextInput
+                  style={styles.input}
+                  value={restaurant}
+                  onChangeText={setRestaurant}
+                  placeholder="e.g. The Clove Club"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <Text style={styles.fieldLabel}>City</Text>
+                <CityAutocomplete
+                  style={styles.input}
+                  value={city}
+                  onChangeText={setCity}
+                  placeholder="City"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <Text style={styles.fieldLabel}>Date</Text>
+                <TextInput
+                  style={styles.input}
+                  value={reviewDate}
+                  onChangeText={(text) => setReviewDate(text.replace(/[^0-9-]/g, '').slice(0, 10))}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={10}
+                />
+                <Text style={styles.dateHint}>Format: YYYY-MM-DD · defaults to today.</Text>
+              </View>
+            )}
 
             <View style={styles.divider} />
 
@@ -270,6 +317,23 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             />
             <Text style={styles.scoreHint}>out of 100</Text>
 
+            <Text style={styles.sectionLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
+            <TextInput
+              style={styles.input}
+              value={listPrice}
+              onChangeText={(text) => {
+                // Allow digits and a single decimal point only; the menu
+                // price from the scan can be non-integer (e.g. 24.50).
+                const cleaned = text.replace(/[^0-9.]/g, '');
+                const parts = cleaned.split('.');
+                const normalised = parts.length > 2 ? `${parts[0]}.${parts.slice(1).join('')}` : cleaned;
+                setListPrice(normalised);
+              }}
+              placeholder={wine.menuPrice != null ? String(wine.menuPrice) : 'e.g. 65'}
+              placeholderTextColor={colors.textMuted}
+              keyboardType="decimal-pad"
+            />
+
             {saved ? (
               <View style={styles.savedRow}>
                 <Text style={styles.savedText}>Saved — </Text>
@@ -278,15 +342,25 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
                 </TouchableOpacity>
               </View>
             ) : (
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSave}
-                disabled={save.isPending || update.isPending}
-              >
-                <Text style={styles.saveButtonText}>
-                  {save.isPending || update.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
-                </Text>
-              </TouchableOpacity>
+              <>
+                <TouchableOpacity
+                  style={styles.saveButton}
+                  onPress={handleSave}
+                  disabled={save.isPending || update.isPending}
+                >
+                  <Text style={styles.saveButtonText}>
+                    {save.isPending || update.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.cancelLink}
+                  onPress={onClose}
+                  disabled={save.isPending || update.isPending}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.cancelLinkText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
             )}
 
           </ScrollView>
@@ -381,6 +455,53 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     marginBottom: spacing.lg,
+  },
+  // Compact "Discovered At [summary] (edit)" row that replaces the old
+  // "Where did you drink it?" three-field block. Expands inline when the
+  // (edit) link is tapped.
+  discoveredRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+  },
+  discoveredLabel: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 16,
+    color: colors.text,
+  },
+  editLink: {
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 13,
+    color: colors.gold,
+    textDecorationLine: 'underline',
+  },
+  discoveredSummary: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 15,
+    color: colors.textMuted,
+    marginBottom: spacing.sm,
+    lineHeight: 20,
+  },
+  locationEditor: {
+    marginBottom: spacing.sm,
+  },
+  dateHint: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: -4,
+    marginBottom: spacing.sm,
+  },
+  cancelLink: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+  },
+  cancelLinkText: {
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 14,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
   },
   savedRow: {
     flexDirection: 'row',

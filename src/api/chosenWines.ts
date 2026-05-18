@@ -11,6 +11,10 @@ export interface SaveChosenWineInput {
   userScore: number | null;
   listPrice: number | null;
   isFavourite: boolean;
+  // Optional yyyy-mm-dd. When set, overrides the chosen_at default of
+  // now() so the review carries the actual drinking date the user
+  // selected on the review modal. Omit / pass null to fall back to now.
+  reviewDate?: string | null;
 }
 
 // Manual entry path — used by the +Add flow on Your Wine Reviews, where
@@ -61,8 +65,8 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
 }
 
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<ChosenWine> {
-  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore, listPrice, isFavourite } = input;
-  const { data, error } = await supabase.from('chosen_wines').insert({
+  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore, listPrice, isFavourite, reviewDate } = input;
+  const row: Record<string, unknown> = {
     user_id: userId,
     scan_session_id: scanSessionId,
     wine_name: wine.name,
@@ -86,7 +90,11 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     other_observations: otherObservations || null,
     user_score: userScore,
     is_favourite: isFavourite,
-  }).select().single();
+  };
+  // Only set chosen_at when the user picked a specific date — letting the
+  // DB default to now() otherwise. Treat as a date-only value (no time).
+  if (reviewDate) row.chosen_at = reviewDate;
+  const { data, error } = await supabase.from('chosen_wines').insert(row).select().single();
   if (error) throw new Error(error.message);
   return data as ChosenWine;
 }
