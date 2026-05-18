@@ -111,16 +111,28 @@ export default function RackGridScreen() {
   const naturalSlotSize = Math.floor((width - PADDING - GAP * (cols - 1)) / cols);
   const slotSize = Math.max(20, naturalSlotSize);
   const gridFitsScreen = naturalSlotSize >= 20;
-  // Scale the in-slot wine name with the slot itself. A 3×5 rack ends up
-  // around 70pt per slot on a phone, so the name can read at ~15pt; a 10×8
-  // rack drops to ~30pt slots and the name needs to shrink to ~8pt to fit
-  // two wrapped lines. The 8–18pt clamp keeps both extremes legible.
-  const slotFontSize = Math.max(8, Math.min(18, Math.floor(slotSize * 0.22)));
-  const slotLineHeight = slotFontSize + 2;
-  // Truncate the name at a length that scales with the slot too — a tiny
-  // slot can only afford ~10 chars before wrapping eats the vintage line,
-  // a big slot can comfortably show the whole name.
-  const slotMaxChars = Math.max(10, Math.floor(slotSize / 3.5));
+  // Build the rows the grid will render. The optional large-format row
+  // is row_index = -1 and sits above the standard rows; its slots take
+  // up the same total width as the standard grid, so fewer slots means
+  // each is proportionally wider.
+  const standardTotalWidth = cols * slotSize + (cols - 1) * GAP;
+  const largeFormatCols = rack?.large_format_cols ?? null;
+  const largeFormatSlotSize = largeFormatCols && largeFormatCols > 0
+    ? Math.floor((standardTotalWidth - GAP * (largeFormatCols - 1)) / largeFormatCols)
+    : 0;
+  const gridRows: Array<{ rowIndex: number; cols: number; slotWidth: number }> = [];
+  if (largeFormatCols && largeFormatCols > 0) {
+    gridRows.push({ rowIndex: -1, cols: largeFormatCols, slotWidth: largeFormatSlotSize });
+  }
+  for (let r = 0; r < (rack?.rows ?? 0); r++) {
+    gridRows.push({ rowIndex: r, cols, slotWidth: slotSize });
+  }
+  // Slot font sizing scales with the slot — same clamp formula in both
+  // the standard grid and the (typically wider) large-format row.
+  function fontForSlot(size: number) {
+    const fontSize = Math.max(8, Math.min(18, Math.floor(size * 0.22)));
+    return { fontSize, lineHeight: fontSize + 2, maxChars: Math.max(10, Math.floor(size / 3.5)) };
+  }
 
   function openSlot(row: number, col: number) {
     // If we're in the middle of a move, treat this tap as the drop target.
@@ -419,51 +431,64 @@ export default function RackGridScreen() {
           bounces={false}
         >
           <View>
-            {Array.from({ length: rack.rows }, (_, row) => (
-              <View key={row} style={[styles.gridRow, { gap: GAP, marginBottom: GAP }]}>
-                {Array.from({ length: rack.cols }, (_, col) => {
-                  const slot = slotMap[`${row},${col}`];
-                  const wine = slot?.wine as CellarWine | null | undefined;
-                  const status = wine?.drinking_window_status ?? null;
-                  const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
-                  const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
-                  const isMovingSource = !!moving && moving.row === row && moving.col === col;
-                  return (
-                    <TouchableOpacity
-                      key={col}
-                      style={[
-                        styles.slot,
-                        { width: slotSize, height: slotSize },
-                        wine
-                          ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] }
-                          : styles.slotEmpty,
-                        isHighlighted && styles.slotHighlighted,
-                        isDimmed && styles.slotDimmed,
-                        isMovingSource && styles.slotMovingSource,
-                      ]}
-                      onPress={() => openSlot(row, col)}
-                      onLongPress={() => pickUpSlot(row, col)}
-                      delayLongPress={400}
-                    >
-                      {wine ? (
-                        <Text
-                          style={[
-                            styles.slotText,
-                            { fontSize: slotFontSize, lineHeight: slotLineHeight },
-                            isHighlighted && styles.slotTextHighlighted,
-                          ]}
-                          numberOfLines={2}
-                        >
-                          {truncate(wine.wine_name, slotMaxChars)}{wine.vintage ? `\n${wine.vintage}` : ''}
-                        </Text>
-                      ) : (
-                        <Text style={styles.slotPlus}>+</Text>
-                      )}
-                    </TouchableOpacity>
-                  );
-                })}
-              </View>
-            ))}
+            {gridRows.map((rowDef) => {
+              const isLargeFormat = rowDef.rowIndex === -1;
+              const slotFont = fontForSlot(rowDef.slotWidth);
+              return (
+                <View
+                  key={rowDef.rowIndex}
+                  style={[
+                    styles.gridRow,
+                    { gap: GAP, marginBottom: GAP },
+                    // Pull the large-format row away from the standard grid
+                    // a touch so it visually reads as a distinct shelf.
+                    isLargeFormat && { marginBottom: GAP * 2 },
+                  ]}
+                >
+                  {Array.from({ length: rowDef.cols }, (_, col) => {
+                    const slot = slotMap[`${rowDef.rowIndex},${col}`];
+                    const wine = slot?.wine as CellarWine | null | undefined;
+                    const status = wine?.drinking_window_status ?? null;
+                    const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
+                    const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
+                    const isMovingSource = !!moving && moving.row === rowDef.rowIndex && moving.col === col;
+                    return (
+                      <TouchableOpacity
+                        key={col}
+                        style={[
+                          styles.slot,
+                          { width: rowDef.slotWidth, height: rowDef.slotWidth },
+                          wine
+                            ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] }
+                            : styles.slotEmpty,
+                          isHighlighted && styles.slotHighlighted,
+                          isDimmed && styles.slotDimmed,
+                          isMovingSource && styles.slotMovingSource,
+                        ]}
+                        onPress={() => openSlot(rowDef.rowIndex, col)}
+                        onLongPress={() => pickUpSlot(rowDef.rowIndex, col)}
+                        delayLongPress={400}
+                      >
+                        {wine ? (
+                          <Text
+                            style={[
+                              styles.slotText,
+                              { fontSize: slotFont.fontSize, lineHeight: slotFont.lineHeight },
+                              isHighlighted && styles.slotTextHighlighted,
+                            ]}
+                            numberOfLines={2}
+                          >
+                            {truncate(wine.wine_name, slotFont.maxChars)}{wine.vintage ? `\n${wine.vintage}` : ''}
+                          </Text>
+                        ) : (
+                          <Text style={styles.slotPlus}>+</Text>
+                        )}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              );
+            })}
           </View>
         </ScrollView>
 

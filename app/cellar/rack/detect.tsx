@@ -4,6 +4,7 @@ import { showAlert } from '../../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useRacks } from '../../../src/hooks/useRacks';
+import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 
 function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
@@ -33,6 +34,11 @@ export default function RackDetectScreen() {
   const [cols, setCols] = useState(detectedCols);
   const [name, setName] = useState(isFridge ? 'My Wine Fridge' : 'My Wine Rack');
   const [saving, setSaving] = useState(false);
+  // Optional large-format row that sits above the standard grid. Off by
+  // default; users opt in via "+ Insert large-format row".
+  const [largeFormatOpen, setLargeFormatOpen] = useState(false);
+  const [largeFormatCols, setLargeFormatCols] = useState(3);
+  const [largeFormatBottleSizeMl, setLargeFormatBottleSizeMl] = useState(1500);
   const { create } = useRacks();
 
   async function handleSave() {
@@ -42,7 +48,15 @@ export default function RackDetectScreen() {
     }
     setSaving(true);
     try {
-      const rack = await create.mutateAsync({ name: name.trim(), rows, cols, storageType: pendingStorageType });
+      const rack = await create.mutateAsync({
+        name: name.trim(),
+        rows,
+        cols,
+        storageType: pendingStorageType,
+        largeFormat: largeFormatOpen
+          ? { cols: largeFormatCols, bottleSizeMl: largeFormatBottleSizeMl }
+          : null,
+      });
       reset();
       router.replace(`/cellar/rack/${rack.id}`);
     } catch (err) {
@@ -95,6 +109,28 @@ export default function RackDetectScreen() {
         <View style={styles.divider} />
         <Counter label="Horizontal" value={cols} onChange={setCols} />
 
+        {/* Optional large-format row — sits above the standard grid for
+            magnums / oversized formats. Default 3 slots at 1.5L. */}
+        <View style={styles.divider} />
+        {!largeFormatOpen ? (
+          <TouchableOpacity style={styles.largeFormatToggle} onPress={() => setLargeFormatOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.largeFormatToggleText}>+ Insert large-format row</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.largeFormatBlock}>
+            <View style={styles.largeFormatHeader}>
+              <Text style={styles.largeFormatHeading}>Large-format row</Text>
+              <TouchableOpacity onPress={() => setLargeFormatOpen(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.largeFormatRemove}>Remove</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.largeFormatHint}>An extra row above the standard grid for bigger bottles — magnums, etc.</Text>
+            <Counter label="Slots" value={largeFormatCols} onChange={setLargeFormatCols} />
+            <Text style={styles.fieldLabel}>Bottle size for this row</Text>
+            <BottleSizePicker value={largeFormatBottleSizeMl} onChange={setLargeFormatBottleSizeMl} />
+          </View>
+        )}
+
         <Text style={styles.fieldLabel}>{isFridge ? 'Fridge' : 'Rack'} Name</Text>
         <TextInput
           style={styles.input}
@@ -144,6 +180,13 @@ const styles = StyleSheet.create({
   counterBtnText: { fontSize: 22, color: colors.text, fontFamily: 'CormorantGaramond_400Regular' },
   counterValue: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, minWidth: 40, textAlign: 'center' },
   divider: { height: 1, backgroundColor: colors.border },
+  largeFormatToggle: { paddingVertical: spacing.md, alignItems: 'center' },
+  largeFormatToggleText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
+  largeFormatBlock: { paddingVertical: spacing.md, gap: spacing.xs },
+  largeFormatHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  largeFormatHeading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.text },
+  largeFormatRemove: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
+  largeFormatHint: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.xs },
   fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.xl, marginBottom: spacing.sm },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
   footer: { padding: spacing.xl, paddingBottom: 48 },
