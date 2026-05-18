@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -19,11 +19,11 @@ import { colors, spacing } from '../../src/constants/theme';
 
 type Category = 'wine' | 'recipe';
 
-// Threshold of new content the user needs to add since the last sketch was
-// generated before "I've evolved" unlocks. Set conservatively so users don't
-// regenerate every visit, but reachable within a couple of weeks of regular
-// use.
-const EVOLUTION_THRESHOLD = 5;
+// Personality updates aren't user-triggered any more — the app surfaces a
+// fresh sketch only when Vinster decides the user has engaged enough to
+// have meaningfully evolved. The previous "I've evolved, Update my sketch"
+// button (and its threshold + "Not yet" modal) were removed to prevent
+// users from regenerating on demand.
 
 export default function PersonalityScreen() {
   useKeepAwake();
@@ -64,7 +64,6 @@ export default function PersonalityScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [publishState, setPublishState] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [evolveModalOpen, setEvolveModalOpen] = useState(false);
   const shareCardRef = useRef<View>(null);
 
   // Hydrate cached sketch + last-generated timestamp so we can gate the
@@ -165,45 +164,6 @@ export default function PersonalityScreen() {
       setError(err instanceof Error ? err.message : 'Could not generate personality.');
     } finally {
       setLoading(false);
-    }
-  }
-
-  // Count new items the user has added since the saved sketch was generated.
-  // If we never stamped a timestamp (legacy users on a pre-existing sketch),
-  // treat as unlocked so they can regenerate once and seed the timestamp.
-  async function countNewItemsSinceSketch(): Promise<number> {
-    if (!session?.user.id) return 0;
-    if (!lastGeneratedAt) return EVOLUTION_THRESHOLD;
-    const userId = session.user.id;
-    if (cat === 'wine') {
-      const [{ count: c1 }, { count: c2 }] = await Promise.all([
-        supabase.from('cellar_wines').select('id', { count: 'exact', head: true })
-          .eq('user_id', userId).gt('created_at', lastGeneratedAt),
-        supabase.from('chosen_wines').select('id', { count: 'exact', head: true })
-          .eq('user_id', userId).gt('chosen_at', lastGeneratedAt),
-      ]);
-      return (c1 ?? 0) + (c2 ?? 0);
-    }
-    const [{ count: c1 }, { count: c2 }, { count: c3 }] = await Promise.all([
-      supabase.from('chef_label_sessions').select('id', { count: 'exact', head: true })
-        .eq('user_id', userId).gt('saved_at', lastGeneratedAt),
-      supabase.from('chef_pairing_sessions').select('id', { count: 'exact', head: true })
-        .eq('user_id', userId).gt('saved_at', lastGeneratedAt),
-      // New restaurant signals since the last sketch — any scan_session with
-      // a restaurant_name or an overall rating counts.
-      supabase.from('scan_sessions').select('id', { count: 'exact', head: true })
-        .eq('user_id', userId).gt('captured_at', lastGeneratedAt)
-        .or('restaurant_name.not.is.null,rating_overall.not.is.null'),
-    ]);
-    return (c1 ?? 0) + (c2 ?? 0) + (c3 ?? 0);
-  }
-
-  async function handleEvolve() {
-    const newItems = await countNewItemsSinceSketch();
-    if (newItems >= EVOLUTION_THRESHOLD) {
-      generate();
-    } else {
-      setEvolveModalOpen(true);
     }
   }
 
@@ -313,10 +273,6 @@ export default function PersonalityScreen() {
           </View>
         ) : text ? (
           <>
-            <TouchableOpacity style={styles.evolveBtn} onPress={handleEvolve} activeOpacity={0.8}>
-              <Text style={styles.evolveBtnText}>I've evolved, Update my sketch</Text>
-            </TouchableOpacity>
-
             <View style={styles.sketchCard}>
               {(() => {
                 const { title, body } = splitPersonality(text);
@@ -340,19 +296,7 @@ export default function PersonalityScreen() {
         ) : null}
       </ScrollView>
 
-      <Modal visible={evolveModalOpen} transparent animationType="fade" onRequestClose={() => setEvolveModalOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEvolveModalOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Not yet</Text>
-            <Text style={styles.modalBody}>Engage regularly with Vinster to generate an updated personality sketch.</Text>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setEvolveModalOpen(false)}>
-              <Text style={styles.modalButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Off-screen branded share card — rendered at its natural size (1080
+{/* Off-screen branded share card — rendered at its natural size (1080
           wide, height grows with the sketch) so the capture is never clipped. */}
       {text ? (
         <View style={styles.offscreenShareWrap} pointerEvents="none">
@@ -385,18 +329,10 @@ const styles = StyleSheet.create({
   errorBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   retryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
-  evolveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
-  evolveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
   sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
   sketchTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
   sketchText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 26 },
   archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
   archiveLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   offscreenShareWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
-  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
 });
