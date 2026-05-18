@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   body: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',

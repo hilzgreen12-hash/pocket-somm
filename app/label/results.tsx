@@ -13,6 +13,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
+import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 
 function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
@@ -58,6 +59,7 @@ export default function LabelResultsScreen() {
   const [addingReview, setAddingReview] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
   const [purchasePrice, setPurchasePrice] = useState('');
+  const [bottleSizeMl, setBottleSizeMl] = useState(750);
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
   // Review-without-adding form state — captured in a Modal and saved to
@@ -144,6 +146,7 @@ export default function LabelResultsScreen() {
       estimated_value_at: intel.estimatedValue != null ? new Date().toISOString() : null,
       purchase_price: validPrice,
       purchase_price_currency: userCurrency,
+      bottle_size_ml: bottleSizeMl,
     };
   }
 
@@ -510,6 +513,12 @@ export default function LabelResultsScreen() {
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Add to Wish List</Text>
             <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
+
+            <Text style={styles.modalLabel}>Bottle size</Text>
+            <View style={styles.bottleSizeWrap}>
+              <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
+            </View>
+
             <TouchableOpacity
               style={[styles.button, saving && styles.buttonDisabled]}
               onPress={handleAddToWishList}
@@ -679,6 +688,11 @@ export default function LabelResultsScreen() {
               </>
             )}
 
+            <Text style={styles.modalLabel}>Bottle size</Text>
+            <View style={styles.bottleSizeWrap}>
+              <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
+            </View>
+
             <Text style={styles.modalLabel}>Purchase price (optional)</Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
@@ -755,6 +769,7 @@ const styles = StyleSheet.create({
   secondaryAddBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center' },
   secondaryAddBtnText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
   reviewNoteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 100, lineHeight: 22, marginBottom: spacing.md },
+  bottleSizeWrap: { marginBottom: spacing.md },
   singleActionRow: { marginHorizontal: spacing.xl, marginTop: spacing.xl },
   singleActionButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   singleActionButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, textAlign: 'center' },

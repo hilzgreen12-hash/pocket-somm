@@ -3,6 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensio
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
+import { HelpButton } from '../../src/components/HelpButton';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
@@ -11,6 +12,14 @@ import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 
 interface AppMessage { title: string; body: string; }
+
+const CHEF_HELP = `Chef works two ways.
+
+Start with a wine and Vinster picks a chef-style recipe to pair with it. Or start with a dish — and Vinster will suggest wines, either from your own cellar or out in the wild.
+
+The recipes are generated fresh by Anthropic's Claude AI each time, not pulled from a database. They bend to your dietary needs, the food you usually cook, and the bottle you're matching to. Save your favourites to your Cookbook for later, and share them within the Vinster community or friends outside.
+
+The same AI reads your wine preferences, your recipe requirements, and your history — so each recipe and wine pairing is personal.`;
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();
@@ -92,10 +101,13 @@ export default function ChefTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <Text style={styles.appName}>Chef</Text>
+      <View style={styles.titleRow}>
+        <Text style={styles.appName}>Chef</Text>
+        <HelpButton title="How Chef works" body={CHEF_HELP} />
+      </View>
 
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>
+        <Text style={styles.topBlurb}>
           Tell Vinster what you're cooking and they'll offer you a wine pairing from your cellar or beyond. Select your bottle first for celebrity chef inspired recipe recommendations, tailored to your needs and wants.
         </Text>
       </View>
@@ -103,7 +115,7 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Need a wine for your recipe?</Text>
+        <Text style={styles.subheading}>Find a wine for a recipe</Text>
         <Text style={styles.sectionDesc}>
           Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
         </Text>
@@ -120,9 +132,9 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Chosen your bottle first?</Text>
+        <Text style={styles.subheading}>Find a recipe for a wine</Text>
         <Text style={styles.sectionDesc}>
-          Scan or upload a photo of the label to receive deep AI generated, top chef inspired recipe suggestions.
+          Choose your bottle then photograph it's label (or upload) to receive deep AI generated, top chef inspired recipes
         </Text>
         <TouchableOpacity onPress={handleViewLastLabelSearch}>
           <Text style={styles.lastResultLink}>View last result</Text>
@@ -159,13 +171,18 @@ export default function ChefTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  appName: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm },
+  appName: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   profileNote: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
-  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  lastResultLink: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
+  // Top blurb under the Chef heading stays italic — every other in-section
+  // body copy is regular, matching the user's "italics only in the blurb
+  // under each heading" rule.
+  topBlurb: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  lastResultLink: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
@@ -174,7 +191,7 @@ const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
+  modalBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
 });

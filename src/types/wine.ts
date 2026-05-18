@@ -145,6 +145,9 @@ export interface CellarWine {
   review_location: string | null;
   review_date: string | null;
   is_favourite: boolean;
+  // Bottle volume in millilitres. 750 = standard, 1500 = magnum, 375 =
+  // half, etc. Defaults to 750 on legacy rows via migration 040.
+  bottle_size_ml: number;
   created_at: string;
   updated_at: string;
 }

@@ -7,6 +7,7 @@ import { useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function AddToWishListScreen() {
@@ -18,6 +19,7 @@ export default function AddToWishListScreen() {
   const [producer, setProducer] = useState('');
   const [region, setRegion] = useState('');
   const [vintage, setVintage] = useState('');
+  const [bottleSizeMl, setBottleSizeMl] = useState(750);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -50,6 +52,7 @@ export default function AddToWishListScreen() {
         label_image_path: null,
         user_notes: null,
         is_wishlist: true,
+        bottle_size_ml: bottleSizeMl,
       });
       router.back();
     } catch {
@@ -150,6 +153,11 @@ export default function AddToWishListScreen() {
         keyboardType="number-pad"
       />
 
+      <Text style={styles.label}>Bottle size</Text>
+      <View style={styles.bottleSizeWrap}>
+        <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
+      </View>
+
       <TouchableOpacity
         style={[styles.saveButton, saving && { opacity: 0.6 }]}
         onPress={handleSave}
@@ -180,6 +188,7 @@ const styles = StyleSheet.create({
   dividerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  bottleSizeWrap: { marginBottom: spacing.lg },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
 });

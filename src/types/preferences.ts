@@ -1,4 +1,4 @@
-export type WineType = 'red' | 'white' | 'rose' | 'sparkling';
+export type WineType = 'red' | 'white' | 'rose' | 'sparkling' | 'orange' | 'sweet-fortified';
 
 export interface UserPreferences {
   wineTypes: WineType[];

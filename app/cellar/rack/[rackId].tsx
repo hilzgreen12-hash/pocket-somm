@@ -82,7 +82,9 @@ export default function RackGridScreen() {
     return map;
   }, [slots]);
 
-  // Build unique wine list from slots, preserving slot positions for highlight
+  // Build unique wine list from slots — used by the search list below the
+  // grid. Wine names live in the slot cells themselves now (font scales to
+  // slot size), so the list just carries name / region / bottle count.
   const winesInRack = useMemo(() => {
     const map = new Map<string, { wine: CellarWine; count: number }>();
     slots.forEach((s) => {
@@ -109,6 +111,16 @@ export default function RackGridScreen() {
   const naturalSlotSize = Math.floor((width - PADDING - GAP * (cols - 1)) / cols);
   const slotSize = Math.max(20, naturalSlotSize);
   const gridFitsScreen = naturalSlotSize >= 20;
+  // Scale the in-slot wine name with the slot itself. A 3×5 rack ends up
+  // around 70pt per slot on a phone, so the name can read at ~15pt; a 10×8
+  // rack drops to ~30pt slots and the name needs to shrink to ~8pt to fit
+  // two wrapped lines. The 8–18pt clamp keeps both extremes legible.
+  const slotFontSize = Math.max(8, Math.min(18, Math.floor(slotSize * 0.22)));
+  const slotLineHeight = slotFontSize + 2;
+  // Truncate the name at a length that scales with the slot too — a tiny
+  // slot can only afford ~10 chars before wrapping eats the vintage line,
+  // a big slot can comfortably show the whole name.
+  const slotMaxChars = Math.max(10, Math.floor(slotSize / 3.5));
 
   function openSlot(row: number, col: number) {
     // If we're in the middle of a move, treat this tap as the drop target.
@@ -331,9 +343,10 @@ export default function RackGridScreen() {
       <View style={styles.header}>
         {/* A rack can be reached at the end of a scan / rack-build flow,
             so router.back() can land on a scanner screen (or no-op).
-            Navigate to the Cellar tab — it's always at the base of these
-            stacks, so this pops the whole flow off, scanners included. */}
-        <TouchableOpacity onPress={() => router.navigate('/(tabs)/cellar')}>
+            Navigate to the racks landing page ("Wine Racks & Fridges") —
+            it sits above this screen in the user's mental hierarchy and
+            popping the whole scanner stack off the way to it is fine. */}
+        <TouchableOpacity onPress={() => router.navigate('/cellar/racks')}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
@@ -361,6 +374,12 @@ export default function RackGridScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        {/* How-it-works hint — sits between the drinking-window legend
+            and the rack grid so users see it before they start tapping. */}
+        <Text style={styles.rackHint}>
+          Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.
+        </Text>
+
         {moving && movingMsg && (
           <View style={styles.movingBanner}>
             <Text style={styles.movingBannerText} numberOfLines={2}>{movingMsg}</Text>
@@ -427,8 +446,15 @@ export default function RackGridScreen() {
                       delayLongPress={400}
                     >
                       {wine ? (
-                        <Text style={[styles.slotText, isHighlighted && styles.slotTextHighlighted]} numberOfLines={2}>
-                          {truncate(wine.wine_name, 12)}{wine.vintage ? `\n${wine.vintage}` : ''}
+                        <Text
+                          style={[
+                            styles.slotText,
+                            { fontSize: slotFontSize, lineHeight: slotLineHeight },
+                            isHighlighted && styles.slotTextHighlighted,
+                          ]}
+                          numberOfLines={2}
+                        >
+                          {truncate(wine.wine_name, slotMaxChars)}{wine.vintage ? `\n${wine.vintage}` : ''}
                         </Text>
                       ) : (
                         <Text style={styles.slotPlus}>+</Text>
@@ -444,9 +470,6 @@ export default function RackGridScreen() {
         {/* Wine list */}
         {winesInRack.length > 0 && (
           <View style={styles.wineList}>
-            <Text style={styles.wineListHeading}>Wines in this rack</Text>
-            <Text style={styles.wineListHint}>Tap an empty slot to add a wine, tap a wine to highlight its position. Long-press a slot in the rack to move it.</Text>
-
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
@@ -712,8 +735,7 @@ const styles = StyleSheet.create({
   slotTextHighlighted: { color: '#FFFFFF' },
   slotPlus: { fontSize: 14, color: 'rgba(255,255,255,0.20)', fontFamily: 'CormorantGaramond_400Regular' },
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
-  wineListHeading: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 },
-  wineListHint: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.md },
+  rackHint: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, lineHeight: 20 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text },
   searchClear: { paddingLeft: spacing.sm, paddingVertical: spacing.sm },

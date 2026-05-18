@@ -24,7 +24,10 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
 }
 
 export default function RackDetectScreen() {
-  const { detectedRows, detectedCols, pendingStorageType, reset } = useRackStore();
+  const { detectedRows, detectedCols, pendingStorageType, imageUri, reset } = useRackStore();
+  // Came in via the camera flow? Back button reads "Retake". Came in via
+  // the manual layout chooser? There's nothing to retake — show "Back".
+  const cameFromCamera = !!imageUri;
   const isFridge = pendingStorageType === 'fridge';
   const [rows, setRows] = useState(detectedRows);
   const [cols, setCols] = useState(detectedCols);
@@ -62,15 +65,26 @@ export default function RackDetectScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>Retake</Text>
-        </TouchableOpacity>
+        {cameFromCamera ? (
+          <TouchableOpacity onPress={() => router.back()}>
+            <Text style={styles.back}>Retake</Text>
+          </TouchableOpacity>
+        ) : (
+          // Manual layout flow — no photograph to retake, and the user
+          // came in via a chooser modal so a Back affordance here is just
+          // noise. Spacer keeps the title centred.
+          <View style={{ width: 60 }} />
+        )}
         <Text style={styles.title}>{isFridge ? 'Confirm Fridge' : 'Confirm Rack'}</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <View style={styles.body}>
-        <Text style={styles.intro}>We detected the dimensions below. Adjust if needed, then give your {isFridge ? 'fridge' : 'rack'} a name.</Text>
+        <Text style={styles.intro}>
+          {cameFromCamera
+            ? `We detected the dimensions below. Adjust if needed, then give your ${isFridge ? 'fridge' : 'rack'} a name.`
+            : `Set your dimensions then give your ${isFridge ? 'fridge' : 'rack'} a name.`}
+        </Text>
 
         <View style={styles.preview}>
           <Text style={styles.previewLabel}>{rows} × {cols}</Text>
@@ -94,6 +108,17 @@ export default function RackDetectScreen() {
       <View style={styles.footer}>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveButtonText}>{isFridge ? 'Save Fridge' : 'Save Rack'}</Text>
+        </TouchableOpacity>
+        {/* Cancel bails out of the whole creation flow. router.navigate
+            pops to the existing /cellar/racks instance so the camera (if
+            the user came through it) is dropped off the back stack — they
+            don't reappear on the camera on the next back gesture. */}
+        <TouchableOpacity
+          style={styles.cancelLink}
+          onPress={() => { reset(); router.navigate('/cellar/racks'); }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.cancelLinkText}>Cancel</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -124,4 +149,6 @@ const styles = StyleSheet.create({
   footer: { padding: spacing.xl, paddingBottom: 48 },
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   saveButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  cancelLink: { alignItems: 'center', paddingVertical: spacing.md },
+  cancelLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });

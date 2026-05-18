@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
@@ -18,8 +19,11 @@ function bottleLabel(n: number) {
   return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 }
 
+function formatCreatedDate(iso: string) {
+  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
 function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
-  const isFridge = rack.storage_type === 'fridge';
   const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const blurb = rackHomeToBlurb(rack.id, wines);
 
@@ -32,10 +36,10 @@ function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWi
     >
       <View style={styles.rowMain}>
         <Text style={styles.rowName}>{rack.name}</Text>
-        <Text style={styles.rowDetail}>
-          {isFridge ? 'Wine Fridge' : 'Wine Rack'} · {rack.rows} vertical · {rack.cols} horizontal · {rack.rows * rack.cols} slots
-        </Text>
-        <Text style={styles.rowBottles}>{bottleLabel(totalBottles)}</Text>
+        <View style={styles.rowMetaLine}>
+          <Text style={styles.rowBottles}>{bottleLabel(totalBottles)}</Text>
+          <Text style={styles.rowCreated}>Created {formatCreatedDate(rack.created_at)}</Text>
+        </View>
         <View style={styles.homeToRow}>
           <Text style={styles.homeToLabel}>Home to</Text>
           <Text style={styles.homeToBlurb}>{blurb}</Text>
@@ -50,7 +54,10 @@ export default function RacksScreen() {
   const { session } = useAuth();
   const { racks, isLoading, remove: removeRack } = useRacks();
   const { wines } = useCellar();
-  const { setPendingStorageType } = useRackStore();
+  const { setPendingStorageType, reset: resetRackStore } = useRackStore();
+  // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
+  // that storage type (photograph vs manual layout).
+  const [chooser, setChooser] = useState<'rack' | 'fridge' | null>(null);
 
   function handleLongPressRack(rack: WineRack) {
     showAlert({
@@ -93,9 +100,29 @@ export default function RacksScreen() {
   // automatically as the cellar query refreshes.
   const recentAdditions = wines.slice(0, 3);
 
+  // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
-    setPendingStorageType(type);
+    setChooser(type);
+  }
+
+  // "Photograph your rack/fridge" — the existing camera-then-detect flow.
+  function handleChoosePhotograph() {
+    if (!chooser) return;
+    setPendingStorageType(chooser);
+    setChooser(null);
     router.push('/cellar/rack/camera');
+  }
+
+  // "Manually Select Layout" — skip the camera and drop the user straight
+  // onto the Confirm Rack / Confirm Fridge page with default 4×6 dims that
+  // they can tweak before saving. Reset first so any stale image / dims
+  // from a previous photograph attempt don't bleed through.
+  function handleChooseManual() {
+    if (!chooser) return;
+    resetRackStore();
+    setPendingStorageType(chooser);
+    setChooser(null);
+    router.push('/cellar/rack/detect');
   }
 
   if (isLoading) {
@@ -112,7 +139,7 @@ export default function RacksScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wines</Text>
+        <Text style={styles.title}>Wine Racks & Fridges</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -135,12 +162,6 @@ export default function RacksScreen() {
           ))}
 
           <View style={styles.storageInfo}>
-            <Text style={styles.storageBlurb}>
-              Photograph your wine rack or wine fridge and Vinster will build a virtual grid so you can track exactly where each bottle lives.
-            </Text>
-            <Text style={styles.storageNote}>
-              Vinster maps your storage as a rectangular grid, alternative shaped racks will be approximated to fit the layout.
-            </Text>
             <TouchableOpacity style={styles.addButton} onPress={() => handleAddType('rack')}>
               <Text style={styles.addButtonText}>Add Wine Rack</Text>
             </TouchableOpacity>
@@ -179,6 +200,34 @@ export default function RacksScreen() {
           </View>
         </ScrollView>
       )}
+
+      {/* Photograph / manual chooser for Add Wine Rack & Add Wine Fridge.
+          The photograph path runs the camera + auto-detect flow; the
+          manual path skips the camera and drops the user straight on the
+          Confirm Rack/Fridge page so they can set dimensions by hand. */}
+      <Modal visible={chooser !== null} transparent animationType="fade" onRequestClose={() => setChooser(null)}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooser(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
+            <Text style={styles.chooserTitle}>
+              {chooser === 'fridge' ? 'Add Wine Fridge' : 'Add Wine Rack'}
+            </Text>
+            <Text style={styles.chooserBody}>
+              How would you like to build it?
+            </Text>
+            <TouchableOpacity style={styles.chooserBtn} onPress={handleChoosePhotograph} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>
+                {chooser === 'fridge' ? 'Photograph your fridge' : 'Photograph your rack'}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chooserBtn, styles.chooserBtnSecondary]} onPress={handleChooseManual} activeOpacity={0.8}>
+              <Text style={[styles.chooserBtnText, styles.chooserBtnTextSecondary]}>Manually Select Layout</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setChooser(null)} style={styles.chooserCancel}>
+              <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -193,15 +242,14 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
   rowName: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3 },
-  rowDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 4 },
-  rowBottles: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.xs },
+  rowMetaLine: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4, gap: spacing.sm },
+  rowBottles: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  rowCreated: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   homeToRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: spacing.xs, gap: 6 },
   homeToLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   homeToBlurb: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 19 },
   arrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
   storageInfo: { paddingHorizontal: spacing.xl, paddingTop: spacing.md },
-  storageBlurb: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
-  storageNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.lg },
   addButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   addButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
@@ -212,4 +260,15 @@ const styles = StyleSheet.create({
   recentRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   recentName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
   recentDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
+  // Photograph / manual chooser overlay
+  chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  chooserTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  chooserBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  chooserBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  chooserBtnSecondary: { borderColor: '#FFFFFF' },
+  chooserBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  chooserBtnTextSecondary: { color: '#FFFFFF' },
+  chooserCancel: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: 4 },
+  chooserCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
 });

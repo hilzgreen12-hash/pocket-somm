@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -49,6 +49,35 @@ type ReviewItem =
   | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
+// Three-prong share icon drawn with bordered Views — three small white
+// circles in a triangular arrangement, joined by two thin diagonals.
+// Mirrors the Android share glyph; tappable from the score cluster on
+// each review card to hand the review to the native share sheet.
+function ShareIcon() {
+  return (
+    <View style={shareIconStyles.box}>
+      <View style={[shareIconStyles.line, shareIconStyles.lineTop]} />
+      <View style={[shareIconStyles.line, shareIconStyles.lineBottom]} />
+      <View style={[shareIconStyles.node, shareIconStyles.nodeTopRight]} />
+      <View style={[shareIconStyles.node, shareIconStyles.nodeMiddleLeft]} />
+      <View style={[shareIconStyles.node, shareIconStyles.nodeBottomRight]} />
+    </View>
+  );
+}
+
+const shareIconStyles = StyleSheet.create({
+  box: { width: 22, height: 24, position: 'relative' },
+  node: { position: 'absolute', width: 7, height: 7, borderRadius: 3.5, borderWidth: 1.2, borderColor: '#FFFFFF', backgroundColor: '#000000' },
+  nodeTopRight: { top: 0, right: 0 },
+  nodeMiddleLeft: { top: 8.5, left: 0 },
+  nodeBottomRight: { bottom: 0, right: 0 },
+  line: { position: 'absolute', height: 1, backgroundColor: '#FFFFFF' },
+  // Diagonal from the middle-left node to the top-right node.
+  lineTop: { width: 18, left: 2, top: 7, transform: [{ rotate: '-30deg' }] },
+  // Diagonal from the middle-left node to the bottom-right node.
+  lineBottom: { width: 18, left: 2, top: 16, transform: [{ rotate: '30deg' }] },
+});
+
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
@@ -61,7 +90,7 @@ export default function ChosenWinesScreen() {
   // scan + upload feed into the label flow with context=reviews).
   const [chooserOpen, setChooserOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sortBy, setSortBy] = useState<'date' | 'city' | 'score'>('date');
+  const [sortBy, setSortBy] = useState<'date' | 'city' | 'score' | 'favourites'>('date');
   const [filterBy, setFilterBy] = useState<'all' | 'cellar' | 'restaurant'>('all');
 
   // Cellar wines that have ANY user-supplied review content count as a
@@ -88,8 +117,19 @@ export default function ChosenWinesScreen() {
     return (item.wine as CellarWine).review_location?.trim() ?? '';
   }
 
+  // Both ChosenWine and CellarWine carry an is_favourite flag, so the
+  // favourites sort is the same logic on either side: favourites first,
+  // tiebreak by date.
+  function isFavourite(item: ReviewItem): boolean {
+    return !!(item.wine as { is_favourite?: boolean }).is_favourite;
+  }
+
   const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === 'score') {
+    if (sortBy === 'favourites') {
+      const af = isFavourite(a);
+      const bf = isFavourite(b);
+      if (af !== bf) return af ? -1 : 1;
+    } else if (sortBy === 'score') {
       const ar = a.score ?? -1;
       const br = b.score ?? -1;
       if (ar !== br) return br - ar;
@@ -167,6 +207,31 @@ export default function ChosenWinesScreen() {
   }
 
   const hasAnything = items.length > 0;
+
+  // Hand a review to the native share sheet — wine identity + score +
+  // location + the user's tasting note, formatted as plain text so it can
+  // land cleanly into WhatsApp, Messages, email etc.
+  async function handleShareReview(item: ReviewItem) {
+    const w = item.wine;
+    const header = wineHeaderLine(w.producer, w.wine_name, w.vintage);
+    const scoreText = item.score != null ? `\nMy score: ${item.score}/100` : '';
+    const locText = item.source === 'restaurant'
+      ? locationLine(item.wine as ChosenWine)
+      : (item.wine as CellarWine).review_location ?? '';
+    const locFormatted = locText ? `\nWhere: ${locText}` : '';
+    const note = item.source === 'restaurant'
+      ? (item.wine as ChosenWine).tasting_note ?? ''
+      : (item.wine as CellarWine).user_notes ?? '';
+    const noteFormatted = note.trim() ? `\n\n"${note.trim()}"` : '';
+    try {
+      await Share.share({
+        message: `${header}${scoreText}${locFormatted}${noteFormatted}\n\nShared via Vinster`,
+        title: header,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   function handleChooseScan() {
     setChooserOpen(false);
@@ -304,6 +369,13 @@ export default function ChosenWinesScreen() {
             >
               <Text style={[styles.sortChipText, sortBy === 'score' && styles.sortChipTextActive]}>Top rated</Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.sortChip, sortBy === 'favourites' && styles.sortChipActive]}
+              onPress={() => setSortBy('favourites')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.sortChipText, sortBy === 'favourites' && styles.sortChipTextActive]}>Favourites</Text>
+            </TouchableOpacity>
           </View>
           <View style={styles.sortRow}>
             <Text style={styles.sortLabel}>Show:</Text>
@@ -358,12 +430,22 @@ export default function ChosenWinesScreen() {
                       {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                     </Text>
                     <View style={styles.scoreCluster}>
-                      {item.source === 'restaurant' && (item.wine as ChosenWine).is_favourite ? (
-                        <Text style={styles.favouriteStar}>★</Text>
-                      ) : null}
-                      {item.score != null && (
-                        <Text style={styles.scoreCompact}>{item.score}</Text>
-                      )}
+                      <View style={styles.scoreLine}>
+                        {item.source === 'restaurant' && (item.wine as ChosenWine).is_favourite ? (
+                          <Text style={styles.favouriteStar}>★</Text>
+                        ) : null}
+                        {item.score != null && (
+                          <Text style={styles.scoreCompact}>{item.score}</Text>
+                        )}
+                      </View>
+                      <TouchableOpacity
+                        onPress={() => handleShareReview(item)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel="Share this review"
+                      >
+                        <ShareIcon />
+                      </TouchableOpacity>
                     </View>
                   </View>
                   {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
@@ -380,11 +462,6 @@ export default function ChosenWinesScreen() {
                       You added this to your {note.kind} on {formatDate(note.date)}
                     </Text>
                   ) : null}
-                  <View style={styles.saveToCommunityRow}>
-                    <Text style={styles.saveToCommunityText}>
-                      Save to Community <Text style={styles.comingSoonInline}>(coming soon)</Text>
-                    </Text>
-                  </View>
                 </TouchableOpacity>
               );
             })
@@ -419,7 +496,10 @@ const styles = StyleSheet.create({
   wineNameCompact: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 2 },
   scoreCompact: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
-  scoreCluster: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
+  // Cluster sits as a column on the right: score (+ favourite star) at
+  // the top, the white share icon below it.
+  scoreCluster: { alignItems: 'flex-end', gap: spacing.xs },
+  scoreLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   favouriteStar: { fontSize: 18, color: colors.gold },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   addedNote: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: spacing.xs },
@@ -430,26 +510,6 @@ const styles = StyleSheet.create({
   sortChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   sortChipText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
   sortChipTextActive: { color: colors.gold },
-  saveToCommunityRow: {
-    marginTop: spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-    paddingTop: spacing.sm,
-    alignItems: 'center',
-  },
-  saveToCommunityText: {
-    fontSize: 13,
-    fontFamily: 'CormorantGaramond_600SemiBold',
-    color: 'rgba(212,176,96,0.45)',
-    letterSpacing: 0.3,
-  },
-  comingSoonInline: {
-    fontSize: 12,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
-    color: colors.textMuted,
-    textTransform: 'lowercase',
-    letterSpacing: 0.5,
-  },
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   chooserTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },

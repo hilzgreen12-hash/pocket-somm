@@ -21,11 +21,12 @@ export function FoodPairingInput({ value, onChange }: Props) {
 
 const styles = StyleSheet.create({
   input: {
-    paddingVertical: 4,
-    fontSize: 14,
+    paddingVertical: 6,
+    fontSize: 17,
+    lineHeight: 23,
     fontFamily: 'CormorantGaramond_600SemiBold',
     color: '#FFFFFF',
-    minHeight: 40,
+    minHeight: 44,
     textAlignVertical: 'top',
   },
 });
