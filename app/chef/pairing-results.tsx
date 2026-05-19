@@ -268,10 +268,11 @@ export default function PairingResultsScreen() {
                   <Text style={styles.archiveBtnText}>{archiving ? 'Archiving…' : 'Archive Wine'}</Text>
                 </TouchableOpacity>
 
-                <TouchableOpacity style={styles.secondaryBtn} onPress={closeSelect}>
-                  <Text style={styles.secondaryBtnText}>Back to wine results</Text>
-                </TouchableOpacity>
-
+                {/* "Back to wine results" used to sit above this — it
+                    fired the same closeSelect handler, so the two prompts
+                    were duplicates. Removed the upper one; the underlined
+                    Cancel selection now does the same job at the size
+                    "Back to wine results" used to use. */}
                 <TouchableOpacity onPress={closeSelect} style={styles.cancelLink}>
                   <Text style={styles.cancelLinkText}>Cancel selection</Text>
                 </TouchableOpacity>
@@ -324,5 +325,5 @@ const styles = StyleSheet.create({
   secondaryBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
   secondaryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.text },
   cancelLink: { alignItems: 'center', paddingVertical: spacing.md },
-  cancelLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
+  cancelLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });
