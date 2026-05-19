@@ -8,7 +8,7 @@ import { colors, spacing } from '../../src/constants/theme';
 // don't drift.
 
 const POLICY_VERSION = 'Version 1.0 · Last updated May 2026';
-const CONTACT_EMAIL = 'tellme@vinterapp.com';
+const CONTACT_EMAIL = 'tellme@vinsterapp.com';
 
 interface Section { title: string; body: string }
 

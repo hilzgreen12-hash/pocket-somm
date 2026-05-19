@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing } from '../src/constants/theme';
@@ -9,10 +9,16 @@ import { colors, spacing } from '../src/constants/theme';
 // (not a yes/no) and only let the user proceed when they're 18 or older
 // (the UK legal drinking age the founder is based in).
 //
-// Result is persisted to AsyncStorage so the gate only ever appears once
-// per device install. A re-install will re-prompt, which both stores allow.
+// Two AsyncStorage keys are used:
+//   AGE_GATE_KEY      — set when the user passes the gate; cleared only
+//                        by reinstalling the app.
+//   AGE_GATE_BLOCKED_KEY — set when the user enters an under-18 DOB;
+//                        persists across launches so a kill-and-relaunch
+//                        with a different date can't bypass the gate
+//                        (App Store Review Guideline 1.4.3).
 
 export const AGE_GATE_KEY = 'vinster_age_verified_at';
+export const AGE_GATE_BLOCKED_KEY = 'vinster_age_blocked_at';
 export const MIN_AGE_YEARS = 18;
 
 function ageInYears(dobIso: string, now: Date = new Date()): number {
@@ -33,26 +39,47 @@ export default function AgeGateScreen() {
   const [year, setYear] = useState('');
   const [rejected, setRejected] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  // null = still checking storage; once loaded we know whether to show
+  // the DOB form or the persisted-blocked screen.
+  const [storageLoaded, setStorageLoaded] = useState(false);
+  // Inline validation error (e.g. "31 Feb isn't a real date"). Was
+  // computed but never shown previously — that left the Continue button
+  // silently no-op'ing on impossible dates.
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const monthRef = useRef<TextInput>(null);
   const yearRef = useRef<TextInput>(null);
 
+  useEffect(() => {
+    // Check whether this device has been blocked on a previous run. If
+    // so, render the rejection screen straight away — no DOB re-entry.
+    AsyncStorage.getItem(AGE_GATE_BLOCKED_KEY)
+      .then((blocked) => {
+        if (blocked) setRejected(true);
+      })
+      .finally(() => setStorageLoaded(true));
+  }, []);
+
   // Auto-advance focus when each field hits its expected width so the
   // input feels like a single date control rather than three separate
-  // boxes the user has to tab through.
+  // boxes the user has to tab through. Each onChange clears any prior
+  // validation error so the user isn't stuck staring at a stale message.
   function onDayChange(text: string) {
     const cleaned = text.replace(/[^0-9]/g, '').slice(0, 2);
     setDay(cleaned);
+    if (validationError) setValidationError(null);
     if (cleaned.length === 2) monthRef.current?.focus();
   }
   function onMonthChange(text: string) {
     const cleaned = text.replace(/[^0-9]/g, '').slice(0, 2);
     setMonth(cleaned);
+    if (validationError) setValidationError(null);
     if (cleaned.length === 2) yearRef.current?.focus();
   }
   function onYearChange(text: string) {
     const cleaned = text.replace(/[^0-9]/g, '').slice(0, 4);
     setYear(cleaned);
+    if (validationError) setValidationError(null);
   }
 
   function validateDob(): { ok: true; iso: string; age: number } | { ok: false; reason: string } {
@@ -78,20 +105,32 @@ export default function AgeGateScreen() {
     if (submitting) return;
     const result = validateDob();
     if (!result.ok) {
-      setRejected(false);
+      // Surface the validation reason so the user knows why nothing's
+      // happening — previously the handler silently no-op'd.
+      setValidationError(result.reason);
       return;
     }
     if (result.age < MIN_AGE_YEARS) {
+      // Persist the block so a kill-and-relaunch can't bypass the gate
+      // by re-entering a different DOB. Apple/Google reviewers test this.
+      try {
+        await AsyncStorage.setItem(
+          AGE_GATE_BLOCKED_KEY,
+          JSON.stringify({ blockedAt: new Date().toISOString() }),
+        );
+      } catch {
+        // Even if storage fails, still show the rejection in-memory for
+        // this session. The next launch may not block — but the AsyncStorage
+        // surface is reliable enough that this is acceptable degradation.
+      }
       setRejected(true);
       return;
     }
     setSubmitting(true);
     try {
-      // Store the verification timestamp + the DOB so future features (e.g.
-      // birthday wishes, age-adjusted recommendations) can use it without
-      // re-prompting. The actual gate decision only cares that the key is
-      // present, but recording the value is cheap and useful.
-      await AsyncStorage.setItem(AGE_GATE_KEY, JSON.stringify({ verifiedAt: new Date().toISOString(), dob: result.iso }));
+      // Only the verification timestamp is stored — the DOB itself is PII
+      // we don't need to keep on disk after the gate decision is made.
+      await AsyncStorage.setItem(AGE_GATE_KEY, JSON.stringify({ verifiedAt: new Date().toISOString() }));
       router.replace('/');
     } catch {
       // AsyncStorage failure is exceptionally rare; let the user retry.
@@ -99,7 +138,20 @@ export default function AgeGateScreen() {
     }
   }
 
-  const dobLooksFilled = day.length > 0 && month.length > 0 && year.length === 4;
+  // Require fully-padded day/month so single-digit "1/1/2000" can't slip
+  // past the form validation — that was the only path to reach the
+  // silent-no-op branch on invalid dates.
+  const dobLooksFilled = day.length === 2 && month.length === 2 && year.length === 4;
+
+  if (!storageLoaded) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.gold} />
+        </View>
+      </View>
+    );
+  }
 
   if (rejected) {
     return (
@@ -111,12 +163,9 @@ export default function AgeGateScreen() {
           <Text style={styles.body}>
             Vinster is a wine app and is intended only for adults of legal drinking age.
           </Text>
-          <Text style={styles.body}>
-            If you've entered your date of birth incorrectly, you can try again.
-          </Text>
-          <TouchableOpacity style={styles.tryAgainBtn} onPress={() => { setRejected(false); setDay(''); setMonth(''); setYear(''); }}>
-            <Text style={styles.tryAgainText}>Try again</Text>
-          </TouchableOpacity>
+          {/* No "Try again" path — App Store Review Guideline 1.4.3 requires
+              the rejection to persist on the device. A user who genuinely
+              mistyped will need to reinstall the app to retry. */}
         </View>
       </View>
     );
@@ -174,6 +223,10 @@ export default function AgeGateScreen() {
           </View>
         </View>
 
+        {validationError ? (
+          <Text style={styles.validationError}>{validationError}</Text>
+        ) : null}
+
         <TouchableOpacity
           style={[styles.continueBtn, (!dobLooksFilled || submitting) && { opacity: 0.4 }]}
           onPress={handleContinue}
@@ -197,6 +250,7 @@ export default function AgeGateScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: 100, paddingBottom: spacing.xxl, alignItems: 'center' },
   brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: '#FFFFFF', letterSpacing: 8, marginBottom: spacing.sm },
   rule: { width: 80, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginBottom: spacing.lg },
@@ -211,6 +265,5 @@ const styles = StyleSheet.create({
   legalNote: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: spacing.lg, paddingHorizontal: spacing.sm },
   privacyLink: { marginTop: spacing.md, paddingVertical: spacing.sm },
   privacyLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.5 },
-  tryAgainBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, paddingHorizontal: spacing.xl, marginTop: spacing.lg },
-  tryAgainText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  validationError: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.error, textAlign: 'center', marginBottom: spacing.md, marginTop: -spacing.md },
 });

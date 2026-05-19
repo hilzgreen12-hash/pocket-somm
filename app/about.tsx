@@ -2,7 +2,7 @@ import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Linking } from 'r
 import { router } from 'expo-router';
 import { colors, spacing } from '../src/constants/theme';
 
-const FEEDBACK_EMAIL = 'tellme@vinterapp.com';
+const FEEDBACK_EMAIL = 'tellme@vinsterapp.com';
 
 interface Subsection {
   title: string;

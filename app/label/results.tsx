@@ -103,9 +103,24 @@ export default function LabelResultsScreen() {
   function computeSlots(
     startRow: number, startCol: number,
     totalRows: number, totalCols: number,
-    count: number, orient: 'Horizontal' | 'Vertical'
+    count: number, orient: 'Horizontal' | 'Vertical',
+    largeFormatCols?: number | null,
   ): Array<{ row: number; col: number }> {
     const result: Array<{ row: number; col: number }> = [];
+    // Large-format row (row_index = -1) is a one-row band above the
+    // standard grid. Cap placement to that row's width and force
+    // horizontal orientation so magnums can never bleed into 750ml slots.
+    const inLargeFormat = startRow === -1;
+    if (inLargeFormat) {
+      const lfCols = largeFormatCols ?? 0;
+      let col = startCol;
+      for (let i = 0; i < count; i++) {
+        if (col >= lfCols) break;
+        result.push({ row: -1, col });
+        col++;
+      }
+      return result;
+    }
     let row = startRow;
     let col = startCol;
     for (let i = 0; i < count; i++) {
@@ -223,7 +238,7 @@ export default function LabelResultsScreen() {
       // number of bottles from that slot — skipping any occupied slots in
       // the path — and set the wine's quantity to match what was placed.
       const requested = Math.max(1, parseInt(placeCount, 10) || 1);
-      const allSlots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, requested, placeOrientation);
+      const allSlots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, requested, placeOrientation, pendingSlot.largeFormatCols);
       const occupied = new Set(
         pendingRackSlots.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`),
       );

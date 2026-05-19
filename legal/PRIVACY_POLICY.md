@@ -92,4 +92,4 @@ We may update this policy from time to time. Material changes will be flagged in
 
 ## Contact us
 
-Questions, requests, or feedback — email us at **tellme@vinterapp.com**. We read everything.
+Questions, requests, or feedback — email us at **tellme@vinsterapp.com**. We read everything.

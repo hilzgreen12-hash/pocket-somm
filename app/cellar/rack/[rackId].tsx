@@ -162,13 +162,26 @@ export default function RackGridScreen() {
       setPlaceCount('1');
       setPlaceOrientation('Vertical');
     } else {
-      setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols });
+      setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols, largeFormatCols: rack.large_format_cols });
       router.push('/label/camera');
     }
   }
 
   function computePlacementSlots(startRow: number, startCol: number, count: number, orient: 'Vertical' | 'Horizontal') {
     const result: Array<{ row: number; col: number }> = [];
+    // Large-format row (row_index = -1) is a one-row band above the
+    // standard grid. Cap placement to that row's width — magnums must
+    // stay in their slots and never spill into 750ml slots below.
+    if (startRow === -1) {
+      const lfCols = rack?.large_format_cols ?? 0;
+      let col = startCol;
+      for (let i = 0; i < count; i++) {
+        if (col >= lfCols) break;
+        result.push({ row: -1, col });
+        col++;
+      }
+      return result;
+    }
     let row = startRow;
     let col = startCol;
     for (let i = 0; i < count; i++) {

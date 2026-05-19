@@ -6,6 +6,11 @@ export interface PendingSlot {
   col: number;
   rows: number;
   cols: number;
+  // Width of the rack's optional large-format row, when one exists. The
+  // placement routines need this to clamp multi-bottle placements that
+  // start at row_index = -1 to a single horizontal band — otherwise a
+  // magnum can spill into the standard grid below.
+  largeFormatCols?: number | null;
 }
 
 interface RackStore {
