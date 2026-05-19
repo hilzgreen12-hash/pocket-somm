@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -131,6 +131,86 @@ function PairingCard({
   );
 }
 
+// Card used for SAVED recipes — recipe name is the main header (replacing
+// the wine name), wine sits as subhead, and the full method is shown by
+// default (no expand/collapse). + SHARE and + FULL sit in the top-right.
+// A "View/Edit Your Recipe Notes" link opens the notes popup.
+function PairingCardSaved({
+  pairing,
+  wineLine,
+  hasNotes,
+  onShare,
+  onViewFull,
+  onOpenNotes,
+  sharing,
+}: {
+  pairing: Pairing;
+  wineLine: string;
+  hasNotes: boolean;
+  onShare: () => void;
+  onViewFull: () => void;
+  onOpenNotes: () => void;
+  sharing: boolean;
+}) {
+  return (
+    <View style={styles.savedCard}>
+      <View style={styles.savedHeaderRow}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.savedDishName}>{pairing.dishName}</Text>
+          <Text style={styles.savedChef}>Inspired by {pairing.chefInspiration}</Text>
+          {wineLine ? <Text style={styles.savedWineLine}>To pair with {wineLine}</Text> : null}
+        </View>
+        <View style={styles.savedHeaderActions}>
+          <TouchableOpacity
+            onPress={onViewFull}
+            onLongPress={onViewFull}
+            delayLongPress={400}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.cardShareLink}
+          >
+            <Text style={styles.cardShareLinkText}>+ FULL</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onShare}
+            onLongPress={onShare}
+            delayLongPress={400}
+            disabled={sharing}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.cardShareLink}
+          >
+            <Text style={[styles.cardShareLinkText, sharing && { opacity: 0.5 }]}>
+              {sharing ? 'PREPARING…' : '+ SHARE'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
+      <TouchableOpacity onPress={onOpenNotes} style={styles.savedNotesLink} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+        <Text style={styles.savedNotesLinkText}>
+          + {hasNotes ? 'View/Edit Your Recipe Notes' : 'Add Your Recipe Notes'}
+        </Text>
+      </TouchableOpacity>
+
+      <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
+      <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
+
+      <View style={styles.recipe}>
+        <Text style={styles.recipeIntro}>{pairing.introduction}</Text>
+
+        <Text style={styles.recipeSection}>Ingredients</Text>
+        {pairing.recipe.ingredients.map((ing, i) => (
+          <Text key={i} style={styles.recipeItem}>· {ing}</Text>
+        ))}
+
+        <Text style={[styles.recipeSection, { marginTop: spacing.md }]}>Method</Text>
+        {pairing.recipe.instructions.map((step, i) => (
+          <Text key={i} style={styles.recipeItem}>{step}</Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 export default function ChefResultsScreen() {
   const { fromHistory, sessionId, savedAt, city, from, wineId } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; savedAt?: string; city?: string; from?: string; wineId?: string }>();
   const isFromHistory = fromHistory === 'true';
@@ -158,7 +238,10 @@ export default function ChefResultsScreen() {
   const wine = isFromHistory ? (viewingSession?.wine ?? null) : wineDetailsConfirmed;
   const pairings = isFromHistory ? (viewingSession?.pairings ?? []) : freshPairings;
 
-  const [notesEditing, setNotesEditing] = useState(false);
+  // Notes for a saved recipe — previously edited inline at the bottom of
+  // the screen, now lifted into a popup modal reachable from the
+  // "+ View/Edit Your Recipe Notes" link on the recipe header.
+  const [notesModalOpen, setNotesModalOpen] = useState(false);
   const [notesDraft, setNotesDraft] = useState('');
   const [notesSaving, setNotesSaving] = useState(false);
 
@@ -173,7 +256,7 @@ export default function ChefResultsScreen() {
     try {
       const trimmed = notesDraft.trim();
       await updateNotes.mutateAsync({ id: viewingSession.id, notes: trimmed.length > 0 ? trimmed : null });
-      setNotesEditing(false);
+      setNotesModalOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -183,7 +266,7 @@ export default function ChefResultsScreen() {
 
   function handleCancelNotes() {
     setNotesDraft(viewingSession?.user_notes ?? '');
-    setNotesEditing(false);
+    setNotesModalOpen(false);
   }
 
   function formatNotesDate(iso: string | null | undefined): string | null {
@@ -393,86 +476,53 @@ export default function ChefResultsScreen() {
         </View>
       )}
 
-      <View style={styles.header}>
-        <Text style={styles.headerLine}>{headerLine}</Text>
-        {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
-
-      </View>
+      {/* Wine header is hidden for cookbook entries — the saved-recipe
+          card carries its own recipe-name-first layout with the wine
+          as subhead. Fresh-result flow keeps the wine header at top. */}
+      {!isFromHistory && (
+        <View style={styles.header}>
+          <Text style={styles.headerLine}>{headerLine}</Text>
+          {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
+        </View>
+      )}
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Chef-Inspired Pairings</Text>
-        {pairings.map((p, i) => (
-          <PairingCard
-            key={i}
-            pairing={p}
-            saveState={getSaveState(i)}
-            onSave={() => handleSavePairing(i)}
-            isFromHistory={isFromHistory}
-            onShare={() => handleSharePairing(i)}
-            sharing={sharingIndex === i}
-            onViewFull={() => {
-              // Cookbook entry → load by sessionId; fresh result → load by
-              // index into the labelStore.pairings array.
-              if (isFromHistory && sessionId) {
-                router.push(`/chef/recipe-full?sessionId=${encodeURIComponent(sessionId)}` as any);
-              } else {
-                router.push(`/chef/recipe-full?index=${i}` as any);
-              }
-            }}
-          />
-        ))}
-
-        {/* Your Recipe Notes bubble — shown when viewing a saved cookbook
-            entry. Sits below the recipe card in matching surface colour. */}
-        {viewingSession && (
-          <View style={styles.notesCard}>
-            <View style={styles.notesHeader}>
-              <Text style={styles.notesTitle}>Your Recipe Notes</Text>
-              {viewingSession.user_notes_updated_at ? (
-                <Text style={styles.notesDate}>Updated {formatNotesDate(viewingSession.user_notes_updated_at)}</Text>
-              ) : null}
-            </View>
-
-            {notesEditing ? (
-              <>
-                <TextInput
-                  style={styles.notesInput}
-                  value={notesDraft}
-                  onChangeText={setNotesDraft}
-                  placeholder="Tweaks, swaps, who you cooked it for…"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  numberOfLines={5}
-                  textAlignVertical="top"
-                  autoFocus
-                />
-                <View style={styles.notesActions}>
-                  <TouchableOpacity onPress={handleCancelNotes} disabled={notesSaving}>
-                    <Text style={styles.notesCancel}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.notesSaveBtn, notesSaving && styles.notesSaveBtnDisabled]}
-                    onPress={handleSaveNotes}
-                    disabled={notesSaving}
-                  >
-                    <Text style={styles.notesSaveBtnText}>{notesSaving ? 'Saving…' : 'Save Notes'}</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            ) : viewingSession.user_notes ? (
-              <>
-                <Text style={styles.notesBody}>{viewingSession.user_notes}</Text>
-                <TouchableOpacity onPress={() => setNotesEditing(true)}>
-                  <Text style={styles.notesEditLink}>Edit Notes</Text>
-                </TouchableOpacity>
-              </>
-            ) : (
-              <TouchableOpacity onPress={() => setNotesEditing(true)}>
-                <Text style={styles.notesEditLink}>+ Add Notes</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* "Chef-Inspired Pairings" section title is hidden for cookbook
+            entries — there's a single recipe and the dish name is the
+            new top header. */}
+        {!isFromHistory && (
+          <Text style={styles.sectionTitle}>Chef-Inspired Pairings</Text>
         )}
+        {pairings.map((p, i) => (
+          isFromHistory && viewingSession ? (
+            <PairingCardSaved
+              key={i}
+              pairing={p}
+              wineLine={wine ? wineHeaderLine(wine.producer, wine.wineName, wine.vintage) : ''}
+              hasNotes={!!viewingSession.user_notes?.trim()}
+              sharing={sharingIndex === i}
+              onShare={() => handleSharePairing(i)}
+              onViewFull={() => {
+                if (sessionId) router.push(`/chef/recipe-full?sessionId=${encodeURIComponent(sessionId)}` as any);
+              }}
+              onOpenNotes={() => setNotesModalOpen(true)}
+            />
+          ) : (
+            <PairingCard
+              key={i}
+              pairing={p}
+              saveState={getSaveState(i)}
+              onSave={() => handleSavePairing(i)}
+              isFromHistory={isFromHistory}
+              onShare={() => handleSharePairing(i)}
+              sharing={sharingIndex === i}
+              onViewFull={() => {
+                // Fresh result → load by index into labelStore.pairings.
+                router.push(`/chef/recipe-full?index=${i}` as any);
+              }}
+            />
+          )
+        ))}
       </View>
 
       {!isFromHistory && (
@@ -488,6 +538,49 @@ export default function ChefResultsScreen() {
         onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
         onContinue={() => setSignInPromptVisible(false)}
       />
+
+      {/* Recipe-notes popup — opened from the "View/Edit Your Recipe Notes"
+          link on the saved-recipe card. Replaces the old inline notes
+          editor block that used to sit at the bottom of the screen. */}
+      <Modal
+        visible={notesModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCancelNotes}
+      >
+        <TouchableOpacity style={styles.notesModalOverlay} activeOpacity={1} onPress={handleCancelNotes}>
+          <TouchableOpacity activeOpacity={1} style={styles.notesModalSheet} onPress={() => {}}>
+            <Text style={styles.notesModalTitle}>Your Recipe Notes</Text>
+            <Text style={styles.notesModalHint}>Tweaks, swaps, who you cooked it for — keep your own version of the recipe alongside Vinster's.</Text>
+            <TextInput
+              style={styles.notesModalInput}
+              value={notesDraft}
+              onChangeText={setNotesDraft}
+              placeholder="Your notes…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={6}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.notesModalActions}>
+              <TouchableOpacity onPress={handleCancelNotes} disabled={notesSaving}>
+                <Text style={styles.notesCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.notesSaveBtn, notesSaving && styles.notesSaveBtnDisabled]}
+                onPress={handleSaveNotes}
+                disabled={notesSaving}
+              >
+                <Text style={styles.notesSaveBtnText}>{notesSaving ? 'Saving…' : 'Save Notes'}</Text>
+              </TouchableOpacity>
+            </View>
+            {viewingSession?.user_notes_updated_at ? (
+              <Text style={styles.notesModalDate}>Last updated {formatNotesDate(viewingSession.user_notes_updated_at)}</Text>
+            ) : null}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       {/* Off-screen branded share card. Mounted only while a share is in
           flight so the remote QR image gets a fresh render each time. */}
@@ -556,4 +649,26 @@ const styles = StyleSheet.create({
   recipeItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
   regenLink: { alignItems: 'center', paddingVertical: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm },
   regenLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
+
+  // ---- Saved-recipe card (cookbook view) ----
+  // Same card shell as the fresh-result PairingCard but with a different
+  // header structure: recipe name big at the top, wine line below it,
+  // share/full links in the corner, and a notes-popup link.
+  savedCard: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
+  savedHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  savedDishName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.text, lineHeight: 30 },
+  savedChef: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, marginTop: 2 },
+  savedWineLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: spacing.xs, lineHeight: 20 },
+  savedHeaderActions: { flexDirection: 'row', gap: spacing.sm },
+  savedNotesLink: { paddingVertical: spacing.xs, alignSelf: 'flex-start', marginTop: spacing.xs },
+  savedNotesLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.3, textDecorationLine: 'underline' },
+
+  // ---- Notes popup modal ----
+  notesModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  notesModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  notesModalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  notesModalHint: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
+  notesModalInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 140, lineHeight: 22, marginBottom: spacing.md },
+  notesModalActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md },
+  notesModalDate: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm },
 });

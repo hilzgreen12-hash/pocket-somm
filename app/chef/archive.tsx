@@ -315,7 +315,8 @@ export default function ChefArchiveScreen() {
               <TouchableOpacity
                 key={item.key}
                 style={styles.card}
-                activeOpacity={0.9}
+                activeOpacity={0.7}
+                onPress={() => handleViewItem(item)}
                 onLongPress={() => handleLongPressItem(item)}
                 delayLongPress={400}
               >
@@ -343,12 +344,17 @@ export default function ChefArchiveScreen() {
                   </View>
                 ) : null}
 
+                {/* "+ Add to folder" sits at the bottom of the card; the
+                    inner Touchable claims the press so the outer card's
+                    onPress (open recipe) doesn't fire when this is tapped. */}
                 <View style={styles.cardActions}>
-                  <TouchableOpacity onPress={() => setAssigning(item)}>
+                  <TouchableOpacity
+                    onPress={() => setAssigning(item)}
+                    onLongPress={() => setAssigning(item)}
+                    delayLongPress={400}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
                     <Text style={styles.assignLink}>+ Add to folder</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewItem(item)}>
-                    <Text style={styles.viewBtnText}>View</Text>
                   </TouchableOpacity>
                 </View>
               </TouchableOpacity>
