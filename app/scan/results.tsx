@@ -13,6 +13,7 @@ import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useWishList } from '../../src/hooks/useCellar';
+import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
@@ -48,6 +49,7 @@ export default function ResultsScreen() {
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   const [wishlistIndexes, setWishlistIndexes] = useState<Set<number>>(new Set());
   const { addWine: addToWishList } = useWishList();
+  const { save: saveChosen } = useChosenWines();
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
   const [renderedAt] = useState(() => new Date().toISOString());
@@ -170,6 +172,41 @@ export default function ResultsScreen() {
   // post-save confirmation block on this screen.
 
   const isSaved = !!autoSave.data;
+
+  // Quick Select — the user says "I chose this one" without writing a
+  // full review. Writes a chosen_wines row with empty review fields so
+  // Vinster's personalisation has the signal but the user isn't pushed
+  // through the review modal. They can upgrade to a full review later
+  // via the Review Wine button on the expanded card.
+  async function handleQuickSelect(wine: WineRecommendation, i: number) {
+    if (!session || chosenIndexes.has(i)) return;
+    try {
+      const sid = isFromHistory
+        ? (sessionId ?? null)
+        : (autoSave.data?.[0]?.sessionId ?? null);
+      const cityValue = isFromHistory
+        ? (historyCity ?? '')
+        : (autoSave.data?.[0]?.city ?? '');
+      await saveChosen.mutateAsync({
+        wine,
+        scanSessionId: sid,
+        restaurantName: restaurantName ?? '',
+        city: cityValue,
+        tastingNote: '',
+        otherObservations: '',
+        userScore: null,
+        listPrice: null,
+        isFavourite: false,
+      });
+      setChosenIndexes((prev) => new Set([...prev, i]));
+      showAlert({
+        title: 'Noted',
+        body: "Your selection has been noted — Vinster will apply this to their understanding of your vinous amour.",
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   async function handleAddToWishlist(wine: WineRecommendation, i: number) {
     if (!session || wishlistIndexes.has(i)) return;
@@ -499,22 +536,26 @@ export default function ResultsScreen() {
                 </View>
               </TouchableOpacity>
 
-              {/* Chosen indicator */}
+              {/* Quick Select — primary CTA on the collapsed card. The
+                  user tells Vinster "I chose this one" without writing a
+                  full review. Once selected, the button switches to a
+                  read-only "✓ Selected" state; the user can still upgrade
+                  to a full review via the Review Wine button inside the
+                  expanded view below. */}
               {session && (
                 <TouchableOpacity
                   style={[styles.chosenButton, chosenIndexes.has(i) && styles.chosenButtonDone]}
                   onPress={() => {
                     if (chosenIndexes.has(i)) {
-                      // Wine has already been added — route to the reviews
-                      // list so the user can find it and tap to edit.
                       router.push('/wines/chosen');
                     } else {
-                      setChosenModalWine(wine);
+                      handleQuickSelect(wine, i);
                     }
                   }}
+                  disabled={saveChosen.isPending && !chosenIndexes.has(i)}
                 >
                   <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
-                    {chosenIndexes.has(i) ? 'View and Edit Your Wine Review' : 'Review This Wine'}
+                    {chosenIndexes.has(i) ? '✓ Selected · View in Your Wine Reviews' : 'Quick Select From List'}
                   </Text>
                 </TouchableOpacity>
               )}
@@ -547,20 +588,35 @@ export default function ResultsScreen() {
 
                   {!noVintages && <VintageWindowBadge assessment={wine.vintageAssessment} window={wine.drinkingWindow} />}
                   <RarityBadge rarity={wine.rarityAssessment} />
-                  <RationaleBlock text={wine.rationale} />
 
+                  {/* Review Wine + Add to Wish List sit above the sommelier
+                      note as the two-action set the user reaches for once
+                      they've read the badges. The Quick Select button at
+                      the top of the card is the no-friction signal path;
+                      these are the heavier actions. */}
                   {session && (
-                    <TouchableOpacity
-                      style={[styles.wishlistAddButton, wishlistIndexes.has(i) && styles.wishlistAddButtonDone]}
-                      onPress={() => handleAddToWishlist(wine, i)}
-                      disabled={wishlistIndexes.has(i) || addToWishList.isPending}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.wishlistAddButtonText, wishlistIndexes.has(i) && styles.wishlistAddButtonTextDone]}>
-                        {wishlistIndexes.has(i) ? '✓ Added to Wish List' : 'Add to Wish List'}
-                      </Text>
-                    </TouchableOpacity>
+                    <View style={styles.detailActionsRow}>
+                      <TouchableOpacity
+                        style={styles.detailActionBtn}
+                        onPress={() => setChosenModalWine(wine)}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.detailActionBtnText}>Review Wine</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.detailActionBtn, wishlistIndexes.has(i) && styles.detailActionBtnDone]}
+                        onPress={() => handleAddToWishlist(wine, i)}
+                        disabled={wishlistIndexes.has(i) || addToWishList.isPending}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.detailActionBtnText, wishlistIndexes.has(i) && styles.detailActionBtnTextDone]}>
+                          {wishlistIndexes.has(i) ? '✓ On Wish List' : 'Add to Wish List'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
                   )}
+
+                  <RationaleBlock text={wine.rationale} />
                 </View>
               )}
             </View>
@@ -893,6 +949,35 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   chosenButtonTextDone: {
+    color: colors.gold,
+  },
+  // Two-button row sitting above the sommelier's note on each expanded
+  // card — Review Wine (full review modal) + Add to Wish List, side by
+  // side. Buttons are equal-width via flex: 1.
+  detailActionsRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  detailActionBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  detailActionBtnDone: {
+    borderColor: colors.gold,
+    backgroundColor: 'rgba(212,176,96,0.10)',
+  },
+  detailActionBtnText: {
+    color: '#FFFFFF',
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 14,
+  },
+  detailActionBtnTextDone: {
     color: colors.gold,
   },
   topPickReasons: {
