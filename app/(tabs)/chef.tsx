@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
@@ -31,6 +31,11 @@ export default function ChefTab() {
   const { sessions: labelSessions } = useChefLabelHistory();
   const { sessions: pairingSessions } = useChefPairingHistory();
   const [message, setMessage] = useState<AppMessage | null>(null);
+  // Holds the picked image while prepareImageBase64 + scanLabel run.
+  // Surfaces a fullscreen overlay so the user sees their photo + a
+  // spinner instead of staring at the chef tab wondering if the upload
+  // landed. Cleared when navigation kicks in (or on error).
+  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
 
   function handleViewLastPairing() {
     if (generalResult || cellarResult) {
@@ -85,6 +90,11 @@ export default function ChefTab() {
     });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
+    // Show the picked photo + a "Reading the label…" overlay immediately
+    // so the user has feedback during the (sometimes multi-second)
+    // base64-prepare + Claude scan call. Same pattern the camera flow
+    // uses for live captures.
+    setUploadingImage(uri);
     try {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
@@ -94,6 +104,10 @@ export default function ChefTab() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
       router.push('/chef/confirm');
+    } finally {
+      // Clear after navigation so the overlay doesn't linger on the chef
+      // tab if the user swipes back to it before the confirm screen mounts.
+      setUploadingImage(null);
     }
   }
 
@@ -164,6 +178,24 @@ export default function ChefTab() {
         </TouchableOpacity>
       </Modal>
     </ScrollView>
+
+    {/* Upload-in-progress overlay — shows the picked image full-screen
+        with a spinner while prepareImageBase64 + scanLabel are running.
+        Without this the user sat staring at the chef tab for a few
+        seconds wondering whether their upload had landed. */}
+    <Modal visible={!!uploadingImage} transparent animationType="fade">
+      <View style={styles.uploadOverlay}>
+        {uploadingImage ? (
+          <Image source={{ uri: uploadingImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+        ) : null}
+        <View style={styles.uploadScrim} />
+        <View style={styles.uploadStatus}>
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.uploadStatusText}>Reading the label…</Text>
+        </View>
+      </View>
+    </Modal>
+
     <TabFooter />
     </TabSwipeView>
   );
@@ -171,6 +203,12 @@ export default function ChefTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Upload overlay — full-screen Modal showing the picked image with a
+  // dark scrim on top, gold spinner, and "Reading the label…" status text.
+  uploadOverlay: { flex: 1, backgroundColor: '#000' },
+  uploadScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  uploadStatus: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
+  uploadStatusText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: '#FFFFFF', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4, textAlign: 'center' },
   appName: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   profileNote: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },

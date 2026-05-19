@@ -12,9 +12,9 @@ import type { Pairing } from '../types/wine';
 // The bottom-right corner carries a remote QR code that points at the
 // Vinster install URL — recipients can scan it to grab the app.
 
-const INSTALL_URL = 'https://vinsterapp.com';
+import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 const QR_SIZE = 240;
-const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&format=png&margin=0&data=${encodeURIComponent(INSTALL_URL)}`;
+const QR_URL = `https://api.qrserver.com/v1/create-qr-code/?size=${QR_SIZE}x${QR_SIZE}&format=png&margin=0&data=${encodeURIComponent(VINSTER_INSTALL_URL)}`;
 
 interface Props {
   pairing: Pairing;
@@ -66,10 +66,10 @@ export const RecipeShareCard = forwardRef<View, Props>(({ pairing, wineHeader },
 
         <View style={styles.footer}>
           <View style={styles.footerCopy}>
-            <Text style={styles.footerHeadline}>INSTALL VINSTER</Text>
+            <Text style={styles.footerHeadline}>{VINSTER_GET_LABEL}</Text>
             <Text style={styles.footerLine}>Scan the QR or visit</Text>
-            <Text style={styles.footerUrl}>{INSTALL_URL}</Text>
-            <Text style={styles.footerTagline}>Your pocket sommelier — wine, food, restaurants.</Text>
+            <Text style={styles.footerUrl}>{VINSTER_INSTALL_URL.replace(/^https?:\/\//, '')}</Text>
+            <Text style={styles.footerTagline}>{VINSTER_TAGLINE}</Text>
           </View>
           <View style={styles.qrWrap}>
             <Image source={{ uri: QR_URL }} style={styles.qr} />
@@ -81,7 +81,7 @@ export const RecipeShareCard = forwardRef<View, Props>(({ pairing, wineHeader },
 });
 
 export const RECIPE_SHARE_QR_URL = QR_URL;
-export const RECIPE_SHARE_INSTALL_URL = INSTALL_URL;
+export const RECIPE_SHARE_INSTALL_URL = VINSTER_INSTALL_URL;
 
 const CARD_WIDTH = 1080;
 

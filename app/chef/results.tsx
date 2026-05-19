@@ -23,6 +23,7 @@ function PairingCard({
   isFromHistory,
   onShare,
   sharing,
+  onViewFull,
 }: {
   pairing: Pairing;
   saveState: 'idle' | 'saving' | 'saved';
@@ -30,13 +31,45 @@ function PairingCard({
   isFromHistory: boolean;
   onShare: () => void;
   sharing: boolean;
+  onViewFull: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
     <View style={styles.card}>
       <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.8}>
-        <Text style={styles.dishName}>{pairing.dishName}</Text>
+        <View style={styles.cardHeaderRow}>
+          <Text style={[styles.dishName, { flex: 1 }]}>{pairing.dishName}</Text>
+          {/* Two corner actions — both claim press + long-press so the
+              outer expand/collapse toggle doesn't fire when the user
+              taps either. "+ FULL" opens the dedicated full-screen view
+              for sharing / printing; "+ SHARE" is the in-card quick path. */}
+          <TouchableOpacity
+            onPress={onViewFull}
+            onLongPress={onViewFull}
+            delayLongPress={400}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.cardShareLink}
+            accessibilityRole="button"
+            accessibilityLabel="View this recipe in full screen"
+          >
+            <Text style={styles.cardShareLinkText}>+ FULL</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onShare}
+            onLongPress={onShare}
+            delayLongPress={400}
+            disabled={sharing}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.cardShareLink}
+            accessibilityRole="button"
+            accessibilityLabel="Share this recipe"
+          >
+            <Text style={[styles.cardShareLinkText, sharing && { opacity: 0.5 }]}>
+              {sharing ? 'PREPARING…' : '+ SHARE'}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
         <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
         <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
@@ -377,6 +410,15 @@ export default function ChefResultsScreen() {
             isFromHistory={isFromHistory}
             onShare={() => handleSharePairing(i)}
             sharing={sharingIndex === i}
+            onViewFull={() => {
+              // Cookbook entry → load by sessionId; fresh result → load by
+              // index into the labelStore.pairings array.
+              if (isFromHistory && sessionId) {
+                router.push(`/chef/recipe-full?sessionId=${encodeURIComponent(sessionId)}` as any);
+              } else {
+                router.push(`/chef/recipe-full?index=${i}` as any);
+              }
+            }}
           />
         ))}
 
@@ -479,6 +521,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
   dishName: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
+  // Header row hosting dishName + the quick "+ SHARE" link in the corner.
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  cardShareLink: { paddingHorizontal: spacing.xs, paddingVertical: 2 },
+  cardShareLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 12, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase' },
   chefInspiration: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: 2 },
   recipeMetaInline: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, marginTop: 4, letterSpacing: 0.3 },
   pairingNotes: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
