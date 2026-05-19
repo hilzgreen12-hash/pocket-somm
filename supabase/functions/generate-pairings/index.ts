@@ -2,7 +2,12 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-function buildPrompt(wine: Record<string, string | null>, filters: Record<string, unknown>): string {
+function buildPrompt(
+  wine: Record<string, string | null>,
+  filters: Record<string, unknown>,
+  excludeChefs: string[],
+  additionalRequest: string | null,
+): string {
   const vintageStr = wine.vintage === 'NV' ? 'Non-Vintage (NV)' : wine.vintage;
   const wineNameStr = wine.wineName ? `\n- Wine Name: ${wine.wineName}` : '';
   const colourStr = wine.style ? `\n- Style: ${wine.style} (confirmed by user — treat this as definitive)` : '';
@@ -91,13 +96,33 @@ function buildPrompt(wine: Record<string, string | null>, filters: Record<string
       ? '\nRegional Variety (HARD RULE — when the user has set no cuisine preference): the three recipes must each draw from a DIFFERENT regional/cuisine tradition. Spread them across distinct origins (for example: one Italian, one Middle Eastern, one Latin American — or one French bistro, one Japanese-influenced, one North African). Do NOT anchor two or three recipes in the same tradition. Asian-influenced fills one slot per the diversity rule above; the remaining two must come from two further, different regions.\n'
       : '';
 
+  // When the user taps "generate another set", we feed back the chefs
+  // (and dish names if we ever extend this) that already appeared in
+  // previous rounds so Claude doesn't churn out near-duplicates. The
+  // hard-rule wording matters — without it the model treats this as a
+  // soft nudge and still falls back on its favourites.
+  const excludeChefsBlock =
+    excludeChefs.length > 0
+      ? `\nChef Diversity (HARD RULE — these chefs have already been used in earlier sets for this same wine and MUST NOT appear again): ${excludeChefs.join(', ')}. Pick three entirely different chefs whose styles still fit this wine. Reach beyond the most-cited names — French, Italian, Spanish, Japanese, Mexican, Peruvian, Lebanese, Indian, Turkish, Nordic and modern American chefs all qualify. Each of the three new recipes must be inspired by a chef NOT in the above list AND not by a chef who has already been used in this conversation context.\n`
+      : '';
+
+  // Free-form user request from the regen modal — e.g. "Show me
+  // Japanese inspired pairings" or "recipes with fresh vegetables".
+  // Treated as a strong soft preference: the model should lean into it
+  // across the set but not abandon pairing quality to satisfy a brief
+  // that contradicts the wine.
+  const additionalRequestBlock =
+    additionalRequest && additionalRequest.trim().length > 0
+      ? `\nUser's Steer For This Set (STRONG PREFERENCE — apply across all three recipes where the wine allows): "${additionalRequest.trim()}". Lean firmly into this direction. If the wine is genuinely poorly suited to the request, prioritise pairing quality and explain the connection — but try hard to honour the user's brief.\n`
+      : '';
+
   return `You are a world-class sommelier and food pairing expert. Analyse this wine and suggest three outstanding dish pairings with full chef-inspired recipes.
 
 Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${difficultyBlock}${diversityBlock}${timeBlock}
+${constraintBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:
@@ -124,12 +149,27 @@ Ensure recipes are complete, detailed, and genuinely worthy of the chef inspirat
 
 Deno.serve(async (req) => {
   try {
-    const { wine, filters } = await req.json();
+    const { wine, filters, excludeChefs, additionalRequest } = await req.json();
+    const excludeChefsList = Array.isArray(excludeChefs)
+      ? (excludeChefs as unknown[]).filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+      : [];
+    const additionalRequestText = typeof additionalRequest === 'string' && additionalRequest.trim().length > 0
+      ? additionalRequest
+      : null;
+
+    // Bump temperature on regeneration rounds (anything that ships an
+    // excludeChefs list or a steer is by definition a regen). Default
+    // SDK temperature is around 1.0; pushing to 1.0 explicitly + giving
+    // the model the exclude list is what actually breaks the
+    // "same three chefs every time" loop the user reported.
+    const isRegeneration = excludeChefsList.length > 0 || !!additionalRequestText;
+    const temperature = isRegeneration ? 1.0 : 0.8;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
       max_tokens: 8192,
-      messages: [{ role: 'user', content: buildPrompt(wine, filters ?? {}) }],
+      temperature,
+      messages: [{ role: 'user', content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText) }],
     });
 
     const text = response.content.find((b) => b.type === 'text')?.text ?? '';

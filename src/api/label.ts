@@ -42,8 +42,19 @@ export async function getWineIntelligence(wine: WineDetailsComplete, currency: s
   return data;
 }
 
-export async function generatePairings(wine: WineDetailsComplete, filters: DietaryFilters): Promise<Pairing[]> {
-  const data = await invokeFunction('generate-pairings', { wine, filters }) as { pairings: Pairing[] };
+export async function generatePairings(
+  wine: WineDetailsComplete,
+  filters: DietaryFilters,
+  options?: { excludeChefs?: string[]; additionalRequest?: string | null },
+): Promise<Pairing[]> {
+  const data = await invokeFunction('generate-pairings', {
+    wine,
+    filters,
+    // Backwards-compatible: omitted keys are treated as defaults by the
+    // edge function (no excludes, no steer).
+    excludeChefs: options?.excludeChefs ?? [],
+    additionalRequest: options?.additionalRequest ?? null,
+  }) as { pairings: Pairing[] };
   return data.pairings;
 }
 

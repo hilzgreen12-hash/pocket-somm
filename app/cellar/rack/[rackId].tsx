@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -76,6 +77,39 @@ export default function RackGridScreen() {
   }, []);
 
   const rack = racks.find((r) => r.id === rackId);
+
+  // Inter-rack swipe — mirrors the pattern in TabSwipeView: horizontal
+  // pan with 30px activation threshold, fails on >30px vertical so the
+  // inner vertical ScrollView still gets its turn. Tap-targets on the
+  // arrow row provide a fallback for wide racks whose horizontal grid
+  // scroll competes with the gesture, and for accessibility.
+  const currentIndex = racks.findIndex((r) => r.id === rackId);
+  const prevRack = currentIndex > 0 ? racks[currentIndex - 1] : null;
+  const nextRack = currentIndex >= 0 && currentIndex < racks.length - 1 ? racks[currentIndex + 1] : null;
+  // Clear search + highlight when the user swipes to another rack so
+  // they don't carry over a stale query from the previous one.
+  useEffect(() => {
+    setSearchQuery('');
+    setHighlightedWineId(null);
+    // Don't reset moving/pending placement state — those are global
+    // workflows (Wish List → place in rack) that should survive a
+    // sideways navigation.
+  }, [rackId]);
+  const swipeGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-30, 30])
+        .failOffsetY([-30, 30])
+        .runOnJS(true)
+        .onEnd((e) => {
+          if (e.translationX < -80 && nextRack) {
+            router.replace(`/cellar/rack/${nextRack.id}` as any);
+          } else if (e.translationX > 80 && prevRack) {
+            router.replace(`/cellar/rack/${prevRack.id}` as any);
+          }
+        }),
+    [prevRack?.id, nextRack?.id],
+  );
 
   const slotMap = useMemo(() => {
     const map: Record<string, RackSlot> = {};
@@ -392,14 +426,18 @@ export default function RackGridScreen() {
   }
 
   return (
+    <GestureDetector gesture={swipeGesture}>
     <View style={styles.container}>
       <View style={styles.header}>
         {/* A rack can be reached at the end of a scan / rack-build flow,
             so router.back() can land on a scanner screen (or no-op).
-            Navigate to the racks landing page ("Wine Racks & Fridges") —
-            it sits above this screen in the user's mental hierarchy and
-            popping the whole scanner stack off the way to it is fine. */}
-        <TouchableOpacity onPress={() => router.navigate('/cellar/racks')}>
+            dismissTo pops the stack down to the existing racks landing
+            page if it's already there (Cellar tab → Racks → Rack), and
+            collapses the scanner stack (Cellar tab → Racks → Camera →
+            Detect → Rack) the same way. Using router.navigate() here
+            pushed a SECOND copy of racks onto the stack, which then
+            looped the user back through the rack on the next Back. */}
+        <TouchableOpacity onPress={() => router.dismissTo('/cellar/racks')}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
@@ -416,6 +454,38 @@ export default function RackGridScreen() {
           <Text style={styles.rotateBtnText}>{isLandscape ? '↺ Portrait' : '↻ Landscape'}</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Inter-rack swipe indicator + tap-targets. Only renders when the
+          user has more than one rack/fridge — otherwise there's nothing
+          to swipe to. Arrows are disabled (greyed) at the edges of the
+          list rather than hidden so the affordance stays stable. */}
+      {racks.length > 1 && (
+        <View style={styles.swipeBar}>
+          <TouchableOpacity
+            style={styles.swipeSide}
+            onPress={() => prevRack && router.replace(`/cellar/rack/${prevRack.id}` as any)}
+            disabled={!prevRack}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.swipeArrow, !prevRack && styles.swipeArrowDisabled]} numberOfLines={1}>
+              ← {prevRack?.name ?? ''}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.swipeCount}>
+            {currentIndex + 1} of {racks.length}
+          </Text>
+          <TouchableOpacity
+            style={[styles.swipeSide, { alignItems: 'flex-end' }]}
+            onPress={() => nextRack && router.replace(`/cellar/rack/${nextRack.id}` as any)}
+            disabled={!nextRack}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={[styles.swipeArrow, !nextRack && styles.swipeArrowDisabled]} numberOfLines={1}>
+              {nextRack?.name ?? ''} →
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.legend}>
         {Object.entries({ peak: 'Peak', approaching: 'Approaching', too_young: 'Too Young', declining: 'Declining' }).map(([k, v]) => (
@@ -751,6 +821,7 @@ export default function RackGridScreen() {
         </View>
       </Modal>
     </View>
+    </GestureDetector>
   );
 }
 
@@ -762,6 +833,14 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'center', letterSpacing: 1 },
   rotateBtn: { alignItems: 'flex-end', width: 80 },
   rotateBtnText: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Inter-rack swipe bar — small gold arrows + count, sits directly
+  // below the rack-name header so the user sees the swipe affordance
+  // before they reach for the grid.
+  swipeBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: spacing.sm },
+  swipeSide: { flex: 1, paddingVertical: 4 },
+  swipeArrow: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.3 },
+  swipeArrowDisabled: { color: colors.textMuted, opacity: 0.4 },
+  swipeCount: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   scrollHint: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingBottom: spacing.xs },
   placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   placeSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },

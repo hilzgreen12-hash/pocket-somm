@@ -24,6 +24,7 @@ export default function WishlistNoteScreen() {
   const [note, setNote] = useState('');
   const [location, setLocation] = useState('');
   const [initialised, setInitialised] = useState(false);
+  const [vinsterNotesOpen, setVinsterNotesOpen] = useState(false);
 
   // Seed the fields once the wine has loaded; don't fight subsequent
   // edits by re-syncing from the cached row on every render.
@@ -139,6 +140,77 @@ export default function WishlistNoteScreen() {
           textAlignVertical="top"
           autoFocus={!wine.tasting_notes && !wine.user_notes}
         />
+
+        {/* Vinster's notes for this wine — mirrors the expandable block
+            in EditChosenWineModal so the user can revisit the AI's view
+            of THIS bottle from the wish-list screen too. The wish-list
+            row carries a narrower subset of Vinster fields than a
+            chosen-wine review (critic score + drinking window only —
+            rationale/vintage/rarity live on the ChosenWine type), so
+            those are the rows we render. */}
+        {(() => {
+          const hasVinsterNotes =
+            wine.critic_score != null ||
+            !!wine.critic_score_note ||
+            wine.drinking_window_from != null ||
+            wine.drinking_window_to != null ||
+            (wine.drinking_window_status && wine.drinking_window_status !== 'unknown');
+          if (!hasVinsterNotes) return null;
+          const drinkingRange =
+            wine.drinking_window_from != null && wine.drinking_window_to != null
+              ? `${wine.drinking_window_from}–${wine.drinking_window_to}`
+              : wine.drinking_window_from != null
+                ? `${wine.drinking_window_from}`
+                : wine.drinking_window_to != null
+                  ? `${wine.drinking_window_to}`
+                  : null;
+          const drinkingStatus =
+            wine.drinking_window_status && wine.drinking_window_status !== 'unknown'
+              ? wine.drinking_window_status
+              : null;
+          const hasDrinkingWindow = !!(drinkingRange || drinkingStatus);
+          return (
+            <View style={styles.vinsterWrap}>
+              <TouchableOpacity
+                onPress={() => setVinsterNotesOpen((v) => !v)}
+                activeOpacity={0.7}
+                style={styles.vinsterLink}
+              >
+                <Text style={styles.vinsterLinkText}>
+                  {vinsterNotesOpen ? 'Hide Vinster’s notes for this wine' : 'View Vinster’s notes for this wine →'}
+                </Text>
+              </TouchableOpacity>
+
+              {vinsterNotesOpen ? (
+                <View style={styles.vinsterBlock}>
+                  <Text style={styles.vinsterIntro}>Vinster sifted dozens of sources to present to you:</Text>
+                  {wine.critic_score != null ? (
+                    <View style={styles.vinsterRow}>
+                      <Text style={styles.vinsterLabel}>Critic Score</Text>
+                      <Text style={styles.vinsterScore}>{wine.critic_score} <Text style={styles.vinsterScoreUnit}>pts</Text></Text>
+                    </View>
+                  ) : wine.critic_score_note ? (
+                    <View style={styles.vinsterField}>
+                      <Text style={styles.vinsterLabel}>Critic Score</Text>
+                      <Text style={styles.vinsterFieldBody}>{wine.critic_score_note}</Text>
+                    </View>
+                  ) : null}
+
+                  {hasDrinkingWindow ? (
+                    <View style={styles.vinsterField}>
+                      <Text style={styles.vinsterLabel}>Drinking Window</Text>
+                      <Text style={styles.vinsterFieldValue}>
+                        {drinkingRange ? drinkingRange : ''}
+                        {drinkingRange && drinkingStatus ? ' · ' : ''}
+                        {drinkingStatus ?? ''}
+                      </Text>
+                    </View>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          );
+        })()}
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -158,4 +230,18 @@ const styles = StyleSheet.create({
   noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 200, lineHeight: 22 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center' },
+  // Vinster notes expandable block — values copied from
+  // EditChosenWineModal so the two surfaces read identically.
+  vinsterWrap: { marginTop: spacing.lg, marginBottom: spacing.sm },
+  vinsterLink: { alignItems: 'flex-start', paddingVertical: spacing.xs },
+  vinsterLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  vinsterIntro: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, lineHeight: 19 },
+  vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, marginTop: spacing.xs, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)' },
+  vinsterRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
+  vinsterLabel: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
+  vinsterScore: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold },
+  vinsterScoreUnit: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold },
+  vinsterField: { gap: 2 },
+  vinsterFieldValue: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.text },
+  vinsterFieldBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, lineHeight: 21 },
 });
