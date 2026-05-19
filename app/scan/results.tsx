@@ -14,6 +14,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
@@ -49,7 +50,7 @@ export default function ResultsScreen() {
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   const [wishlistIndexes, setWishlistIndexes] = useState<Set<number>>(new Set());
   const { addWine: addToWishList } = useWishList();
-  const { save: saveChosen } = useChosenWines();
+  const { save: saveChosen, update: updateChosen, chosenWines } = useChosenWines();
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
   const [renderedAt] = useState(() => new Date().toISOString());
@@ -178,6 +179,15 @@ export default function ResultsScreen() {
   // Vinster's personalisation has the signal but the user isn't pushed
   // through the review modal. They can upgrade to a full review later
   // via the Review Wine button on the expanded card.
+  //
+  // Duplicate behaviour: if a review for this wine identity already
+  // exists, we don't create a second row. Instead we update the
+  // existing review's other_observations with a dated "Selected at X"
+  // line so the user's history reads as a small log of when they've
+  // chosen this wine. Mirrors the user's mental model: ordering a wine
+  // they've had before should reinforce the existing review, not
+  // fragment it. Same-scan-session re-taps are a silent no-op (the chip
+  // just flips to Chosen).
   async function handleQuickSelect(wine: WineRecommendation, i: number) {
     if (!session || chosenIndexes.has(i)) return;
     try {
@@ -187,10 +197,65 @@ export default function ResultsScreen() {
       const cityValue = isFromHistory
         ? (historyCity ?? '')
         : (autoSave.data?.[0]?.city ?? '');
+      const currentRestaurant = restaurantName ?? '';
+
+      const existing = findExistingReview(chosenWines, {
+        producer: wine.producer,
+        wineName: wine.name,
+        vintage: wine.vintage,
+      });
+
+      if (existing) {
+        // Same scan session → the user already noted this wine on this
+        // list (probably tapped Quick Select twice). Treat as a no-op
+        // so we don't add duplicate "Selected at" lines for one event.
+        if (existing.scan_session_id && sid && existing.scan_session_id === sid) {
+          setChosenIndexes((prev) => new Set([...prev, i]));
+          showAlert({
+            title: 'Already noted',
+            body: "You've already chosen this wine on this list.",
+          });
+          return;
+        }
+
+        // Different occasion (or no scan-session info to compare) →
+        // append a dated "Selected at {place}" line to the existing
+        // review's other_observations, keeping their original tasting
+        // note, score and where/when intact. The new place lives in
+        // the dated entry rather than overwriting the existing
+        // restaurant_name/city so the original review context survives.
+        const places = [currentRestaurant.trim(), (cityValue ?? '').trim()]
+          .filter(Boolean)
+          .join(', ');
+        const selectionLine = places ? `Selected at ${places}.` : 'Selected again.';
+        const label = todayLabel();
+        await updateChosen.mutateAsync({
+          id: existing.id,
+          input: {
+            restaurantName: existing.restaurant_name ?? '',
+            city: existing.city ?? '',
+            tastingNote: existing.tasting_note ?? '',
+            otherObservations: appendDatedEntry(existing.other_observations, selectionLine, label),
+            userScore: existing.user_score,
+            listPrice: existing.menu_price,
+            isFavourite: existing.is_favourite,
+            producer: existing.producer,
+            wineName: existing.wine_name,
+            vintage: existing.vintage,
+          },
+        });
+        setChosenIndexes((prev) => new Set([...prev, i]));
+        showAlert({
+          title: 'Noted',
+          body: "Added to your existing review for this wine — Vinster will fold this latest selection into your vinous amour.",
+        });
+        return;
+      }
+
       await saveChosen.mutateAsync({
         wine,
         scanSessionId: sid,
-        restaurantName: restaurantName ?? '',
+        restaurantName: currentRestaurant,
         city: cityValue,
         tastingNote: '',
         otherObservations: '',

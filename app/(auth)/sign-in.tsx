@@ -36,7 +36,7 @@ export default function SignIn() {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Vinster</Text>
-      <Text style={styles.subtitle}>Your personal sommelier</Text>
+      <Text style={styles.subtitle}>Your personal AI sommelier</Text>
 
       <TextInput
         style={styles.input}

@@ -47,7 +47,7 @@ export default function SignUp() {
   return (
     <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Save your preferences and allow Vinster to learn from your selections. Your personal sommelier awaits.</Text>
+      <Text style={styles.subtitle}>Save your preferences and allow Vinster to learn from your selections. Your personal AI sommelier awaits.</Text>
 
       <TextInput
         style={styles.input}
