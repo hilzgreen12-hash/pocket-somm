@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/theme';
+import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 import type { WineRecommendation } from '../types/wine';
 
 // Branded card for sharing wine recommendations from the List flow.
@@ -74,8 +75,9 @@ export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaur
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerLine}>DOWNLOAD VINSTER</Text>
-          <Text style={styles.footerCta}>Your pocket sommelier</Text>
+          <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
+          <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
+          <Text style={styles.footerUrl}>{VINSTER_INSTALL_URL.replace(/^https?:\/\//, '')}</Text>
         </View>
       </View>
     </View>
@@ -127,5 +129,6 @@ const styles = StyleSheet.create({
   wineDetail: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: 'rgba(255,255,255,0.85)', lineHeight: 38 },
   footer: { alignItems: 'center', marginTop: 44 },
   footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 28, color: 'rgba(255,255,255,0.70)', marginTop: 8 },
+  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },
+  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: '#FFFFFF', marginTop: 8, letterSpacing: 0.5 },
 });

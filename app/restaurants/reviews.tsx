@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
 import { router } from 'expo-router';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -7,6 +7,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
+import { ShareIcon } from '../../src/components/ShareIcon';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
@@ -25,6 +27,61 @@ type RatingFilter = 'all' | '5' | '4plus' | '3plus';
 
 export default function RestaurantReviewsScreen() {
   const { archive, archiveLoading, removeArchiveItem } = useScanHistory();
+
+  // Render a single rating as a "★★★★☆ (4/5)" plain-text line for the
+  // share text body. Returns null when the rating is missing.
+  function ratingLine(label: string, value: number | null): string | null {
+    if (value == null) return null;
+    const stars = '★'.repeat(value) + '☆'.repeat(5 - value);
+    return `${label}: ${stars} (${value}/5)`;
+  }
+
+  // Build the plain-text version of a restaurant visit + hand it to the
+  // native share sheet. Includes restaurant name, city, visit date, all
+  // ratings present, the user's note, and any wines they chose at that
+  // visit. Matches the per-review share function on Your Wine Reviews.
+  async function handleShareRestaurant(item: ScanArchiveItem) {
+    const restaurant = item.restaurantName?.trim() || 'Restaurant visit';
+    const header = item.city?.trim()
+      ? `${restaurant} · ${item.city.trim()}`
+      : restaurant;
+    const date = formatDate(item.capturedAt);
+
+    const ratings = [
+      ratingLine('Overall',  item.ratingOverall),
+      ratingLine('Food',     item.ratingFood),
+      ratingLine('Service',  item.ratingService),
+      ratingLine('Wine list', item.ratingWineList),
+    ].filter(Boolean).join('\n');
+
+    const note = item.restaurantNote?.trim()
+      ? `\n\n"${item.restaurantNote.trim()}"`
+      : '';
+
+    const chosen = findChosenForVisit(item);
+    const winesBlock = chosen.length === 0
+      ? ''
+      : '\n\nWines I had:\n' + chosen.map((cw) => {
+          const wineLine = [cw.producer, cw.wine_name, cw.vintage]
+            .filter((x) => x != null && String(x).trim().length > 0)
+            .join(' · ');
+          const score = cw.user_score != null ? ` (${cw.user_score}/100)` : '';
+          return `· ${wineLine}${score}`;
+        }).join('\n');
+
+    const message =
+      `${header}\n${date}` +
+      (ratings ? `\n\n${ratings}` : '') +
+      note +
+      winesBlock +
+      VINSTER_TEXT_SHARE_FOOTER;
+
+    try {
+      await Share.share({ message, title: restaurant });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   function handleLongPressRestaurant(item: ScanArchiveItem) {
     const label = item.restaurantName?.trim() || 'this restaurant';
@@ -242,9 +299,23 @@ export default function RestaurantReviewsScreen() {
                       <Text style={styles.restaurantName} numberOfLines={1}>
                         {item.restaurantName || 'Unnamed restaurant'}
                       </Text>
-                      {item.ratingOverall != null && (
-                        <StarRating value={item.ratingOverall} size={14} readonly />
-                      )}
+                      <View style={styles.rightCluster}>
+                        {item.ratingOverall != null && (
+                          <StarRating value={item.ratingOverall} size={14} readonly />
+                        )}
+                        <TouchableOpacity
+                          onPress={() => handleShareRestaurant(item)}
+                          // Claim the long-press too so holding the share
+                          // icon doesn't fire the parent card's delete prompt.
+                          onLongPress={() => handleShareRestaurant(item)}
+                          delayLongPress={400}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Share this restaurant review"
+                        >
+                          <ShareIcon />
+                        </TouchableOpacity>
+                      </View>
                     </View>
                     <View style={styles.cardCompactMetaRow}>
                       <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
@@ -344,7 +415,9 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
-  cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
+  cardCompactRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
+  // Star rating sits above the share icon on the right of each card.
+  rightCluster: { alignItems: 'flex-end', gap: spacing.xs },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   restaurantName: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },

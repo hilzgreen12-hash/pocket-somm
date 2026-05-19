@@ -7,6 +7,8 @@ import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
+import { ShareIcon } from '../../src/components/ShareIcon';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -48,35 +50,6 @@ function wineIdentityKey(
 type ReviewItem =
   | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
-
-// Three-prong share icon drawn with bordered Views — three small white
-// circles in a triangular arrangement, joined by two thin diagonals.
-// Mirrors the Android share glyph; tappable from the score cluster on
-// each review card to hand the review to the native share sheet.
-function ShareIcon() {
-  return (
-    <View style={shareIconStyles.box}>
-      <View style={[shareIconStyles.line, shareIconStyles.lineTop]} />
-      <View style={[shareIconStyles.line, shareIconStyles.lineBottom]} />
-      <View style={[shareIconStyles.node, shareIconStyles.nodeTopRight]} />
-      <View style={[shareIconStyles.node, shareIconStyles.nodeMiddleLeft]} />
-      <View style={[shareIconStyles.node, shareIconStyles.nodeBottomRight]} />
-    </View>
-  );
-}
-
-const shareIconStyles = StyleSheet.create({
-  box: { width: 22, height: 24, position: 'relative' },
-  node: { position: 'absolute', width: 7, height: 7, borderRadius: 3.5, borderWidth: 1.2, borderColor: '#FFFFFF', backgroundColor: '#000000' },
-  nodeTopRight: { top: 0, right: 0 },
-  nodeMiddleLeft: { top: 8.5, left: 0 },
-  nodeBottomRight: { bottom: 0, right: 0 },
-  line: { position: 'absolute', height: 1, backgroundColor: '#FFFFFF' },
-  // Diagonal from the middle-left node to the top-right node.
-  lineTop: { width: 18, left: 2, top: 7, transform: [{ rotate: '-30deg' }] },
-  // Diagonal from the middle-left node to the bottom-right node.
-  lineBottom: { width: 18, left: 2, top: 16, transform: [{ rotate: '30deg' }] },
-});
 
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
@@ -225,7 +198,7 @@ export default function ChosenWinesScreen() {
     const noteFormatted = note.trim() ? `\n\n"${note.trim()}"` : '';
     try {
       await Share.share({
-        message: `${header}${scoreText}${locFormatted}${noteFormatted}\n\nShared via Vinster`,
+        message: `${header}${scoreText}${locFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`,
         title: header,
       });
     } catch (err) {
@@ -440,6 +413,11 @@ export default function ChosenWinesScreen() {
                       </View>
                       <TouchableOpacity
                         onPress={() => handleShareReview(item)}
+                        // No-op long-press handler so the parent card's
+                        // onLongPress (delete prompt) doesn't fire when
+                        // the user holds the share icon for >400ms.
+                        onLongPress={() => handleShareReview(item)}
+                        delayLongPress={400}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         accessibilityRole="button"
                         accessibilityLabel="Share this review"
