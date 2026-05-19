@@ -13,7 +13,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
-import { BottleSizePicker } from '../../src/components/BottleSizePicker';
+import { BottleSizePicker, detectPlacementMismatch, placementWarningBody } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 
 function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
@@ -234,6 +234,30 @@ export default function LabelResultsScreen() {
   // will be naturally replaced on the next label scan.
   async function performSaveFlow(savedWineId: string, mode: 'new' | 'merge', baseQuantity: number) {
     if (pendingSlot) {
+      // Soft warning when the bottle's size doesn't match the slot's
+      // expected size. Fires once before placement runs; user can
+      // continue or cancel back into the Add modal.
+      const mismatch = detectPlacementMismatch(
+        bottleSizeMl,
+        pendingSlot.row,
+        pendingSlot.largeFormatBottleSizeMl,
+      );
+      if (mismatch) {
+        const proceed = await new Promise<boolean>((resolve) => {
+          showAlert({
+            title: 'Bottle size mismatch',
+            body: placementWarningBody(mismatch),
+            buttons: [
+              { text: 'Cancel', style: 'cancel', onPress: () => resolve(false) },
+              { text: 'Place anyway', onPress: () => resolve(true) },
+            ],
+          });
+        });
+        if (!proceed) {
+          setSaving(false);
+          return;
+        }
+      }
       // User came in from a specific empty rack slot. Place the requested
       // number of bottles from that slot — skipping any occupied slots in
       // the path — and set the wine's quantity to match what was placed.

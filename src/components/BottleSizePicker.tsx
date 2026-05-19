@@ -23,6 +23,57 @@ export function bottleSizeLabel(ml: number): string {
   return `${(ml / 10).toFixed(ml % 10 === 0 ? 0 : 1)}cl`;
 }
 
+// Standard rack slots are 750ml by convention — that's what a normal wine
+// rack is built to hold. The large-format row (row_index = -1 in our
+// schema) carries its own configured size on the rack record.
+export function expectedSlotSizeMl(
+  rowIndex: number,
+  largeFormatBottleSizeMl: number | null | undefined,
+): number {
+  if (rowIndex === -1) return largeFormatBottleSizeMl ?? 1500;
+  return 750;
+}
+
+export interface PlacementMismatch {
+  bottleMl: number;
+  slotMl: number;
+  bottleLabel: string;
+  slotLabel: string;
+  direction: 'too-big' | 'too-small';
+}
+
+// Returns null when the wine matches the slot's expected size; otherwise
+// returns a description the caller can show in a soft warning prompt.
+// Bottle and slot sizes are compared by exact ml — a Magnum (1500) and a
+// standard (750) are clearly different; a 75cl (750) and a standard slot
+// match. Custom sizes (e.g. 500ml halves) will mismatch a 750ml slot and
+// surface the warning, which is the desired behaviour.
+export function detectPlacementMismatch(
+  bottleSizeMl: number,
+  rowIndex: number,
+  largeFormatBottleSizeMl: number | null | undefined,
+): PlacementMismatch | null {
+  const slotMl = expectedSlotSizeMl(rowIndex, largeFormatBottleSizeMl);
+  if (bottleSizeMl === slotMl) return null;
+  return {
+    bottleMl: bottleSizeMl,
+    slotMl,
+    bottleLabel: bottleSizeLabel(bottleSizeMl),
+    slotLabel: bottleSizeLabel(slotMl),
+    direction: bottleSizeMl > slotMl ? 'too-big' : 'too-small',
+  };
+}
+
+// Warm, format-aware copy. The "too-big" case is more serious (the bottle
+// physically may not fit a smaller slot in real life); "too-small" is just
+// airspace and is mostly an FYI.
+export function placementWarningBody(m: PlacementMismatch): string {
+  if (m.direction === 'too-big') {
+    return `You're placing a ${m.bottleLabel} in a slot built for ${m.slotLabel}. Most physical racks won't hold a larger bottle in a smaller slot — Vinster will save the placement either way, but you may need to adjust your real rack at home.`;
+  }
+  return `You're placing a ${m.bottleLabel} in a slot built for ${m.slotLabel}. The bottle will sit comfortably but with airspace around it.`;
+}
+
 interface Props {
   value: number; // ml
   onChange: (ml: number) => void;

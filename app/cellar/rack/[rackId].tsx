@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard } from 'react-native';
 import { showAlert } from '../../../src/components/AppAlert';
+import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
@@ -162,7 +163,7 @@ export default function RackGridScreen() {
       setPlaceCount('1');
       setPlaceOrientation('Vertical');
     } else {
-      setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols, largeFormatCols: rack.large_format_cols });
+      setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols, largeFormatCols: rack.large_format_cols, largeFormatBottleSizeMl: rack.large_format_bottle_size_ml });
       router.push('/label/camera');
     }
   }
@@ -201,6 +202,33 @@ export default function RackGridScreen() {
   async function confirmPlacement() {
     if (!placingAt) return;
     Keyboard.dismiss();
+    // Soft warning when the bottle's size doesn't match the slot's
+    // expected size. Fires once before the placement runs — user can
+    // continue and place anyway, or cancel back to the modal.
+    const wineForCheck = wines.find((w) => w.id === placingAt.wineId);
+    if (wineForCheck && rack) {
+      const mismatch = detectPlacementMismatch(
+        wineForCheck.bottle_size_ml,
+        placingAt.row,
+        rack.large_format_bottle_size_ml,
+      );
+      if (mismatch) {
+        showAlert({
+          title: 'Bottle size mismatch',
+          body: placementWarningBody(mismatch),
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Place anyway', onPress: () => { void runPlacement(); } },
+          ],
+        });
+        return;
+      }
+    }
+    void runPlacement();
+  }
+
+  async function runPlacement() {
+    if (!placingAt) return;
     const requested = Math.max(1, parseInt(placeCount, 10) || 1);
     setPlacing(true);
     try {

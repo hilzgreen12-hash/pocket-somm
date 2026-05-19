@@ -11,6 +11,9 @@ export interface PendingSlot {
   // start at row_index = -1 to a single horizontal band — otherwise a
   // magnum can spill into the standard grid below.
   largeFormatCols?: number | null;
+  // Bottle size the large-format row was configured for. Used to detect
+  // size mismatches at placement time and warn the user gently.
+  largeFormatBottleSizeMl?: number | null;
 }
 
 interface RackStore {
