@@ -129,7 +129,7 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Find a wine for a recipe</Text>
+        <Text style={styles.subheading}>Recipe → Wine</Text>
         <Text style={styles.sectionDesc}>
           Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
         </Text>
@@ -146,7 +146,7 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Find a recipe for a wine</Text>
+        <Text style={styles.subheading}>Wine → Recipe</Text>
         <Text style={styles.sectionDesc}>
           Choose your bottle then photograph it's label (or upload) to receive deep AI generated, top chef inspired recipes
         </Text>
@@ -161,8 +161,8 @@ export default function ChefTab() {
             <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF', marginTop: spacing.sm }]} onPress={() => router.push('/chef/archive')}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Your Cookbook</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.sm }]} onPress={() => router.push('/chef/archive')}>
+          <Text style={styles.buttonText}>View Your Cookbook</Text>
         </TouchableOpacity>
       </View>
 
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
   // under each heading" rule.
   topBlurb: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  lastResultLink: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
+  lastResultLink: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },

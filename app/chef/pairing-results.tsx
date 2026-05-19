@@ -206,7 +206,7 @@ export default function PairingResultsScreen() {
       )}
 
       <View style={styles.header}>
-        <Text style={styles.headerLine}>Your Pairing</Text>
+        <Text style={styles.headerLine}>Your Brief</Text>
         <Text style={styles.dish}>{dish}</Text>
       </View>
 
@@ -294,8 +294,12 @@ const styles = StyleSheet.create({
   stampDate: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerLine: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.5 },
-  dish: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: spacing.xs },
+  headerLine: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
+  // The dish text is the user's free-form brief — promote it from a
+  // 15pt subline to the visual headline of the page (was previously
+  // dominated by "Your Pairing" at 20pt bold). Now reads as a proper
+  // headline so the user can quickly see what they asked for.
+  dish: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginTop: spacing.xs, lineHeight: 28 },
   successTick: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   successCount: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
   section: { padding: spacing.xl },

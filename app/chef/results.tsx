@@ -365,13 +365,71 @@ export default function ChefResultsScreen() {
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
 
-  async function handleRegenerate() {
+  // Regen modal — opens when the user taps "Not quite — generate
+  // another set of recipes". Carries the free-form steer and (under
+  // the hood) the running list of chefs already shown so the next
+  // batch can't recycle them.
+  const [regenModalOpen, setRegenModalOpen] = useState(false);
+  const [regenRequestDraft, setRegenRequestDraft] = useState('');
+  const [usedChefs, setUsedChefs] = useState<string[]>([]);
+
+  // Seed the used-chefs list from the initial pairings so the first
+  // regen already excludes round-one chefs. Re-seeds when fresh
+  // pairings land (e.g. after a regen) — see handleConfirmRegenerate
+  // which also pushes its own.
+  useEffect(() => {
+    if (isFromHistory) return;
+    const initial = (freshPairings ?? [])
+      .map((p) => (p.chefInspiration ?? '').trim())
+      .filter((s) => s.length > 0);
+    if (initial.length > 0) {
+      setUsedChefs((prev) => {
+        const merged = new Set<string>(prev);
+        for (const c of initial) merged.add(c);
+        return Array.from(merged);
+      });
+    }
+    // Only run on first mount of a fresh result. We don't include
+    // freshPairings in the deps because handleConfirmRegenerate already
+    // updates usedChefs imperatively after each regen — re-running
+    // this on every pairings change would just re-do that work.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function openRegenModal() {
+    if (regenerating) return;
+    setRegenRequestDraft('');
+    setRegenModalOpen(true);
+  }
+
+  function cancelRegen() {
+    setRegenModalOpen(false);
+    setRegenRequestDraft('');
+  }
+
+  async function handleConfirmRegenerate() {
     if (!wine || regenerating) return;
+    const steer = regenRequestDraft.trim();
+    Keyboard.dismiss();
+    setRegenModalOpen(false);
     setRegenerating(true);
     try {
-      const fresh = await generatePairings(wine, (filters ?? {}) as any);
+      const fresh = await generatePairings(wine, (filters ?? {}) as any, {
+        excludeChefs: usedChefs,
+        additionalRequest: steer.length > 0 ? steer : null,
+      });
       setPairings(fresh);
       setPairingSaveStates({});
+      // Roll the new chefs into the running exclude list so a third
+      // regen avoids rounds one AND two.
+      const incoming = fresh
+        .map((p) => (p.chefInspiration ?? '').trim())
+        .filter((s) => s.length > 0);
+      setUsedChefs((prev) => {
+        const merged = new Set<string>(prev);
+        for (const c of incoming) merged.add(c);
+        return Array.from(merged);
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate pairings');
       showAlert({ title: 'Could not regenerate', body: 'Please try again in a moment.' });
@@ -526,10 +584,54 @@ export default function ChefResultsScreen() {
       </View>
 
       {!isFromHistory && (
-        <TouchableOpacity style={styles.regenLink} onPress={handleRegenerate} disabled={regenerating}>
-          <Text style={styles.regenLinkText}>Not quite — generate another set of recipes</Text>
+        <TouchableOpacity style={styles.regenLink} onPress={openRegenModal} disabled={regenerating}>
+          <Text style={styles.regenLinkText}>
+            {regenerating ? 'Generating a fresh set…' : 'Not quite — generate another set of recipes'}
+          </Text>
         </TouchableOpacity>
       )}
+
+      {/* Regen steer modal — asks the user if they'd like to nudge the
+          next set in a particular direction. The exclude-chefs list is
+          carried through invisibly; the user only sees the steer
+          prompt. Empty input is fine — just hit Generate to roll again
+          with the chef list as the only differentiator. */}
+      <Modal
+        visible={regenModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={cancelRegen}
+      >
+        <TouchableOpacity style={styles.notesModalOverlay} activeOpacity={1} onPress={cancelRegen}>
+          <TouchableOpacity activeOpacity={1} style={styles.notesModalSheet} onPress={() => {}}>
+            <Text style={styles.notesModalTitle}>Anything in particular you'd like to see in the next set of recipes?</Text>
+            <Text style={styles.notesModalHint}>Leave blank to roll the dice — Vinster will also pick three new chefs so the next set doesn't repeat.</Text>
+            <TextInput
+              style={styles.notesModalInput}
+              value={regenRequestDraft}
+              onChangeText={setRegenRequestDraft}
+              placeholder="ie. Show me Japanese inspired pairings, recipes with fresh vegetables"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              autoFocus
+            />
+            <View style={styles.notesModalActions}>
+              <TouchableOpacity onPress={cancelRegen} disabled={regenerating}>
+                <Text style={styles.notesCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.notesSaveBtn, regenerating && styles.notesSaveBtnDisabled]}
+                onPress={handleConfirmRegenerate}
+                disabled={regenerating}
+              >
+                <Text style={styles.notesSaveBtnText}>{regenerating ? 'Generating…' : 'Generate'}</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <SignInPromptModal
         visible={signInPromptVisible}

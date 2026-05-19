@@ -139,7 +139,7 @@ export default function RacksScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Wine Racks & Fridges</Text>
+        <Text style={styles.title}>Your Wines</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -150,7 +150,26 @@ export default function RacksScreen() {
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          <Text style={styles.subHeader}>Your Storage</Text>
+          <Text style={styles.subHeader}>Racks & Fridges</Text>
+
+          {/* Add Wine Rack + Add Wine Fridge sit above the rack list now
+              (was below) and render as a white side-by-side pair so the
+              two creation entry points read as siblings, distinct from
+              the yellow "primary action" buttons elsewhere in the app. */}
+          <View style={styles.addButtonRow}>
+            <TouchableOpacity
+              style={[styles.addButtonWhite, { flex: 1 }]}
+              onPress={() => handleAddType('rack')}
+            >
+              <Text style={styles.addButtonWhiteText}>Add Wine Rack</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addButtonWhite, { flex: 1 }]}
+              onPress={() => handleAddType('fridge')}
+            >
+              <Text style={styles.addButtonWhiteText}>Add Wine Fridge</Text>
+            </TouchableOpacity>
+          </View>
 
           {racks.map((rack) => (
             <RackRow
@@ -161,22 +180,13 @@ export default function RacksScreen() {
             />
           ))}
 
-          <View style={styles.storageInfo}>
-            <TouchableOpacity style={styles.addButton} onPress={() => handleAddType('rack')}>
-              <Text style={styles.addButtonText}>Add Wine Rack</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.addButton, { marginTop: spacing.sm }]} onPress={() => handleAddType('fridge')}>
-              <Text style={styles.addButtonText}>Add Wine Fridge</Text>
-            </TouchableOpacity>
-          </View>
-
           <View style={styles.divider} />
 
           <Text style={styles.subHeader}>Cellar List</Text>
 
           <View style={styles.cellarListSection}>
             <TouchableOpacity style={styles.fullListButton} onPress={() => router.push('/cellar/list')}>
-              <Text style={styles.fullListButtonText}>Full Cellar List</Text>
+              <Text style={styles.fullListButtonText}>View Full Cellar List</Text>
             </TouchableOpacity>
 
             {recentAdditions.length > 0 && (
@@ -249,9 +259,12 @@ const styles = StyleSheet.create({
   homeToLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   homeToBlurb: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 19 },
   arrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
-  storageInfo: { paddingHorizontal: spacing.xl, paddingTop: spacing.md },
-  addButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  addButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  // White side-by-side Add Wine Rack / Add Wine Fridge buttons. Sized
+  // a touch tighter than the old stacked yellow pair so two read
+  // comfortably across the screen width.
+  addButtonRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md },
+  addButtonWhite: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center' },
+  addButtonWhiteText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   cellarListSection: { paddingHorizontal: spacing.xl },
   fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },

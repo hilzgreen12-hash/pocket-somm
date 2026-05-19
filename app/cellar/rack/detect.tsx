@@ -145,13 +145,15 @@ export default function RackDetectScreen() {
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
           <Text style={styles.saveButtonText}>{isFridge ? 'Save Fridge' : 'Save Rack'}</Text>
         </TouchableOpacity>
-        {/* Cancel bails out of the whole creation flow. router.navigate
-            pops to the existing /cellar/racks instance so the camera (if
-            the user came through it) is dropped off the back stack — they
-            don't reappear on the camera on the next back gesture. */}
+        {/* Cancel bails out of the whole creation flow. dismissTo pops
+            down to the existing /cellar/racks instance so the camera (if
+            the user came through it) is dropped off the back stack —
+            they don't reappear on the camera on the next back gesture.
+            router.navigate would push a second racks screen onto the
+            stack, which then loops the user back via the camera. */}
         <TouchableOpacity
           style={styles.cancelLink}
-          onPress={() => { reset(); router.navigate('/cellar/racks'); }}
+          onPress={() => { reset(); router.dismissTo('/cellar/racks'); }}
           activeOpacity={0.7}
         >
           <Text style={styles.cancelLinkText}>Cancel</Text>
