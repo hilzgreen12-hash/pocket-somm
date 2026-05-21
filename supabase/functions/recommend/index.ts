@@ -93,6 +93,7 @@ For each recommended wine return:
 - menuPrice: menu price as found on the list (number | null)
 - currency: currency code (string)
 - rationale: 2–4 sentences explaining why this wine is recommended, covering score, vintage, drinking window, rarity, and value (string)
+- flavourProfile: ONE brief sentence (max ~18 words) describing what the wine actually tastes like — fruit, acidity, tannin, body, finish, aromatics. This is a tasting note, NOT a sales pitch. Strict exclusions: no producer name, no vintage information, no critic scores, no rarity / availability comments, no price / value language, no recommendation language ("worth trying", "ideal with", "perfect for"). Pure sensory: think how a sommelier would describe the glass in front of them to a guest who asked "what's this like?". Examples of the right register: "Bright black cherry and graphite, firm fine tannins, savoury herb finish." / "Lifted lemon zest and wet stone, taut acidity, lean and saline." / "Crushed strawberry, gentle spice, soft tannins, easy and fragrant." (string)
 - criticScore: estimated average critic score 0–100 (number)
 - vintageAssessment: object with:
     - label: one of "Exceptional" | "Excellent" | "Good" | "Average" | "Challenging" | "Poor" (string)

@@ -70,6 +70,15 @@ export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaur
               </View>
               <Text style={styles.wineName} numberOfLines={2}>{wineLine(w)}</Text>
               <Text style={styles.wineDetail} numberOfLines={2}>{detailLine(w)}</Text>
+              {/* Flavour profile — one-line tasting note in italic
+                  gold so a friend reading the share knows what the
+                  wine actually tastes like, not just why Vinster
+                  picked it. Omitted gracefully when the field is
+                  missing (older recommendations saved before this
+                  prompt change). */}
+              {w.flavourProfile ? (
+                <Text style={styles.wineFlavour} numberOfLines={3}>{w.flavourProfile}</Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -127,6 +136,7 @@ const styles = StyleSheet.create({
   priceText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 30, color: 'rgba(255,255,255,0.85)', marginTop: 4 },
   wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: '#FFFFFF', lineHeight: 52, marginBottom: 8 },
   wineDetail: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: 'rgba(255,255,255,0.85)', lineHeight: 38 },
+  wineFlavour: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 28, color: colors.gold, lineHeight: 36, marginTop: 14 },
   footer: { alignItems: 'center', marginTop: 44 },
   footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
   footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },

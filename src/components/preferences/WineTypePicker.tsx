@@ -8,12 +8,16 @@ import type { WineType } from '../../types/preferences';
 // app.
 export type { WineType };
 
+// "Orange" was replaced by "Natural / Low Intervention" as a wine
+// type — wider remit (covers what was under Orange plus the broader
+// low-intervention world) and the new label communicates the
+// production style rather than a colour curiosity.
 const WINE_TYPES: { id: WineType; label: string }[] = [
   { id: 'white',           label: 'White' },
   { id: 'red',             label: 'Red' },
   { id: 'rose',            label: 'Rosé' },
   { id: 'sparkling',       label: 'Sparkling' },
-  { id: 'orange',          label: 'Orange' },
+  { id: 'natural',         label: 'Natural / Low Intervention' },
   { id: 'sweet-fortified', label: 'Sweet & Fortified' },
 ];
 

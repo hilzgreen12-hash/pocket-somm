@@ -42,6 +42,11 @@ export interface WineRecommendation {
   rarityAssessment: RarityAssessment;
   outsidePreferences?: string | null; // set when wine breaks a stated preference, explains why it's still worth it
   topPickReasons?: string[] | null;  // 2–3 bullet points for the #1 wine only, explaining why it ranks above the others
+  // One brief tasting-only sentence — what the wine actually tastes
+  // like, not why it was picked. No vintage notes, no producer info,
+  // no scores. Surfaces on the compact card and on the share card so
+  // a friend skim-reading the share knows what they're being shown.
+  flavourProfile?: string | null;
 }
 
 export interface RecommendationResponse {
@@ -139,6 +144,12 @@ export interface CellarWine {
   grape_variety: string | null;
   label_image_path: string | null;
   user_notes: string | null;
+  // Migration 043. The user's WRITTEN REVIEW — sharable to community
+  // and outside the app. Distinct from user_notes (Personal Notes,
+  // private). Null on legacy rows; the wine card prefers review_note
+  // when populated and falls back to user_notes for the community
+  // post body so pre-existing posts aren't lost.
+  review_note: string | null;
   is_wishlist: boolean;
   archived_at: string | null;
   purchase_price: number | null;
@@ -237,6 +248,11 @@ export interface ChosenWine {
   other_observations: string | null;
   user_score: number | null;
   is_favourite: boolean;
+  // Source discriminator (migration 042). 'restaurant' = came from a
+  // List scan or manual entry on Your Wine Reviews. 'other' = reviewed
+  // via the "Review without adding" path on /label/results (Cellar
+  // add-wine flow). Legacy rows default to 'restaurant'.
+  source: 'restaurant' | 'other';
 }
 
 export interface PricingData {

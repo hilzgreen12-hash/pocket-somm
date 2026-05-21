@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router } from 'expo-router';
@@ -61,6 +62,34 @@ export default function RackGridScreen() {
     const t = setTimeout(() => setSavedMsg(null), 3000);
     return () => clearTimeout(t);
   }, [savedMsg]);
+
+  // How-this-works modal. Shows on EVERY rack-screen mount until the
+  // user explicitly opts out via "Don't show me this again", which
+  // persists the flag to AsyncStorage. Mid-mount the flag is read
+  // async, so the modal stays hidden by default and flips open only
+  // when the read resolves AND the flag isn't set.
+  const [rackHintOpen, setRackHintOpen] = useState(false);
+  const [rackHintDontShow, setRackHintDontShow] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const flag = await AsyncStorage.getItem('vinster_rack_hint_dismissed');
+        if (!cancelled && flag !== '1') setRackHintOpen(true);
+      } catch {
+        // AsyncStorage failure — fall through and show the modal,
+        // worst case the user dismisses it once per session.
+        if (!cancelled) setRackHintOpen(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+  async function closeRackHint() {
+    if (rackHintDontShow) {
+      try { await AsyncStorage.setItem('vinster_rack_hint_dismissed', '1'); } catch { /* best-effort */ }
+    }
+    setRackHintOpen(false);
+  }
 
   // Unlock landscape for this screen; restore portrait on leave
   useEffect(() => {
@@ -497,10 +526,12 @@ export default function RackGridScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* How-it-works hint — sits between the drinking-window legend
-            and the rack grid so users see it before they start tapping. */}
+        {/* Short hint pointing at the search box below the grid. The
+            full "tap slot to add / tap wine to highlight" instructions
+            now live on a per-mount modal that the user can dismiss
+            permanently via "Don't show me this again". */}
         <Text style={styles.rackHint}>
-          Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.
+          Search your bottle's placement using the list & search function below the rack grid.
         </Text>
 
         {moving && movingMsg && (
@@ -820,6 +851,41 @@ export default function RackGridScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* How-this-works overlay. Fires on every rack open until the
+          user ticks "Don't show me this again". Dismiss requires an
+          explicit OK tap — overlay tap is a no-op so a stray finger
+          can't bypass the explanation. */}
+      <Modal
+        visible={rackHintOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {}}
+      >
+        <View style={styles.rackHintOverlay}>
+          <View style={styles.rackHintSheet}>
+            <Text style={styles.rackHintTitle}>How the rack works</Text>
+            <Text style={styles.rackHintBody}>
+              Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.
+            </Text>
+
+            <TouchableOpacity
+              style={styles.rackHintCheckRow}
+              onPress={() => setRackHintDontShow((v) => !v)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.rackHintCheckbox, rackHintDontShow && styles.rackHintCheckboxActive]}>
+                {rackHintDontShow ? <Text style={styles.rackHintCheckmark}>✓</Text> : null}
+              </View>
+              <Text style={styles.rackHintCheckLabel}>Don't show me this again</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity style={styles.rackHintOkBtn} onPress={closeRackHint} activeOpacity={0.8}>
+              <Text style={styles.rackHintOkBtnText}>OK</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
     </GestureDetector>
   );
@@ -881,6 +947,20 @@ const styles = StyleSheet.create({
   slotPlus: { fontSize: 14, color: 'rgba(255,255,255,0.20)', fontFamily: 'CormorantGaramond_400Regular' },
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   rackHint: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, lineHeight: 20 },
+  // How-this-works overlay shown on every rack open until dismissed
+  // with "Don't show me this again". Uses the standard sheet-on-dim-
+  // scrim pattern already established by other modals in the app.
+  rackHintOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  rackHintSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  rackHintTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  rackHintBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  rackHintCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg, paddingVertical: 4 },
+  rackHintCheckbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' },
+  rackHintCheckboxActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.20)' },
+  rackHintCheckmark: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 14, color: colors.gold, lineHeight: 16 },
+  rackHintCheckLabel: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.text },
+  rackHintOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  rackHintOkBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text },
   searchClear: { paddingLeft: spacing.sm, paddingVertical: spacing.sm },

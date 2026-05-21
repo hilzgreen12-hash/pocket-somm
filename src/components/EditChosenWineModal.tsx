@@ -41,6 +41,44 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     }
   }, [visible, wine]);
 
+  // Favourite-star auto-save — the only field on this modal that
+  // persists without the user tapping Save. Standard UX for a
+  // favourite tick (Spotify, Apple Music, Letterboxd all behave this
+  // way). All OTHER fields still wait for Save so in-flight edits
+  // aren't surprise-committed.
+  //
+  // Important: we send the WINE's persisted values for the other
+  // columns rather than the local draft, so toggling the star never
+  // accidentally commits an in-progress tasting-note draft. On
+  // failure we revert the optimistic flip and surface the error.
+  async function handleToggleFavourite() {
+    if (!wine) return;
+    const next = !isFavourite;
+    setIsFavourite(next);
+    try {
+      await update.mutateAsync({
+        id: wine.id,
+        input: {
+          restaurantName: wine.restaurant_name ?? '',
+          city: wine.city ?? '',
+          tastingNote: wine.tasting_note ?? '',
+          otherObservations: wine.other_observations ?? '',
+          userScore: wine.user_score,
+          listPrice: wine.menu_price,
+          isFavourite: next,
+          producer: wine.producer,
+          wineName: wine.wine_name,
+          vintage: wine.vintage,
+        },
+      });
+    } catch (err) {
+      // Revert the optimistic flip so the star reflects what's
+      // actually saved server-side.
+      setIsFavourite(!next);
+      showAlert({ title: 'Could not update favourite', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   async function handleSave() {
     if (!wine) return;
     // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
@@ -128,9 +166,14 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
+          {/* Star auto-saves on tap — the only field on this modal
+              that doesn't wait for the Save button. Other edits in the
+              form are preserved (this handler only writes is_favourite
+              + the wine's persisted other-fields, not the local draft). */}
           <TouchableOpacity
             style={styles.favouriteBtn}
-            onPress={() => setIsFavourite((v) => !v)}
+            onPress={handleToggleFavourite}
+            disabled={update.isPending}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >

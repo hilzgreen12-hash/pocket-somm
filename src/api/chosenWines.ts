@@ -34,6 +34,11 @@ export interface ManualSaveChosenWineInput {
   otherObservations: string;
   userScore: number | null;
   isFavourite: boolean;
+  // Source discriminator (migration 042). Omitted = falls back to the
+  // DB default 'restaurant'. The "Review without adding" path in
+  // /label/results passes 'other' so those reviews can be filtered out
+  // of the Restaurant Wines bucket in Your Wine Reviews.
+  source?: 'restaurant' | 'other';
 }
 
 export async function saveManualChosenWine(userId: string, input: ManualSaveChosenWineInput): Promise<ChosenWine> {
@@ -59,6 +64,10 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
     other_observations: input.otherObservations.trim() || null,
     user_score: input.userScore,
     is_favourite: input.isFavourite,
+    // Only write source when the caller asked for a non-default value —
+    // omitting the key lets the DB default ('restaurant') kick in for
+    // every existing call site that hasn't been updated.
+    ...(input.source ? { source: input.source } : {}),
   }).select().single();
   if (error) throw new Error(error.message);
   return data as ChosenWine;

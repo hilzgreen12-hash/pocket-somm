@@ -21,6 +21,7 @@ import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 const LIST_HELP = `Scan a wine list or upload a screenshot, and Vinster (powered by Anthropic's Claude AI) reads every bottle on the page.
 
@@ -55,9 +56,22 @@ export default function ScanTab() {
     else setStyleOpen((v) => !v);
   }
 
+  // "Let's take a closer look" stays disabled until the user has
+  // committed to at least one wine type — without that, the style
+  // picker has nothing to filter from. If the user drops back to
+  // "Any" while the accordion is open, force-close it so the disabled
+  // state stays honest.
+  const closerLookDisabled = wineTypes.length === 0;
+  useEffect(() => {
+    if (closerLookDisabled && styleOpen) {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setStyleOpen(false);
+    }
+  }, [closerLookDisabled, styleOpen]);
+
   const WINE_TYPE_LABELS: Record<string, string> = {
     red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling',
-    orange: 'Orange', 'sweet-fortified': 'Sweet & Fortified',
+    natural: 'Natural / Low Intervention', 'sweet-fortified': 'Sweet & Fortified',
   };
 
   const wineTypeLabel = wineTypes.length > 0
@@ -261,7 +275,7 @@ export default function ScanTab() {
         <View style={styles.section}>
           <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
-              <Text style={styles.question}>What are you drinking?</Text>
+              <Text style={styles.question}>Choose a Style</Text>
               {!wineTypeOpen && <Text style={styles.selectionSummary}>{wineTypeLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
@@ -273,18 +287,30 @@ export default function ScanTab() {
           )}
         </View>
 
-        {/* Style accordion */}
+        {/* Closer-look accordion. Gated: tapping the row is a no-op
+            until at least one wine type is selected above. The row is
+            dimmed in that state and shows a short hint instead of the
+            usual "Any / N styles selected" summary. */}
         <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.accordionRow}>
+          <TouchableOpacity
+            onPress={() => { if (!closerLookDisabled) toggleSection('style'); }}
+            activeOpacity={closerLookDisabled ? 1 : 0.7}
+            style={[styles.accordionRow, closerLookDisabled && styles.accordionRowDisabled]}
+            accessibilityState={{ disabled: closerLookDisabled }}
+          >
             <View style={styles.accordionLeft}>
-              <Text style={styles.question}>What style are you vibing?</Text>
-              {!styleOpen && <Text style={styles.selectionSummary}>{styleLabel}</Text>}
+              <Text style={[styles.question, closerLookDisabled && styles.questionDisabled]}>Let's take a closer look</Text>
+              {!styleOpen && (
+                <Text style={styles.selectionSummary}>
+                  {closerLookDisabled ? 'Choose a style first' : styleLabel}
+                </Text>
+              )}
             </View>
-            <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
+            <Text style={[styles.chevron, closerLookDisabled && styles.chevronDisabled]}>{styleOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
-          {styleOpen && (
+          {styleOpen && !closerLookDisabled && (
             <View style={styles.pickerWrap}>
-              <StylePicker selected={styleProfiles} onChange={setStyleProfiles} />
+              <StylePicker selected={styleProfiles} onChange={setStyleProfiles} wineTypes={wineTypes} />
             </View>
           )}
         </View>
@@ -384,23 +410,28 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
     alignItems: 'center',
   },
+  // Tab landing brand mark — stays Cormorant (header-tier).
   brandName: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     fontSize: 23,
     color: '#FFFFFF',
     letterSpacing: 1,
     marginBottom: spacing.md,
   },
+  // The big "List" title — header.
   appName: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 42,
     color: '#FFFFFF',
     letterSpacing: 1.5,
   },
   // Row container so the gold "i" sits inline with the centred title.
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  // Italic blurb directly under the "List" title — explicitly kept
+  // Cormorant per user spec ("the blurbs below the headers on the
+  // tab screens").
   subtitle: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     fontSize: 17,
     color: '#FFFFFF',
     marginTop: spacing.xs,
@@ -442,6 +473,19 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     backgroundColor: 'rgba(212,176,96,0.08)',
   },
+  // Disabled variant — used by "Let's take a closer look" while no
+  // wine type is selected. Dimmed border + opacity so the row reads
+  // as inert without removing the affordance entirely.
+  accordionRowDisabled: {
+    opacity: 0.45,
+    borderColor: 'rgba(255,255,255,0.10)',
+  },
+  questionDisabled: {
+    color: 'rgba(255,255,255,0.6)',
+  },
+  chevronDisabled: {
+    color: 'rgba(255,255,255,0.4)',
+  },
   accordionLeft: {
     flex: 1,
     alignItems: 'center',
@@ -451,8 +495,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginLeft: spacing.sm,
   },
+  // Accordion question — acts as a section sub-header. Cormorant.
   question: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 17,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -460,8 +505,10 @@ const styles = StyleSheet.create({
   questionActive: {
     color: colors.gold,
   },
+  // Selection summary (the "Any" / "Cellar wines" line under a
+  // collapsed accordion) — body readout, Inter.
   selectionSummary: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodyMedium,
     fontSize: 16,
     color: '#FFFFFF',
     marginTop: 2,
@@ -492,14 +539,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xs,
     alignItems: 'center',
   },
+  // Button label — Cormorant (button rule).
   buttonHalfText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     color: colors.gold,
     fontSize: 14,
     textAlign: 'center',
   },
+  // In-body informational text (e.g. "Your saved preferences apply
+  // unless you adjust them here"). Body content → Inter for readability.
   profileNote: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 17,
     color: '#FFFFFF',
     marginTop: spacing.xs,
@@ -523,23 +573,25 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
   },
+  // Pop-up title — Cormorant (pop-up header rule).
   introTitle: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 26,
     color: colors.gold,
     textAlign: 'center',
     letterSpacing: 0.5,
     marginBottom: spacing.md,
   },
+  // Pop-up body — Inter (pop-up body rule).
   introBody: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: '#FFFFFF',
     lineHeight: 23,
     marginBottom: spacing.sm,
   },
   introBodyEmph: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     fontStyle: 'normal',
     color: colors.gold,
   },
@@ -551,8 +603,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.md,
   },
+  // Pop-up button label — Cormorant.
   introPrimaryBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
     letterSpacing: 0.5,
@@ -562,8 +615,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     marginTop: 4,
   },
+  // Pop-up dismiss link — body / link, Inter.
   introDismissText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
     textDecorationLine: 'underline',

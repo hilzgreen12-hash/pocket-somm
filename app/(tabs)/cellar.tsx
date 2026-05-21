@@ -14,6 +14,8 @@ const CELLAR_HELP = `Add Wine/Generate Wine Intel – This function will return 
 
 Your Wines: Wine Racks and Cellar List – Now this is cool, Vinster builds virtual wine racks that mirror your home storage using quick scan functions. Keep track of where your wines are, and see what's ready for drinking.
 
+How the rack works – Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.
+
 Keep track of your wine reviews, as well as wish list and archived wines, and see all of your cellar stats in one place.`;
 import { colors, spacing } from '../../src/constants/theme';
 

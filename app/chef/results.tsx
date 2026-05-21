@@ -154,35 +154,38 @@ function PairingCardSaved({
 }) {
   return (
     <View style={styles.savedCard}>
-      <View style={styles.savedHeaderRow}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.savedDishName}>{pairing.dishName}</Text>
-          <Text style={styles.savedChef}>Inspired by {pairing.chefInspiration}</Text>
-          {wineLine ? <Text style={styles.savedWineLine}>To pair with {wineLine}</Text> : null}
-        </View>
-        <View style={styles.savedHeaderActions}>
-          <TouchableOpacity
-            onPress={onViewFull}
-            onLongPress={onViewFull}
-            delayLongPress={400}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.cardShareLink}
-          >
-            <Text style={styles.cardShareLinkText}>+ FULL</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onShare}
-            onLongPress={onShare}
-            delayLongPress={400}
-            disabled={sharing}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.cardShareLink}
-          >
-            <Text style={[styles.cardShareLinkText, sharing && { opacity: 0.5 }]}>
-              {sharing ? 'PREPARING…' : '+ SHARE'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+      {/* Actions sit in their own compact row above the title now, so
+          the recipe name can stretch across the full inner width
+          rather than being squeezed between "+ FULL" and "+ SHARE"
+          (which previously forced 2- or 3-line wraps on anything
+          longer than "Roast Chicken"). */}
+      <View style={styles.savedActionsRow}>
+        <TouchableOpacity
+          onPress={onViewFull}
+          onLongPress={onViewFull}
+          delayLongPress={400}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.cardShareLink}
+        >
+          <Text style={styles.cardShareLinkText}>+ FULL</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onShare}
+          onLongPress={onShare}
+          delayLongPress={400}
+          disabled={sharing}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.cardShareLink}
+        >
+          <Text style={[styles.cardShareLinkText, sharing && { opacity: 0.5 }]}>
+            {sharing ? 'PREPARING…' : '+ SHARE'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+      <View>
+        <Text style={styles.savedDishName}>{pairing.dishName}</Text>
+        <Text style={styles.savedChef}>Inspired by {pairing.chefInspiration}</Text>
+        {wineLine ? <Text style={styles.savedWineLine}>To pair with {wineLine}</Text> : null}
       </View>
 
       <TouchableOpacity onPress={onOpenNotes} style={styles.savedNotesLink} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -756,12 +759,16 @@ const styles = StyleSheet.create({
   // Same card shell as the fresh-result PairingCard but with a different
   // header structure: recipe name big at the top, wine line below it,
   // share/full links in the corner, and a notes-popup link.
-  savedCard: { marginHorizontal: spacing.xl, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.lg, gap: spacing.xs },
-  savedHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
-  savedDishName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.text, lineHeight: 30 },
+  // Saved-recipe card — outer margin was spacing.xl (32) which left
+  // the title squeezed against the inner padding once the +FULL /
+  // +SHARE buttons ate the right side of the header row. Now narrower
+  // outer margin + dedicated actions row above the title so the
+  // recipe name has the full card width to breathe.
+  savedCard: { marginHorizontal: spacing.md, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg, gap: spacing.xs },
+  savedActionsRow: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.md, marginBottom: spacing.xs },
+  savedDishName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: colors.text, lineHeight: 34 },
   savedChef: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, marginTop: 2 },
   savedWineLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: 'rgba(255,255,255,0.85)', marginTop: spacing.xs, lineHeight: 20 },
-  savedHeaderActions: { flexDirection: 'row', gap: spacing.sm },
   savedNotesLink: { paddingVertical: spacing.xs, alignSelf: 'flex-start', marginTop: spacing.xs },
   savedNotesLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.3, textDecorationLine: 'underline' },
 

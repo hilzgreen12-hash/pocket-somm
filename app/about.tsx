@@ -33,6 +33,12 @@ const SECTIONS: Section[] = [
   {
     title: 'How Cellar Works',
     body: 'Scan a label or enter a wine manually to add it to your cellar. Vinster pulls in critic scores, drinking windows, grape variety, and tasting notes from a deep AI knowledge base — so every bottle you add is enriched on the spot.\n\nBeyond tracking what you own, the Cellar gives you:\n\n• A visual storage layout — map your bottles to virtual racks that mirror your real cellar\n• A Wish List for bottles you want to buy\n• Cellar Statistics — total bottles, total estimated value, condition breakdown, top regions, style breakdown\n• A per-bottle purchase price log alongside Vinster\'s estimated current value\n• Personal notes and your own tasting reviews per bottle\n• An archive for bottles you\'ve drunk, gifted, or otherwise removed — with the date and a note on each\n• Drinking-window alerts so you always open a bottle at the right time',
+    subsections: [
+      {
+        title: 'How The Rack Works',
+        body: 'Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.',
+      },
+    ],
   },
   {
     title: 'Personality Sketches',
