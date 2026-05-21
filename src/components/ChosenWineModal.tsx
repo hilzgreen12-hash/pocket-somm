@@ -10,6 +10,7 @@ import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
+import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import type { WineRecommendation, ChosenWine } from '../types/wine';
 
@@ -97,7 +98,8 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             if (status !== 'granted') return;
             const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
             const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-            const detected = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+            const rawDetected = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+            const detected = rawDetected ? normaliseCity(rawDetected) : null;
             if (detected) {
               // Only fill if the user hasn't started typing in the meantime.
               setCity((current) => (current.trim() ? current : detected));
@@ -144,13 +146,18 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     const trimmedPrice = listPrice.trim();
     const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
     const price = Number.isFinite(parsedPrice) ? parsedPrice : null;
+    // Normalise on save so anything the user typed by hand ("Greater
+    // London") gets canonicalised before it hits the DB. Display-side
+    // normalisation also runs (see wines/chosen.tsx) but doing it here
+    // keeps the stored row clean for sort + dedup downstream.
+    const cityClean = normaliseCity(city);
     try {
       if (mode === 'create' || !existing) {
         await save.mutateAsync({
           wine,
           scanSessionId: scanSessionId ?? null,
           restaurantName: restaurant,
-          city,
+          city: cityClean,
           tastingNote,
           otherObservations,
           userScore,
@@ -163,7 +170,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         if (mode === 'update') {
           await update.mutateAsync({
             id: existing.id,
-            input: { restaurantName: restaurant, city, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
+            input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
           });
         } else {
           // Append a dated tasting onto the existing review, leaving its
@@ -173,7 +180,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             id: existing.id,
             input: {
               restaurantName: existing.restaurant_name ?? '',
-              city: existing.city ?? '',
+              city: normaliseCity(existing.city ?? ''),
               tastingNote: appendDatedEntry(existing.tasting_note, tastingNote, label),
               otherObservations: appendDatedEntry(existing.other_observations, otherObservations, label),
               userScore: userScore != null ? userScore : existing.user_score,
@@ -215,6 +222,20 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.sheet}>
+          {/* Back link in the top-left mirrors the rest of the app's
+              header pattern (Cellar, Reviews, Restaurants etc.). The
+              previous bottom-of-screen Cancel link is gone — keeping
+              navigation affordances in one consistent place. */}
+          <TouchableOpacity
+            style={styles.backBtn}
+            onPress={onClose}
+            disabled={save.isPending || update.isPending}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.backBtnText}>Back</Text>
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.favouriteBtn}
             onPress={() => setIsFavourite((v) => !v)}
@@ -352,14 +373,9 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
                     {save.isPending || update.isPending ? 'Saving…' : 'Add to Your Wine Reviews'}
                   </Text>
                 </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.cancelLink}
-                  onPress={onClose}
-                  disabled={save.isPending || update.isPending}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.cancelLinkText}>Cancel</Text>
-                </TouchableOpacity>
+                {/* Cancel link removed from the bottom — exit is via
+                    the Back link in the top-left header now, matching
+                    the rest of the app's navigation pattern. */}
               </>
             )}
 
@@ -385,6 +401,20 @@ const styles = StyleSheet.create({
     right: spacing.xl,
     zIndex: 10,
     padding: 4,
+  },
+  // Back link mirrors the favourite-star position on the opposite
+  // side — same top offset so they sit on a shared visual baseline.
+  backBtn: {
+    position: 'absolute',
+    top: 56,
+    left: spacing.xl,
+    zIndex: 10,
+    padding: 4,
+  },
+  backBtnText: {
+    fontFamily: 'CormorantGaramond_400Regular',
+    fontSize: 16,
+    color: colors.textMuted,
   },
   favouriteStar: {
     fontSize: 30,
@@ -493,16 +523,8 @@ const styles = StyleSheet.create({
     marginTop: -4,
     marginBottom: spacing.sm,
   },
-  cancelLink: {
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  cancelLinkText: {
-    fontFamily: 'CormorantGaramond_400Regular',
-    fontSize: 14,
-    color: colors.textMuted,
-    textDecorationLine: 'underline',
-  },
+  // cancelLink / cancelLinkText removed — exit is now via the top-
+  // left Back link (see backBtn / backBtnText).
   savedRow: {
     flexDirection: 'row',
     justifyContent: 'center',

@@ -4,6 +4,7 @@ import * as Location from 'expo-location';
 import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
+import { normaliseCity } from '../utils/city';
 
 const STORAGE_KEY = 'vinster_scan_history';
 const MAX_LOCAL = 3;
@@ -131,7 +132,8 @@ export function useScanHistory() {
           longitude = pos.coords.longitude;
           const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
           if (geo) {
-            city = geo.city ?? geo.subregion ?? geo.region ?? null;
+            const rawCity = geo.city ?? geo.subregion ?? geo.region ?? null;
+            city = rawCity ? normaliseCity(rawCity) : null;
             // Use the establishment name if the geocoder returns one (e.g. "The Clove Club")
             // Falls back to null — user can fill it in on the results screen
             restaurantName = (geo.name && geo.name !== geo.street && geo.name !== geo.streetNumber) ? geo.name : null;

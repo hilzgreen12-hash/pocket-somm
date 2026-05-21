@@ -1,17 +1,21 @@
-import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
 import { ShareIcon } from '../../src/components/ShareIcon';
+import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { normaliseCity } from '../../src/utils/city';
 import { colors, spacing } from '../../src/constants/theme';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
 
@@ -20,7 +24,11 @@ function formatDate(iso: string) {
 }
 
 function locationLine(wine: ChosenWine): string {
-  const parts = [wine.restaurant_name, wine.city].filter(Boolean);
+  // City normalised on read so legacy rows saved as "Greater London"
+  // (UK reverse-geocode subregion) render as "London" without needing
+  // a backfill migration. New writes go in canonical via normaliseCity
+  // at the save sites — see ChosenWineModal etc.
+  const parts = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean);
   return parts.join(', ');
 }
 
@@ -47,8 +55,13 @@ function wineIdentityKey(
   return `${normKey(producer)}|${normKey(wineName)}|${normKey(vintage != null ? String(vintage) : '')}`;
 }
 
+// Source discriminator drives the Type filter chip. 'restaurant' and
+// 'other' both live on chosen_wines and are distinguished by the
+// `source` column (migration 042); 'cellar' is derived from any
+// cellar_wines row with user review content.
 type ReviewItem =
   | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
+  | { source: 'other';      date: string; score: number | null; wine: ChosenWine }
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
@@ -63,8 +76,21 @@ export default function ChosenWinesScreen() {
   // scan + upload feed into the label flow with context=reviews).
   const [chooserOpen, setChooserOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [sortBy, setSortBy] = useState<'date' | 'city' | 'score' | 'favourites'>('date');
-  const [filterBy, setFilterBy] = useState<'all' | 'cellar' | 'restaurant'>('all');
+  // Filter / sort state — mirrors the Full Cellar List pattern: one
+  // chip per filter dimension, each opens a modal dropdown with the
+  // available options. Sort is gold-bordered to mark it as the most
+  // common interaction. Default sort is "Recently added" (the previous
+  // 'date' option, renamed for consistency with Full Cellar List).
+  type SortMode = 'recent' | 'score-desc' | 'score-asc';
+  type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
+  type FavouriteFilter = 'all' | 'favourites';
+  type FilterField = 'sort' | 'type' | 'favourite' | 'location' | null;
+  const [sortMode, setSortMode] = useState<SortMode>('recent');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
+  const [locationFilter, setLocationFilter] = useState<string>('All');
+  const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+  const [search, setSearch] = useState('');
 
   // Cellar wines that have ANY user-supplied review content count as a
   // "cellar review".
@@ -76,47 +102,129 @@ export default function ChosenWinesScreen() {
   );
 
   const items: ReviewItem[] = [
-    ...chosenWines.map((w): ReviewItem => ({ source: 'restaurant', date: w.chosen_at, score: w.user_score, wine: w })),
+    // The `source` column on chosen_wines (migration 042) drives the
+    // restaurant-vs-other split here. Legacy rows default to
+    // 'restaurant'; the "Review without adding" path tags 'other'.
+    ...chosenWines.map((w): ReviewItem => ({
+      source: w.source === 'other' ? 'other' : 'restaurant',
+      date: w.chosen_at,
+      score: w.user_score,
+      wine: w,
+    })),
     ...cellarReviews.map((w): ReviewItem => ({ source: 'cellar', date: w.review_date ?? w.created_at, score: w.review_score, wine: w })),
   ];
 
-  const filtered = filterBy === 'all' ? items : items.filter((i) => i.source === filterBy);
-
-  // For city sort we read off the chosen_wines.city for restaurant
-  // reviews; cellar reviews keep the location they were drunk at in the
-  // free-text review_location. Rows with no city sort to the bottom.
-  function cityFor(item: ReviewItem): string {
-    if (item.source === 'restaurant') return (item.wine as ChosenWine).city?.trim() ?? '';
-    return (item.wine as CellarWine).review_location?.trim() ?? '';
-  }
-
   // Both ChosenWine and CellarWine carry an is_favourite flag, so the
-  // favourites sort is the same logic on either side: favourites first,
-  // tiebreak by date.
+  // favourite filter applies symmetrically on either side.
   function isFavourite(item: ReviewItem): boolean {
     return !!(item.wine as { is_favourite?: boolean }).is_favourite;
   }
 
+  // Canonical city for a review — restaurant reviews carry a clean
+  // chosen_wines.city; cellar reviews don't have a structured city
+  // field (review_location is free-form "Restaurant, City"), so they
+  // don't participate in the Location filter — selecting a city
+  // implicitly narrows to restaurant reviews. The available-cities
+  // computation reflects this.
+  function cityFor(item: ReviewItem): string {
+    // Both restaurant and other reviews live on chosen_wines and may
+    // carry a city. Cellar reviews use the free-form review_location
+    // field which isn't structured enough to feed the Location chip.
+    if (item.source === 'cellar') return '';
+    return normaliseCity((item.wine as ChosenWine).city);
+  }
+
+  // Cities surfaced by the Location chip — only those that exist on
+  // at least one restaurant review, normalised + de-duplicated.
+  const availableCities = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      const c = cityFor(it);
+      if (c) set.add(c);
+    }
+    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    // items is a derived array — listing it as a dep is fine, useMemo
+    // will recompute when chosenWines / cellarReviews change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenWines, cellarReviews]);
+
+  // Apply filters. Search is applied last so the chips still own the
+  // visible "shape" — typing a query just narrows whatever filters
+  // are on, matching Full Cellar List's behaviour.
+  const q = search.trim().toLowerCase();
+  const filtered = items.filter((it) => {
+    if (typeFilter !== 'all' && it.source !== typeFilter) return false;
+    if (favouriteFilter === 'favourites' && !isFavourite(it)) return false;
+    if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
+    if (q) {
+      const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
+      const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  // Sort. Score-asc and score-desc both push score-less rows to the
+  // bottom (they're not interesting in either direction). Recent uses
+  // the unified `date` (chosen_at for restaurant, review_date /
+  // created_at for cellar — set when items[] is built).
   const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === 'favourites') {
-      const af = isFavourite(a);
-      const bf = isFavourite(b);
-      if (af !== bf) return af ? -1 : 1;
-    } else if (sortBy === 'score') {
-      const ar = a.score ?? -1;
-      const br = b.score ?? -1;
-      if (ar !== br) return br - ar;
-    } else if (sortBy === 'city') {
-      const ac = cityFor(a).toLowerCase();
-      const bc = cityFor(b).toLowerCase();
-      const aEmpty = ac.length === 0;
-      const bEmpty = bc.length === 0;
-      if (aEmpty !== bEmpty) return aEmpty ? 1 : -1;
-      const cmp = ac.localeCompare(bc);
-      if (cmp !== 0) return cmp;
+    if (sortMode === 'score-desc' || sortMode === 'score-asc') {
+      const ar = a.score;
+      const br = b.score;
+      const aMissing = ar == null;
+      const bMissing = br == null;
+      if (aMissing !== bMissing) return aMissing ? 1 : -1;
+      if (ar != null && br != null && ar !== br) {
+        return sortMode === 'score-desc' ? br - ar : ar - br;
+      }
     }
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
+
+  // Labels surfaced inside each chip's value line.
+  const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+    { value: 'recent',     label: 'Recently added' },
+    { value: 'score-desc', label: 'Descending score' },
+    { value: 'score-asc',  label: 'Ascending score' },
+  ];
+  const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
+    { value: 'all',        label: 'All reviews' },
+    { value: 'cellar',     label: 'Cellar wines' },
+    { value: 'restaurant', label: 'Restaurant wines' },
+    // 'Other' captures reviews saved via the "Review without adding"
+    // path on the Cellar add-wine flow (migration 042 column). Kept as
+    // a placeholder bucket while we figure out the longer-term taxonomy.
+    { value: 'other',      label: 'Other' },
+  ];
+  const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
+    { value: 'all',        label: 'All reviews' },
+    { value: 'favourites', label: 'Favourites only' },
+  ];
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added';
+  const typeLabel = TYPE_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All reviews';
+  const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All reviews';
+  const locationLabel = locationFilter === 'All' ? 'All' : locationFilter;
+
+  // Build the dropdown config for whichever chip the user tapped.
+  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
+    if (field === 'sort') return { title: 'Sort', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
+    if (field === 'type') return { title: 'Filter by type', options: TYPE_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
+    if (field === 'favourite') return { title: 'Favourites', options: FAVOURITE_OPTIONS, selected: favouriteFilter, onSelect: (v) => setFavouriteFilter(v as FavouriteFilter) };
+    if (field === 'location') {
+      return {
+        title: 'Filter by location',
+        options: availableCities.map((c) => ({ value: c, label: c === 'All' ? 'All locations' : c })),
+        selected: locationFilter,
+        onSelect: setLocationFilter,
+      };
+    }
+    return null;
+  }
+  const activeDropdown = dropdownConfig(openDropdown);
 
   // A review's wine may also live in the wishlist or cellar. Match by
   // identity so each card can note when it was added there. date_received
@@ -153,16 +261,19 @@ export default function ChosenWinesScreen() {
     });
     showAlert({
       title: 'Delete review?',
-      body: item.source === 'restaurant'
-        ? `${label}\n\nThis permanently removes your review.`
-        : `${label}\n\nThis clears your review — the bottle stays in your cellar.`,
+      // Restaurant and Other reviews both delete from chosen_wines —
+      // no inventory side-effect. Cellar reviews only clear the review
+      // fields, leaving the bottle in the rack.
+      body: item.source === 'cellar'
+        ? `${label}\n\nThis clears your review — the bottle stays in your cellar.`
+        : `${label}\n\nThis permanently removes your review.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete review',
           style: 'destructive',
           onPress: () => {
-            if (item.source === 'restaurant') {
+            if (item.source !== 'cellar') {
               remove.mutate(item.wine.id, { onError });
             } else {
               updateWine.mutate(
@@ -181,28 +292,91 @@ export default function ChosenWinesScreen() {
 
   const hasAnything = items.length > 0;
 
-  // Hand a review to the native share sheet — wine identity + score +
-  // location + the user's tasting note, formatted as plain text so it can
-  // land cleanly into WhatsApp, Messages, email etc.
+  // Off-screen branded card used for review shares. Holds the props of
+  // the review currently being shared; mounted only while a share is in
+  // flight so we don't pay for layout work when nothing's queued.
+  const reviewShareRef = useRef<View>(null);
+  const [reviewSharing, setReviewSharing] = useState(false);
+  const [reviewSharePayload, setReviewSharePayload] = useState<{
+    producer: string | null;
+    wineName: string;
+    vintage: string | number | null;
+    region: string | null;
+    userScore: number | null;
+    criticScore: number | null;
+    tastingNote: string | null;
+    otherObservations: string | null;
+    date: string | null;
+    location: string | null;
+    isFavourite: boolean;
+  } | null>(null);
+
+  // Hand a review to the native share sheet as a branded PNG — mirrors
+  // the WineListShareCard path used by List recommendations so the two
+  // surfaces feel like one family. Falls back to the previous plain-
+  // text share if capture or expo-sharing isn't available (older
+  // devices, simulator without share support).
   async function handleShareReview(item: ReviewItem) {
+    if (reviewSharing) return;
     const w = item.wine;
-    const header = wineHeaderLine(w.producer, w.wine_name, w.vintage);
-    const scoreText = item.score != null ? `\nMy score: ${item.score}/100` : '';
-    const locText = item.source === 'restaurant'
-      ? locationLine(item.wine as ChosenWine)
-      : (item.wine as CellarWine).review_location ?? '';
-    const locFormatted = locText ? `\nWhere: ${locText}` : '';
-    const note = item.source === 'restaurant'
-      ? (item.wine as ChosenWine).tasting_note ?? ''
-      : (item.wine as CellarWine).user_notes ?? '';
-    const noteFormatted = note.trim() ? `\n\n"${note.trim()}"` : '';
+    // Both restaurant and other reviews live on chosen_wines, so they
+    // share the same field shape for sharing. Only cellar splits off.
+    const isChosen = item.source !== 'cellar';
+    const cw = isChosen ? (w as ChosenWine) : null;
+    const cellar = !isChosen ? (w as CellarWine) : null;
+
+    const locText = isChosen
+      ? locationLine(cw!)
+      : (cellar!.review_location?.trim() ?? '');
+    const tastingNote = isChosen
+      ? cw!.tasting_note ?? ''
+      : cellar!.user_notes ?? '';
+    const otherObs = isChosen ? (cw!.other_observations ?? '') : '';
+    const criticScore = isChosen ? cw!.critic_score : cellar!.critic_score;
+
+    setReviewSharePayload({
+      producer: w.producer,
+      wineName: w.wine_name,
+      vintage: w.vintage,
+      region: w.region,
+      userScore: item.score,
+      criticScore,
+      tastingNote,
+      otherObservations: otherObs,
+      date: formatDate(item.date),
+      location: locText || null,
+      isFavourite: !!(w as { is_favourite?: boolean }).is_favourite,
+    });
+    setReviewSharing(true);
+
     try {
+      // One paint to let the off-screen card mount with the new props.
+      await new Promise((r) => setTimeout(r, 250));
+      if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share my wine review',
+          UTI: 'public.png',
+        });
+        return;
+      }
+      // Plain-text fallback — same shape as the previous behaviour so
+      // sharing still works on devices where capture / expo-sharing
+      // isn't supported. The Get Vinster footer is always appended.
+      const header = wineHeaderLine(w.producer, w.wine_name, w.vintage);
+      const scoreText = item.score != null ? `\nMy score: ${item.score}/100` : '';
+      const locFormatted = locText ? `\nWhere: ${locText}` : '';
+      const noteFormatted = tastingNote.trim() ? `\n\n"${tastingNote.trim()}"` : '';
       await Share.share({
         message: `${header}${scoreText}${locFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`,
         title: header,
       });
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setReviewSharing(false);
+      setReviewSharePayload(null);
     }
   }
 
@@ -297,6 +471,27 @@ export default function ChosenWinesScreen() {
         </View>
       ) : null}
 
+      {/* Off-screen branded share card. Mounted only while a share is
+          in flight so its layout work doesn't sit idle in the tree. */}
+      {reviewSharePayload && (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <WineReviewShareCard
+            ref={reviewShareRef}
+            producer={reviewSharePayload.producer}
+            wineName={reviewSharePayload.wineName}
+            vintage={reviewSharePayload.vintage}
+            region={reviewSharePayload.region}
+            userScore={reviewSharePayload.userScore}
+            criticScore={reviewSharePayload.criticScore}
+            tastingNote={reviewSharePayload.tastingNote}
+            otherObservations={reviewSharePayload.otherObservations}
+            date={reviewSharePayload.date}
+            location={reviewSharePayload.location}
+            isFavourite={reviewSharePayload.isFavourite}
+          />
+        </View>
+      )}
+
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
@@ -318,74 +513,76 @@ export default function ChosenWinesScreen() {
           </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-          <View style={styles.sortRow}>
-            <Text style={styles.sortLabel}>Sort:</Text>
-            <TouchableOpacity
-              style={[styles.sortChip, sortBy === 'date' && styles.sortChipActive]}
-              onPress={() => setSortBy('date')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, sortBy === 'date' && styles.sortChipTextActive]}>Date</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, sortBy === 'city' && styles.sortChipActive]}
-              onPress={() => setSortBy('city')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, sortBy === 'city' && styles.sortChipTextActive]}>City</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, sortBy === 'score' && styles.sortChipActive]}
-              onPress={() => setSortBy('score')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, sortBy === 'score' && styles.sortChipTextActive]}>Top rated</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, sortBy === 'favourites' && styles.sortChipActive]}
-              onPress={() => setSortBy('favourites')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, sortBy === 'favourites' && styles.sortChipTextActive]}>Favourites</Text>
-            </TouchableOpacity>
+        <>
+          {/* Summary + filter chips + search — mirrors Full Cellar List
+              so the two screens read the same way. Chip lineup (left to
+              right): Sort (gold-bordered, most common interaction) /
+              Type (cellar vs restaurant) / Favourites / Location. */}
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>
+              {filtered.length} {filtered.length === 1 ? 'review' : 'reviews'}
+            </Text>
           </View>
-          <View style={styles.sortRow}>
-            <Text style={styles.sortLabel}>Show:</Text>
-            <TouchableOpacity
-              style={[styles.sortChip, filterBy === 'all' && styles.sortChipActive]}
-              onPress={() => setFilterBy('all')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, filterBy === 'all' && styles.sortChipTextActive]}>All</Text>
+          <Text style={styles.filterHint}>Swipe to see all filters →</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
+          >
+            <TouchableOpacity style={[styles.filterChip, styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
+              <Text style={styles.filterChipLabel}>Sort</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, filterBy === 'cellar' && styles.sortChipActive]}
-              onPress={() => setFilterBy('cellar')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, filterBy === 'cellar' && styles.sortChipTextActive]}>Cellar wines</Text>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
+              <Text style={styles.filterChipLabel}>Type</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{typeLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.sortChip, filterBy === 'restaurant' && styles.sortChipActive]}
-              onPress={() => setFilterBy('restaurant')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.sortChipText, filterBy === 'restaurant' && styles.sortChipTextActive]}>Restaurant wines</Text>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
+              <Text style={styles.filterChipLabel}>Favourites</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
+              <Text style={styles.filterChipLabel}>Location</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
+            </TouchableOpacity>
+          </ScrollView>
+
+          {/* Search sits below the chips and narrows whatever the chips
+              already filter — same pattern as Full Cellar List. */}
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search producer, wine, region…"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.searchClearText}>✕</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
+        <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
           {sorted.length === 0 ? (
             <View style={styles.emptyFilter}>
-              <Text style={styles.emptyBody}>No reviews match this filter.</Text>
+              <Text style={styles.emptyBody}>No reviews match these filters.</Text>
             </View>
           ) : (
             sorted.map((item) => {
               const w = item.wine;
-              const onPress = item.source === 'restaurant'
+              // chosen_wines reviews (restaurant + other) all open the
+              // EditChosenWineModal. Cellar reviews drill into the
+              // wine card under /cellar/[id].
+              const isChosen = item.source !== 'cellar';
+              const onPress = isChosen
                 ? () => setEditingWine(item.wine as ChosenWine)
                 : () => router.push(`/cellar/${(item.wine as CellarWine).id}?from=reviews` as any);
-              const locText = item.source === 'restaurant'
+              const locText = isChosen
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
               const note = addedNote(item);
@@ -404,7 +601,7 @@ export default function ChosenWinesScreen() {
                     </Text>
                     <View style={styles.scoreCluster}>
                       <View style={styles.scoreLine}>
-                        {item.source === 'restaurant' && (item.wine as ChosenWine).is_favourite ? (
+                        {isChosen && (item.wine as ChosenWine).is_favourite ? (
                           <Text style={styles.favouriteStar}>★</Text>
                         ) : null}
                         {item.score != null && (
@@ -430,10 +627,16 @@ export default function ChosenWinesScreen() {
                   <View style={styles.cardCompactMetaRow}>
                     <Text style={styles.metaText}>{formatDate(item.date)}</Text>
                     {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
-                    {item.source === 'restaurant' && formatListPrice(item.wine as ChosenWine) ? (
+                    {isChosen && formatListPrice(item.wine as ChosenWine) ? (
                       <Text style={styles.metaText}> · {formatListPrice(item.wine as ChosenWine)}</Text>
                     ) : null}
-                    <Text style={styles.metaText}> · {item.source === 'restaurant' ? 'Restaurant' : 'Cellar'}</Text>
+                    {/* No visible "Restaurant" / "Cellar" suffix here —
+                        the user found it redundant. Internally each
+                        review still carries item.source which drives
+                        the filter chips, sort logic, share routing
+                        and the long-press delete prompt (see line ~156
+                        and the filter chip group above), so this
+                        cosmetic removal doesn't disturb behaviour. */}
                   </View>
                   {note ? (
                     <Text style={styles.addedNote}>
@@ -445,7 +648,47 @@ export default function ChosenWinesScreen() {
             })
           )}
         </ScrollView>
+        </>
       )}
+
+      {/* Filter dropdown — single modal driven by openDropdown. The
+          chip the user tapped sets dropdownConfig, which feeds title
+          + options + current value into this sheet. Matches Full
+          Cellar List's interaction model so the two screens behave
+          identically. */}
+      <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
+            {activeDropdown && (
+              <>
+                <Text style={styles.dropdownTitle}>{activeDropdown.title}</Text>
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {activeDropdown.options.map((opt) => {
+                    const active = activeDropdown.selected === opt.value;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        style={[styles.dropdownOption, active && styles.dropdownOptionActive]}
+                        onPress={() => {
+                          activeDropdown.onSelect(opt.value);
+                          setOpenDropdown(null);
+                        }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}>{opt.label}</Text>
+                        {active && <Text style={styles.dropdownOptionCheck}>✓</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity style={styles.dropdownCancel} onPress={() => setOpenDropdown(null)}>
+                  <Text style={styles.dropdownCancelText}>Close</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </View>
   );
 }
@@ -482,12 +725,33 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
   addedNote: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: spacing.xs },
   emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
-  sortLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: spacing.xs },
-  sortChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 16, paddingVertical: 4, paddingHorizontal: spacing.md },
-  sortChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  sortChipText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
-  sortChipTextActive: { color: colors.gold },
+  // Summary + filter carousel — copied from Full Cellar List
+  // (app/cellar/list.tsx) so the two screens look identical above the
+  // list itself. Sort chip is gold-bordered to mark it as the most
+  // common interaction.
+  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, letterSpacing: 0.3 },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
+  filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
+  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChipSort: { borderColor: colors.gold },
+  filterChipLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterChipValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
+  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  searchClear: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  searchClearText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  dropdownSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  dropdownTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  dropdownOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
+  dropdownOptionText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text },
+  dropdownOptionTextActive: { color: colors.gold },
+  dropdownOptionCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
+  dropdownCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  dropdownCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   chooserTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
@@ -498,4 +762,8 @@ const styles = StyleSheet.create({
   chooserCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
   uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   uploadingText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, letterSpacing: 0.5 },
+  // Hides the off-screen branded share card from the visible layout
+  // while still keeping it mountable for react-native-view-shot to
+  // snapshot. Matches the WineListShareCard pattern in scan/results.
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
 });

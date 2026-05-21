@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { supabase } from '../../src/api/supabase';
 import { showAlert } from '../../src/components/AppAlert';
@@ -85,6 +88,31 @@ export default function FullCellarListScreen() {
   const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
+  // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
+  // "Add Wine / Generate Wine Intel" flow so the user can kick the
+  // same scan / upload / manual entry path from this screen without
+  // having to bounce back to the tab landing page.
+  const [addWineOpen, setAddWineOpen] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
+  const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
+
+  async function handleUpload() {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    setScanningLabel(true);
+    try {
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to scan label');
+    } finally {
+      setScanningLabel(false);
+    }
+    router.push('/label/confirm');
+  }
 
   // Compute available filter options from the actual cellar
   const availableCountries = useMemo(() => {
@@ -208,7 +236,12 @@ export default function FullCellarListScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Full Cellar List</Text>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={() => setAddWineOpen(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+        >
+          <Text style={styles.addLink}>+ Add</Text>
+        </TouchableOpacity>
       </View>
 
       {!session ? (
@@ -371,6 +404,56 @@ export default function FullCellarListScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Add-wine chooser — Scan / Upload / Manual. Same three-way
+          flow as the Cellar tab's "Add Wine / Generate Wine Intel"
+          button so the user lands on the same /label/* downstream
+          screens regardless of which surface they triggered it from. */}
+      <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Add a wine</Text>
+            <Text style={styles.addBody}>Scan the label or upload a photo and Vinster will pull in the details — or enter them yourself.</Text>
+            <TouchableOpacity
+              style={styles.addBtn}
+              onPress={() => { setAddWineOpen(false); router.push('/label/camera'); }}
+            >
+              <Text style={styles.addBtnText}>Scan Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBtn, { marginTop: spacing.sm }]}
+              onPress={() => { setAddWineOpen(false); handleUpload(); }}
+            >
+              <Text style={styles.addBtnText}>Upload Screenshot / Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBtn, { marginTop: spacing.sm }]}
+              onPress={() => {
+                setAddWineOpen(false);
+                // Clear any prior scan so Confirm Wine Details opens
+                // blank for the user to fill in by hand.
+                resetLabelStore();
+                router.push('/label/confirm?manual=1');
+              }}
+            >
+              <Text style={styles.addBtnText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Scanning overlay — sits on top of the screen while OCR runs
+          so the user has a visual cue between the picker dismiss and
+          the confirm screen mounting (the round-trip can take 5–15s). */}
+      {scanningLabel && (
+        <View style={styles.scanningOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.scanningText}>Reading the label…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -380,6 +463,19 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
+  // Top-right "+ Add" header link — opens the chooser modal that
+  // mirrors the Cellar tab's Add Wine flow.
+  addLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, width: 50, textAlign: 'right' },
+  // Add-wine chooser modal — uses the existing modalOverlay /
+  // modalSheet / modalTitle styles. These are the bits that aren't
+  // shared with the filter dropdown.
+  addBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  addBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  // OCR-in-flight overlay. Locks input while the scan call is out so
+  // the user can't double-tap into the chooser.
+  scanningOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  scanningText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.8 },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },

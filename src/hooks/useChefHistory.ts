@@ -12,6 +12,7 @@ import {
 } from '../api/chef';
 import type { CellarRecommendation, GeneralRecommendation } from '../stores/foodPairingStore';
 import type { Pairing, WineDetailsComplete } from '../types/wine';
+import { normaliseCity } from '../utils/city';
 
 // Best-effort city resolution from GPS. Returns null if permission isn't
 // granted or anything fails — saves should never block on location.
@@ -27,7 +28,8 @@ async function captureCity(): Promise<string | null> {
     if (status !== 'granted') return null;
     const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
     const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-    return geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+    const raw = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+    return raw ? normaliseCity(raw) : null;
   } catch {
     return null;
   }

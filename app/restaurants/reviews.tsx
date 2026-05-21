@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
 import { router } from 'expo-router';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -8,6 +10,7 @@ import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModa
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
 import { ShareIcon } from '../../src/components/ShareIcon';
+import { RestaurantReviewShareCard } from '../../src/components/RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
@@ -28,58 +31,110 @@ type RatingFilter = 'all' | '5' | '4plus' | '3plus';
 export default function RestaurantReviewsScreen() {
   const { archive, archiveLoading, removeArchiveItem } = useScanHistory();
 
+  // Off-screen branded share card — mirrors the WineListShareCard +
+  // WineReviewShareCard pattern so all three Vinster surfaces share
+  // one visual language when posted into a chat thread. Only mounted
+  // during a share so it doesn't sit idle in the tree.
+  const restaurantShareRef = useRef<View>(null);
+  const [restaurantSharing, setRestaurantSharing] = useState(false);
+  const [restaurantSharePayload, setRestaurantSharePayload] = useState<{
+    restaurantName: string;
+    city: string | null;
+    date: string | null;
+    ratingOverall: number | null;
+    ratingFood: number | null;
+    ratingService: number | null;
+    ratingWineList: number | null;
+    note: string | null;
+    wines: Array<{ producer: string | null; wineName: string; vintage: string | number | null; userScore: number | null }>;
+  } | null>(null);
+
   // Render a single rating as a "★★★★☆ (4/5)" plain-text line for the
-  // share text body. Returns null when the rating is missing.
+  // share text body. Returns null when the rating is missing. Used by
+  // the plain-text fallback share only — the branded card builds its
+  // own star rows.
   function ratingLine(label: string, value: number | null): string | null {
     if (value == null) return null;
     const stars = '★'.repeat(value) + '☆'.repeat(5 - value);
     return `${label}: ${stars} (${value}/5)`;
   }
 
-  // Build the plain-text version of a restaurant visit + hand it to the
-  // native share sheet. Includes restaurant name, city, visit date, all
-  // ratings present, the user's note, and any wines they chose at that
-  // visit. Matches the per-review share function on Your Wine Reviews.
+  // Hand a restaurant visit to the native share sheet as a branded
+  // PNG capture. Mirrors the WineListShareCard / WineReviewShareCard
+  // flow. Falls back to the previous plain-text share if capture or
+  // expo-sharing isn't available on the device.
   async function handleShareRestaurant(item: ScanArchiveItem) {
+    if (restaurantSharing) return;
     const restaurant = item.restaurantName?.trim() || 'Restaurant visit';
-    const header = item.city?.trim()
-      ? `${restaurant} · ${item.city.trim()}`
-      : restaurant;
     const date = formatDate(item.capturedAt);
-
-    const ratings = [
-      ratingLine('Overall',  item.ratingOverall),
-      ratingLine('Food',     item.ratingFood),
-      ratingLine('Service',  item.ratingService),
-      ratingLine('Wine list', item.ratingWineList),
-    ].filter(Boolean).join('\n');
-
-    const note = item.restaurantNote?.trim()
-      ? `\n\n"${item.restaurantNote.trim()}"`
-      : '';
-
     const chosen = findChosenForVisit(item);
-    const winesBlock = chosen.length === 0
-      ? ''
-      : '\n\nWines I had:\n' + chosen.map((cw) => {
-          const wineLine = [cw.producer, cw.wine_name, cw.vintage]
-            .filter((x) => x != null && String(x).trim().length > 0)
-            .join(' · ');
-          const score = cw.user_score != null ? ` (${cw.user_score}/100)` : '';
-          return `· ${wineLine}${score}`;
-        }).join('\n');
+    const winesForCard = chosen.map((cw) => ({
+      producer: cw.producer,
+      wineName: cw.wine_name,
+      vintage: cw.vintage,
+      userScore: cw.user_score,
+    }));
 
-    const message =
-      `${header}\n${date}` +
-      (ratings ? `\n\n${ratings}` : '') +
-      note +
-      winesBlock +
-      VINSTER_TEXT_SHARE_FOOTER;
+    setRestaurantSharePayload({
+      restaurantName: restaurant,
+      city: item.city?.trim() || null,
+      date,
+      ratingOverall: item.ratingOverall,
+      ratingFood: item.ratingFood,
+      ratingService: item.ratingService,
+      ratingWineList: item.ratingWineList,
+      note: item.restaurantNote?.trim() || null,
+      wines: winesForCard,
+    });
+    setRestaurantSharing(true);
 
     try {
+      // One paint to mount the off-screen card with the new props
+      // before the snapshot.
+      await new Promise((r) => setTimeout(r, 250));
+      if (restaurantShareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(restaurantShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: `Share ${restaurant}`,
+          UTI: 'public.png',
+        });
+        return;
+      }
+
+      // Plain-text fallback — preserves the previous behaviour for
+      // devices where capture / expo-sharing isn't available.
+      const header = item.city?.trim() ? `${restaurant} · ${item.city.trim()}` : restaurant;
+      const ratings = [
+        ratingLine('Overall',  item.ratingOverall),
+        ratingLine('Food',     item.ratingFood),
+        ratingLine('Service',  item.ratingService),
+        ratingLine('Wine list', item.ratingWineList),
+      ].filter(Boolean).join('\n');
+      const note = item.restaurantNote?.trim()
+        ? `\n\n"${item.restaurantNote.trim()}"`
+        : '';
+      const winesBlock = chosen.length === 0
+        ? ''
+        : '\n\nWines I had:\n' + chosen.map((cw) => {
+            const wineLine = [cw.producer, cw.wine_name, cw.vintage]
+              .filter((x) => x != null && String(x).trim().length > 0)
+              .join(' · ');
+            const score = cw.user_score != null ? ` (${cw.user_score}/100)` : '';
+            return `· ${wineLine}${score}`;
+          }).join('\n');
+      const message =
+        `${header}\n${date}` +
+        (ratings ? `\n\n${ratings}` : '') +
+        note +
+        winesBlock +
+        VINSTER_TEXT_SHARE_FOOTER;
       await Share.share({ message, title: restaurant });
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setRestaurantSharing(false);
+      setRestaurantSharePayload(null);
     }
   }
 
@@ -402,6 +457,25 @@ export default function RestaurantReviewsScreen() {
         onClose={() => setEditingWine(null)}
         onSaved={() => setEditingWine(null)}
       />
+
+      {/* Off-screen branded share card. Mounted only during a share
+          so layout work doesn't sit idle when nothing is queued. */}
+      {restaurantSharePayload && (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <RestaurantReviewShareCard
+            ref={restaurantShareRef}
+            restaurantName={restaurantSharePayload.restaurantName}
+            city={restaurantSharePayload.city}
+            date={restaurantSharePayload.date}
+            ratingOverall={restaurantSharePayload.ratingOverall}
+            ratingFood={restaurantSharePayload.ratingFood}
+            ratingService={restaurantSharePayload.ratingService}
+            ratingWineList={restaurantSharePayload.ratingWineList}
+            note={restaurantSharePayload.note}
+            wines={restaurantSharePayload.wines}
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -414,6 +488,10 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  // Hides the off-screen branded share card from the visible layout
+  // while still mounting it so react-native-view-shot can snapshot.
+  // Matches the WineListShareCard / WineReviewShareCard pattern.
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   cardCompactRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   // Star rating sits above the share icon on the right of each card.

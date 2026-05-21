@@ -18,27 +18,28 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-// Compact wish-list row, matching the Your Wine Reviews visual format:
-// header line + region + meta row + a yellow View/Add Note link in the
-// footer slot. Tapping the card opens the move-to-cellar modal (primary
-// action for a wish-list wine); long-press opens the delete prompt
-// (same UX as Wine Reviews). Note + "Discovered at" editing lives on
-// /cellar/wishlist-note/[id].
-function WishListCard({ wine, onPressMove, onLongPressDelete }: {
+// Compact wish-list row. Tap drills into the unified wine card (same
+// /cellar/[wineId] surface used by Cellar wines) so notes / Vinster
+// intel / community share all live in one place. Long-press still
+// opens the delete prompt. The footer link now triggers the move-to-
+// cellar flow directly (was previously routed through a separate
+// wishlist-note screen, which is being retired in favour of the
+// unified card).
+function WishListCard({ wine, onPressView, onPressAddToCellar, onLongPressDelete }: {
   wine: CellarWine;
-  onPressMove: () => void;
+  onPressView: () => void;
+  onPressAddToCellar: () => void;
   onLongPressDelete: () => void;
 }) {
   const dateLabel = wine.date_received
     ? formatDate(wine.date_received)
     : formatDate(wine.created_at);
   const location = wine.user_notes?.trim() ?? '';
-  const hasNote = !!(wine.tasting_notes && wine.tasting_notes.trim().length > 0);
 
   return (
     <TouchableOpacity
       style={styles.cardCompact}
-      onPress={onPressMove}
+      onPress={onPressView}
       onLongPress={onLongPressDelete}
       delayLongPress={400}
       activeOpacity={0.7}
@@ -55,10 +56,10 @@ function WishListCard({ wine, onPressMove, onLongPressDelete }: {
       </View>
       <View style={styles.viewNoteRow}>
         <TouchableOpacity
-          onPress={() => router.push(`/cellar/wishlist-note/${wine.id}` as any)}
+          onPress={onPressAddToCellar}
           hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
         >
-          <Text style={styles.viewNoteText}>{hasNote ? 'View Note' : 'Add Note'}</Text>
+          <Text style={styles.viewNoteText}>Add to Cellar</Text>
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
@@ -360,7 +361,11 @@ export default function WishListScreen() {
             <WishListCard
               key={wine.id}
               wine={wine}
-              onPressMove={() => handleMoveToCellar(wine.id)}
+              // Tap opens the unified wine card (same surface used for
+              // Cellar wines). from=wishlist tells the card to swap
+              // some affordances for wishlist-mode equivalents.
+              onPressView={() => router.push(`/cellar/${wine.id}?from=wishlist` as any)}
+              onPressAddToCellar={() => handleMoveToCellar(wine.id)}
               onLongPressDelete={() => handleDelete(wine.id)}
             />
           ))}

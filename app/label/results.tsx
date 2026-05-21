@@ -176,9 +176,16 @@ export default function LabelResultsScreen() {
     try {
       await addToWishList.mutateAsync({ ...buildWinePayload(session.user.id), is_wishlist: true });
       setAddingToWishList(false);
+      // Include the vintage in the confirmation so the user sees the
+      // full identity of what just landed ("Château Margaux 2013",
+      // not "Château Margaux"). Falls back to whichever pieces are
+      // populated when scan-label couldn't pull a vintage.
+      const confirmLabel = [wine.producer, wine.wineName, wine.vintage]
+        .filter((s) => s && String(s).trim().length > 0)
+        .join(' ');
       showAlert({
         title: 'Added to Wish List',
-        body: `${wine.wineName ?? wine.producer} has been saved to your wish list.`,
+        body: `${confirmLabel || (wine.wineName ?? wine.producer ?? 'This wine')} has been saved to your wish list.`,
         // When the user came in via the wish-list flow they're expecting to
         // land back on the wish list, not the wine card. Route there from OK.
         buttons: isWishlistFlow
@@ -224,6 +231,58 @@ export default function LabelResultsScreen() {
     }
     return null;
   }, [wineDetailsConfirmed, wines]);
+
+  // Fuzzy-duplicate check. Catches the case where the user adds a wine
+  // by hand using a partial label and the cellar already holds the
+  // same bottle under its full, more precise name (e.g. "Pavillon
+  // Rouge 2009" entered manually vs an existing "Chateau Margaux
+  // Pavillon Rouge 2009" from a scan). Same vintage is required so
+  // we don't confuse different years of the same wine.
+  //
+  // The match runs across the COMBINED producer + wine_name string on
+  // both sides, tokenised to ≥3-character alphanumerics. One side's
+  // token set must be a subset of the other (i.e. every token in the
+  // shorter set appears in the longer set), AND that shorter set must
+  // be at least 2 tokens so we don't false-positive on single-word
+  // grape names like "Riesling".
+  const fuzzyExisting = useMemo(() => {
+    if (!wineDetailsConfirmed || !wines) return null;
+    if (matchingExisting) return null; // exact / swapped wins
+    const wantedVintage = (wineDetailsConfirmed.vintage ?? '').trim();
+    if (!wantedVintage) return null;
+
+    function tokenise(s: string): Set<string> {
+      return new Set(
+        s.toLowerCase()
+          .replace(/[^a-z0-9 ]/g, ' ')
+          .split(/\s+/)
+          .filter((t) => t.length >= 3),
+      );
+    }
+    const wantedCombined = `${wineDetailsConfirmed.producer ?? ''} ${wineDetailsConfirmed.wineName ?? ''}`;
+    const wantedTokens = tokenise(wantedCombined);
+    if (wantedTokens.size < 2) return null;
+
+    for (const w of wines) {
+      if ((w.vintage ?? '').trim() !== wantedVintage) continue;
+      const cellarCombined = `${w.producer ?? ''} ${w.wine_name ?? ''}`;
+      const cellarTokens = tokenise(cellarCombined);
+      if (cellarTokens.size < 2) continue;
+      // Subset check in the direction of the smaller set so the
+      // shorter (manual) entry counts as a match against the longer
+      // (scanned) entry, and vice-versa.
+      const [small, big] =
+        wantedTokens.size <= cellarTokens.size
+          ? [wantedTokens, cellarTokens]
+          : [cellarTokens, wantedTokens];
+      let allIn = true;
+      for (const t of small) {
+        if (!big.has(t)) { allIn = false; break; }
+      }
+      if (allIn) return w;
+    }
+    return null;
+  }, [wineDetailsConfirmed, wines, matchingExisting]);
 
   // Single place that handles all post-save routing — used by both the new-
   // entry path and the merge-with-existing path. NOTE: don't call
@@ -331,13 +390,17 @@ export default function LabelResultsScreen() {
     }
   }
 
-  async function performMerge() {
-    if (!matchingExisting) return;
+  async function performMerge(target?: { id: string; quantity: number } | null) {
+    // Accept an explicit target so the fuzzy-duplicate path can merge
+    // into a row that isn't an exact identity hit. Falls back to the
+    // exact match for the original entry-point.
+    const merge = target ?? matchingExisting;
+    if (!merge) return;
     setSaving(true);
     try {
       // Quantity is reconciled inside performSaveFlow — it differs for the
       // place-in-slot path (adds the placed count) vs the non-slot paths.
-      await performSaveFlow(matchingExisting.id, 'merge', matchingExisting.quantity);
+      await performSaveFlow(merge.id, 'merge', merge.quantity);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       showAlert({ title: 'Could not save to cellar', body: detail });
@@ -369,6 +432,13 @@ export default function LabelResultsScreen() {
         otherObservations: '',
         userScore: validScore,
         isFavourite: false,
+        // The "Review without adding" path on the Cellar add-wine
+        // flow isn't a restaurant scan and isn't a cellar wine — it's
+        // a standalone review. Mark it 'other' so the Your Wine
+        // Reviews Type filter can split it out from the Restaurant
+        // bucket. Manual-entry-via-Reviews-tab continues to fall back
+        // to the DB default 'restaurant'.
+        source: 'other',
       });
       setAddingReview(false);
       if (isReviewsFlow) {
@@ -402,7 +472,31 @@ export default function LabelResultsScreen() {
         title: 'Already in your cellar',
         body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel}. Add this bottle to that listing?`,
         buttons: [
-          { text: 'Yes', onPress: performMerge },
+          { text: 'Yes', onPress: () => performMerge() },
+          { text: 'No, create a new line', onPress: performNewEntry },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    // Near-duplicate caught by fuzzy-token match — same vintage, one
+    // wine's name is a token-subset of the other (e.g. "Pavillon
+    // Rouge 2009" vs "Chateau Margaux Pavillon Rouge 2009"). Surface
+    // the full label of the cellar match so the user can confirm.
+    if (fuzzyExisting) {
+      const existingQty = fuzzyExisting.quantity;
+      const producerPart = fuzzyExisting.producer ? `${fuzzyExisting.producer} ` : '';
+      const vintagePart = fuzzyExisting.vintage ? ` ${fuzzyExisting.vintage}` : '';
+      const wineLabel = `${producerPart}${fuzzyExisting.wine_name}${vintagePart}`.trim();
+      // Capture by value so the alert callbacks can't see a stale
+      // fuzzyExisting if the user pauses on the prompt while the
+      // cellar query refetches in the background.
+      const mergeTarget = { id: fuzzyExisting.id, quantity: existingQty };
+      showAlert({
+        title: 'Similar wine in your cellar',
+        body: `There is a similar wine in your cellar — is this the same as ${wineLabel}? You currently have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of it.`,
+        buttons: [
+          { text: 'Yes, same wine', onPress: () => performMerge(mergeTarget) },
           { text: 'No, create a new line', onPress: performNewEntry },
           { text: 'Cancel', style: 'cancel' },
         ],

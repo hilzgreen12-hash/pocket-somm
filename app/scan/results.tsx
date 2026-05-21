@@ -15,6 +15,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
+import { normaliseCity } from '../../src/utils/city';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
@@ -48,8 +49,13 @@ export default function ResultsScreen() {
   const inFlightSaveRef = useRef<Promise<void> | null>(null);
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
-  const [wishlistIndexes, setWishlistIndexes] = useState<Set<number>>(new Set());
-  const { addWine: addToWishList } = useWishList();
+  // Per-recommendation map: index → wishlist row id. Used to toggle
+  // a wine on/off the wish list from the results screen — if there's
+  // a row id stored, the same button removes it; otherwise it adds
+  // and stashes the new id. Lets a user undo an accidental tap
+  // without leaving the screen.
+  const [wishlistRowIds, setWishlistRowIds] = useState<Record<number, string>>({});
+  const { addWine: addToWishList, deleteWine: removeFromWishList } = useWishList();
   const { save: saveChosen, update: updateChosen, chosenWines } = useChosenWines();
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
@@ -104,7 +110,8 @@ export default function ResultsScreen() {
         if (status !== 'granted') return;
         const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
         const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-        const city = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+        const raw = geo?.city ?? geo?.subregion ?? geo?.region ?? null;
+        const city = raw ? normaliseCity(raw) : null;
         if (city && !cancelled) setLiveCity(city);
       } catch { /* location unavailable — stamp falls back to whatever's on the saved row */ }
     })();
@@ -273,10 +280,30 @@ export default function ResultsScreen() {
     }
   }
 
-  async function handleAddToWishlist(wine: WineRecommendation, i: number) {
-    if (!session || wishlistIndexes.has(i)) return;
+  async function handleToggleWishlist(wine: WineRecommendation, i: number) {
+    if (!session) return;
+    const existingId = wishlistRowIds[i];
+
+    // Already on the wish list — tap removes it. Lets the user undo
+    // an accidental add without navigating away from the recommendation.
+    if (existingId) {
+      try {
+        await removeFromWishList.mutateAsync(existingId);
+        setWishlistRowIds((prev) => {
+          const next = { ...prev };
+          delete next[i];
+          return next;
+        });
+      } catch (err) {
+        showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
+      return;
+    }
+
+    // Not on the wish list yet — add it and stash the new row id so a
+    // subsequent tap can remove it.
     try {
-      await addToWishList.mutateAsync({
+      const created = await addToWishList.mutateAsync({
         user_id: session.user.id,
         wine_name: wine.name,
         producer: wine.producer,
@@ -295,7 +322,9 @@ export default function ResultsScreen() {
         user_notes: null,
         is_wishlist: true,
       });
-      setWishlistIndexes((prev) => new Set([...prev, i]));
+      if (created?.id) {
+        setWishlistRowIds((prev) => ({ ...prev, [i]: created.id }));
+      }
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -390,7 +419,11 @@ export default function ResultsScreen() {
         const rank = RANK_LABELS[i] ?? `#${i + 1}`;
         const vintage = w.vintage ? `${w.vintage} ` : '';
         const score = w.criticScore > 0 ? ` (${w.criticScore} pts)` : '';
-        return `${rank}: ${vintage}${w.name}${score}`;
+        // Flavour profile on its own line, indented, so it reads as a
+        // pull-quote about taste rather than an extension of the
+        // header. Omitted when missing (older saved scans).
+        const flavour = w.flavourProfile ? `\n   ${w.flavourProfile}` : '';
+        return `${rank}: ${vintage}${w.name}${score}${flavour}`;
       });
       await Share.share({
         title: 'Vinster Recommends',
@@ -588,6 +621,15 @@ export default function ResultsScreen() {
                   <Text style={styles.wineProducer}>
                     {wine.producer}{wine.region ? ` · ${wine.region}` : ''}{wine.grape ? ` · ${wine.grape}` : ''}
                   </Text>
+                  {/* One-line flavour profile — pure tasting note,
+                      always visible on the compact card so the user
+                      gets a sense of how the wine drinks before they
+                      decide whether to expand. Falls back gracefully
+                      if Claude omitted the field (older sessions
+                      saved before this prompt change). */}
+                  {wine.flavourProfile ? (
+                    <Text style={styles.wineFlavour} numberOfLines={2}>{wine.flavourProfile}</Text>
+                  ) : null}
                 </View>
                 <View style={styles.rowRight}>
                   {wine.menuPrice != null && (
@@ -668,14 +710,19 @@ export default function ResultsScreen() {
                       >
                         <Text style={styles.detailActionBtnText}>Review Wine</Text>
                       </TouchableOpacity>
+                      {/* Tap toggles wish-list membership. When on
+                          the list the button reads "✓ On Wish List —
+                          tap to remove" so the user knows they can
+                          undo without leaving the screen. Disabled
+                          only while a mutation is mid-flight. */}
                       <TouchableOpacity
-                        style={[styles.detailActionBtn, wishlistIndexes.has(i) && styles.detailActionBtnDone]}
-                        onPress={() => handleAddToWishlist(wine, i)}
-                        disabled={wishlistIndexes.has(i) || addToWishList.isPending}
+                        style={[styles.detailActionBtn, !!wishlistRowIds[i] && styles.detailActionBtnDone]}
+                        onPress={() => handleToggleWishlist(wine, i)}
+                        disabled={addToWishList.isPending || removeFromWishList.isPending}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.detailActionBtnText, wishlistIndexes.has(i) && styles.detailActionBtnTextDone]}>
-                          {wishlistIndexes.has(i) ? '✓ On Wish List' : 'Add to Wish List'}
+                        <Text style={[styles.detailActionBtnText, !!wishlistRowIds[i] && styles.detailActionBtnTextDone]}>
+                          {wishlistRowIds[i] ? '✓ On Wish List — tap to remove' : 'Add to Wish List'}
                         </Text>
                       </TouchableOpacity>
                     </View>
@@ -955,6 +1002,19 @@ const styles = StyleSheet.create({
     color: colors.text,
     letterSpacing: 0.2,
     textAlign: 'center',
+  },
+  // Flavour-profile line — italic gold so it reads as "Vinster's voice"
+  // (matching the personality popup, sommelier rationale and other
+  // first-person prose surfaces). Sits between the producer line and
+  // the chevron, always visible on the compact card.
+  wineFlavour: {
+    fontSize: 14,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    color: colors.gold,
+    lineHeight: 19,
+    textAlign: 'center',
+    marginTop: 4,
+    paddingHorizontal: spacing.sm,
   },
   rowRight: {
     alignItems: 'flex-end',

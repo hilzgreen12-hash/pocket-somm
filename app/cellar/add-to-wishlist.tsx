@@ -7,7 +7,6 @@ import { useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 
 export default function AddToWishListScreen() {
@@ -19,7 +18,10 @@ export default function AddToWishListScreen() {
   const [producer, setProducer] = useState('');
   const [region, setRegion] = useState('');
   const [vintage, setVintage] = useState('');
-  const [bottleSizeMl, setBottleSizeMl] = useState(750);
+  // Bottle size isn't relevant for a wish-list wine — they haven't
+  // bought it yet, so 750ml is assumed at insert time and the picker
+  // is hidden from this screen. The cellar add flow still surfaces
+  // it because that IS a real bottle entering the rack.
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -34,12 +36,15 @@ export default function AddToWishListScreen() {
     if (!session?.user.id) return;
     setSaving(true);
     try {
+      const trimmedName = wineName.trim();
+      const trimmedProducer = producer.trim();
+      const trimmedVintage = vintage.trim();
       await addWine.mutateAsync({
         user_id: session.user.id,
-        wine_name: wineName.trim(),
-        producer: producer.trim() || null,
+        wine_name: trimmedName,
+        producer: trimmedProducer || null,
         region: region.trim() || null,
-        vintage: vintage.trim() || null,
+        vintage: trimmedVintage || null,
         quantity: 1,
         storage_location: null,
         date_received: new Date().toISOString().split('T')[0],
@@ -52,9 +57,22 @@ export default function AddToWishListScreen() {
         label_image_path: null,
         user_notes: null,
         is_wishlist: true,
-        bottle_size_ml: bottleSizeMl,
+        // Default to 750ml silently — wishlist wines haven't been
+        // bought yet, so a format picker on this screen is noise.
+        bottle_size_ml: 750,
       });
-      router.back();
+      // Confirmation includes the vintage so the user sees the FULL
+      // identity of what just landed on their wish list ("Château
+      // Margaux 2013" not "Château Margaux"). Falls back gracefully
+      // when no producer/vintage was entered.
+      const confirmLabel = [trimmedProducer, trimmedName, trimmedVintage]
+        .filter((s) => s && s.length > 0)
+        .join(' ');
+      showAlert({
+        title: 'Added to your wish list',
+        body: `${confirmLabel || trimmedName} has been added to your wish list.`,
+        buttons: [{ text: 'OK', onPress: () => router.back() }],
+      });
     } catch {
       showAlert({ title: 'Error', body: 'Could not save wine. Please try again.' });
     } finally {
@@ -153,11 +171,6 @@ export default function AddToWishListScreen() {
         keyboardType="number-pad"
       />
 
-      <Text style={styles.label}>Bottle size</Text>
-      <View style={styles.bottleSizeWrap}>
-        <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
-      </View>
-
       <TouchableOpacity
         style={[styles.saveButton, saving && { opacity: 0.6 }]}
         onPress={handleSave}
@@ -188,7 +201,6 @@ const styles = StyleSheet.create({
   dividerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
   label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
-  bottleSizeWrap: { marginBottom: spacing.lg },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
 });

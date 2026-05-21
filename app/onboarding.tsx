@@ -172,8 +172,8 @@ export default function OnboardingScreen() {
           open={regionalOpen}
           onToggle={() => toggle(setRegionalOpen)}
         >
-          <Text style={styles.pickerHint}>Select up to 5 — Vinster will never recommend these.</Text>
-          <ChipPicker options={WINE_REGIONS} selected={disRegions} onChange={setDisRegions} max={5} />
+          <Text style={styles.pickerHint}>Select up to 5 — Vinster will never recommend these. Tap "+ Add other" to type one that isn't listed.</Text>
+          <ChipPicker options={WINE_REGIONS} selected={disRegions} onChange={setDisRegions} max={5} allowCustom />
         </Accordion>
 
         <Accordion
@@ -182,8 +182,8 @@ export default function OnboardingScreen() {
           open={varietalOpen}
           onToggle={() => toggle(setVarietalOpen)}
         >
-          <Text style={styles.pickerHint}>Select up to 5 — Vinster will never recommend these.</Text>
-          <ChipPicker options={GRAPE_VARIETIES} selected={disGrapes} onChange={setDisGrapes} max={5} />
+          <Text style={styles.pickerHint}>Select up to 5 — Vinster will never recommend these. Tap "+ Add other" to type one that isn't listed.</Text>
+          <ChipPicker options={GRAPE_VARIETIES} selected={disGrapes} onChange={setDisGrapes} max={5} allowCustom />
         </Accordion>
 
         <Text style={styles.subheading}>Recipe Requirements</Text>

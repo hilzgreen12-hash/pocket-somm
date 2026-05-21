@@ -1,11 +1,15 @@
-import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
-import { useCellar, useArchive } from '../../src/hooks/useCellar';
+import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
+import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -72,16 +76,28 @@ export default function CellarWineDetail() {
   // this card is swapped for a Post Review to Community CTA so the user
   // can share what they just wrote with other Vinster users.
   const cameFromReviews = from === 'reviews';
+  // Coming in from the Wish List screen — surfaces an Add to Cellar
+  // affordance and hides cellar-only actions (Add bottles, Archive,
+  // Removal History) that don't make sense for a wine the user
+  // hasn't bought yet.
+  const cameFromWishlist = from === 'wishlist';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
+  const { wines: wishlistWines, isLoading: wishlistLoading } = useWishList();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
   const { setPendingWineId, setPendingAddMode } = useRackStore();
   const qc = useQueryClient();
   const { wines: archivedWines, isLoading: archiveLoading } = useArchive();
-  const wine = wines.find((w) => w.id === wineId) ?? archivedWines.find((w) => w.id === wineId);
+  // Unified lookup — the card now serves cellar, wishlist and archive
+  // rows out of the same screen. Mode flags below drive the
+  // affordance differences.
+  const wine = wines.find((w) => w.id === wineId)
+    ?? wishlistWines.find((w) => w.id === wineId)
+    ?? archivedWines.find((w) => w.id === wineId);
   const isArchived = !!wine?.archived_at;
+  const isWishlist = !!wine?.is_wishlist;
 
   const { data: removals = [] } = useQuery({
     queryKey: ['cellar-removals', wineId],
@@ -133,7 +149,24 @@ export default function CellarWineDetail() {
   // reviewed yet — users adding a review immediately after drinking would
   // otherwise have to type the date out every time.
   const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? todayISO());
+  // The user's WRITTEN review text — sharable to community + outside
+  // the app. Distinct from Personal Notes (user_notes), which stays
+  // private. Backed by the new review_note column (migration 043).
+  const [reviewNoteDraft, setReviewNoteDraft] = useState(wine?.review_note ?? '');
   const [savingReview, setSavingReview] = useState(false);
+
+  // Vinster's Note — collapsed by default now (was always visible).
+  // The "(what's this)" link surfaces a short explanation modal so a
+  // user encountering the field for the first time knows what it is.
+  const [vinstersNoteOpen, setVinstersNoteOpen] = useState(false);
+  const [whatsThisOpen, setWhatsThisOpen] = useState(false);
+
+  // Off-screen share card for "Share outside the app" — captured to
+  // PNG and handed to the native share sheet. Same pattern Wine
+  // Reviews uses.
+  const reviewShareRef = useRef<View>(null);
+  const [sharingOutside, setSharingOutside] = useState(false);
+  const [reviewSharePayload, setReviewSharePayload] = useState<React.ComponentProps<typeof WineReviewShareCard> | null>(null);
 
   // Brief "Wine removed from your records" toast — shown for ~1.4s after
   // a permanent delete, then the auto-dismiss timer navigates back. The
@@ -153,7 +186,7 @@ export default function CellarWineDetail() {
   // "Wine not found" fallback — otherwise the user sees a flash of that
   // message right after a wine is added (the navigation lands before the
   // cellar refetch resolves).
-  if (!wine && (cellarLoading || archiveLoading)) {
+  if (!wine && (cellarLoading || archiveLoading || wishlistLoading)) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={colors.gold} size="large" />
@@ -361,6 +394,9 @@ export default function CellarWineDetail() {
           review_score: parsedScore,
           review_location: locationTrim || null,
           review_date: dateTrim || null,
+          // Review prose lives in review_note (migration 043) so it
+          // can be split cleanly from Personal Notes (user_notes).
+          review_note: reviewNoteDraft.trim() || null,
         },
       });
       // Mirror the review edit onto every matching record so reviews,
@@ -457,7 +493,10 @@ export default function CellarWineDetail() {
     const title = titleParts.join(' · ').trim() || wine.wine_name || 'Wine review';
     const subtitleParts = [wine.region, wine.grape_variety].filter(Boolean);
     const subtitle = subtitleParts.join(' · ') || null;
-    const body = (wine.user_notes ?? '').trim() || null;
+    // Prefer the new review_note column for the post body; fall back
+    // to user_notes for legacy rows where the user wrote everything
+    // into "Additional Notes" before the split (migration 043).
+    const body = (wine.review_note ?? '').trim() || (wine.user_notes ?? '').trim() || null;
     showAlert({
       title: 'Share with the community?',
       body: `Post your review of ${title} to the Vinster community feed. Other users will be able to read your notes and rating.`,
@@ -507,6 +546,60 @@ export default function CellarWineDetail() {
         },
       ],
     });
+  }
+
+  // Share the review as a branded PNG card via the native share sheet
+  // (WhatsApp, Messages, Instagram, etc.). Mirrors the Wine Reviews
+  // share flow so all three Vinster review surfaces use the same card.
+  async function handleShareReviewOutside() {
+    if (!wine || sharingOutside) return;
+    const headerLine = (() => {
+      const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+      return sameName
+        ? [wine.producer, wine.vintage].filter(Boolean).join(' ')
+        : [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
+    })();
+    setReviewSharePayload({
+      producer: wine.producer,
+      wineName: wine.wine_name,
+      vintage: wine.vintage,
+      region: wine.region,
+      userScore: wine.review_score,
+      criticScore: wine.critic_score,
+      tastingNote: wine.review_note ?? wine.user_notes ?? '',
+      otherObservations: null,
+      date: wine.review_date ? new Date(wine.review_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null,
+      location: wine.review_location ?? null,
+      isFavourite: wine.is_favourite,
+    });
+    setSharingOutside(true);
+    try {
+      // One paint to let the off-screen card mount with the new props.
+      await new Promise((r) => setTimeout(r, 250));
+      if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share my wine review',
+          UTI: 'public.png',
+        });
+        return;
+      }
+      // Plain-text fallback for devices without share-sheet support.
+      const note = (wine.review_note ?? '').trim();
+      const noteFormatted = note ? `\n\n"${note}"` : '';
+      const scoreText = wine.review_score != null ? `\nMy score: ${wine.review_score}/100` : '';
+      const locFormatted = wine.review_location ? `\nWhere: ${wine.review_location}` : '';
+      await Share.share({
+        message: `${headerLine}${scoreText}${locFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`,
+        title: headerLine,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharingOutside(false);
+      setReviewSharePayload(null);
+    }
   }
 
   function handleFindPairings() {
@@ -581,12 +674,22 @@ export default function CellarWineDetail() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text style={styles.backText}>← Back</Text>
         </TouchableOpacity>
-        {!isArchived && (
+        {/* Card-type label — sits centred between Back and the star
+            so it reads as a chip / breadcrumb identifying which kind
+            of card the user is looking at. */}
+        <Text style={styles.cardTypeLabel}>
+          {isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Cellar Wine'}
+        </Text>
+        {!isArchived ? (
           <TouchableOpacity onPress={handleToggleFavourite} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
             <Text style={[styles.favouriteStar, wine.is_favourite && styles.favouriteStarActive]}>
               {wine.is_favourite ? '★' : '☆'}
             </Text>
           </TouchableOpacity>
+        ) : (
+          // Spacer so the label stays centred when the favourite star
+          // doesn't render (archived wines).
+          <View style={{ width: 28 }} />
         )}
       </View>
 
@@ -683,12 +786,47 @@ export default function CellarWineDetail() {
         </View>
       ) : null}
 
+      {/* Bottles grid moved ABOVE the chef button so the user can see
+          at a glance whether they own (or have owned) the wine before
+          deciding whether to pair a meal to it. */}
+      <View style={styles.statsGrid}>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Bottles in My Cellar</Text>
+          <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
+          {wineRack && !cameFromRack && (
+            <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
+              <Text style={styles.statAction}>In {wineRack.name} →</Text>
+            </TouchableOpacity>
+          )}
+          {!isArchived && !isWishlist && (
+            <TouchableOpacity onPress={() => handleAddBottlesEntry()}>
+              <Text style={styles.statAction}>+ Add bottles</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <View style={styles.statCell}>
+          <Text style={styles.statLabel}>Bottles in My Archive</Text>
+          <Text style={[styles.statValue, bottlesInArchive === 0 && styles.statValueMuted]}>{bottleLabel(bottlesInArchive)}</Text>
+        </View>
+      </View>
+
       {!isArchived && (
         <>
           {rackRemovalMsg && (
             <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
           )}
-          {cameFromReviews ? (
+          {/* Wishlist mode shows an Add-to-Cellar CTA in place of the
+              Chef pairing button — the user hasn't bought the bottle
+              yet, so the natural next action is moving it across. */}
+          {isWishlist ? (
+            <TouchableOpacity
+              style={[styles.chefBtn, { borderColor: colors.gold }]}
+              onPress={() => router.push('/cellar/wishlist')}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar (use the Wish List → Add to Cellar flow)</Text>
+            </TouchableOpacity>
+          ) : cameFromReviews ? (
             <TouchableOpacity
               style={[styles.chefBtn, (postingReview || reviewPosted) && styles.chefBtnDisabled]}
               onPress={handlePostToCommunity}
@@ -707,33 +845,31 @@ export default function CellarWineDetail() {
         </>
       )}
 
-      {wine.tasting_notes && (
-        <View style={styles.tastingBlock}>
-          <VinstersNoteHeading />
-          <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
-        </View>
-      )}
-
-      <View style={styles.statsGrid}>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Bottles in My Cellar</Text>
-          <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
-          {wineRack && !cameFromRack && (
-            <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
-              <Text style={styles.statAction}>In {wineRack.name} →</Text>
+      {/* Vinster's Note — collapsed by default. The "(what's this)"
+          link surfaces a short explanation for new users. Only renders
+          when Vinster actually has a tasting note for the wine; for
+          wishlist wines pre-intelligence-fetch this section is hidden. */}
+      {wine.tasting_notes ? (
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <TouchableOpacity
+              onPress={() => setVinstersNoteOpen((v) => !v)}
+              activeOpacity={0.7}
+              style={{ flex: 1 }}
+            >
+              <Text style={styles.sectionTitle}>
+                {vinstersNoteOpen ? 'Hide Vinster’s Note' : 'View Vinster’s Note →'}
+              </Text>
             </TouchableOpacity>
-          )}
-          {!isArchived && (
-            <TouchableOpacity onPress={() => handleAddBottlesEntry()}>
-              <Text style={styles.statAction}>+ Add bottles</Text>
+            <TouchableOpacity onPress={() => setWhatsThisOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.whatsThisLink}>(what’s this)</Text>
             </TouchableOpacity>
-          )}
+          </View>
+          {vinstersNoteOpen ? (
+            <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+          ) : null}
         </View>
-        <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Bottles in My Archive</Text>
-          <Text style={[styles.statValue, bottlesInArchive === 0 && styles.statValueMuted]}>{bottleLabel(bottlesInArchive)}</Text>
-        </View>
-      </View>
+      ) : null}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -741,11 +877,38 @@ export default function CellarWineDetail() {
           {!reviewExpanded && (
             <TouchableOpacity onPress={() => setReviewExpanded(true)}>
               <Text style={styles.editLink}>
-                {wine.review_score != null || wine.review_location || wine.review_date ? 'Edit Review' : 'Add Review'}
+                {wine.review_score != null || wine.review_location || wine.review_date || wine.review_note ? 'Edit Review' : 'Add Review'}
               </Text>
             </TouchableOpacity>
           )}
         </View>
+
+        {/* Score / Where / When quick-stats line — visible at all
+            times directly below "Your Review", even when the expanded
+            edit form is closed. Each cell only renders when its field
+            is populated so empty reviews don't show a row of dashes. */}
+        {(wine.review_score != null || wine.review_location || wine.review_date) ? (
+          <View style={styles.reviewQuickStats}>
+            <View style={styles.reviewQuickCell}>
+              <Text style={styles.reviewQuickLabel}>Score</Text>
+              <Text style={[styles.reviewQuickValue, wine.review_score == null && styles.reviewQuickValueMuted]}>
+                {wine.review_score != null ? `${wine.review_score}/100` : '—'}
+              </Text>
+            </View>
+            <View style={styles.reviewQuickCell}>
+              <Text style={styles.reviewQuickLabel}>Where</Text>
+              <Text style={[styles.reviewQuickValue, !wine.review_location && styles.reviewQuickValueMuted]} numberOfLines={1}>
+                {wine.review_location || '—'}
+              </Text>
+            </View>
+            <View style={styles.reviewQuickCell}>
+              <Text style={styles.reviewQuickLabel}>When</Text>
+              <Text style={[styles.reviewQuickValue, !wine.review_date && styles.reviewQuickValueMuted]} numberOfLines={1}>
+                {wine.review_date || '—'}
+              </Text>
+            </View>
+          </View>
+        ) : null}
 
         {reviewExpanded ? (
           <>
@@ -775,12 +938,25 @@ export default function CellarWineDetail() {
               placeholder="YYYY-MM-DD"
               placeholderTextColor={colors.textMuted}
             />
+            {/* Review prose — the sharable body. Maps to review_note. */}
+            <Text style={styles.fieldLabel}>Your review</Text>
+            <TextInput
+              style={[styles.input, styles.noteInput]}
+              value={reviewNoteDraft}
+              onChangeText={setReviewNoteDraft}
+              placeholder="What you thought of the wine — taste, occasion, anything that's worth sharing."
+              placeholderTextColor={colors.textMuted}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+            />
             <View style={styles.noteActions}>
               <TouchableOpacity onPress={() => {
                 setReviewExpanded(false);
                 setReviewScoreDraft(wine.review_score != null ? String(wine.review_score) : '');
                 setReviewLocationDraft(wine.review_location ?? '');
                 setReviewDateDraft(wine.review_date ?? todayISO());
+                setReviewNoteDraft(wine.review_note ?? '');
               }}>
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
@@ -789,39 +965,55 @@ export default function CellarWineDetail() {
               </TouchableOpacity>
             </View>
           </>
-        ) : (wine.review_score != null || wine.review_location || wine.review_date) ? (
-          <View>
-            {wine.review_score != null && (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Score</Text>
-                <Text style={styles.infoValue}>{wine.review_score}</Text>
-              </View>
-            )}
-            {wine.review_location ? (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>Where</Text>
-                <Text style={styles.infoValue}>{wine.review_location}</Text>
-              </View>
+        ) : (
+          <>
+            {/* Render the user's saved review prose when present and
+                the form is collapsed — so the body of the review is
+                visible at a glance alongside the quick stats. */}
+            {wine.review_note ? (
+              <Text style={styles.reviewNoteBody}>“{wine.review_note}”</Text>
             ) : null}
-            {wine.review_date ? (
-              <View style={styles.infoRow}>
-                <Text style={styles.infoLabel}>When</Text>
-                <Text style={styles.infoValue}>{wine.review_date}</Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
+
+            {/* Share-to-community + share-outside-the-app actions sit
+                under the review so the user can post or send their
+                review without leaving the card. Disabled until a
+                review has been written. */}
+            <View style={styles.reviewShareRow}>
+              <TouchableOpacity
+                style={[styles.reviewShareBtn, (postingReview || reviewPosted || !wine.review_note) && styles.buttonDisabled]}
+                onPress={handlePostToCommunity}
+                disabled={postingReview || reviewPosted || !wine.review_note}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.reviewShareBtnText}>
+                  {reviewPosted ? '✓ Posted' : postingReview ? 'Posting…' : 'Share to Community'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.reviewShareBtn, (sharingOutside || !wine.review_note) && styles.buttonDisabled]}
+                onPress={handleShareReviewOutside}
+                disabled={sharingOutside || !wine.review_note}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.reviewShareBtnText}>
+                  {sharingOutside ? 'Preparing…' : 'Share'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </>
+        )}
       </View>
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Additional Notes</Text>
+          <Text style={styles.sectionTitle}>Personal Notes</Text>
           {!editingNote && (
             <TouchableOpacity onPress={() => setEditingNote(true)}>
               <Text style={styles.editLink}>{wine.user_notes ? 'Edit Note' : 'Add Note'}</Text>
             </TouchableOpacity>
           )}
         </View>
+        <Text style={styles.personalNotesHint}>Private — not shared with the community or with friends.</Text>
         {editingNote ? (
           <>
             <TextInput
@@ -849,13 +1041,13 @@ export default function CellarWineDetail() {
         ) : null}
       </View>
 
-      {!isArchived && (
+      {!isArchived && !isWishlist && (
         <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
           <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
         </TouchableOpacity>
       )}
 
-      {removals.length > 0 && (
+      {!isWishlist && removals.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>{isArchived ? 'Archived' : 'Removal History'}</Text>
@@ -980,6 +1172,31 @@ export default function CellarWineDetail() {
         </View>
       </Modal>
 
+      {/* "(what's this)" explainer for Vinster's Note — a short
+          definition of the AI tasting line so first-time users know
+          what they're looking at. */}
+      <Modal visible={whatsThisOpen} transparent animationType="fade" onRequestClose={() => setWhatsThisOpen(false)}>
+        <TouchableOpacity style={styles.removeModalOverlay} activeOpacity={1} onPress={() => setWhatsThisOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.removeModalSheet} onPress={() => {}}>
+            <Text style={styles.removeModalTitle}>What is Vinster's Note?</Text>
+            <Text style={styles.removeModalBody}>
+              Vinster's Note is a short tasting summary written by the AI sommelier when this wine landed in your cellar — fruit, acidity, tannin, body, finish. It's the AI's read of the wine, not yours. Your own thoughts live in "Your Review" and "Personal Notes" below.
+            </Text>
+            <TouchableOpacity style={styles.removeModalConfirmBtn} onPress={() => setWhatsThisOpen(false)}>
+              <Text style={styles.removeModalConfirmText}>Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Off-screen share card for the Share button on Your Review.
+          Mounted only while a share is in flight. */}
+      {reviewSharePayload && (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <WineReviewShareCard ref={reviewShareRef} {...reviewSharePayload} />
+        </View>
+      )}
+
       <Modal
         visible={removeStep !== 'idle'}
         transparent
@@ -1021,6 +1238,19 @@ const styles = StyleSheet.create({
   backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
   backText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  // Card-type label centred in the top bar — gold caps, light spacing.
+  // Identifies which kind of wine card the user is on (Cellar / Wish
+  // List / Archived) without needing to read the rest of the screen.
+  cardTypeLabel: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 12,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 1.5,
+    flex: 1,
+    textAlign: 'center',
+    marginHorizontal: spacing.md,
+  },
   favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
   favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -1157,4 +1387,76 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
+  // "(what's this)" link sits next to the View Vinster's Note toggle.
+  whatsThisLink: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 13,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
+    marginLeft: spacing.sm,
+  },
+  // Personal Notes private clarification.
+  personalNotesHint: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.md,
+  },
+  // Your Review quick-stats row — Score / Where / When at a glance.
+  reviewQuickStats: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginBottom: spacing.md,
+  },
+  reviewQuickCell: {
+    flex: 1,
+  },
+  reviewQuickLabel: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 11,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 2,
+  },
+  reviewQuickValue: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 15,
+    color: colors.text,
+  },
+  reviewQuickValueMuted: {
+    color: colors.textMuted,
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+  },
+  // Body of the user's saved written review when the form is collapsed.
+  reviewNoteBody: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 22,
+    marginBottom: spacing.md,
+  },
+  // Share-to-community + Share buttons under Your Review.
+  reviewShareRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  reviewShareBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.gold,
+    borderRadius: 10,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  reviewShareBtnText: {
+    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontSize: 14,
+    color: colors.gold,
+  },
+  // Hides the off-screen branded share card while it's mounted for
+  // capture by react-native-view-shot.
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
 });
