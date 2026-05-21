@@ -11,6 +11,7 @@ import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function LabelCameraScreen() {
   const { context } = useLocalSearchParams<{ context?: string }>();
@@ -136,8 +137,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.lg,
   },
+  // Camera overlay processing status text — body note.
   processingText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 18,
     color: '#FFFFFF',
     letterSpacing: 0.5,

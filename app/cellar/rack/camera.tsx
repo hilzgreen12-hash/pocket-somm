@@ -10,6 +10,7 @@ import { prepareImageBase64 } from '../../../src/api/label';
 import { detectRack } from '../../../src/api/racks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { colors, spacing } from '../../../src/constants/theme';
+import { fonts } from '../../../src/constants/fonts';
 
 export default function RackCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -95,7 +96,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   processingText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // Inter — body (processing status text)
+    fontFamily: fonts.bodySemibold,
     fontSize: 18,
     color: '#FFFFFF',
     letterSpacing: 0.5,

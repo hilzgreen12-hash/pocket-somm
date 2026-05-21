@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'rea
 import { router, useLocalSearchParams } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 // Lands here after a Supabase magic-link / verification deep link is opened.
 // _layout.tsx owns ALL token redemption via its global Linking handler — this
@@ -75,8 +76,8 @@ export default function AuthCallbackScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.text, textAlign: 'center' },
-  body: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center' },
+  body: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.lg },
-  buttonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  buttonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 });

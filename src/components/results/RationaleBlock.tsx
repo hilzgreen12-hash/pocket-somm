@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing, typography } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 
 interface Props {
   text: string;
@@ -25,7 +26,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 11,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     color: colors.gold,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
@@ -33,7 +34,7 @@ const styles = StyleSheet.create({
   },
   text: {
     ...typography.body,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 17,
     color: colors.text,
     lineHeight: 25,

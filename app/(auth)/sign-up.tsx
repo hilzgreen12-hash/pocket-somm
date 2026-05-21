@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 
 import { Link, router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, typography, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function SignUp() {
   const [displayName, setDisplayName] = useState('');
@@ -105,13 +106,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 28,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.headingRegular,
     fontSize: 16,
     color: colors.text,
     textAlign: 'center',
@@ -124,7 +125,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: 'transparent',
   },
@@ -138,7 +139,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: colors.gold,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
   },
   skipLink: {
@@ -146,21 +147,24 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     marginTop: spacing.lg,
   },
+  // Underlined skip link — button-style navigation.
   skipLinkText: {
     color: '#FFFFFF',
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     fontSize: 15,
     textDecorationLine: 'underline',
   },
+  // "Already have an account?" navigation link — button-like.
   link: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.headingRegular,
     textAlign: 'center',
     color: colors.text,
     marginTop: spacing.lg,
     fontSize: 14,
   },
+  // Form-level error message — body/helper text.
   errorText: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: colors.gold,
     fontSize: 16,
     textAlign: 'center',

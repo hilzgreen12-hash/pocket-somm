@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 // "Vinster's Note" heading + a tappable "(what's this)" explainer.
 // Shared by the Wine Intel results screen and the cellar wine card so
@@ -24,6 +25,6 @@ export function VinstersNoteHeading() {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs, marginBottom: spacing.sm },
-  title: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  whatsThis: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textDecorationLine: 'underline' },
+  title: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
+  whatsThis: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textDecorationLine: 'underline' },
 });

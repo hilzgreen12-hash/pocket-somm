@@ -5,6 +5,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
 
 export default function ChefConfirmScreen() {
@@ -76,12 +77,13 @@ export default function ChefConfirmScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: 60 },
-  heading: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
-  subheading: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.xl, lineHeight: 22, textAlign: 'center' },
-  label: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
+  heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
+  subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, marginBottom: spacing.xl, lineHeight: 22, textAlign: 'center' },
+  label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
-  confirmButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  confirmButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   scanAgain: { alignItems: 'center', paddingVertical: spacing.lg },
-  scanAgainText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, textDecorationLine: 'underline' },
+  // Underlined "Scan again" inline link — treat as a subtle text link.
+  scanAgainText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
 });

@@ -1,6 +1,7 @@
 import { Component, type ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 interface State {
   error: Error | null;
@@ -42,9 +43,9 @@ export class ErrorBoundary extends Component<Props, State> {
 
 const styles = StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, backgroundColor: colors.background },
-  title: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
-  body: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
-  detail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.xl },
+  title: { fontSize: 24, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md, textAlign: 'center' },
+  body: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
+  detail: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.xl },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
-  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
 });

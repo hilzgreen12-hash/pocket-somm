@@ -9,6 +9,7 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraOverlay';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function CameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -188,7 +189,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   steadyTitle: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 28,
     color: colors.gold,
     textAlign: 'center',
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   steadyBody: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 17,
     color: colors.text,
     textAlign: 'center',
@@ -211,7 +212,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   steadyButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 18,
     color: colors.gold,
     letterSpacing: 0.5,

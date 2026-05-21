@@ -17,6 +17,7 @@ import { supabase } from '../../src/api/supabase';
 import { splitPersonality } from '../../src/utils/personalityText';
 import { PersonalityShareCard } from '../../src/components/PersonalityShareCard';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 type Category = 'wine' | 'recipe';
 
@@ -325,24 +326,24 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   topRightStack: { alignItems: 'flex-end', gap: 4 },
   postLinkBtn: { paddingVertical: 2, paddingHorizontal: 8 },
-  postLinkText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+  postLinkText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   backRow: {},
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   shareBtn: { paddingVertical: 4, paddingHorizontal: 8 },
-  shareText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 14, color: colors.gold, letterSpacing: 1 },
+  shareText: { fontFamily: fonts.headingBold, fontSize: 14, color: colors.gold, letterSpacing: 1 },
   intro: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center', gap: spacing.xs },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 32, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  subheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginTop: spacing.xs },
+  heading: { fontFamily: fonts.headingBold, fontSize: 32, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  subheading: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginTop: spacing.xs },
   center: { padding: spacing.xl, alignItems: 'center', gap: spacing.md, marginTop: spacing.xl },
-  loadingText: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center' },
-  errorTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.text },
-  errorBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center' },
+  loadingText: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center' },
+  errorTitle: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text },
+  errorBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
-  retryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   sketchCard: { marginHorizontal: spacing.xl, marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
-  sketchTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
-  sketchText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 26 },
+  sketchTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.gold, letterSpacing: 0.5, lineHeight: 30, marginBottom: spacing.md, textAlign: 'center' },
+  sketchText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 26 },
   archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
-  archiveLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  archiveLinkText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   offscreenShareWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
 });

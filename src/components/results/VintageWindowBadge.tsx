@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 import type { VintageAssessment, DrinkingWindow } from '../../types/wine';
 
 interface Props {
@@ -54,7 +55,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     letterSpacing: 0.2,
     marginBottom: 2,
     color: colors.text,
@@ -62,7 +63,7 @@ const styles = StyleSheet.create({
   notes: {
     fontSize: 16,
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     lineHeight: 22,
   },
 });

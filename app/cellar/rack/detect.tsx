@@ -6,6 +6,7 @@ import { useRackStore } from '../../../src/stores/rackStore';
 import { useRacks } from '../../../src/hooks/useRacks';
 import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
+import { fonts } from '../../../src/constants/fonts';
 
 function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -166,34 +167,51 @@ export default function RackDetectScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.lg },
-  loadingText: { fontSize: 19, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
+  // Inter — body (processing status)
+  loadingText: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
-  title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
+  // Inter — back/nav link
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 60 },
+  // Cormorant — page header
+  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   body: { flex: 1, padding: spacing.xl },
-  intro: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl },
+  // Inter — intro body
+  intro: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl },
   preview: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xl },
-  previewLabel: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, letterSpacing: 1 },
-  previewSub: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.xs },
+  // Inter — large stat value
+  previewLabel: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },
+  // Inter — caption
+  previewSub: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
   counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
-  counterLabel: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
+  // Inter — form label
+  counterLabel: { fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text },
   counterControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   counterBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
-  counterBtnText: { fontSize: 22, color: colors.text, fontFamily: 'CormorantGaramond_400Regular' },
-  counterValue: { fontSize: 24, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, minWidth: 40, textAlign: 'center' },
+  // Cormorant — button text (−/+ glyphs)
+  counterBtnText: { fontSize: 22, color: colors.text, fontFamily: fonts.headingRegular },
+  // Inter — counter value
+  counterValue: { fontSize: 24, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 40, textAlign: 'center' },
   divider: { height: 1, backgroundColor: colors.border },
   largeFormatToggle: { paddingVertical: spacing.md, alignItems: 'center' },
-  largeFormatToggleText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
+  // Cormorant — inline action link reads as a button
+  largeFormatToggleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
   largeFormatBlock: { paddingVertical: spacing.md, gap: spacing.xs },
   largeFormatHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  largeFormatHeading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.text },
-  largeFormatRemove: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
-  largeFormatHint: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.xs },
-  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.xl, marginBottom: spacing.sm },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
+  // Cormorant — sub-section header
+  largeFormatHeading: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text },
+  // Inter — inline remove link (small underlined)
+  largeFormatRemove: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
+  // Inter — hint
+  largeFormatHint: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.xs },
+  // Inter — form label
+  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.xl, marginBottom: spacing.sm },
+  // Inter — form input
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   footer: { padding: spacing.xl, paddingBottom: 48 },
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  saveButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  // Cormorant — button text
+  saveButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 17 },
   cancelLink: { alignItems: 'center', paddingVertical: spacing.md },
-  cancelLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+  // Inter — cancel link (not a button)
+  cancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });

@@ -10,6 +10,7 @@ import { PersonalityPromptModal } from '../src/components/PersonalityPromptModal
 import { supabase } from '../src/api/supabase';
 import { splitPersonality } from '../src/utils/personalityText';
 import { colors, spacing } from '../src/constants/theme';
+import { fonts } from '../src/constants/fonts';
 
 // Per-category AsyncStorage key — set to the timestamp of the most recent
 // sketch the user has viewed for that category. Popup re-appears whenever
@@ -258,33 +259,33 @@ const styles = StyleSheet.create({
   // small decorative rule with a diamond marker so the brand block reads
   // more "wine list" than "app shell".
   hero: { alignItems: 'center', marginBottom: spacing.lg },
-  appName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: '#FFFFFF', letterSpacing: 8 },
-  tagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, marginTop: 2, letterSpacing: 1 },
+  appName: { fontFamily: fonts.headingBold, fontSize: 44, color: '#FFFFFF', letterSpacing: 8 },
+  tagline: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, marginTop: 2, letterSpacing: 1 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.sm, marginBottom: spacing.sm, paddingHorizontal: spacing.xxl },
   rule: { flex: 1, height: 1, backgroundColor: 'rgba(224,184,74,0.55)' },
-  ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm, fontFamily: 'CormorantGaramond_600SemiBold' },
-  welcome: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 18, color: '#FFFFFF', marginTop: spacing.xs },
+  ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm, fontFamily: fonts.headingSemibold },
+  welcome: { fontFamily: fonts.headingItalic, fontSize: 18, color: '#FFFFFF', marginTop: spacing.xs },
 
   // "Your personality is ready" popup styles — centred sheet over a dim
   // overlay; tapping outside or "Not now" dismisses for this session.
   readyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   readySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
-  readyLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 11, color: 'rgba(224,184,74,0.75)', letterSpacing: 1.8, textAlign: 'center', marginBottom: spacing.xs },
-  readyHeading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  readyTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, textAlign: 'center', lineHeight: 32, marginBottom: spacing.md },
-  readyBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  readyLabel: { fontFamily: fonts.headingSemibold, fontSize: 11, color: 'rgba(224,184,74,0.75)', letterSpacing: 1.8, textAlign: 'center', marginBottom: spacing.xs },
+  readyHeading: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  readyTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.gold, textAlign: 'center', lineHeight: 32, marginBottom: spacing.md },
+  readyBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   readyPrimaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
-  readyPrimaryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  readyPrimaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
   readyDismissBtn: { alignItems: 'center', paddingVertical: spacing.sm },
-  readyDismissBtnText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+  readyDismissBtnText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 
   // Tiles — motif at top, big gold label, short divider, italic tagline,
   // and a subtle → in the corner to telegraph navigation.
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
   tile: { width: '48%', aspectRatio: 0.92, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, paddingTop: spacing.lg, paddingHorizontal: spacing.md, paddingBottom: spacing.md, alignItems: 'center' },
   tileMotif: { height: 40, justifyContent: 'center', marginBottom: spacing.sm },
-  tileTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: colors.gold, letterSpacing: 2, textAlign: 'center' },
+  tileTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.gold, letterSpacing: 2, textAlign: 'center' },
   tileDivider: { width: 36, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
-  tileDesc: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginTop: 2, paddingHorizontal: 4, lineHeight: 18 },
+  tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginTop: 2, paddingHorizontal: 4, lineHeight: 18 },
   tileArrow: { position: 'absolute', right: 10, bottom: 8, fontSize: 14, color: 'rgba(224,184,74,0.55)' },
 });

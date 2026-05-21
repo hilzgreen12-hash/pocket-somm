@@ -6,6 +6,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
 
 function formatDate(iso: string) {
@@ -134,14 +135,22 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
-  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
+  // Inter — back/nav link
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 60 },
+  // Cormorant — page header
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  searchInput: { marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  // Cormorant — empty-state header
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  // Inter — empty-state body
+  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  // Inter — form input
+  searchInput: { marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   card: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
-  headerLine: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 22 },
-  region: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4 },
-  archivedAt: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: 4, letterSpacing: 0.3 },
+  // Inter — wine card name line (card content, not a page header)
+  headerLine: { fontSize: 16, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 22 },
+  // Inter — caption
+  region: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
+  // Inter — subtle small info
+  archivedAt: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4, letterSpacing: 0.3 },
 });

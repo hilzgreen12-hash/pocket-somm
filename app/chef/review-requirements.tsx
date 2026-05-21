@@ -8,6 +8,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 const DIETARY_OPTIONS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian'];
 const ALLERGY_OPTIONS = ['None', 'Nut Free', 'Dairy Free', 'Gluten Free'];
@@ -237,28 +238,28 @@ export default function ReviewRequirementsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: 60 },
-  heading: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
-  subheading: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
-  label: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
+  heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
+  subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
+  label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: colors.surface, marginBottom: spacing.lg },
-  selectValue: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, flex: 1 },
-  selectArrow: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
+  selectValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, flex: 1 },
+  selectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
   continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
-  continueButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  continueButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   back: { alignItems: 'center', paddingVertical: spacing.lg },
-  backText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, textDecorationLine: 'underline' },
+  backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
-  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  modalOptionText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text },
+  modalOptionText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text },
   modalOptionTextActive: { color: colors.gold },
-  modalOptionSub: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, marginTop: 2 },
+  modalOptionSub: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: 2 },
   modalOptionSubActive: { color: colors.gold },
-  modalOptionCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
+  modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
-  modalCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

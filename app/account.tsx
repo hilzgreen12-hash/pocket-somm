@@ -9,6 +9,7 @@ import { usePreferences } from '../src/hooks/usePreferences';
 import { supabase } from '../src/api/supabase';
 import { CURRENCIES } from '../src/constants/currency';
 import { colors, spacing } from '../src/constants/theme';
+import { fonts } from '../src/constants/fonts';
 
 function formatJoinedDate(iso: string | undefined): string {
   if (!iso) return '—';
@@ -372,55 +373,69 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: 40 },
   backButton: { marginBottom: spacing.sm, alignSelf: 'flex-start' },
-  backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
-  heading: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
-  thanks: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
+  // Back nav link.
+  backText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
+  // Italic blurb under the page heading — editorial intro, stays Cormorant.
+  thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   block: { gap: 4 },
-  blockHeading: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  // Section header label.
+  blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
-  personalityButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  personalityButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
-  prefButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15 },
+  prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
-  rowLabel: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  rowValue: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
-  rowValueSmall: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular' },
-  rowValueLink: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Form-style label in identity rows.
+  rowLabel: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Form-style value rendered to the right of the row label.
+  rowValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
+  rowValueSmall: { fontSize: 15, fontFamily: fonts.bodyRegular },
+  // Currency selector tappable value — still a value, leans Inter.
+  rowValueLink: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.gold },
   editLinkBtn: { alignSelf: 'flex-end', marginTop: 2 },
-  editLinkText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // "Edit" link button text.
+  editLinkText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   editPanel: { marginTop: spacing.sm, gap: 4 },
-  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
+  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
   editActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: spacing.md, marginTop: 4 },
-  cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted },
+  // Cancel link inside the inline edit panel.
+  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md, minWidth: 70, alignItems: 'center' },
-  saveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold },
+  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
   toggleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: 4 },
-  toggleLabel: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 20 },
+  // Toggle row descriptive label — form-style content, switches to Inter.
+  toggleLabel: { flex: 1, fontSize: 15, fontFamily: fonts.bodyItalic, color: '#FFFFFF', lineHeight: 20 },
   signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginTop: spacing.xs, marginBottom: 6 },
-  signOutText: { color: colors.gold, fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold' },
+  signOutText: { color: colors.gold, fontSize: 15, fontFamily: fonts.headingSemibold },
   deleteButton: { alignItems: 'center', paddingVertical: 4 },
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  confirmTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  confirmBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  // Modal body copy.
+  confirmBody: { fontFamily: fonts.bodyItalic, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   confirmDangerBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   confirmDangerBtnDisabled: { opacity: 0.5 },
-  confirmDangerBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  confirmDangerBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   confirmGoldBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  confirmGoldBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  confirmGoldBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   confirmCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
-  confirmCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
-  deleteText: { color: colors.gold, fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', textDecorationLine: 'underline' },
+  // Cancel link inside the confirm modal.
+  confirmCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // "Delete Account" underlined link — button-style action.
+  deleteText: { color: colors.gold, fontSize: 13, fontFamily: fonts.headingRegular, textDecorationLine: 'underline' },
   currencyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   currencySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420, padding: spacing.lg },
-  currencySheetTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  currencySheetTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   currencyOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   currencyOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
-  currencyOptionText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text },
-  currencyOptionTextActive: { fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  currencyCheck: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold },
+  // Modal option row label.
+  currencyOptionText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text },
+  currencyOptionTextActive: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  currencyCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold },
   currencyClose: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
-  currencyCloseText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted },
+  // Close link inside currency picker — cancel-style.
+  currencyCloseText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
 });

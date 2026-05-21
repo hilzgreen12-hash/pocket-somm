@@ -7,6 +7,7 @@ import { useChosenWines } from '../hooks/useChosenWines';
 import { CityAutocomplete } from './CityAutocomplete';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
 
 interface Props {
@@ -384,7 +385,7 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   heading: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 26,
     color: colors.text,
     textAlign: 'center',
@@ -392,14 +393,14 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   wineProducer: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 15,
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.xs,
   },
   reviewDate: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 12,
     color: colors.gold,
     textAlign: 'center',
@@ -413,13 +414,13 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   sectionLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 16,
     color: colors.text,
     marginBottom: spacing.sm,
   },
   fieldLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 12,
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -432,7 +433,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing.sm,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
@@ -446,13 +447,13 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
   },
   vinsterLinkText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
     letterSpacing: 0.3,
   },
   vinsterIntro: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 14,
     color: colors.gold,
     lineHeight: 19,
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   vinsterLabel: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 11,
     color: colors.gold,
     textTransform: 'uppercase',
@@ -480,12 +481,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   vinsterScore: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 22,
     color: colors.gold,
   },
   vinsterScoreUnit: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 14,
     color: colors.gold,
   },
@@ -493,12 +494,12 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   vinsterFieldValue: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 15,
     color: colors.text,
   },
   vinsterFieldBody: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 15,
     color: colors.textMuted,
     lineHeight: 21,
@@ -511,7 +512,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   scoreHint: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textMuted,
     marginBottom: spacing.lg,
@@ -525,7 +526,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   saveButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },
@@ -534,7 +535,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   cancelText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
   },
@@ -544,7 +545,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   deleteText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.gold,
     textDecorationLine: 'underline',

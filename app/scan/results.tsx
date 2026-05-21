@@ -24,6 +24,7 @@ import { RationaleBlock } from '../../src/components/results/RationaleBlock';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { WineRecommendation } from '../../src/types/wine';
 
 if (Platform.OS === 'android') {
@@ -800,12 +801,12 @@ const styles = StyleSheet.create({
   },
   backLink: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
   },
   shareBtnText: {
     fontSize: 14,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     color: colors.gold,
     letterSpacing: 0.5,
   },
@@ -823,20 +824,20 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
   },
   stampDate: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 18,
     color: colors.gold,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
   stampLocation: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     fontSize: 20,
     color: colors.text,
     textAlign: 'center',
   },
   heading: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 22,
     color: colors.textMuted,
     letterSpacing: 1,
@@ -855,7 +856,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   topScoringBannerTitle: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 14,
     color: colors.gold,
     textTransform: 'uppercase',
@@ -863,8 +864,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textAlign: 'center',
   },
+  // Italic banner explainer — body italic (not a tab tagline).
   topScoringBannerBody: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 15,
     color: 'rgba(212,176,96,0.80)',
     lineHeight: 20,
@@ -872,13 +874,14 @@ const styles = StyleSheet.create({
   },
   vintageNote: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: colors.textMuted,
     marginBottom: spacing.sm,
   },
+  // Sommelier summary prose — italic body, not a header.
   summary: {
     fontSize: 17,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: '#FFFFFF',
     lineHeight: 24,
   },
@@ -892,7 +895,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(212,176,96,0.06)',
   },
   restaurantCardLabel: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 12,
     color: colors.text,
     textTransform: 'uppercase',
@@ -908,22 +911,25 @@ const styles = StyleSheet.create({
   locationPin: {
     fontSize: 18,
   },
+  // Restaurant name value display inside the card — body (data value).
   restaurantNameDisplay: {
     flex: 1,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 20,
     color: colors.text,
     letterSpacing: 0.3,
   },
+  // Italic placeholder inside the restaurant-name input — body italic.
   restaurantNamePlaceholder: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 18,
     color: 'rgba(255,255,255,0.50)',
     letterSpacing: 0,
   },
+  // Editable restaurant name input — form input, body.
   restaurantNameInput: {
     flex: 1,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     fontSize: 20,
     color: colors.text,
     borderBottomWidth: 1,
@@ -931,7 +937,7 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   restaurantHint: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 14,
     color: colors.textMuted,
     marginTop: spacing.sm,
@@ -947,7 +953,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   reviewRestaurantBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 13,
     color: '#FFFFFF',
   },
@@ -982,15 +988,16 @@ const styles = StyleSheet.create({
   },
   rankLabel: {
     fontSize: 21,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     textTransform: 'uppercase',
     letterSpacing: 1.2,
     textAlign: 'center',
   },
+  // Wine name on the recommendation card — body (data value, readability).
   wineName: {
     fontSize: 21,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     color: colors.text,
     letterSpacing: -0.2,
     marginBottom: 2,
@@ -998,7 +1005,7 @@ const styles = StyleSheet.create({
   },
   wineProducer: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     letterSpacing: 0.2,
     textAlign: 'center',
@@ -1009,7 +1016,7 @@ const styles = StyleSheet.create({
   // the chevron, always visible on the compact card.
   wineFlavour: {
     fontSize: 14,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: colors.gold,
     lineHeight: 19,
     textAlign: 'center',
@@ -1020,24 +1027,27 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 6,
   },
+  // Price value display — body.
   price: {
     fontSize: 21,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     color: colors.text,
   },
   scoreChip: {
     flexDirection: 'row',
     alignItems: 'baseline',
   },
+  // Score value display — body.
   scoreText: {
     fontSize: 21,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.bodyBold,
     color: colors.text,
   },
+  // Score unit (e.g. /100) — body value.
   scoreUnit: {
     fontSize: 16,
     color: colors.text,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
   },
   details: {
     paddingHorizontal: spacing.md,
@@ -1046,7 +1056,7 @@ const styles = StyleSheet.create({
   grape: {
     fontSize: 14,
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     marginBottom: 4,
   },
   divider: {
@@ -1069,7 +1079,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(212,176,96,0.10)',
   },
   chosenButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 15,
     color: '#FFFFFF',
   },
@@ -1099,7 +1109,7 @@ const styles = StyleSheet.create({
   },
   detailActionBtnText: {
     color: '#FFFFFF',
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 14,
   },
   detailActionBtnTextDone: {
@@ -1120,10 +1130,11 @@ const styles = StyleSheet.create({
     color: colors.gold,
     marginTop: 5,
   },
+  // Bullet-point reasons listed inside the expanded card — body text.
   topPickReasonText: {
     flex: 1,
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     color: colors.gold,
     lineHeight: 20,
   },
@@ -1140,7 +1151,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(212,176,96,0.10)',
   },
   wishlistAddButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 15,
     color: '#FFFFFF',
   },
@@ -1157,7 +1168,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   outsideText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: colors.gold,
     lineHeight: 22,
@@ -1166,7 +1177,7 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md,
     marginTop: spacing.xl,
     fontSize: 17,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 24,
@@ -1184,11 +1195,12 @@ const styles = StyleSheet.create({
   },
   alternativeText: {
     color: colors.text,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
   },
+  // Save confirmation status — body note.
   savedConfirm: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 15,
     color: colors.gold,
     textAlign: 'center',
@@ -1202,7 +1214,7 @@ const styles = StyleSheet.create({
   },
   newScanText: {
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 15,
     textDecorationLine: 'underline',
   },

@@ -1,6 +1,7 @@
 import { ScrollView, View, Text, TouchableOpacity, StyleSheet, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 // Vinster privacy policy — in-app surface for the same text that must
 // also be hosted at a public URL (e.g. https://vinsterapp.com/privacy)
@@ -92,13 +93,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 80, paddingHorizontal: spacing.xl, paddingBottom: 80 },
   backButton: { marginBottom: spacing.xl },
-  backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.textMuted },
-  heading: { fontSize: 36, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 1, marginBottom: spacing.xs },
-  versionLine: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.xl },
+  backText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.textMuted },
+  heading: { fontSize: 36, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, marginBottom: spacing.xs },
+  versionLine: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.xl },
   section: { marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm, letterSpacing: 0.3 },
-  sectionBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 24 },
+  sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, letterSpacing: 0.3 },
+  sectionBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 24 },
   contactSection: { marginTop: spacing.md, padding: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, backgroundColor: 'rgba(212,176,96,0.06)' },
-  contactBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 24 },
-  contactLink: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', textDecorationLine: 'underline' },
+  contactBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 24 },
+  contactLink: { color: colors.gold, fontFamily: fonts.headingSemibold, textDecorationLine: 'underline' },
 });

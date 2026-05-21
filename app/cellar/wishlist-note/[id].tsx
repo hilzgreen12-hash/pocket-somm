@@ -9,6 +9,7 @@ import { splitLocationString } from '../../../src/services/reviewSync';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { showAlert } from '../../../src/components/AppAlert';
 import { colors, spacing } from '../../../src/constants/theme';
+import { fonts } from '../../../src/constants/fonts';
 
 // Dedicated screen for viewing and editing a wish-list wine's note and
 // the "Discovered at" location. Reached from the Wish List card. Keeps
@@ -220,28 +221,44 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
-  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  saveText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, width: 60, textAlign: 'right' },
-  wineHeader: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 4 },
-  wineDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },
-  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
-  locationInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
-  noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 200, lineHeight: 22 },
+  // Inter — back/nav link
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 60 },
+  // Cormorant — page header
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
+  // Cormorant — save button text
+  saveText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, width: 60, textAlign: 'right' },
+  // Inter — wine name on this details screen
+  wineHeader: { fontSize: 20, fontFamily: fonts.bodyBold, color: colors.text, marginBottom: 4 },
+  // Inter — wine detail caption
+  wineDetail: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.lg },
+  // Inter — form label
+  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
+  // Inter — form input
+  locationInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  // Inter — form input
+  noteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 200, lineHeight: 22 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center' },
+  // Inter — empty body
+  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
   // Vinster notes expandable block — values copied from
   // EditChosenWineModal so the two surfaces read identically.
   vinsterWrap: { marginTop: spacing.lg, marginBottom: spacing.sm },
   vinsterLink: { alignItems: 'flex-start', paddingVertical: spacing.xs },
-  vinsterLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
-  vinsterIntro: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.gold, lineHeight: 19 },
+  // Cormorant — inline action link reads as a button
+  vinsterLinkText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  // Inter — intro body
+  vinsterIntro: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, lineHeight: 19 },
   vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, marginTop: spacing.xs, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)' },
   vinsterRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  vinsterLabel: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
-  vinsterScore: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.gold },
-  vinsterScoreUnit: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold },
+  // Inter — form label
+  vinsterLabel: { fontFamily: fonts.bodyBold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 2 },
+  // Inter — large stat value
+  vinsterScore: { fontFamily: fonts.bodyBold, fontSize: 22, color: colors.gold },
+  // Inter — small unit caption
+  vinsterScoreUnit: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
   vinsterField: { gap: 2 },
-  vinsterFieldValue: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.text },
-  vinsterFieldBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, lineHeight: 21 },
+  // Inter — value read-out
+  vinsterFieldValue: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.text },
+  // Inter — body
+  vinsterFieldBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, lineHeight: 21 },
 });

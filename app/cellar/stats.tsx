@@ -9,6 +9,7 @@ import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
 import { getWineIntelligence } from '../../src/api/label';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -357,41 +358,67 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
-  title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
+  // Inter — back/nav link
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  // Cormorant — page header
+  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  // Cormorant — empty-state header
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  // Inter — empty body
+  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   emptyBanner: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 4 },
-  emptyBannerTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  emptyBannerBody: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20 },
+  // Cormorant — empty banner title (header)
+  emptyBannerTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.text },
+  // Inter — empty banner body
+  emptyBannerBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20 },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.lg },
-  statValue: { fontSize: 32, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginBottom: 2 },
-  statLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  // Inter — stat value read-out
+  statValue: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, marginBottom: 2 },
+  // Inter — stat label
+  statLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  sectionTitle: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
+  // Cormorant — section header
+  sectionTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
   valueRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  valueLabel: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, flexShrink: 1 },
-  valueAmount: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginLeft: spacing.md },
-  valueAmountMuted: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' },
-  valueHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 17, marginTop: 4 },
+  // Inter — form label
+  valueLabel: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, flexShrink: 1 },
+  // Inter — form value read-out
+  valueAmount: { fontSize: 17, fontFamily: fonts.bodyBold, color: colors.text, marginLeft: spacing.md },
+  // Inter — muted variant of value
+  valueAmountMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
+  // Inter — hint
+  valueHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 17, marginTop: 4 },
   valueDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   calcBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
-  calcBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  // Cormorant — button text
+  calcBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   estimateMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: spacing.sm },
   estimateMetaStack: { marginTop: spacing.sm, gap: 4 },
-  estimateUpdateNote: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 18 },
-  lastEstimate: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
-  recalcLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Inter — note
+  estimateUpdateNote: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 18 },
+  // Inter — subtle small info
+  lastEstimate: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  // Cormorant — inline action link reads as a button
+  recalcLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
-  breakdownRank: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 14, color: colors.gold, width: 24 },
-  breakdownLabel: { flex: 1, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.text },
-  breakdownCount: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, width: 50, textAlign: 'right' },
-  breakdownPct: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.gold, width: 60, textAlign: 'right' },
-  muted: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 17, marginTop: spacing.xs },
-  calcTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
-  calcSubtitle: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
-  calcPercent: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 56, color: colors.gold, marginBottom: spacing.xs },
-  calcCount: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
+  // Inter — list rank
+  breakdownRank: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold, width: 24 },
+  // Inter — breakdown label
+  breakdownLabel: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  // Inter — count value
+  breakdownCount: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, width: 50, textAlign: 'right' },
+  // Inter — percentage value
+  breakdownPct: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.gold, width: 60, textAlign: 'right' },
+  // Inter — muted hint
+  muted: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 17, marginTop: spacing.xs },
+  // Cormorant — processing screen title
+  calcTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  // Inter — processing subtitle (body)
+  calcSubtitle: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
+  // Inter — large stat value read-out
+  calcPercent: { fontFamily: fonts.bodyBold, fontSize: 56, color: colors.gold, marginBottom: spacing.xs },
+  // Inter — small caption
+  calcCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1 },
 });

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { searchMyCommunityUploads, type CommunityCategory, type CommunityReview } from '../../src/api/community';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 const TITLES: Record<string, string> = {
   recipe: 'Recipe Reviews',
@@ -130,15 +131,15 @@ const styles = StyleSheet.create({
   // pointerEvents="none" so it can't be used, only previewed.
   muted: { opacity: 0.5 },
   backRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   intro: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center', gap: spacing.xs },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 32, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  subheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginTop: spacing.xs },
+  heading: { fontFamily: fonts.headingBold, fontSize: 32, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  subheading: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginTop: spacing.xs },
   section: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, gap: spacing.md },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   yourReviewsSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, gap: spacing.sm },
-  yourReviewsHeading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, letterSpacing: 0.5, marginBottom: spacing.xs },
+  yourReviewsHeading: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, marginBottom: spacing.xs },
   searchInput: {
     borderWidth: 1,
     borderColor: colors.borderLight,
@@ -146,16 +147,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 10,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  emptyHint: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg, lineHeight: 22 },
+  emptyHint: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg, lineHeight: 22 },
   reviewCard: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, marginTop: spacing.sm, gap: 4 },
   reviewCardRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  reviewTitle: { flex: 1, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, lineHeight: 22 },
-  reviewRating: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 17, color: colors.gold },
-  reviewSubtitle: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, lineHeight: 19 },
-  reviewBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.text, lineHeight: 19, marginTop: 2 },
-  reviewDate: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 12, color: colors.textMuted, marginTop: 4 },
+  reviewTitle: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, lineHeight: 22 },
+  reviewRating: { fontFamily: fonts.bodyBold, fontSize: 17, color: colors.gold },
+  reviewSubtitle: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 19 },
+  reviewBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 19, marginTop: 2 },
+  reviewDate: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 4 },
 });

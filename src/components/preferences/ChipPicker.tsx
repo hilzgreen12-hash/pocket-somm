@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 
 interface Props {
   options: readonly string[];
@@ -231,7 +232,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   addOtherText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   chipText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodyMedium,
     fontSize: 16,
     color: colors.textMuted,
   },
@@ -266,7 +267,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: 8,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
@@ -278,7 +279,7 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
   },
   inputAddBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 15,
     color: colors.gold,
   },
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   inputCancelText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 13,
     color: colors.textMuted,
   },

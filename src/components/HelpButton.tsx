@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 // Small gold-bordered "i" sat next to a tab title. Tapping opens a centered
 // modal with a brief explanation of how the AI on that tab actually works.
@@ -67,7 +68,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   iconLetter: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     fontSize: 14,
     color: colors.gold,
     lineHeight: 16,
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
     maxWidth: 460,
   },
   modalTitle: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 22,
     color: colors.gold,
     textAlign: 'center',
@@ -102,7 +103,7 @@ const styles = StyleSheet.create({
     maxHeight: 400,
   },
   body: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: colors.text,
     lineHeight: 24,
@@ -116,7 +117,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.lg,
   },
   buttonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 15,
     color: colors.gold,
     letterSpacing: 0.5,

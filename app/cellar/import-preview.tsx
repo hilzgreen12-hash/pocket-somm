@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { formatCurrency } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 function WineCard({ wine, index, onRemove }: { wine: ImportedWine; index: number; onRemove: () => void }) {
   const priceLine = wine.purchase_price != null
@@ -136,21 +137,30 @@ export default function ImportPreviewScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.lg },
-  savingText: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center' },
+  // Inter — body (saving status)
+  savingText: { fontSize: 17, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 60 },
-  title: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1 },
-  subtitle: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  // Inter — back/cancel link
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 60 },
+  // Cormorant — page header
+  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
+  // Inter — sub-line intro body
+  subtitle: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   card: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   cardMain: { flex: 1 },
-  cardName: { fontSize: 17, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
-  cardProducer: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 1 },
-  cardDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: 2 },
+  // Inter — wine card name
+  cardName: { fontSize: 17, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Inter — wine producer line
+  cardProducer: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 1 },
+  // Inter — wine detail caption
+  cardDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2 },
   removeBtn: { paddingLeft: spacing.md },
-  removeText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Cormorant — button text
+  removeText: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
   sep: { height: 1, backgroundColor: colors.border, marginLeft: spacing.xl },
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: spacing.xl, paddingBottom: 48, backgroundColor: colors.background },
   importButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   importButtonDisabled: { opacity: 0.4 },
-  importButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  // Cormorant — button text
+  importButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 17 },
 });

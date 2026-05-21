@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { Redirect, router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
 import { colors, spacing } from '../src/constants/theme';
+import { fonts } from '../src/constants/fonts';
 
 export default function WelcomeScreen() {
   const { session } = useAuth();
@@ -81,14 +82,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   appName: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 38,
     color: '#FFFFFF',
     letterSpacing: 2,
     marginBottom: spacing.xs,
   },
   tagline: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     fontSize: 21,
     color: colors.textMuted,
     textAlign: 'center',
@@ -111,14 +112,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   featureTitle: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 17,
     color: colors.text,
     letterSpacing: 0.2,
     textAlign: 'center',
   },
   featureBody: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
     lineHeight: 21,
@@ -139,7 +140,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   primaryText: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 18,
     color: '#FFFFFF',
   },
@@ -153,12 +154,12 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   secondaryText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 18,
     color: colors.gold,
   },
   secondaryNote: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 16,
     color: colors.textMuted,
     textAlign: 'center',
@@ -169,7 +170,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: colors.textMuted,
   },

@@ -1,5 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 import type { WineType } from '../../types/preferences';
 
 // Re-export so the existing import sites on scan.tsx etc. keep compiling
@@ -88,7 +89,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold + '22',
   },
   chipText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodyMedium,
     fontSize: 16,
     color: colors.textMuted,
   },

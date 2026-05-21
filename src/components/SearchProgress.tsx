@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated, Easing, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 interface Props {
   title: string;
@@ -113,7 +114,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 36,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     color: colors.text,
     letterSpacing: 1.5,
     marginBottom: spacing.xxl,
@@ -137,28 +138,28 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   percent: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 13,
     color: colors.gold,
     letterSpacing: 1,
   },
   title: {
     fontSize: 20,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
   timing: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: colors.gold,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
   body: {
     fontSize: 14,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 20,
@@ -166,7 +167,7 @@ const styles = StyleSheet.create({
   },
   stayNote: {
     fontSize: 12,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
     textAlign: 'center',
     opacity: 0.8,
