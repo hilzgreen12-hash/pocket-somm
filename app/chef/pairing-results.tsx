@@ -10,6 +10,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
 
 function isPriceBandExample(ex: PriceBandExample | string): ex is PriceBandExample {
@@ -289,45 +290,45 @@ export default function PairingResultsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm },
-  backLink: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   stampRow: { alignItems: 'center', gap: 2, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
-  stampDate: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
-  stampLocation: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center' },
+  stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
+  stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerLine: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
+  headerLine: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
   // The dish text is the user's free-form brief — promote it from a
   // 15pt subline to the visual headline of the page (was previously
   // dominated by "Your Pairing" at 20pt bold). Now reads as a proper
   // headline so the user can quickly see what they asked for.
-  dish: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, marginTop: spacing.xs, lineHeight: 28 },
-  successTick: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
-  successCount: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
+  dish: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, marginTop: spacing.xs, lineHeight: 28 },
+  successTick: { fontFamily: fonts.headingBold, fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
+  successCount: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
   section: { padding: spacing.xl },
-  sectionTitle: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.md },
-  summary: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
+  sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
+  summary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
-  cardWine: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  cardSubtitle: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, marginTop: 2 },
-  cardBody: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
-  cardSection: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
-  cardItem: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 20, marginBottom: 4 },
+  cardWine: { fontSize: 16, fontFamily: fonts.bodyBold, color: colors.text },
+  cardSubtitle: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2 },
+  cardBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
+  cardSection: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  cardItem: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 20, marginBottom: 4 },
   bandRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginBottom: 6 },
-  bandSymbol: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 16, color: colors.gold, minWidth: 40, letterSpacing: 1 },
-  bandRegion: { flex: 1, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.text, lineHeight: 20 },
-  cardLink: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginTop: spacing.sm },
+  bandSymbol: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.gold, minWidth: 40, letterSpacing: 1 },
+  bandRegion: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 20 },
+  cardLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
   cardLinkMuted: { color: colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
-  fieldLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, backgroundColor: colors.surface },
-  fieldHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4, marginBottom: spacing.lg, textAlign: 'right' },
+  modalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  modalBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
+  fieldHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, marginBottom: spacing.lg, textAlign: 'right' },
   archiveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  archiveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  archiveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   btnDisabled: { opacity: 0.6 },
   secondaryBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
-  secondaryBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.text },
+  secondaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text },
   cancelLink: { alignItems: 'center', paddingVertical: spacing.md },
-  cancelLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+  cancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });

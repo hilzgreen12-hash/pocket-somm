@@ -7,6 +7,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { getWineIntelligence, generatePairings } from '../../src/api/label';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
 
 export default function LabelConfirmScreen() {
@@ -156,27 +157,29 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingTop: 130, paddingBottom: 60 },
   heading: {
     fontSize: 26,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subheading: {
     fontSize: 14,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.headingRegular,
     color: colors.textMuted,
     marginBottom: spacing.xl,
     lineHeight: 20,
     textAlign: 'center',
   },
+  // Form field label — body.
   label: {
     fontSize: 13,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
     marginBottom: spacing.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
+  // Form input — body.
   input: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -184,7 +187,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
   },
@@ -199,13 +202,14 @@ const styles = StyleSheet.create({
   buttonDisabled: { opacity: 0.6 },
   buttonText: {
     color: '#FFFFFF',
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
   },
   backButton: { alignItems: 'center', marginTop: spacing.lg },
+  // Back/nav link — body.
   backText: {
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
   },
 });

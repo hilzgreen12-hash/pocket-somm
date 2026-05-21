@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 export type AppAlertButtonStyle = 'default' | 'cancel' | 'destructive' | 'gold';
 
@@ -106,7 +107,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   title: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 22,
     color: colors.text,
     textAlign: 'center',
@@ -114,7 +115,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   body: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Modal body — Inter
+    fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -136,7 +138,7 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
   },
   primaryBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },
@@ -149,7 +151,8 @@ const styles = StyleSheet.create({
     paddingBottom: 4,
   },
   cancelBtnText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Cancel link in modal — Inter
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
   },

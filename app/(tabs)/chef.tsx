@@ -10,6 +10,7 @@ import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
@@ -208,28 +209,37 @@ const styles = StyleSheet.create({
   uploadOverlay: { flex: 1, backgroundColor: '#000' },
   uploadScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
   uploadStatus: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
-  uploadStatusText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 18, color: '#FFFFFF', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4, textAlign: 'center' },
-  appName: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  // Overlay caption while a label is being read — body-tier readability.
+  uploadStatusText: { fontFamily: fonts.bodySemibold, fontSize: 18, color: '#FFFFFF', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4, textAlign: 'center' },
+  // Big "Chef" tab title — header, Cormorant.
+  appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  profileNote: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },
+  // Profile note in the body of the tab — body content, Inter.
+  profileNote: { fontSize: 17, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 24, marginBottom: spacing.xs },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  subheading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 24, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
-  // Top blurb under the Chef heading stays italic — every other in-section
-  // body copy is regular, matching the user's "italics only in the blurb
-  // under each heading" rule.
-  topBlurb: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  lastResultLink: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
+  // Section subheadings ("Recipe → Wine", "Wine → Recipe") — Cormorant.
+  subheading: { fontFamily: fonts.headingBold, fontSize: 24, color: '#FFFFFF', letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.xs },
+  // Top blurb under the Chef heading — italic blurb directly under the
+  // tab title, kept Cormorant per user spec ("blurbs below the headers
+  // on the tab screens"). Italics retained.
+  topBlurb: { fontSize: 17, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  // Body copy under each subheading — switched to Inter for readability.
+  sectionDesc: { fontSize: 17, fontFamily: fonts.bodyRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  // "View last result" link — body / link, Inter.
+  lastResultLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
-  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  // Button label — Cormorant.
+  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  modalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
+  // Pop-up title — Cormorant. Pop-up body — Inter.
+  modalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  modalBody: { fontFamily: fonts.bodyRegular, fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  modalButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  // Pop-up button — Cormorant.
+  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
 });

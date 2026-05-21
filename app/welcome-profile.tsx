@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { colors, spacing } from '../src/constants/theme';
+import { fonts } from '../src/constants/fonts';
 
 export default function WelcomeProfile() {
   const { height } = useWindowDimensions();
@@ -53,7 +54,7 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 52,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     color: '#FFFFFF',
     letterSpacing: 2,
     textAlign: 'center',
@@ -61,7 +62,7 @@ const styles = StyleSheet.create({
   },
   tagline: {
     fontSize: 19,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.headingItalic,
     color: colors.gold,
     textAlign: 'center',
     marginBottom: spacing.lg,
@@ -73,7 +74,7 @@ const styles = StyleSheet.create({
   },
   body: {
     fontSize: 18,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: '#FFFFFF',
     lineHeight: 26,
     textAlign: 'center',
@@ -89,7 +90,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: colors.gold,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 17,
   },
   skipButton: {
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   skipText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: '#FFFFFF',
     fontSize: 14,
   },

@@ -2,6 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 export function TabFooter() {
   const { session } = useAuth();
@@ -30,7 +31,7 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   text: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyMedium,
     color: '#FFFFFF',
     fontSize: 15,
   },

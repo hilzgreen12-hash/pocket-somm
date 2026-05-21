@@ -1,5 +1,6 @@
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 import type { PersonalityCategory } from '../hooks/usePersonalityPrompt';
 
 interface Props {
@@ -54,7 +55,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
   },
   body: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 19,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -70,11 +71,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(212,176,96,0.10)',
   },
   generateBtnText: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 16,
     color: colors.gold,
     letterSpacing: 0.3,
   },
   laterBtn: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
-  laterText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  laterText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

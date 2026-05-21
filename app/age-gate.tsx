@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingVi
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing } from '../src/constants/theme';
+import { fonts } from '../src/constants/fonts';
 
 // Vinster is a wine app — both App Store and Play Store require a neutral
 // age gate before users can access the content. We capture a date of birth
@@ -252,18 +253,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   content: { flex: 1, paddingHorizontal: spacing.xl, paddingTop: 100, paddingBottom: spacing.xxl, alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: '#FFFFFF', letterSpacing: 8, marginBottom: spacing.sm },
+  brand: { fontFamily: fonts.headingBold, fontSize: 38, color: '#FFFFFF', letterSpacing: 8, marginBottom: spacing.sm },
   rule: { width: 80, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginBottom: spacing.lg },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md, paddingHorizontal: spacing.sm },
-  body: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  heading: { fontFamily: fonts.headingBold, fontSize: 28, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md, paddingHorizontal: spacing.sm },
+  body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   dobRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xl, alignSelf: 'stretch' },
   dobField: { flex: 1 },
-  dobLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6, textAlign: 'center' },
-  dobInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, backgroundColor: colors.surface, textAlign: 'center' },
+  dobLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6, textAlign: 'center' },
+  dobInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, fontSize: 20, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center' },
   continueBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
-  continueBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
-  legalNote: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: spacing.lg, paddingHorizontal: spacing.sm },
+  continueBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
+  legalNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: spacing.lg, paddingHorizontal: spacing.sm },
   privacyLink: { marginTop: spacing.md, paddingVertical: spacing.sm },
-  privacyLinkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.5 },
-  validationError: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.error, textAlign: 'center', marginBottom: spacing.md, marginTop: -spacing.md },
+  privacyLinkText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.5 },
+  validationError: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.error, textAlign: 'center', marginBottom: spacing.md, marginTop: -spacing.md },
 });

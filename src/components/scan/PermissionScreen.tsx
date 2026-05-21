@@ -1,6 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { colors, spacing, typography } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 
 interface Props {
   onRequest: () => void;
@@ -53,7 +54,7 @@ const styles = StyleSheet.create({
   },
   backLink: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
   },
   body: {
@@ -64,13 +65,13 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 22,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     marginBottom: spacing.sm,
   },
   bodyText: {
     ...typography.body,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.xl,
@@ -85,7 +86,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: colors.gold,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     letterSpacing: 0.3,
   },

@@ -12,6 +12,7 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { WineRack, CellarWine } from '../../src/types/wine';
 
 function bottleLabel(n: number) {
@@ -246,42 +247,59 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  title: { flex: 1, fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  subHeader: { fontSize: 20, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  // Inter — back/nav link
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // Cormorant — page header
+  title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  // Cormorant — section header
+  subHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
-  rowName: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, letterSpacing: 0.3 },
+  // Inter — rack card name (card content, not a page header)
+  rowName: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3 },
   rowMetaLine: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4, gap: spacing.sm },
-  rowBottles: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  rowCreated: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  // Inter — meta value
+  rowBottles: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold },
+  // Inter — meta caption
+  rowCreated: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   homeToRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: spacing.xs, gap: 6 },
-  homeToLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  homeToBlurb: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 19 },
-  arrow: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginLeft: spacing.md },
+  // Inter — meta label
+  homeToLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Inter — body blurb
+  homeToBlurb: { flex: 1, fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 19 },
+  arrow: { fontSize: 20, fontFamily: fonts.bodyRegular, color: colors.gold, marginLeft: spacing.md },
   // White side-by-side Add Wine Rack / Add Wine Fridge buttons. Sized
   // a touch tighter than the old stacked yellow pair so two read
   // comfortably across the screen width.
   addButtonRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md },
   addButtonWhite: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center' },
-  addButtonWhiteText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  // Cormorant — button text
+  addButtonWhiteText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   cellarListSection: { paddingHorizontal: spacing.xl },
   fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
-  fullListButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
-  recentLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.xs },
+  // Cormorant — button text
+  fullListButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  // Inter — meta label
+  recentLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.xs },
   recentRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  recentName: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
-  recentDetail: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
+  // Inter — wine card name
+  recentName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Inter — wine detail caption
+  recentDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   // Photograph / manual chooser overlay
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  chooserTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  chooserBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  // Cormorant — chooser pop-up title
+  chooserTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  // Inter — chooser pop-up body
+  chooserBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   chooserBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
   chooserBtnSecondary: { borderColor: '#FFFFFF' },
-  chooserBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  // Cormorant — chooser button text
+  chooserBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   chooserBtnTextSecondary: { color: '#FFFFFF' },
   chooserCancel: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: 4 },
-  chooserCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  // Inter — cancel link inside modal (not a button)
+  chooserCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

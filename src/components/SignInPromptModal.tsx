@@ -1,5 +1,6 @@
 import { Modal, View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 interface Props {
   visible: boolean;
@@ -66,7 +67,7 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
   heading: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 24,
     color: colors.text,
     textAlign: 'center',
@@ -74,7 +75,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   body: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 17,
     color: '#FFFFFF',
     textAlign: 'center',
@@ -90,12 +91,12 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   signInText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },
   create: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
     textAlign: 'center',
@@ -103,7 +104,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
   },
   continueText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
     textAlign: 'center',

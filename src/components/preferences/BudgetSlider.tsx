@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { spacing } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 import { currencySymbol } from '../../constants/currency';
 
 // Non-linear stops so the lower end (where most users sit) has finer
@@ -78,7 +79,7 @@ export function BudgetSlider({ value, onChange, currency }: Props) {
 
 const styles = StyleSheet.create({
   value: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 15,
     color: '#FFFFFF',
     marginBottom: spacing.sm,
@@ -90,7 +91,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   label: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 11,
     color: '#FFFFFF',
   },

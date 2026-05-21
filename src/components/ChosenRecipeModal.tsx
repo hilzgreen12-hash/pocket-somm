@@ -8,6 +8,7 @@ import { useChosenRecipes } from '../hooks/useChosenRecipes';
 import { useAuth } from '../hooks/useAuth';
 import { CityAutocomplete } from './CityAutocomplete';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 import type { Pairing, WineDetailsComplete } from '../types/wine';
 
 interface Props {
@@ -169,20 +170,26 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '92%', borderTopWidth: 1, borderColor: colors.border },
   content: { padding: spacing.xl, paddingBottom: 40 },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  chefInspiration: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
+  heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  // Chef inspiration sub-line — italic body, Inter
+  chefInspiration: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  sectionLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, marginBottom: spacing.sm },
-  fieldLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
+  sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
+  // Field label — form label, Inter
+  fieldLabel: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  // Form input — Inter
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
   noteInput: { minHeight: 80, marginBottom: spacing.md },
   scoreInput: { marginBottom: 4 },
-  scoreHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.lg },
+  // Score hint — Inter italic
+  scoreHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginBottom: spacing.lg },
   savedRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.sm },
-  savedText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  savedLink: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold, textDecorationLine: 'underline' },
+  // "Saved —" label paired with the View link below — Cormorant to match the link's button-like treatment
+  savedText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  savedLink: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, textDecorationLine: 'underline' },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   cancelButton: { alignItems: 'center', padding: spacing.sm },
-  cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  // Cancel link in modal — Inter
+  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

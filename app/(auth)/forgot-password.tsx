@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('');
@@ -65,12 +66,12 @@ export default function ForgotPassword() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: spacing.xl, justifyContent: 'center', backgroundColor: colors.background },
-  title: { fontSize: 28, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.xs, textAlign: 'center' },
-  subtitle: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 17, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xxl, lineHeight: 24 },
-  input: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: 'transparent' },
-  errorText: { fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, fontSize: 16, textAlign: 'center', marginBottom: spacing.sm },
+  title: { fontSize: 28, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.xs, textAlign: 'center' },
+  subtitle: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xxl, lineHeight: 24 },
+  input: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)', borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'transparent' },
+  errorText: { fontFamily: fonts.bodyItalic, color: colors.gold, fontSize: 16, textAlign: 'center', marginBottom: spacing.sm },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  buttonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   backButton: { padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  backText: { fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, fontSize: 14 },
+  backText: { fontFamily: fonts.bodyRegular, color: colors.textMuted, fontSize: 14 },
 });

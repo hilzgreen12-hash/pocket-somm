@@ -14,6 +14,7 @@ import {
   type CommunityReviewInput,
 } from '../../src/api/community';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 const HEADINGS: Record<string, string> = {
   wine: 'Upload Wine Reviews',
@@ -217,20 +218,20 @@ export default function CommunityUploadScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
-  headerTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
-  helper: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, lineHeight: 18 },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  headerTitle: { fontSize: 18, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
+  helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, lineHeight: 18 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md },
   rowTop: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm },
-  rowTitle: { flex: 1, fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
-  rowRating: { fontSize: 14, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold },
-  rowSubtitle: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
-  rowMeta: { fontSize: 11, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginTop: 2 },
+  rowTitle: { flex: 1, fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
+  rowRating: { fontSize: 14, fontFamily: fonts.bodyBold, color: colors.gold },
+  rowSubtitle: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  rowMeta: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   actionBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md, alignItems: 'center', minWidth: 80 },
   actionBtnPosted: { backgroundColor: 'rgba(212,176,96,0.15)' },
-  actionBtnText: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  actionBtnText: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
   actionBtnTextPosted: { color: colors.gold },
 });

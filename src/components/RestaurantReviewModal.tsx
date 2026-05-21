@@ -8,6 +8,7 @@ import { supabase } from '../api/supabase';
 import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 interface Props {
   visible: boolean;
@@ -152,7 +153,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   heading: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 28,
     color: colors.text,
     textAlign: 'center',
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   fieldLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 12,
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -173,7 +174,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing.sm,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
     marginBottom: spacing.md,
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   ratingLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 15,
     color: colors.text,
   },
@@ -209,7 +210,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   saveButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },
@@ -218,7 +219,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   cancelText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: colors.textMuted,
   },

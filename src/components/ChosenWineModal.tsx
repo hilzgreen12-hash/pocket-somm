@@ -12,6 +12,7 @@ import { useAuth } from '../hooks/useAuth';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
 import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 import type { WineRecommendation, ChosenWine } from '../types/wine';
 
 // Today's date as yyyy-mm-dd (local time). Default Date for the review's
@@ -412,7 +413,8 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   backBtnText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Back/nav link — Inter
+    fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: colors.textMuted,
   },
@@ -429,7 +431,7 @@ const styles = StyleSheet.create({
     paddingBottom: 60,
   },
   heading: {
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     fontSize: 26,
     color: colors.text,
     textAlign: 'center',
@@ -437,7 +439,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   wineProducer: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    // Wine producer caption — Inter italic
+    fontFamily: fonts.bodyItalic,
     fontSize: 15,
     color: colors.textMuted,
     textAlign: 'center',
@@ -449,13 +452,14 @@ const styles = StyleSheet.create({
     marginVertical: spacing.md,
   },
   sectionLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.text,
     marginBottom: spacing.sm,
   },
   fieldLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // Field label — form label, Inter
+    fontFamily: fonts.bodyMedium,
     fontSize: 12,
     color: colors.textMuted,
     textTransform: 'uppercase',
@@ -468,7 +472,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing.sm,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Form input — Inter
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
@@ -481,7 +486,8 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   scoreHint: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    // Score hint — Inter italic
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textMuted,
     marginBottom: spacing.lg,
@@ -496,18 +502,21 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   discoveredLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // Section-title-style label ("Discovered At") — Cormorant
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.text,
   },
   editLink: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Inline edit link (button) — Cormorant
+    fontFamily: fonts.headingRegular,
     fontSize: 13,
     color: colors.gold,
     textDecorationLine: 'underline',
   },
   discoveredSummary: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    // Italic summary caption — Inter
+    fontFamily: fonts.bodyItalic,
     fontSize: 15,
     color: colors.textMuted,
     marginBottom: spacing.sm,
@@ -517,7 +526,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   dateHint: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    // Date hint — Inter italic
+    fontFamily: fonts.bodyItalic,
     fontSize: 12,
     color: colors.textMuted,
     marginTop: -4,
@@ -533,12 +543,13 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   savedText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // "Saved —" label paired with the View link — Cormorant to match the link
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },
   savedLink: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
     textDecorationLine: 'underline',
@@ -552,7 +563,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   saveButtonText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
   },

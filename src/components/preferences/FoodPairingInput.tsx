@@ -1,4 +1,5 @@
 import { TextInput, StyleSheet } from 'react-native';
+import { fonts } from '../../constants/fonts';
 
 interface Props {
   value: string;
@@ -24,7 +25,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     fontSize: 17,
     lineHeight: 23,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodyRegular,
     color: '#FFFFFF',
     minHeight: 44,
     textAlignVertical: 'top',

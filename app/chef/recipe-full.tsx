@@ -10,6 +10,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { RecipeShareCard } from '../../src/components/RecipeShareCard';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../../src/constants/share';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
 
 // Full-screen "artifact" view of a single pairing — the surface users
@@ -240,39 +241,39 @@ function buildPrintHtml(pairing: Pairing, wineLine: string): string {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   headerActions: { flexDirection: 'row', gap: spacing.md },
-  actionLink: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase' },
+  actionLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase' },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 80 },
 
-  brandHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center' },
-  brandSub: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: 'rgba(224,184,74,0.75)', textAlign: 'center', marginTop: 4 },
+  brandHeading: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 4, textTransform: 'uppercase', textAlign: 'center' },
+  brandSub: { fontFamily: fonts.headingItalic, fontSize: 14, color: 'rgba(224,184,74,0.75)', textAlign: 'center', marginTop: 4 },
 
   ruleRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.md, marginBottom: spacing.md, paddingHorizontal: spacing.xl },
   rule: { flex: 1, height: 1, backgroundColor: 'rgba(224,184,74,0.45)' },
   ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm },
 
-  toPair: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 12, color: colors.textMuted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center' },
-  wineHeader: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', marginTop: 4, lineHeight: 28 },
+  toPair: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center' },
+  wineHeader: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginTop: 4, lineHeight: 28 },
   shortDivider: { width: 40, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', alignSelf: 'center', marginVertical: spacing.lg },
 
-  dishName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: colors.text, lineHeight: 34 },
-  chefInspiration: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: colors.gold, marginTop: 2 },
-  meta: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, marginTop: 6 },
+  dishName: { fontFamily: fonts.headingBold, fontSize: 28, color: colors.text, lineHeight: 34 },
+  chefInspiration: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.gold, marginTop: 2 },
+  meta: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: 6 },
 
-  sectionLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
-  body: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 24 },
-  bullet: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.text, lineHeight: 24, marginBottom: 4 },
+  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
+  body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
+  bullet: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24, marginBottom: 4 },
 
   footerRule: { height: 1, backgroundColor: 'rgba(224,184,74,0.45)', marginTop: spacing.xxl, marginBottom: spacing.md },
   footerBlock: { alignItems: 'center', paddingBottom: spacing.lg },
-  footerHeadline: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 18, color: colors.gold, letterSpacing: 4 },
-  footerTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: 'rgba(255,255,255,0.70)', marginTop: 6, textAlign: 'center' },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: '#FFFFFF', marginTop: 6, letterSpacing: 0.5 },
+  footerHeadline: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold, letterSpacing: 4 },
+  footerTagline: { fontFamily: fonts.headingItalic, fontSize: 14, color: 'rgba(255,255,255,0.70)', marginTop: 6, textAlign: 'center' },
+  footerUrl: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF', marginTop: 6, letterSpacing: 0.5 },
 
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
-  emptyTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center' },
-  emptyBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center' },
+  emptyBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
 
   busyOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   // Render the share card off-screen so captureRef can produce the PNG

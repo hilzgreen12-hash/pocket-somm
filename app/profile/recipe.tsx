@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 // Split lists kept separate so each selection is routed to its own
 // profile column (dietary_needs / allergy_risks) — the UI shows them as
@@ -200,26 +201,26 @@ const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, paddingHorizontal: spacing.md },
   backRow: { paddingTop: 70, paddingBottom: spacing.md },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   profileIntro: { marginBottom: spacing.sm, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
-  profileHeading: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 32, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xs, textAlign: 'center' },
-  profileBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 17, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
-  autosaveHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
+  profileHeading: { fontFamily: fonts.headingSemibold, fontSize: 32, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xs, textAlign: 'center' },
+  profileBody: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
+  autosaveHint: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
   section: { marginBottom: spacing.sm },
   // Matches app/(tabs)/scan.tsx and app/profile/wine.tsx for cross-screen
   // preference UI consistency.
   accordionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: 4 },
   accordionLeft: { flex: 1, alignItems: 'center' },
   chevron: { fontSize: 16, color: '#FFFFFF', marginLeft: spacing.sm },
-  question: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
-  selectionSummary: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  question: { fontFamily: fonts.bodySemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
+  selectionSummary: { fontFamily: fonts.bodyMedium, fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
   pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
-  pickerHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 14, color: colors.textMuted, marginBottom: spacing.sm },
+  pickerHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginBottom: spacing.sm },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
-  skipLinkText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
+  skipLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+  concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
   concernsSaveBtn: { alignSelf: 'flex-end', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: 6, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
-  concernsSaveBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
+  concernsSaveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
 });

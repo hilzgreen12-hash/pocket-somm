@@ -24,6 +24,7 @@ import { supabase } from '../../src/api/supabase';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import type { WineDetailsComplete } from '../../src/types/wine';
 
@@ -1233,16 +1234,17 @@ export default function CellarWineDetail() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  errorText: { color: colors.text, fontFamily: 'CormorantGaramond_400Regular', fontSize: 16 },
-  linkText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, marginTop: spacing.md },
+  // Inter — error body
+  errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
+  // Cormorant — action link reads as a button
+  linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
   backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
-  backText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Inter — back/nav link
+  backText: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
-  // Card-type label centred in the top bar — gold caps, light spacing.
-  // Identifies which kind of wine card the user is on (Cellar / Wish
-  // List / Archived) without needing to read the rest of the screen.
+  // Cormorant — card-type header label
   cardTypeLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 12,
     color: colors.gold,
     textTransform: 'uppercase',
@@ -1254,121 +1256,167 @@ const styles = StyleSheet.create({
   favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
   favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  headerLine: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 28 },
-  region: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4 },
-  grape: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, marginTop: 2 },
+  // Inter — wine card name (card content, not a page header)
+  headerLine: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 28 },
+  // Inter — region caption
+  region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
+  // Inter — grape caption
+  grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2 },
   tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  infoLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  infoValue: { fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, textAlign: 'right' },
-  infoSub: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, textAlign: 'right', marginTop: 2 },
+  // Inter — info label
+  infoLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Inter — info value read-out
+  infoValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right' },
+  // Inter — small caption sub
+  infoSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'right', marginTop: 2 },
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  sectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  editLink: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  tastingNotes: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 22 },
-  fieldLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface },
+  // Cormorant — section header
+  sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
+  // Cormorant — edit link reads as a button
+  editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
+  // Inter — tasting notes body
+  tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
+  // Inter — form label
+  fieldLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  // Inter — form input
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   buttonDisabled: { opacity: 0.6 },
-  cancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
-  noteText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 22 },
+  // Inter — cancel link inside modal (not a button)
+  cancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14 },
+  // Inter — note body
+  noteText: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 22 },
   noteInput: { minHeight: 90, textAlignVertical: 'top' },
   noteActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.md, marginTop: spacing.xs },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.md },
-  saveBtnText: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Cormorant — button text
+  saveBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   removeBlock: { paddingTop: spacing.sm },
   removeBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
-  removeBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  // Cormorant — button text
+  removeBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   removeWineBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  removeWineBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16 },
+  // Cormorant — button text
+  removeWineBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   archivedDeleteBtn: { marginHorizontal: spacing.xl, marginBottom: spacing.lg },
-  archivedAt: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
+  // Inter — subtle small info (archived date)
+  archivedAt: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
   removalRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   removalHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 },
-  removalCount: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
-  removalDate: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
-  removalNoteText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 20, marginBottom: 4 },
-  removalArchiveHint: { fontSize: 13, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
+  // Inter — subtle removal count read-out
+  removalCount: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Inter — removal date caption
+  removalDate: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  // Inter — removal note body
+  removalNoteText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 20, marginBottom: 4 },
+  // Inter — subtle hint
+  removalArchiveHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   removeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   removeModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  removeModalTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm, lineHeight: 28 },
-  removeModalBody: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  // Cormorant — remove modal title
+  removeModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm, lineHeight: 28 },
+  // Inter — remove modal body
+  removeModalBody: { fontFamily: fonts.bodyItalic, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   removeModalConfirmBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
-  removeModalConfirmText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  // Cormorant — modal confirm button text
+  removeModalConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   removeModalCancel: { alignItems: 'center', paddingVertical: spacing.sm },
-  removeModalCancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.textMuted },
+  // Inter — cancel link (not a button)
+  removeModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   removeModalOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  removeModalOkText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
-  rackRemovalMsg: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold, textAlign: 'center', marginTop: spacing.md },
+  // Cormorant — modal OK button text
+  removeModalOkText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Inter — caption status
+  rackRemovalMsg: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', marginTop: spacing.md },
   chefBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
   chefBtnDisabled: { opacity: 0.6 },
-  chefBtnText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  // Cormorant — button text
+  chefBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
-  archiveAccessBtnText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  // Cormorant — button text
+  archiveAccessBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   archiveModalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48, borderTopWidth: 1, borderColor: colors.border },
-  archiveModalTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: 2 },
-  archiveModalWine: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginBottom: spacing.lg },
+  // Cormorant — archive modal title
+  archiveModalTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: 2 },
+  // Inter — wine sub-line in modal
+  archiveModalWine: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.lg },
   archiveModalCancel: { alignItems: 'center', marginTop: spacing.md },
-  archiveModalCancelText: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular', fontSize: 14 },
+  // Inter — cancel link (not a button)
+  archiveModalCancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14 },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   // Full-width "label left, value/action right" rows used for Purchase
   // and Estimated value — these get their own single-line treatment so the
   // CTAs are scannable instead of cramped into the 50%-wide grid.
   valueRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
-  valueLabel: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  valueText: { fontSize: 15, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, flexShrink: 1, textAlign: 'right' },
-  valueTextMuted: { color: colors.textMuted, fontFamily: 'CormorantGaramond_400Regular_Italic' },
-  valueAction: { fontSize: 14, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
+  // Inter — value label
+  valueLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Inter — value read-out
+  valueText: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, flexShrink: 1, textAlign: 'right' },
+  // Inter — muted variant
+  valueTextMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
+  // Cormorant — action link reads as a button
+  valueAction: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   valueEditBlock: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flex: 1, justifyContent: 'flex-end' },
-  valueInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, minWidth: 80, maxWidth: 120, textAlign: 'right' },
-  valueCancel: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  valueSave: { fontSize: 13, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold },
-  // "Why no critic score?" explanation block — only renders when Vinster
-  // couldn't find a score and provided a one-sentence reason.
+  // Inter — form input
+  valueInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minWidth: 80, maxWidth: 120, textAlign: 'right' },
+  // Inter — subtle cancel
+  valueCancel: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // Cormorant — save button text
+  valueSave: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
   scoreNoteBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  scoreNoteLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
-  scoreNoteText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 18 },
+  // Inter — note label
+  scoreNoteLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
+  // Inter — note body
+  scoreNoteText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 18 },
   statCell: {
     width: '50%',
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
+  // Inter — stat label
   statLabel: {
     fontSize: 11,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
   },
+  // Inter — stat value read-out
   statValue: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     color: colors.text,
     lineHeight: 20,
   },
+  // Inter — muted variant
   statValueMuted: {
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
   },
+  // Inter — small caption sub
   statSub: {
     fontSize: 12,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
     marginTop: 2,
   },
+  // Cormorant — action link reads as a button
   statAction: {
     fontSize: 12,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     color: colors.gold,
     marginTop: 4,
   },
+  // Inter — subtle cancel
   statCancel: {
     fontSize: 12,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
   },
+  // Inter — form input
   statInput: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -1376,7 +1424,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
     marginTop: 2,
@@ -1387,17 +1435,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
-  // "(what's this)" link sits next to the View Vinster's Note toggle.
+  // Inter — subtle "(what's this)" inline link
   whatsThisLink: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textMuted,
     textDecorationLine: 'underline',
     marginLeft: spacing.sm,
   },
-  // Personal Notes private clarification.
+  // Inter — personal notes hint
   personalNotesHint: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 13,
     color: colors.textMuted,
     marginTop: -spacing.sm,
@@ -1412,26 +1460,29 @@ const styles = StyleSheet.create({
   reviewQuickCell: {
     flex: 1,
   },
+  // Inter — quick stat label
   reviewQuickLabel: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 11,
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 2,
   },
+  // Inter — quick stat value read-out
   reviewQuickValue: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 15,
     color: colors.text,
   },
+  // Inter — muted variant
   reviewQuickValueMuted: {
     color: colors.textMuted,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
   },
-  // Body of the user's saved written review when the form is collapsed.
+  // Inter — user written review body
   reviewNoteBody: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 16,
     color: colors.text,
     lineHeight: 22,
@@ -1451,8 +1502,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     alignItems: 'center',
   },
+  // Cormorant — share button text
   reviewShareBtnText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 14,
     color: colors.gold,
   },

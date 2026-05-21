@@ -9,6 +9,7 @@ import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
 
 // Manual-entry counterpart to ChosenWineModal. Used by the +Add link on
@@ -321,27 +322,31 @@ const styles = StyleSheet.create({
   favouriteStar: { fontSize: 30, color: colors.textMuted },
   favouriteStarActive: { color: colors.gold },
   content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 60 },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  subheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
+  heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
-  sectionLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.text, marginBottom: spacing.sm },
-  fieldLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
+  // Field label — form label, Inter
+  fieldLabel: { fontFamily: fonts.bodyMedium, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
     padding: spacing.sm,
     fontSize: 15,
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Form input — Inter
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,
     marginBottom: spacing.sm,
   },
   noteInput: { minHeight: 80, marginBottom: spacing.md },
   scoreInput: { marginBottom: 4 },
-  scoreHint: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 13, color: colors.textMuted, marginBottom: spacing.lg },
+  // Score hint — italic helper text, Inter
+  scoreHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginBottom: spacing.lg },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 16, color: colors.gold },
+  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   cancelButton: { alignItems: 'center', padding: spacing.sm },
-  cancelText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 14, color: colors.textMuted },
+  // Cancel link in modal — Inter
+  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

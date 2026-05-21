@@ -5,6 +5,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { listPersonalitySketches, type PersonalitySketch } from '../../src/api/personality';
 import { splitPersonality } from '../../src/utils/personalityText';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 type Category = 'wine' | 'recipe';
 
@@ -105,12 +106,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
-  title: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.8, flex: 1, textAlign: 'center' },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  title: { fontSize: 18, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, flex: 1, textAlign: 'center' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   card: {
     marginHorizontal: spacing.xl,
     marginTop: spacing.lg,
@@ -122,10 +123,10 @@ const styles = StyleSheet.create({
   },
   cardCurrent: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.06)' },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  cardDate: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  currentTag: { fontSize: 11, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, letterSpacing: 1 },
-  cardTitle: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 20, color: colors.gold, letterSpacing: 0.5, lineHeight: 26, marginBottom: spacing.sm },
-  cardPreview: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, lineHeight: 20 },
-  cardBody: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 15, color: colors.text, lineHeight: 24, marginBottom: spacing.sm },
-  toggle: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 13, color: colors.gold, marginTop: spacing.xs },
+  cardDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  currentTag: { fontSize: 11, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },
+  cardTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.gold, letterSpacing: 0.5, lineHeight: 26, marginBottom: spacing.sm },
+  cardPreview: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, lineHeight: 20 },
+  cardBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 24, marginBottom: spacing.sm },
+  toggle: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, marginTop: spacing.xs },
 });

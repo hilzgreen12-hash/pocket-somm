@@ -6,6 +6,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { supabase } from '../../src/api/supabase';
 import { splitPersonality } from '../../src/utils/personalityText';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 interface CommunityProfileRow {
   user_id: string;
@@ -155,29 +156,29 @@ const styles = StyleSheet.create({
   muted: { opacity: 0.5 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   backRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
-  backText: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   intro: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center', gap: spacing.xs },
-  heading: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 30, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  subheading: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginTop: spacing.xs, paddingHorizontal: spacing.md },
+  heading: { fontFamily: fonts.headingBold, fontSize: 30, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginTop: spacing.xs, paddingHorizontal: spacing.md },
   section: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl, gap: spacing.sm },
-  sectionLabel: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
-  usernameText: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.text },
-  helper: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 18 },
+  sectionLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
+  usernameText: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.text },
+  helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18 },
   loadingRow: { padding: spacing.xl, alignItems: 'center' },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   publishedCard: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, backgroundColor: 'rgba(212,176,96,0.06)', gap: spacing.xs },
-  publishedLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
-  publishedTitle: { fontSize: 18, fontFamily: 'CormorantGaramond_700Bold', color: colors.gold, lineHeight: 24, marginBottom: 2 },
-  publishedText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, lineHeight: 22 },
+  publishedLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  publishedTitle: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, lineHeight: 24, marginBottom: 2 },
+  publishedText: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
   latestCard: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, padding: spacing.md, gap: spacing.xs, marginTop: spacing.sm },
-  latestLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
-  latestTitle: { fontSize: 16, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, lineHeight: 22, marginBottom: 2 },
-  latestText: { fontSize: 15, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 20 },
+  latestLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  latestTitle: { fontSize: 16, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 22, marginBottom: 2 },
+  latestText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 20 },
   publishBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  publishBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, color: colors.gold },
+  publishBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   btnDisabled: { opacity: 0.5 },
   unpublishBtn: { alignItems: 'center', paddingVertical: spacing.sm },
-  unpublishText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
+  unpublishText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
   generateBtn: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  generateBtnText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, color: colors.textMuted },
+  generateBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.textMuted },
 });

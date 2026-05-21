@@ -10,6 +10,7 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function ChefCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -132,7 +133,8 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
   },
   processingText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // Status read-out shown while OCR runs — treat as subtle/muted info text.
+    fontFamily: fonts.bodySemibold,
     fontSize: 18,
     color: '#FFFFFF',
     letterSpacing: 0.5,

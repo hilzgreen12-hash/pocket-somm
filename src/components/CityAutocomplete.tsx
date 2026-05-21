@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, type StyleProp, ty
 import { CITIES } from '../constants/cities';
 import { useCityHistory } from '../hooks/useCityHistory';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 interface Props {
   value: string;
@@ -131,13 +132,13 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border,
   },
   rowText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodyMedium,
     fontSize: 15,
     color: colors.text,
     flex: 1,
   },
   rowHint: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     fontSize: 12,
     color: colors.gold,
     marginLeft: spacing.sm,

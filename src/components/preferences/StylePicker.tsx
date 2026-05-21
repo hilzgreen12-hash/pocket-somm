@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { STYLE_PROFILES } from '../../constants/styleProfiles';
 import { colors, spacing } from '../../constants/theme';
+import { fonts } from '../../constants/fonts';
 import type { WineType } from '../../types/preferences';
 
 const MAX = 5;
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold + '22',
   },
   label: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     fontSize: 17,
     color: '#FFFFFF',
   },
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
     color: colors.gold,
   },
   description: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     fontSize: 14,
     color: 'rgba(255,255,255,0.75)',
     marginTop: 2,

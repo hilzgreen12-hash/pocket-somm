@@ -14,6 +14,7 @@ import { RestaurantReviewShareCard } from '../../src/components/RestaurantReview
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
 import type { ChosenWine } from '../../src/types/wine';
 
@@ -483,11 +484,11 @@ export default function RestaurantReviewsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, width: 40 },
-  title: { fontSize: 20, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
-  emptyTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, textAlign: 'center' },
-  emptyBody: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
+  emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   // Hides the off-screen branded share card from the visible layout
   // while still mounting it so react-native-view-shot can snapshot.
   // Matches the WineListShareCard / WineReviewShareCard pattern.
@@ -497,22 +498,23 @@ const styles = StyleSheet.create({
   // Star rating sits above the share icon on the right of each card.
   rightCluster: { alignItems: 'flex-end', gap: spacing.xs },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
-  restaurantName: { flex: 1, fontSize: 16, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text },
-  metaText: { fontSize: 12, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted },
-  notePreview: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, marginTop: 4, lineHeight: 18 },
+  restaurantName: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  notePreview: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
   ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },
   ratingCell: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  ratingCellLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
+  ratingCellLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
   wineList: { marginTop: spacing.xs, gap: 2 },
   wineRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', paddingVertical: 4 },
-  wineLine: { flex: 1, fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.gold },
-  wineScore: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, marginLeft: spacing.sm },
+  // Wine name italics inside a restaurant card — wine reference, treat as caption.
+  wineLine: { flex: 1, fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold },
+  wineScore: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginLeft: spacing.sm },
   filterRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  filterLabel: { fontSize: 11, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 6, minWidth: 50 },
+  filterLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 6, minWidth: 50 },
   filterChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 14, paddingVertical: 3, paddingHorizontal: spacing.sm },
   filterChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
-  filterChipText: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted },
+  filterChipText: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   filterChipTextActive: { color: colors.gold },
   personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(212,176,96,0.08)' },
-  personalityButtonText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
+  personalityButtonText: { fontFamily: fonts.headingBold, fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
 });

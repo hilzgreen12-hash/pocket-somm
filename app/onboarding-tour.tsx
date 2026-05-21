@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { colors, spacing } from '../src/constants/theme';
+import { fonts } from '../src/constants/fonts';
 
 interface Slide {
   badge: string;
@@ -103,15 +104,16 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingTop: 60, paddingBottom: 40 },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginTop: spacing.xl, marginBottom: spacing.lg },
   topBarSide: { flex: 1, alignItems: 'flex-end' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: '#FFFFFF', letterSpacing: 2, textAlign: 'center', flex: 1 },
+  brand: { fontFamily: fonts.headingBold, fontSize: 38, color: '#FFFFFF', letterSpacing: 2, textAlign: 'center', flex: 1 },
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
-  badge: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },
-  title: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 38, color: colors.text, letterSpacing: 0.5, lineHeight: 46, textAlign: 'center', marginBottom: spacing.lg },
-  body: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 19, color: '#FFFFFF', textAlign: 'center', lineHeight: 28 },
+  badge: { fontFamily: fonts.headingBold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },
+  title: { fontFamily: fonts.headingBold, fontSize: 38, color: colors.text, letterSpacing: 0.5, lineHeight: 46, textAlign: 'center', marginBottom: spacing.lg },
+  // Slide body copy.
+  body: { fontFamily: fonts.bodyItalic, fontSize: 19, color: '#FFFFFF', textAlign: 'center', lineHeight: 28 },
   dotsRow: { flexDirection: 'row', justifyContent: 'center', gap: 8, marginVertical: spacing.lg },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: 'rgba(255,255,255,0.20)' },
   dotActive: { backgroundColor: colors.gold, width: 24 },
   footer: { paddingHorizontal: spacing.xl },
   nextButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
-  nextText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 17, color: colors.gold, letterSpacing: 0.5 },
+  nextText: { fontFamily: fonts.headingBold, fontSize: 17, color: colors.gold, letterSpacing: 0.5 },
 });

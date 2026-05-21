@@ -13,6 +13,7 @@ It's not live yet. We're building it carefully so it stays warm and high-signal 
 In the meantime, anything you post — your reviews, your wine and foodie personalities — is being saved, and will surface here when Community opens up.`;
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function CommunityTab() {
   const { height } = useWindowDimensions();
@@ -100,12 +101,16 @@ export default function CommunityTab() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  title: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  // Big "Community" tab title — header.
+  title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
-  sectionDesc: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
-  comingSoonNotice: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular', color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
+  // Italic blurb below the tab title — kept Cormorant per spec.
+  sectionDesc: { fontSize: 17, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  // Coming-soon banner — body content, Inter.
+  comingSoonNotice: { fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  buttonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 15, textAlign: 'center' },
+  // Button label — Cormorant.
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
 });

@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function AddToWishListScreen() {
   const { addWine } = useWishList();
@@ -188,19 +189,28 @@ export default function AddToWishListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: 80, paddingBottom: 60 },
-  back: { fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, marginBottom: spacing.xl },
-  heading: { fontSize: 30, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
-  subheading: { fontSize: 17, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
+  // Inter — back/nav link
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginBottom: spacing.xl },
+  // Cormorant — page header
+  heading: { fontSize: 30, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
+  // Cormorant — tab-screen italic blurb under the heading
+  subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xl },
   scanRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl },
   scanButton: { flex: 1, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
-  scanButtonText: { color: '#FFFFFF', fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 14, textAlign: 'center' },
+  // Cormorant — button text
+  scanButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   uploadingScreen: { flex: 1, backgroundColor: colors.background, justifyContent: 'center', alignItems: 'center', gap: spacing.lg },
-  uploadingText: { fontSize: 18, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 0.5 },
+  // Inter — body (processing status)
+  uploadingText: { fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, letterSpacing: 0.5 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xl },
   dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
-  dividerText: { fontSize: 14, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted },
-  label: { fontSize: 12, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: 'CormorantGaramond_400Regular', color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  // Inter — small caption divider text
+  dividerText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  // Inter — form label
+  label: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
+  // Inter — form input
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.lg },
   saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  saveButtonText: { color: colors.gold, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 17 },
+  // Cormorant — button text
+  saveButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 17 },
 });

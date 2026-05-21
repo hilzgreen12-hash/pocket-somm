@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-nativ
 import { Link, router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, typography, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 export default function SignIn() {
   const [email, setEmail] = useState('');
@@ -91,14 +92,14 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 32,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: '#FFFFFF',
     marginBottom: spacing.xs,
     textAlign: 'center',
   },
   subtitle: {
     ...typography.body,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.headingRegular,
     color: colors.textMuted,
     textAlign: 'center',
     marginBottom: spacing.xxl,
@@ -110,7 +111,7 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     marginBottom: spacing.md,
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: 'transparent',
   },
@@ -127,15 +128,16 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: spacing.md,
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
   },
   eyeButton: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.md,
   },
+  // Show/Hide toggle inside the password row — acts as a button label.
   eyeText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 13,
     color: colors.textMuted,
   },
@@ -149,7 +151,7 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: colors.gold,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
   },
   guestButton: {
@@ -157,20 +159,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: spacing.sm,
   },
+  // "Continue without account" — button label.
   guestText: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.headingRegular,
     color: colors.textMuted,
     fontSize: 14,
   },
+  // Forgot password / sign-up navigation links — button-like.
   link: {
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.headingRegular,
     textAlign: 'center',
     color: '#FFFFFF',
     marginTop: spacing.lg,
     fontSize: 14,
   },
+  // Form-level error message — body/helper text.
   errorText: {
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: colors.gold,
     fontSize: 16,
     textAlign: 'center',

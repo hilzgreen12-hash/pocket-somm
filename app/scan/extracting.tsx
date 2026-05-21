@@ -10,6 +10,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { extractWineList } from '../../src/services/ocr';
 import { recommendWines } from '../../src/services/recommender';
 import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 import { COUNTRY_TO_CURRENCY } from '../../src/constants/currency';
 import type { ExtractedWine } from '../../src/types/wine';
 import type { UserPreferences } from '../../src/types/preferences';
@@ -226,34 +227,35 @@ const styles = StyleSheet.create({
   },
   brand: {
     fontSize: 36,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     color: colors.text,
     letterSpacing: 1.5,
     marginBottom: spacing.xxl,
   },
   title: {
     fontSize: 20,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
+  // Italic timing hint sitting under the progress title — body-italic.
   timing: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontFamily: fonts.bodyItalic,
     color: colors.gold,
     textAlign: 'center',
     marginBottom: spacing.sm,
   },
   body: {
     fontSize: 14,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
     textAlign: 'center',
   },
   stayNote: {
     fontSize: 12,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
     textAlign: 'center',
     marginTop: spacing.lg,
@@ -268,14 +270,14 @@ const styles = StyleSheet.create({
   },
   errorTitle: {
     fontSize: 20,
-    fontFamily: 'CormorantGaramond_700Bold',
+    fontFamily: fonts.headingBold,
     color: colors.text,
     marginBottom: spacing.md,
     textAlign: 'center',
   },
   errorBody: {
     fontSize: 14,
-    fontFamily: 'CormorantGaramond_400Regular',
+    fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,
@@ -290,7 +292,7 @@ const styles = StyleSheet.create({
   },
   retryText: {
     color: '#fff',
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
   },
 });

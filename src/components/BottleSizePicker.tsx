@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
+import { fonts } from '../constants/fonts';
 
 // Standard bottle sizes offered as quick chips. ml is the canonical
 // storage unit (no decimals, no locale dependency); labels use cl / L for
@@ -168,7 +169,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold + '22',
   },
   chipText: {
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // Picker chip label — Inter
+    fontFamily: fonts.bodyMedium,
     fontSize: 16,
     color: colors.textMuted,
   },
@@ -188,13 +190,15 @@ const styles = StyleSheet.create({
   customInput: {
     flex: 1,
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_400Regular',
+    // Form input — Inter
+    fontFamily: fonts.bodyRegular,
     color: colors.text,
     paddingVertical: spacing.sm,
   },
   customSuffix: {
     fontSize: 16,
-    fontFamily: 'CormorantGaramond_600SemiBold',
+    // Suffix label (ml/cl) — Inter
+    fontFamily: fonts.bodyMedium,
     color: colors.textMuted,
     marginLeft: spacing.xs,
   },

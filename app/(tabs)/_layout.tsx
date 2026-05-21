@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { colors } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 function BottleIcon({ color }: { color: string }) {
   return <MaterialCommunityIcons name="bottle-wine-outline" size={20} color={color} />;
@@ -14,7 +15,9 @@ export default function TabsLayout() {
         tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: { borderTopColor: colors.border, backgroundColor: colors.background },
-        tabBarLabelStyle: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 11 },
+        // Tab-bar labels — small 11pt navigation chips. Inter for
+        // legibility at tiny sizes (Cormorant struggled below 14pt).
+        tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 11 },
       }}
     >
       <Tabs.Screen name="scan" options={{ title: 'List', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
