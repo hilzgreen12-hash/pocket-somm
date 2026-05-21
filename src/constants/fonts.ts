@@ -24,38 +24,36 @@
 //     body:    { fontFamily: fonts.bodyRegular, fontSize: 15 },
 //   });
 
+// REVERTED 2026-05-21: the body tokens now point back at Cormorant
+// Garamond. The semantic split (heading / body) is preserved in the
+// codebase so we can rethink the body face more carefully — but right
+// now every token resolves to Cormorant, restoring the pre-migration
+// look in one file rather than rewriting 86 sites again. Inter is
+// still loaded in _layout.tsx so the next iteration can re-point
+// body tokens at it (or a different sans) without another build cycle.
 export const fonts = {
   // -------- Display / editorial — Cormorant Garamond --------
-  // Use these on: page titles, section headers, tab blurbs (the
-  // italic intro under a tab name), button labels, pop-up titles,
-  // anything inside About Vinster, anything inside the headers /
-  // blurbs at the top of a tab screen.
   headingRegular: 'CormorantGaramond_400Regular',
   headingItalic:  'CormorantGaramond_400Regular_Italic',
   headingSemibold: 'CormorantGaramond_600SemiBold',
   headingBold:    'CormorantGaramond_700Bold',
 
-  // -------- Body / readability — Inter --------
-  // Use these on: body text, form fields & labels, card content,
-  // captions, hints, pop-up bodies, anything that isn't a "header"
-  // in the editorial sense.
-  bodyRegular:  'Inter_400Regular',
-  bodyItalic:   'Inter_400Regular_Italic',
-  bodyMedium:   'Inter_500Medium',
-  bodySemibold: 'Inter_600SemiBold',
-  bodyBold:     'Inter_700Bold',
+  // -------- Body — reverted to Cormorant Garamond --------
+  // Tokens kept distinct from heading* so we can re-point body to
+  // Inter (or another sans) per-token without touching call sites.
+  // Inter mapping preserved below in a comment for the next attempt:
+  //   bodyRegular  -> 'Inter_400Regular'
+  //   bodyItalic   -> 'Inter_400Regular_Italic'
+  //   bodyMedium   -> 'Inter_500Medium'
+  //   bodySemibold -> 'Inter_600SemiBold'
+  //   bodyBold     -> 'Inter_700Bold'
+  bodyRegular:  'CormorantGaramond_400Regular',
+  bodyItalic:   'CormorantGaramond_400Regular_Italic',
+  bodyMedium:   'CormorantGaramond_600SemiBold',
+  bodySemibold: 'CormorantGaramond_600SemiBold',
+  bodyBold:     'CormorantGaramond_700Bold',
 } as const;
 
-// Common Cormorant ↔ Inter weight pairings used during the
-// per-screen migration. When swapping a body-context style from
-// Cormorant to Inter, the corresponding Inter weight is the right
-// drop-in 90%+ of the time. Italics are also weight-paired so
-// 'CormorantGaramond_400Regular_Italic' becomes 'Inter_400Regular_Italic'.
-//
-// (Not used at runtime — kept here as a reference for the migration.)
-export const FONT_BODY_FALLBACK: Record<string, string> = {
-  CormorantGaramond_400Regular:         fonts.bodyRegular,
-  CormorantGaramond_400Regular_Italic:  fonts.bodyItalic,
-  CormorantGaramond_600SemiBold:        fonts.bodySemibold,
-  CormorantGaramond_700Bold:            fonts.bodyBold,
-};
+// (Old Cormorant ↔ Inter pairing table removed — no longer needed
+// now that body tokens point back at Cormorant. Re-add per token
+// in the `fonts` object above if/when we re-attempt a body face.)
