@@ -321,7 +321,7 @@ export default function ScanTab() {
             <Text style={styles.buttonHalfText}>Scan Wine List</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
-            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Screenshot / Photo'}</Text>
+            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Screenshot'}</Text>
           </TouchableOpacity>
         </View>
         <View style={styles.buttonRow}>

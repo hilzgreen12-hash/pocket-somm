@@ -187,7 +187,15 @@ export default function ExtractingScreen() {
     } catch (err) {
       if (!token.active) return;
       const message = err instanceof Error ? err.message : String(err);
-      setErrorDetail(message);
+      // Show clear, actionable guidance for the common "couldn't read the
+      // list / couldn't generate" failures. Preserve genuinely specific
+      // messages (e.g. the rate-limit "try again in a few minutes") so the
+      // generic guidance doesn't mask them.
+      const isRateLimit = /minute|too many|rate limit/i.test(message);
+      const friendly = isRateLimit
+        ? message
+        : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.';
+      setErrorDetail(friendly);
       setError(message);
       setStage('error');
     }
@@ -196,7 +204,7 @@ export default function ExtractingScreen() {
   if (stage === 'error') {
     return (
       <ScrollView contentContainerStyle={styles.errorContainer}>
-        <Text style={styles.errorTitle}>Something went wrong</Text>
+        <Text style={styles.errorTitle}>Please try again!</Text>
         <Text style={styles.errorBody}>{errorDetail}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => router.replace('/(tabs)/scan')}>
           <Text style={styles.retryText}>Try Again</Text>
