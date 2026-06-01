@@ -123,7 +123,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Tell Vinster what you're cooking and it'll offer you a wine. Select your bottle first for an original, tailored recipe sure to satisfy.
+          Tell Vinster what you're cooking and it'll offer you a wine. Select your bottle first for an original, tailored recipe sure to satisfy. Keep, organise, and share your recipes to grow your cookbook.
         </Text>
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.sm, borderColor: '#FFFFFF' }]} onPress={() => router.push('/chef/archive')}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Your Cookbook</Text>
@@ -135,7 +135,7 @@ export default function ChefTab() {
       <View style={styles.section}>
         <Text style={styles.subheading}>Find Me A Wine</Text>
         <Text style={styles.sectionDesc}>
-          Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
+          Chosen your recipe? We'll help guide your wine pairing with a bottle from your cellar, or something new.
         </Text>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>

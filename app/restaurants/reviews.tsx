@@ -404,7 +404,7 @@ export default function RestaurantReviewsScreen() {
                             onPress={() => setEditingWine(cw)}
                             activeOpacity={0.7}
                           >
-                            <Text style={styles.wineLine} numberOfLines={1}>Chose: {wineLine}</Text>
+                            <Text style={styles.wineLine} numberOfLines={1}>Bottle Pick: {wineLine}</Text>
                             {cw.user_score != null ? (
                               <Text style={styles.wineScore}>{cw.user_score}/100</Text>
                             ) : null}
