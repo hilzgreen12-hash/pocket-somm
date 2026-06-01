@@ -52,6 +52,11 @@ const WineRecommendationSchema = z.object({
   rarityAssessment: RarityAssessmentSchema,
   outsidePreferences: z.string().nullable().optional(),
   topPickReasons: z.array(z.string()).nullable().optional(),
+  // Labelled parameter notes (see WineRecommendation). Optional so a
+  // response from the pre-upgrade edge function still validates.
+  criticScoreNote: z.string().nullable().optional(),
+  valueNote: z.string().nullable().optional(),
+  standoutNote: z.string().nullable().optional(),
 });
 
 const RecommendationResponseSchema = z.object({

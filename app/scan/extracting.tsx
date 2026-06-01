@@ -209,9 +209,7 @@ export default function ExtractingScreen() {
     <SearchProgress
       title={stage === 'reading' ? 'Reading your wine list…' : 'Finding your perfect match…'}
       subtitle="Vinster needs up to a minute for your result"
-      body={stage === 'reading'
-        ? 'Identifying every wine on the list'
-        : 'Scoring by critic rating, vintage quality and value'}
+      body="Vinster is assessing the wine list for its 3 top picks based on critic scores, value for money, and vintage quality/drinkability, all set against your preferences"
       durationMs={70000}
     />
   );

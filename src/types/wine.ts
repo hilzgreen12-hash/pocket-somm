@@ -41,7 +41,16 @@ export interface WineRecommendation {
   drinkingWindow: DrinkingWindow;
   rarityAssessment: RarityAssessment;
   outsidePreferences?: string | null; // set when wine breaks a stated preference, explains why it's still worth it
-  topPickReasons?: string[] | null;  // 2–3 bullet points for the #1 wine only, explaining why it ranks above the others
+  topPickReasons?: string[] | null;  // legacy — superseded by the labelled notes below; kept for fallback on older saved sessions
+  // Four labelled parameter notes shown (in this order) on the results
+  // card: Critic Score, Value, Vintage/Drinkability, Producer. The recommend
+  // edge function generates criticScoreNote + valueNote; vintage/producer
+  // reuse vintageAssessment.notes + rarityAssessment.notes. Optional so
+  // sessions saved before the prompt upgrade still parse.
+  criticScoreNote?: string | null;
+  valueNote?: string | null;
+  // Top pick (#1) only — one brief synthesis sentence on why it leads.
+  standoutNote?: string | null;
   // One brief tasting-only sentence — what the wine actually tastes
   // like, not why it was picked. No vintage notes, no producer info,
   // no scores. Surfaces on the compact card and on the share card so
