@@ -86,12 +86,12 @@ export default function CellarTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => setAddWineOpen(true))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Add Wine / Generate Wine Intel</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
+          <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wines: Wine Racks and Cellar List</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
+          <Text style={styles.buttonText}>Your Wines: Wine Racks and Cellar List</Text>
         </TouchableOpacity>
 
         {/* Two half-width rows below Your Wines: Quick Cellar Stats sits

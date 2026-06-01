@@ -702,7 +702,7 @@ export default function ResultsScreen() {
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? '✓ Added · View in Your Wine Reviews' : 'Add to Your Bottle Picks'}
+                      {chosenIndexes.has(i) ? '✓ Added · View in Your Wine Reviews' : 'Add to Your Restaurants - Bottle Picks'}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -934,6 +934,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyItalic,
     color: '#FFFFFF',
     lineHeight: 24,
+    textAlign: 'center',
   },
   // Footer CTA — sits below the third wine card, routes the user to
   // Your Restaurants for the proper review/edit flow. Margin-wide so it

@@ -59,7 +59,7 @@ export function BudgetSlider({ value, onChange, currency, label }: Props) {
   return (
     <View style={{ width: '100%' }}>
       <Text style={styles.value}>
-        {label ? `${label} ` : ''}{atMax ? 'Baller' : `${sym}${current}`}.
+        {label ? `${label}  ` : ''}{atMax ? 'Baller' : `${sym}${current}`}.
       </Text>
       <Slider
         minimumValue={0}
