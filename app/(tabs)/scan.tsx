@@ -35,7 +35,7 @@ You can also review the restaurants you've visited, all saved within Your Restau
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
-  const paddingTop = Math.max(60, height * 0.13);
+  const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
@@ -298,10 +298,9 @@ export default function ScanTab() {
 
         <View style={styles.section}>
           <View style={styles.bubbleWrap}>
-            <Text style={styles.question}>Budget?</Text>
             {prefsLoading
               ? <View style={{ height: 60 }} />
-              : <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} />}
+              : <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" />}
           </View>
         </View>
 
@@ -406,7 +405,7 @@ const styles = StyleSheet.create({
   // tab screens").
   subtitle: {
     fontFamily: fonts.headingRegular,
-    fontSize: 17,
+    fontSize: 19,
     color: '#FFFFFF',
     marginTop: spacing.xs,
     textAlign: 'center',

@@ -99,10 +99,8 @@ export default function FindPairingScreen() {
       </TouchableOpacity>
 
       <Text style={styles.heading}>Find a Wine Pairing</Text>
-      <Text style={styles.subheading}>Tell us what you're cooking and we'll find the perfect wine.</Text>
-
-      <Text style={styles.profileNote}>
-        Vinster will use your wine profile settings to guide its results.{' '}
+      <Text style={styles.subheading}>
+        Tell us what you're cooking and we'll find the perfect wine. Vinster will use your settings under About You - Your Wine Preferences to guide its results.{' '}
         <Text
           style={styles.profileNoteLink}
           onPress={() => {
@@ -110,9 +108,9 @@ export default function FindPairingScreen() {
               setSignInPromptVisible(true);
               return;
             }
-            router.push('/profile/recipe');
+            router.push('/profile/wine');
           }}
-        >Update profile settings</Text>
+        >Update your preferences here.</Text>
       </Text>
 
       <Text style={styles.label}>What are you cooking?</Text>
@@ -139,6 +137,23 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
+      <Text style={styles.label}>Any specific style preference?</Text>
+      <View style={styles.styleGrid}>
+        {['Any', 'White', 'Red', 'Rosé', 'Sparkling', 'Fortified'].map((s) => {
+          const val = s === 'Any' ? null : s;
+          const active = stylePreference === val;
+          return (
+            <TouchableOpacity
+              key={s}
+              style={[styles.styleBtn, active && styles.styleBtnActive]}
+              onPress={() => setStylePreference(val)}
+            >
+              <Text style={[styles.styleBtnText, active && styles.styleBtnTextActive]}>{s}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
       <Text style={styles.label}>Where should Vinster look?</Text>
       <View style={styles.toggleRow}>
         <TouchableOpacity
@@ -156,23 +171,6 @@ export default function FindPairingScreen() {
           <Text style={[styles.toggleText, mode === 'general' && styles.toggleTextActive]}>Suggest a Style</Text>
           <Text style={[styles.toggleSub, mode === 'general' && styles.toggleSubActive]}>To go and buy</Text>
         </TouchableOpacity>
-      </View>
-
-      <Text style={styles.label}>Any specific style preference?</Text>
-      <View style={styles.styleGrid}>
-        {['Any', 'White', 'Red', 'Rosé', 'Sparkling', 'Fortified'].map((s) => {
-          const val = s === 'Any' ? null : s;
-          const active = stylePreference === val;
-          return (
-            <TouchableOpacity
-              key={s}
-              style={[styles.styleBtn, active && styles.styleBtnActive]}
-              onPress={() => setStylePreference(val)}
-            >
-              <Text style={[styles.styleBtnText, active && styles.styleBtnTextActive]}>{s}</Text>
-            </TouchableOpacity>
-          );
-        })}
       </View>
 
       <TouchableOpacity style={styles.button} onPress={() => handleFind()}>

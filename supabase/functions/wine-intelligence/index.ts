@@ -29,13 +29,13 @@ Return ONLY a valid JSON object with exactly this structure:
   "criticScoreNote": <single short sentence — 20 words max — explaining why no critic score is available when criticScore is null. e.g. "No published reviews — this is a small-production producer rarely covered by mainstream critics." or "Vintage too young — no major critics have scored this release yet." Set to null when criticScore is provided>,
   "drinkingWindowFrom": <4-digit year when ready to drink, or null>,
   "drinkingWindowTo": <4-digit year by which it should ideally be drunk, or null>,
-  "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining" | "unknown">,
+  "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining">,
   "grapeVariety": <primary grape variety or blend, e.g. "Pinot Noir" or "Grenache/Syrah/Mourvèdre">,
   "tastingNotes": <2-3 sentences describing the wine's character in an elegant sommelier style>,
   "estimatedValue": <integer per-bottle retail estimate in ${cur} from typical independent merchants in the relevant market, or null if too obscure to estimate. Account for vintage scarcity, producer reputation, and current market trends. This is a single point estimate, not a range — be honest about uncertainty by returning null rather than guessing wildly. Return the number only — no currency symbol, no decimals>
 }
 
-Base drinking window status on the current year ${currentYear}. Return only the raw JSON — no markdown, no explanation.`;
+Always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown". Base the status on the current year ${currentYear} relative to the from/to years. Return only the raw JSON — no markdown, no explanation.`;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',

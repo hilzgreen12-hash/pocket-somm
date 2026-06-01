@@ -17,7 +17,7 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function CommunityTab() {
   const { height } = useWindowDimensions();
-  const paddingTop = Math.max(60, height * 0.13);
+  const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Italic blurb below the tab title — kept Cormorant per spec.
-  sectionDesc: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  sectionDesc: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs },
   // Coming-soon banner — body content, Inter.
   comingSoonNotice: { fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },

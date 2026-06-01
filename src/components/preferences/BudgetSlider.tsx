@@ -37,9 +37,12 @@ interface Props {
   value: number | null;
   onChange: (value: number | null) => void;
   currency?: string;
+  // Optional prefix shown before the value on the same line, e.g. "Budget?"
+  // so the header reads "Budget? £200." / "Budget? Baller."
+  label?: string;
 }
 
-export function BudgetSlider({ value, onChange, currency }: Props) {
+export function BudgetSlider({ value, onChange, currency, label }: Props) {
   // Track index locally during drag so the slider doesn't fight the
   // controlled `value` prop (each parent update would otherwise force the
   // thumb back and break the gesture). Commit upstream on release.
@@ -56,7 +59,7 @@ export function BudgetSlider({ value, onChange, currency }: Props) {
   return (
     <View style={{ width: '100%' }}>
       <Text style={styles.value}>
-        {atMax ? 'Baller' : `Up to ${sym}${current}`}
+        {label ? `${label} ` : ''}{atMax ? 'Baller' : `${sym}${current}`}.
       </Text>
       <Slider
         minimumValue={0}
@@ -79,8 +82,8 @@ export function BudgetSlider({ value, onChange, currency }: Props) {
 
 const styles = StyleSheet.create({
   value: {
-    fontFamily: fonts.bodySemibold,
-    fontSize: 15,
+    fontFamily: fonts.headingSemibold,
+    fontSize: 17,
     color: '#FFFFFF',
     marginBottom: spacing.sm,
     textAlign: 'center',
@@ -92,7 +95,7 @@ const styles = StyleSheet.create({
   },
   label: {
     fontFamily: fonts.bodySemibold,
-    fontSize: 11,
+    fontSize: 14,
     color: '#FFFFFF',
   },
 });

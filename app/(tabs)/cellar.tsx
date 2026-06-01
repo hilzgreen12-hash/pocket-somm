@@ -22,7 +22,7 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function CellarTab() {
   const { height } = useWindowDimensions();
-  const paddingTop = Math.max(60, height * 0.13);
+  const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
   const [addWineOpen, setAddWineOpen] = useState(false);
@@ -89,12 +89,8 @@ export default function CellarTab() {
         <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => setAddWineOpen(true))}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
-      </View>
 
-      <View style={styles.divider} />
-
-      <View style={styles.section}>
-        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wines: Wine Racks and Cellar List</Text>
         </TouchableOpacity>
 
@@ -213,7 +209,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").
-  subtitle: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
+  subtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Body description text under section CTAs — Inter for readability.

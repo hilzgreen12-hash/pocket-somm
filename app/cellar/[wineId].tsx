@@ -627,14 +627,35 @@ export default function CellarWineDetail() {
       <SearchProgress
         title="Crafting your pairings…"
         subtitle="Vinster needs up to a minute for your result"
-        body="Our sommelier is selecting three chef-inspired dishes to complement your wine"
+        body="Vinster is selecting three chef-inspired dishes to complement your wine"
         durationMs={60000}
       />
     );
   }
 
-  const windowColor = STATUS_COLORS[wine.drinking_window_status] ?? colors.textMuted;
-  const windowLabel = STATUS_LABELS[wine.drinking_window_status] ?? 'Unknown';
+  // Drinking-window status. 'unknown' is no longer a valid state — Vinster
+  // always estimates a window — so when a legacy row still carries 'unknown'
+  // (or a blank status) but has from/to years, derive the real status from
+  // the current year rather than showing "Unknown" beside a date range.
+  const rawWindowStatus = wine.drinking_window_status;
+  const effectiveWindowStatus = (() => {
+    if (rawWindowStatus && rawWindowStatus !== 'unknown' && STATUS_LABELS[rawWindowStatus]) return rawWindowStatus;
+    const from = wine.drinking_window_from;
+    const to = wine.drinking_window_to;
+    if (from || to) {
+      const yr = new Date().getFullYear();
+      if (from && yr < from) return 'too_young';
+      if (to && yr > to) return 'declining';
+      if (from && to) {
+        const span = to - from;
+        return span > 0 && yr <= from + Math.ceil(span / 3) ? 'approaching' : 'peak';
+      }
+      return 'peak';
+    }
+    return rawWindowStatus;
+  })();
+  const windowColor = STATUS_COLORS[effectiveWindowStatus] ?? colors.textMuted;
+  const windowLabel = STATUS_LABELS[effectiveWindowStatus] ?? 'Unknown';
 
   // Count bottles across all rows (cellar + archive) that match this wine's
   // identity. Producer + wine name + vintage normalised so 'NV' / null /
@@ -757,6 +778,7 @@ export default function CellarWineDetail() {
           )}
         </View>
 
+        {!isWishlist && (
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Purchase Price</Text>
           {editingPrice ? (
@@ -789,6 +811,7 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           )}
         </View>
+        )}
         <TouchableOpacity
           style={styles.statCell}
           onPress={handleRefreshEstimate}
@@ -855,15 +878,7 @@ export default function CellarWineDetail() {
           {/* Wishlist mode shows an Add-to-Cellar CTA in place of the
               Chef pairing button — the user hasn't bought the bottle
               yet, so the natural next action is moving it across. */}
-          {isWishlist ? (
-            <TouchableOpacity
-              style={[styles.chefBtn, { borderColor: colors.gold }]}
-              onPress={() => router.push('/cellar/wishlist')}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>
-            </TouchableOpacity>
-          ) : cameFromReviews ? (
+          {isWishlist ? null : cameFromReviews ? (
             <TouchableOpacity
               style={[styles.chefBtn, (postingReview || reviewPosted) && styles.chefBtnDisabled]}
               onPress={handlePostToCommunity}
@@ -912,9 +927,11 @@ export default function CellarWineDetail() {
         </View>
       ) : null}
 
+      {isWishlist && <View style={styles.reviewDivider} />}
+
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Your Review</Text>
+          <Text style={styles.reviewSectionTitle}>Your Review</Text>
           {!reviewExpanded && (
             <TouchableOpacity onPress={() => setReviewExpanded(true)}>
               <Text style={styles.editLink}>
@@ -963,20 +980,20 @@ export default function CellarWineDetail() {
               placeholderTextColor={colors.textMuted}
               maxLength={3}
             />
-            <Text style={styles.fieldLabel}>Where did you drink it?</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewLocationDraft}
-              onChangeText={setReviewLocationDraft}
-              placeholder="Restaurant, home, friend's place…"
-              placeholderTextColor={colors.textMuted}
-            />
             <Text style={styles.fieldLabel}>When did you drink it?</Text>
             <TextInput
               style={styles.input}
               value={reviewDateDraft}
               onChangeText={setReviewDateDraft}
               placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textMuted}
+            />
+            <Text style={styles.fieldLabel}>Where did you drink it?</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewLocationDraft}
+              onChangeText={setReviewLocationDraft}
+              placeholder="Restaurant, home, friend's place…"
               placeholderTextColor={colors.textMuted}
             />
             {/* Review prose — the sharable body. Maps to review_note. */}
@@ -1082,6 +1099,16 @@ export default function CellarWineDetail() {
           <Text style={styles.noteText}>{wine.user_notes}</Text>
         ) : null}
       </View>
+      )}
+
+      {isWishlist && (
+        <TouchableOpacity
+          style={[styles.chefBtn, { borderColor: colors.gold }]}
+          onPress={() => router.push('/cellar/wishlist')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>
+        </TouchableOpacity>
       )}
 
       {isWishlist && (
@@ -1327,6 +1354,11 @@ const styles = StyleSheet.create({
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   // Cormorant — section header
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
+  // "Your Review" gets a larger subheader treatment vs other section titles.
+  reviewSectionTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text },
+  // A line above the Your Review block on wishlist cards (sits between the
+  // Estimated Value stats and the review section).
+  reviewDivider: { height: 1, backgroundColor: colors.border, marginTop: spacing.sm },
   // Cormorant — edit link reads as a button
   editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — tasting notes body

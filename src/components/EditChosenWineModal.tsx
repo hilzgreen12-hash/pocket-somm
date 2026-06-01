@@ -1,10 +1,16 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard,
+  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Share,
 } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { useChosenWines } from '../hooks/useChosenWines';
+import { useAuth } from '../hooks/useAuth';
 import { CityAutocomplete } from './CityAutocomplete';
+import { WineReviewShareCard } from './WineReviewShareCard';
+import { publishCommunityReview } from '../api/community';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -19,6 +25,7 @@ interface Props {
 
 export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
   const { update, remove } = useChosenWines();
+  const { session } = useAuth();
 
   const [restaurant, setRestaurant] = useState('');
   const [city, setCity] = useState('');
@@ -28,6 +35,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [userScore, setUserScore] = useState<number | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
   const [vinsterNotesOpen, setVinsterNotesOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const shareCardRef = useRef<View>(null);
 
   useEffect(() => {
     if (visible && wine) {
@@ -80,11 +90,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     }
   }
 
-  async function handleSave() {
+  // Persist the current draft to chosen_wines. Shared by Save and by
+  // "Share to Community" (so the published review matches the card).
+  async function persist() {
     if (!wine) return;
-    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
-    // bug can't strand the user on this modal.
-    Keyboard.dismiss();
     const trimmedPrice = listPrice.trim();
     const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
     await update.mutateAsync({
@@ -104,8 +113,87 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         vintage: wine.vintage,
       },
     });
+  }
+
+  async function handleSave() {
+    if (!wine) return;
+    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
+    // bug can't strand the user on this modal.
+    Keyboard.dismiss();
+    await persist();
     onSaved();
     onClose();
+  }
+
+  async function handleShareToCommunity() {
+    if (!wine || posting) return;
+    if (!session?.user.id) {
+      showAlert({ title: 'Sign in required', body: 'You need an account to share a review to the community.' });
+      return;
+    }
+    Keyboard.dismiss();
+    setPosting(true);
+    try {
+      await persist();
+      const title = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' · ').trim() || wine.wine_name || 'Wine review';
+      const subtitle = wine.region || null;
+      const body = tastingNote.trim() || otherObservations.trim() || null;
+      const displayName = (session.user.email ?? '').split('@')[0] || null;
+      await publishCommunityReview(
+        {
+          category: 'wine',
+          source_table: 'chosen_wines',
+          source_id: wine.id,
+          title,
+          subtitle,
+          rating: userScore,
+          body,
+          metadata: {
+            producer: wine.producer ?? null,
+            region: wine.region ?? null,
+            vintage: wine.vintage ?? null,
+            critic_score: wine.critic_score ?? null,
+          },
+        },
+        displayName,
+      );
+      showAlert({ title: 'Shared to community', body: 'Your wine review now appears in the Vinster community feed.' });
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      const already = detail.toLowerCase().includes('duplicate') || detail.toLowerCase().includes('unique');
+      showAlert({
+        title: already ? 'Already shared' : 'Could not share',
+        body: already ? "You've already shared this review to the community." : detail,
+      });
+    } finally {
+      setPosting(false);
+    }
+  }
+
+  async function handleShare() {
+    if (!wine || sharing) return;
+    Keyboard.dismiss();
+    setSharing(true);
+    try {
+      // One paint to mount the off-screen branded card before the snapshot.
+      await new Promise((r) => setTimeout(r, 250));
+      if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share my wine review', UTI: 'public.png' });
+        return;
+      }
+      // Plain-text fallback for devices without share-sheet support.
+      const header = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
+      const scoreText = userScore != null ? `\nMy score: ${userScore}/100` : '';
+      const where = [restaurant.trim(), city.trim()].filter(Boolean).join(', ');
+      const locFormatted = where ? `\nWhere: ${where}` : '';
+      const noteFormatted = tastingNote.trim() ? `\n\n"${tastingNote.trim()}"` : '';
+      await Share.share({ message: `${header}${scoreText}${locFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`, title: header });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharing(false);
+    }
   }
 
   function handleDelete() {
@@ -331,6 +419,26 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             />
             <Text style={styles.scoreHint}>out of 100</Text>
 
+            {/* Share — community + native share, side by side. */}
+            <View style={styles.shareRow}>
+              <TouchableOpacity
+                style={[styles.shareBtn, posting && styles.btnDisabled]}
+                onPress={handleShareToCommunity}
+                disabled={posting}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.shareBtn, sharing && styles.btnDisabled]}
+                onPress={handleShare}
+                disabled={sharing}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.shareBtnText}>{sharing ? 'Preparing…' : 'Share'}</Text>
+              </TouchableOpacity>
+            </View>
+
             <TouchableOpacity
               style={styles.saveButton}
               onPress={handleSave}
@@ -351,6 +459,27 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
           </ScrollView>
         </View>
+
+        {/* Off-screen branded share card — mounted only during a share so
+            react-native-view-shot can snapshot it for the native share. */}
+        {sharing && (
+          <View style={styles.shareCardWrap} pointerEvents="none">
+            <WineReviewShareCard
+              ref={shareCardRef}
+              producer={wine.producer}
+              wineName={wine.wine_name}
+              vintage={wine.vintage}
+              region={wine.region}
+              userScore={userScore}
+              criticScore={wine.critic_score}
+              tastingNote={tastingNote}
+              otherObservations={otherObservations || null}
+              date={reviewDate}
+              location={[restaurant.trim(), city.trim()].filter(Boolean).join(', ') || null}
+              isFavourite={isFavourite}
+            />
+          </View>
+        )}
       </KeyboardAvoidingView>
     </Modal>
   );
@@ -517,6 +646,17 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginBottom: spacing.lg,
   },
+  shareRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  shareBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 12,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  shareBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
+  btnDisabled: { opacity: 0.5 },
   saveButton: {
     borderWidth: 1,
     borderColor: colors.gold,
@@ -550,4 +690,7 @@ const styles = StyleSheet.create({
     color: colors.gold,
     textDecorationLine: 'underline',
   },
+  // Off-screen wrapper so the branded share card can be snapshotted while
+  // staying out of the visible layout.
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
 });
