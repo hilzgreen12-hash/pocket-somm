@@ -123,7 +123,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Tell Vinster what you're cooking and they'll offer you a wine pairing from your cellar or beyond. Select your bottle first for celebrity chef inspired recipe recommendations, tailored to your needs and wants.
+          Tell Vinster what you're cooking and it'll offer you a wine. Select your bottle first for an original, tailored recipe sure to satisfy.
         </Text>
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.sm, borderColor: '#FFFFFF' }]} onPress={() => router.push('/chef/archive')}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Your Cookbook</Text>
@@ -133,38 +133,38 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Find me a wine</Text>
+        <Text style={styles.subheading}>Find Me A Wine</Text>
         <Text style={styles.sectionDesc}>
           Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
         </Text>
-        <TouchableOpacity onPress={handleViewLastPairing}>
-          <Text style={styles.lastResultLink}>View last result</Text>
-        </TouchableOpacity>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={[styles.buttonHalf, { flex: 1 }]} onPress={() => router.push('/chef/find-pairing')}>
             <Text style={styles.buttonText}>Find a Wine Pairing</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={handleViewLastPairing}>
+          <Text style={styles.lastResultLink}>View last result</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Find me a recipe</Text>
+        <Text style={styles.subheading}>Find Me A Recipe</Text>
         <Text style={styles.sectionDesc}>
           Chosen your bottle? Input it below to receive original, Vinster generated recipes inspired by top global chefs.
         </Text>
-        <TouchableOpacity onPress={handleViewLastLabelSearch}>
-          <Text style={styles.lastResultLink}>View last result</Text>
-        </TouchableOpacity>
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/chef/camera')}>
             <Text style={styles.buttonText}>Scan Wine Label</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleUpload}>
-            <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
+            <Text style={styles.buttonText}>Upload Screenshot</Text>
           </TouchableOpacity>
         </View>
+        <TouchableOpacity onPress={handleViewLastLabelSearch}>
+          <Text style={styles.lastResultLink}>View last result</Text>
+        </TouchableOpacity>
       </View>
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
-  buttonText: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 14, textAlign: 'center' },
+  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   // Pop-up title — Cormorant. Pop-up body — Inter.
@@ -241,5 +241,5 @@ const styles = StyleSheet.create({
   modalBody: { fontFamily: fonts.bodyRegular, fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Pop-up button — Cormorant.
-  modalButtonText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
+  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
 });

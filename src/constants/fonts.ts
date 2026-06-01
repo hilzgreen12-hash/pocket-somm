@@ -2,16 +2,14 @@
 //
 // Vinster uses two type families:
 //
-//   • Cormorant Garamond — editorial display serif. Used for
-//     headers, tab-screen blurbs (the italic intro under each tab
-//     name), buttons, pop-up titles, the About Vinster screen, and
-//     the headers + blurbs on every tab. Carries the brand voice.
+//   • Cormorant Garamond (heading*) — editorial display serif. Used for
+//     page titles, section headings, pop-up titles, tab-screen blurbs,
+//     and buttons. Carries the brand voice.
 //
-//   • Inter — neutral readability sans. Used for everything else:
-//     body copy, form labels, form inputs, card content, pop-up
-//     bodies, hints, captions, meta lines. Switched from Cormorant
-//     in 2026-05 after user feedback that the all-serif treatment
-//     was hard to read at small sizes.
+//   • Spectral (body*) — readable serif for everything else: body copy,
+//     form labels and inputs, card content, pop-up bodies, hints,
+//     captions, meta lines. Adopted app-wide on 2026-06-01, replacing the
+//     all-Cormorant body which was hard to read at small sizes.
 //
 // Style declarations should reference these names rather than the
 // raw font-family strings so the next font swap is a one-line
@@ -24,13 +22,10 @@
 //     body:    { fontFamily: fonts.bodyRegular, fontSize: 15 },
 //   });
 
-// REVERTED 2026-05-21: the body tokens now point back at Cormorant
-// Garamond. The semantic split (heading / body) is preserved in the
-// codebase so we can rethink the body face more carefully — but right
-// now every token resolves to Cormorant, restoring the pre-migration
-// look in one file rather than rewriting 86 sites again. Inter is
-// still loaded in _layout.tsx so the next iteration can re-point
-// body tokens at it (or a different sans) without another build cycle.
+// 2026-06-01: Spectral is now the app-wide body face (see body tokens
+// below); Cormorant stays on headings, titles, pop-up titles, blurbs and
+// buttons. Cormorant, Inter and Spectral are all loaded in _layout.tsx,
+// so the body face can be re-pointed here in one place if we revisit it.
 export const fonts = {
   // -------- Display / editorial — Cormorant Garamond --------
   headingRegular: 'CormorantGaramond_400Regular',
@@ -38,31 +33,10 @@ export const fonts = {
   headingSemibold: 'CormorantGaramond_600SemiBold',
   headingBold:    'CormorantGaramond_700Bold',
 
-  // -------- Body — reverted to Cormorant Garamond --------
-  // Tokens kept distinct from heading* so we can re-point body to
-  // Inter (or another sans) per-token without touching call sites.
-  // Inter mapping preserved below in a comment for the next attempt:
-  //   bodyRegular  -> 'Inter_400Regular'
-  //   bodyItalic   -> 'Inter_400Regular_Italic'
-  //   bodyMedium   -> 'Inter_500Medium'
-  //   bodySemibold -> 'Inter_600SemiBold'
-  //   bodyBold     -> 'Inter_700Bold'
-  bodyRegular:  'CormorantGaramond_400Regular',
-  bodyItalic:   'CormorantGaramond_400Regular_Italic',
-  bodyMedium:   'CormorantGaramond_600SemiBold',
-  bodySemibold: 'CormorantGaramond_600SemiBold',
-  bodyBold:     'CormorantGaramond_700Bold',
-} as const;
-
-// Spectral body trial. Heading tokens stay Cormorant (carried through
-// via the spread); body tokens point at Spectral. Screens trialling the
-// Spectral body face import this in place of `fonts`
-// (`import { fontsSpectral as fonts }`). Currently used by the tab pages
-// and the cellar list/stats sub-pages. To make Spectral the app-wide
-// body face, re-point the body tokens in `fonts` above and swap these
-// imports back to `fonts` — then delete this export.
-export const fontsSpectral = {
-  ...fonts,
+  // -------- Body — Spectral (app-wide body face) --------
+  // Everything tagged body* — reading copy, captions, form text, card
+  // content, pop-up bodies — renders in Spectral. Kept distinct from
+  // heading* so the body face can be re-pointed here in one place.
   bodyRegular:  'Spectral_400Regular',
   bodyItalic:   'Spectral_400Regular_Italic',
   bodyMedium:   'Spectral_500Medium',
@@ -70,6 +44,8 @@ export const fontsSpectral = {
   bodyBold:     'Spectral_700Bold',
 } as const;
 
-// (Old Cormorant ↔ Inter pairing table removed — no longer needed
-// now that body tokens point back at Cormorant. Re-add per token
-// in the `fonts` object above if/when we re-attempt a body face.)
+// Deprecated alias — `fonts` now carries the Spectral body face app-wide,
+// so this simply re-exports it. Screens that still import
+// `fontsSpectral as fonts` keep working unchanged; new code should import
+// `fonts` directly. Safe to collapse those imports and remove this later.
+export const fontsSpectral = fonts;
