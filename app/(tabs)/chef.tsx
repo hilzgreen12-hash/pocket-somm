@@ -10,7 +10,7 @@ import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
@@ -125,12 +125,15 @@ export default function ChefTab() {
         <Text style={styles.topBlurb}>
           Tell Vinster what you're cooking and they'll offer you a wine pairing from your cellar or beyond. Select your bottle first for celebrity chef inspired recipe recommendations, tailored to your needs and wants.
         </Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.sm, borderColor: '#FFFFFF' }]} onPress={() => router.push('/chef/archive')}>
+          <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>View Your Cookbook</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Recipe → Wine</Text>
+        <Text style={styles.subheading}>Find me a wine</Text>
         <Text style={styles.sectionDesc}>
           Tell Vinster what you're cooking and we'll help guide a new purchase or pull a bottle from your cellar.
         </Text>
@@ -147,9 +150,9 @@ export default function ChefTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.subheading}>Wine → Recipe</Text>
+        <Text style={styles.subheading}>Find me a recipe</Text>
         <Text style={styles.sectionDesc}>
-          Choose your bottle then photograph it's label (or upload) to receive deep AI generated, top chef inspired recipes
+          Chosen your bottle? Input it below to receive original, Vinster generated recipes inspired by top global chefs.
         </Text>
         <TouchableOpacity onPress={handleViewLastLabelSearch}>
           <Text style={styles.lastResultLink}>View last result</Text>
@@ -162,9 +165,6 @@ export default function ChefTab() {
             <Text style={styles.buttonText}>Upload Screenshot / Photo</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.sm }]} onPress={() => router.push('/chef/archive')}>
-          <Text style={styles.buttonText}>View Your Cookbook</Text>
-        </TouchableOpacity>
       </View>
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   // Top blurb under the Chef heading — italic blurb directly under the
   // tab title, kept Cormorant per user spec ("blurbs below the headers
   // on the tab screens"). Italics retained.
-  topBlurb: { fontSize: 17, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  topBlurb: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   // Body copy under each subheading — switched to Inter for readability.
   sectionDesc: { fontSize: 17, fontFamily: fonts.bodyRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   // "View last result" link — body / link, Inter.
@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
-  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  buttonText: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 14, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   // Pop-up title — Cormorant. Pop-up body — Inter.
@@ -241,5 +241,5 @@ const styles = StyleSheet.create({
   modalBody: { fontFamily: fonts.bodyRegular, fontSize: 17, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Pop-up button — Cormorant.
-  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  modalButtonText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
 });

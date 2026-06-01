@@ -13,7 +13,7 @@ It's not live yet. We're building it carefully so it stays warm and high-signal 
 In the meantime, anything you post — your reviews, your wine and foodie personalities — is being saved, and will surface here when Community opens up.`;
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function CommunityTab() {
   const { height } = useWindowDimensions();
@@ -107,10 +107,10 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Italic blurb below the tab title — kept Cormorant per spec.
-  sectionDesc: { fontSize: 17, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  sectionDesc: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   // Coming-soon banner — body content, Inter.
   comingSoonNotice: { fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
-  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.bodySemibold, fontSize: 15, textAlign: 'center' },
 });

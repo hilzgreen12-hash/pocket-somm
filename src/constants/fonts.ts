@@ -54,6 +54,22 @@ export const fonts = {
   bodyBold:     'CormorantGaramond_700Bold',
 } as const;
 
+// Spectral body trial. Heading tokens stay Cormorant (carried through
+// via the spread); body tokens point at Spectral. Screens trialling the
+// Spectral body face import this in place of `fonts`
+// (`import { fontsSpectral as fonts }`). Currently used by the tab pages
+// and the cellar list/stats sub-pages. To make Spectral the app-wide
+// body face, re-point the body tokens in `fonts` above and swap these
+// imports back to `fonts` — then delete this export.
+export const fontsSpectral = {
+  ...fonts,
+  bodyRegular:  'Spectral_400Regular',
+  bodyItalic:   'Spectral_400Regular_Italic',
+  bodyMedium:   'Spectral_500Medium',
+  bodySemibold: 'Spectral_600SemiBold',
+  bodyBold:     'Spectral_700Bold',
+} as const;
+
 // (Old Cormorant ↔ Inter pairing table removed — no longer needed
 // now that body tokens point back at Cormorant. Re-add per token
 // in the `fonts` object above if/when we re-attempt a body face.)

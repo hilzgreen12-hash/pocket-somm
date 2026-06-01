@@ -21,7 +21,7 @@ import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 const LIST_HELP = `Scan a wine list or upload a screenshot, and Vinster (powered by Anthropic's Claude AI) reads every bottle on the page.
 
@@ -405,7 +405,7 @@ const styles = StyleSheet.create({
   // Cormorant per user spec ("the blurbs below the headers on the
   // tab screens").
   subtitle: {
-    fontFamily: fonts.headingItalic,
+    fontFamily: fonts.headingRegular,
     fontSize: 17,
     color: '#FFFFFF',
     marginTop: spacing.xs,
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   // Button label — Cormorant (button rule).
   buttonHalfText: {
-    fontFamily: fonts.headingSemibold,
+    fontFamily: fonts.bodySemibold,
     color: colors.gold,
     fontSize: 14,
     textAlign: 'center',
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
   // Pop-up button label — Cormorant.
   introPrimaryBtnText: {
-    fontFamily: fonts.headingSemibold,
+    fontFamily: fonts.bodySemibold,
     fontSize: 16,
     color: colors.gold,
     letterSpacing: 0.5,

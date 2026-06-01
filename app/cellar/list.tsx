@@ -18,21 +18,7 @@ import { inferCountry } from '../../src/utils/wineCountry';
 import { formatCurrency } from '../../src/constants/currency';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts as baseFonts } from '../../src/constants/fonts';
-
-// Body-only Spectral trial. Heading tokens stay on Cormorant (carried
-// through via the spread); body tokens point at Spectral so we can
-// judge readability against the rest of the app before considering a
-// global swap. Revert by deleting this block and importing `fonts`
-// directly.
-const fonts = {
-  ...baseFonts,
-  bodyRegular:  'Spectral_400Regular',
-  bodyItalic:   'Spectral_400Regular_Italic',
-  bodyMedium:   'Spectral_500Medium',
-  bodySemibold: 'Spectral_600SemiBold',
-  bodyBold:     'Spectral_700Bold',
-} as const;
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
 
 type SortMode = 'recent' | 'score' | 'value';
@@ -285,23 +271,38 @@ export default function FullCellarListScreen() {
         contentContainerStyle={styles.filterRow}
       >
         <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setOpenDropdown('sort')}>
-          <Text style={styles.filterChipLabel}>Sort</Text>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Sort</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>
+          </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
-          <Text style={styles.filterChipLabel}>Favourites</Text>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Favourites</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
+          </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rack')}>
-          <Text style={styles.filterChipLabel}>Rack</Text>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Rack</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'rack' ? '▴' : '▾'}</Text>
+          </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{rackLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('country')}>
-          <Text style={styles.filterChipLabel}>Country</Text>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Country</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'country' ? '▴' : '▾'}</Text>
+          </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{countryFilter === 'All' ? 'All' : countryFilter}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('colour')}>
-          <Text style={styles.filterChipLabel}>Colour</Text>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Colour</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'colour' ? '▴' : '▾'}</Text>
+          </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -505,6 +506,11 @@ const styles = StyleSheet.create({
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   // Inter — chip value read-out
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  // Heading row inside a filter chip — label on the left, a small up/down
+  // chevron on the right that flips when this chip's dropdown is open, so
+  // users can see the chip is a selectable filter.
+  filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
+  filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
   // Inter — form input
   searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },

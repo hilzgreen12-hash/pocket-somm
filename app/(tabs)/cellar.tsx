@@ -18,7 +18,7 @@ How the rack works – Tap an empty slot in the rack to add a wine, tap a wine i
 
 Keep track of your wine reviews, as well as wish list and archived wines, and see all of your cellar stats in one place.`;
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function CellarTab() {
   const { height } = useWindowDimensions();
@@ -83,12 +83,18 @@ export default function CellarTab() {
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
+      <View style={styles.divider} />
+
       <View style={styles.section}>
         <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => setAddWineOpen(true))}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
+      </View>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs, borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
+      <View style={styles.divider} />
+
+      <View style={styles.section}>
+        <TouchableOpacity style={[styles.buttonFull, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
           <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wines: Wine Racks and Cellar List</Text>
         </TouchableOpacity>
 
@@ -207,7 +213,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").
-  subtitle: { fontSize: 17, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
+  subtitle: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Body description text under section CTAs — Inter for readability.
@@ -217,9 +223,9 @@ const styles = StyleSheet.create({
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button labels — Cormorant.
-  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  buttonText: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 14, textAlign: 'center' },
   buttonDisabled: { borderColor: colors.borderLight, opacity: 0.45 },
-  buttonTextDisabled: { color: colors.textMuted, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  buttonTextDisabled: { color: colors.textMuted, fontFamily: fonts.bodySemibold, fontSize: 14, textAlign: 'center' },
   // Coming-soon note — body content.
   comingSoonNote: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
@@ -229,7 +235,7 @@ const styles = StyleSheet.create({
   modalBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Pop-up button — Cormorant.
-  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  modalButtonText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   // Cancel link in pop-up — body / link, Inter.
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },

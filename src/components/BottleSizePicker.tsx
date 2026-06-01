@@ -8,11 +8,8 @@ import { fonts } from '../constants/fonts';
 // the user-facing language Vinster has settled on elsewhere.
 export const COMMON_BOTTLE_SIZES: { ml: number; label: string }[] = [
   { ml: 375,  label: '37.5cl' },
-  { ml: 500,  label: '50cl' },
   { ml: 750,  label: '75cl' },
-  { ml: 1000, label: '1L' },
-  { ml: 1500, label: '1.5L (Magnum)' },
-  { ml: 3000, label: '3L (Jeroboam)' },
+  { ml: 1500, label: '150cl' },
 ];
 
 // User-facing label for any ml value — used on the cellar list etc. so

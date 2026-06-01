@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensio
 import { router } from 'expo-router';
 import { TabFooter } from '../../src/components/TabFooter';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 export default function WelcomeTab() {
   const { height } = useWindowDimensions();
@@ -70,16 +70,16 @@ export default function WelcomeTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.xs },
-  tagline: { fontSize: 19, fontFamily: fonts.headingItalic, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
+  tagline: { fontSize: 19, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl },
   sectionTitle: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, marginBottom: spacing.xs },
   // Italic blurb under each section title — tab-screen blurb, stays Cormorant.
-  sectionDesc: { fontSize: 17, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 24 },
+  sectionDesc: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 24 },
   buttonSection: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
-  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  buttonText: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 16 },
   skipButton: { alignItems: 'center', padding: spacing.md },
   // "Skip for now" — button label.
-  skipText: { fontFamily: fonts.headingRegular, color: '#FFFFFF', fontSize: 14 },
+  skipText: { fontFamily: fonts.bodyRegular, color: '#FFFFFF', fontSize: 14 },
 });
