@@ -9,7 +9,21 @@ import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
 import { getWineIntelligence } from '../../src/api/label';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fonts as baseFonts } from '../../src/constants/fonts';
+
+// Body-only Spectral trial. Heading tokens stay on Cormorant (carried
+// through via the spread); body tokens point at Spectral so we can
+// judge readability against the rest of the app before considering a
+// global swap. Revert by deleting this block and importing `fonts`
+// directly.
+const fonts = {
+  ...baseFonts,
+  bodyRegular:  'Spectral_400Regular',
+  bodyItalic:   'Spectral_400Regular_Italic',
+  bodyMedium:   'Spectral_500Medium',
+  bodySemibold: 'Spectral_600SemiBold',
+  bodyBold:     'Spectral_700Bold',
+} as const;
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';

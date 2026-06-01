@@ -56,19 +56,6 @@ export default function ScanTab() {
     else setStyleOpen((v) => !v);
   }
 
-  // "Let's take a closer look" stays disabled until the user has
-  // committed to at least one wine type — without that, the style
-  // picker has nothing to filter from. If the user drops back to
-  // "Any" while the accordion is open, force-close it so the disabled
-  // state stays honest.
-  const closerLookDisabled = wineTypes.length === 0;
-  useEffect(() => {
-    if (closerLookDisabled && styleOpen) {
-      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-      setStyleOpen(false);
-    }
-  }, [closerLookDisabled, styleOpen]);
-
   const WINE_TYPE_LABELS: Record<string, string> = {
     red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling',
     natural: 'Natural / Low Intervention', 'sweet-fortified': 'Sweet & Fortified',
@@ -275,7 +262,7 @@ export default function ScanTab() {
         <View style={styles.section}>
           <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Choose a Style</Text>
+              <Text style={styles.question}>What wine style would you like?</Text>
               {!wineTypeOpen && <Text style={styles.selectionSummary}>{wineTypeLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
@@ -287,28 +274,15 @@ export default function ScanTab() {
           )}
         </View>
 
-        {/* Closer-look accordion. Gated: tapping the row is a no-op
-            until at least one wine type is selected above. The row is
-            dimmed in that state and shows a short hint instead of the
-            usual "Any / N styles selected" summary. */}
         <View style={styles.section}>
-          <TouchableOpacity
-            onPress={() => { if (!closerLookDisabled) toggleSection('style'); }}
-            activeOpacity={closerLookDisabled ? 1 : 0.7}
-            style={[styles.accordionRow, closerLookDisabled && styles.accordionRowDisabled]}
-            accessibilityState={{ disabled: closerLookDisabled }}
-          >
+          <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
-              <Text style={[styles.question, closerLookDisabled && styles.questionDisabled]}>Let's take a closer look</Text>
-              {!styleOpen && (
-                <Text style={styles.selectionSummary}>
-                  {closerLookDisabled ? 'Choose a style first' : styleLabel}
-                </Text>
-              )}
+              <Text style={styles.question}>Let's refine that further</Text>
+              {!styleOpen && <Text style={styles.selectionSummary}>{styleLabel}</Text>}
             </View>
-            <Text style={[styles.chevron, closerLookDisabled && styles.chevronDisabled]}>{styleOpen ? '▴' : '▾'}</Text>
+            <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
-          {styleOpen && !closerLookDisabled && (
+          {styleOpen && (
             <View style={styles.pickerWrap}>
               <StylePicker selected={styleProfiles} onChange={setStyleProfiles} wineTypes={wineTypes} />
             </View>
@@ -472,19 +446,6 @@ const styles = StyleSheet.create({
   accordionRowActive: {
     borderColor: colors.gold,
     backgroundColor: 'rgba(212,176,96,0.08)',
-  },
-  // Disabled variant — used by "Let's take a closer look" while no
-  // wine type is selected. Dimmed border + opacity so the row reads
-  // as inert without removing the affordance entirely.
-  accordionRowDisabled: {
-    opacity: 0.45,
-    borderColor: 'rgba(255,255,255,0.10)',
-  },
-  questionDisabled: {
-    color: 'rgba(255,255,255,0.6)',
-  },
-  chevronDisabled: {
-    color: 'rgba(255,255,255,0.4)',
   },
   accordionLeft: {
     flex: 1,

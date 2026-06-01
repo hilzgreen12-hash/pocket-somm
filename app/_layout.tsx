@@ -48,6 +48,15 @@ export default function RootLayout() {
     Inter_500Medium: require('@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf'),
     Inter_600SemiBold: require('@expo-google-fonts/inter/600SemiBold/Inter_600SemiBold.ttf'),
     Inter_700Bold: require('@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf'),
+    // Body trial — Spectral. Loaded so a couple of screens (currently
+    // cellar/list and cellar/stats) can override their body text and
+    // see whether Spectral reads better than Cormorant before we
+    // commit to a global swap.
+    Spectral_400Regular: require('@expo-google-fonts/spectral/400Regular/Spectral_400Regular.ttf'),
+    Spectral_400Regular_Italic: require('@expo-google-fonts/spectral/400Regular_Italic/Spectral_400Regular_Italic.ttf'),
+    Spectral_500Medium: require('@expo-google-fonts/spectral/500Medium/Spectral_500Medium.ttf'),
+    Spectral_600SemiBold: require('@expo-google-fonts/spectral/600SemiBold/Spectral_600SemiBold.ttf'),
+    Spectral_700Bold: require('@expo-google-fonts/spectral/700Bold/Spectral_700Bold.ttf'),
   });
 
   useEffect(() => {
@@ -92,6 +101,13 @@ export default function RootLayout() {
           }
         }
 
+        // type is carried in the query string (PKCE flow) or the hash
+        // fragment (server-redirect flow). A recovery link must land the
+        // user on the reset-password screen to set a new password —
+        // every other type just re-evaluates the session at index.
+        const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
+        const dest = type === 'recovery' ? '/auth/reset-password' : '/';
+
         const access_token = (queryParams?.access_token as string | undefined) ?? fragmentParams.access_token;
         const refresh_token = (queryParams?.refresh_token as string | undefined) ?? fragmentParams.refresh_token;
         if (access_token && refresh_token) {
@@ -100,15 +116,14 @@ export default function RootLayout() {
           // fresh session — otherwise the user can land on the public welcome
           // screen (because index already decided "no session" before we
           // installed it) and miss the onboarding tour entirely.
-          router.replace('/');
+          router.replace(dest);
           return;
         }
 
         const token_hash = (queryParams?.token_hash as string | undefined) ?? fragmentParams.token_hash;
-        const type = (queryParams?.type as string | undefined) ?? fragmentParams.type;
         if (token_hash && type) {
           await supabase.auth.verifyOtp({ token_hash, type: type as any });
-          router.replace('/');
+          router.replace(dest);
         }
       } catch (err) {
         console.warn('[deep-link] handleUrl failed:', url, err);
@@ -136,6 +151,7 @@ export default function RootLayout() {
             <Stack.Screen name="welcome-profile" />
             <Stack.Screen name="(auth)" />
             <Stack.Screen name="auth/callback" />
+            <Stack.Screen name="auth/reset-password" />
             <Stack.Screen name="(tabs)" />
             <Stack.Screen name="scan/camera" />
             <Stack.Screen name="scan/preview" />

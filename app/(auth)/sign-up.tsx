@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Link, router } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { supabase } from '../../src/api/supabase';
 import { colors, typography, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -25,7 +26,17 @@ export default function SignUp() {
     const { error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
       password,
-      options: { data: { display_name: displayName.trim() } },
+      options: {
+        data: { display_name: displayName.trim() },
+        // Where Supabase sends the user after they tap the confirmation
+        // link. createURL resolves to the right scheme per build —
+        // vinster://auth/callback in a standalone/dev-client build,
+        // exp://…/--/auth/callback in Expo Go. The _layout deep-link
+        // handler installs the session from the returned tokens. This
+        // URL MUST be in the Supabase Redirect URLs allow-list, or
+        // Supabase ignores it and falls back to the Site URL.
+        emailRedirectTo: Linking.createURL('/auth/callback'),
+      },
     });
     setLoading(false);
 
