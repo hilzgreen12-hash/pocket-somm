@@ -223,9 +223,9 @@ const styles = StyleSheet.create({
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },
   buttonFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button labels — Cormorant.
-  buttonText: { color: colors.gold, fontFamily: fonts.bodySemibold, fontSize: 14, textAlign: 'center' },
+  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   buttonDisabled: { borderColor: colors.borderLight, opacity: 0.45 },
-  buttonTextDisabled: { color: colors.textMuted, fontFamily: fonts.bodySemibold, fontSize: 14, textAlign: 'center' },
+  buttonTextDisabled: { color: colors.textMuted, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   // Coming-soon note — body content.
   comingSoonNote: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
@@ -235,7 +235,7 @@ const styles = StyleSheet.create({
   modalBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Pop-up button — Cormorant.
-  modalButtonText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
+  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   // Cancel link in pop-up — body / link, Inter.
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },

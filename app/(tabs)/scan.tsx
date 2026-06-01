@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   },
   // Button label — Cormorant (button rule).
   buttonHalfText: {
-    fontFamily: fonts.bodySemibold,
+    fontFamily: fonts.headingSemibold,
     color: colors.gold,
     fontSize: 14,
     textAlign: 'center',
@@ -566,7 +566,7 @@ const styles = StyleSheet.create({
   },
   // Pop-up button label — Cormorant.
   introPrimaryBtnText: {
-    fontFamily: fonts.bodySemibold,
+    fontFamily: fonts.headingSemibold,
     fontSize: 16,
     color: colors.gold,
     letterSpacing: 0.5,

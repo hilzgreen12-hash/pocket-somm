@@ -112,5 +112,5 @@ const styles = StyleSheet.create({
   comingSoonNotice: { fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
-  buttonText: { color: '#FFFFFF', fontFamily: fonts.bodySemibold, fontSize: 15, textAlign: 'center' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
 });
