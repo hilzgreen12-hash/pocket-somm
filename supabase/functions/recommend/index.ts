@@ -84,7 +84,7 @@ VINTAGE ASSESSMENT RULES:
 - Include the vintage context clearly in your rationale.
 
 For each recommended wine return:
-- name: wine name (string)
+- name: the wine's proper name or cuvée ONLY, as it appears on the label (e.g. "Pétrus", "Unico", "Les Forts de Latour", "Brut Réserve", "Barolo Cannubi"). Do NOT include the grape variety, region, producer, or vintage in this field — each has its own field below and is shown on a separate line, so putting them here causes duplication. Keep it to the distinguishing name. If a wine has no distinct cuvée beyond its producer/appellation, use the shortest natural label (e.g. the appellation or range name) without repeating the grape or region already captured elsewhere. (string)
 - producer: producer (string)
 - region: broad region (string)
 - appellation: specific appellation if known (string, optional)
@@ -92,9 +92,11 @@ For each recommended wine return:
 - vintage: year as integer or null (number | null)
 - menuPrice: menu price as found on the list (number | null)
 - currency: currency code (string)
-- rationale: 2–4 sentences explaining why this wine is recommended, covering score, vintage, drinking window, rarity, and value (string)
+- rationale: a short overall sommelier note (2–3 sentences) on the character of the wine and how it suits the diner — food, occasion, what to expect in the glass. The four labelled notes below (criticScoreNote, valueNote, vintage, producer) are shown separately on the card, so do NOT restate them here — add context and colour beyond them rather than repeating (string)
 - flavourProfile: ONE brief sentence (max ~18 words) describing what the wine actually tastes like — fruit, acidity, tannin, body, finish, aromatics. This is a tasting note, NOT a sales pitch. Strict exclusions: no producer name, no vintage information, no critic scores, no rarity / availability comments, no price / value language, no recommendation language ("worth trying", "ideal with", "perfect for"). Pure sensory: think how a sommelier would describe the glass in front of them to a guest who asked "what's this like?". Examples of the right register: "Bright black cherry and graphite, firm fine tannins, savoury herb finish." / "Lifted lemon zest and wet stone, taut acidity, lean and saline." / "Crushed strawberry, gentle spice, soft tannins, easy and fragrant." (string)
 - criticScore: estimated average critic score 0–100 (number)
+- criticScoreNote: ONE concise sentence (max ~16 words) on this wine's critic standing — how it compares across this list and/or the consensus across major critics. Examples: "Highest on this list, averaging 94 points across major critics." / "A solid 91-point consensus, just below the top pick." (string)
+- valueNote: ONE concise sentence (max ~22 words) on value for money, comparing the menu price to the wine's market retail. If it's good value say so plainly; if it's poor value, acknowledge that honestly and briefly justify why it still earns its place (rarity, preference fit, quality). Examples: "Keenly priced at about 1.4× retail — strong value here." / "Dear at roughly 2.5× retail, but its rarity and fit to your taste earn it a spot." (string)
 - vintageAssessment: object with:
     - label: one of "Exceptional" | "Excellent" | "Good" | "Average" | "Challenging" | "Poor" (string)
     - notes: 1 sentence on the vintage character for this specific appellation/year (string)
@@ -107,7 +109,7 @@ For each recommended wine return:
     - label: one of "Very Rare" | "Rare" | "Uncommon" | "Widely Available" (string)
     - notes: 1 sentence explaining the rarity (e.g. production size, limited distribution) (string)
 - outsidePreferences: if this wine breaches any of the diner's stated preferences (budget, colour, excluded region or grape), set this to a short string explaining what the exception is and why the wine is still worth serious consideration — e.g. "This exceeds your £50 budget at £75, but this vintage of Krug is exceptionally rare on restaurant lists and represents a genuinely special opportunity." If the wine is fully within preferences, set this to null.
-- topPickReasons: FOR THE FIRST (TOP-RANKED) WINE ONLY — an array of exactly 2 or 3 short, punchy phrases (max 12 words each) that explain why this wine ranks above the other two. These should be the decisive differentiating factors, not generic praise. Draw on the actual scoring dimensions: critic score, vintage quality, drinking window, rarity, and value. Examples of good reasons: "Highest critic score on this list — averaging 96 points", "2015 vintage: exceptional year for this appellation, now at peak", "Best value: menu price just 1.4× market retail". Do NOT pad with vague statements like "a great wine" or "highly recommended". For wines #2 and #3 set topPickReasons to null.
+- standoutNote: FOR THE FIRST (TOP-RANKED) WINE ONLY — ONE brief sentence (max ~28 words, NOT bullet points) synthesising why this wine leads the three, drawing the decisive factors together (critic score, value, vintage/drinkability, preference fit). Example: "The combination of the list's top critic score, genuine value, and a peak-drinking 2019 makes this your standout match." For wines #2 and #3 set standoutNote to null.
 
 Also return a top-level "summary" field: 1–2 sentences summarising your recommendation approach.
 
@@ -204,7 +206,7 @@ Deno.serve(async (req) => {
 
     const topScoringOverride = topScoringMode ? `
 TOP SCORING MODE — ACTIVE:
-The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, topPickReasons, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
+The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, criticScoreNote, valueNote, standoutNote, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
 
 SUMMARY FIELD — TOP SCORING MODE:
 The top-level "summary" must open by framing the task as a critic-score sweep. Start with a phrase along the lines of "My task to sort through this list for the highest-scoring wines led me to…" — you may vary the exact wording (e.g. "Sorting this list for the highest critic scores led me to…", "Combing the list for the top-scoring bottles brought me to…") but it must always open by acknowledging that the task was to find the highest scorers. Then briefly explain what stood out about the three picks (1–2 sentences total).

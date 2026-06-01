@@ -18,8 +18,6 @@ import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/util
 import { normaliseCity } from '../../src/utils/city';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
-import { RarityBadge } from '../../src/components/results/RarityBadge';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
@@ -370,6 +368,10 @@ export default function ResultsScreen() {
   }
 
   const noVintages = recommendation.wines.every((w) => !w.vintage);
+  // Highest critic score across the picks — used to compute the fallback
+  // Critic Score note ("Highest of the picks…") before the recommend
+  // function is redeployed with an AI-written criticScoreNote.
+  const maxCriticScore = Math.max(0, ...recommendation.wines.map((w) => w.criticScore ?? 0));
 
   // Build a date + location stamp shown at the top of the page. For fresh
   // scans the date defaults to the moment results rendered; once saved it's
@@ -549,6 +551,26 @@ export default function ResultsScreen() {
       <View style={styles.list}>
         {recommendation.wines.map((wine, i) => {
           const sommOpen = openIndex === i;
+          // The four labelled parameter notes, always in the same order.
+          // Critic Score / Value come from the AI once the recommend
+          // function is redeployed; until then Critic Score falls back to a
+          // computed line and Value stays hidden. Vintage + Producer reuse
+          // the existing assessment notes.
+          const criticScoreText = wine.criticScoreNote
+            ?? (wine.criticScore > 0
+              ? (wine.criticScore === maxCriticScore && recommendation.wines.length > 1
+                  ? `Highest of the picks at ${wine.criticScore} points`
+                  : `${wine.criticScore} points`)
+              : null);
+          const valueText = wine.valueNote ?? null;
+          const vintageText = !noVintages && wine.vintageAssessment
+            ? [wine.vintageAssessment.notes, wine.drinkingWindow?.notes].filter(Boolean).join(' ')
+            : null;
+          const producerText = wine.rarityAssessment?.notes ?? null;
+          // Top pick only — one synthesis line. Falls back to joining the
+          // legacy topPickReasons until standoutNote ships.
+          const standoutText = wine.standoutNote
+            ?? (wine.topPickReasons?.length ? wine.topPickReasons.join(' · ') : null);
           return (
             <View key={wine.name + i} style={styles.card}>
               <View style={styles.cardInner}>
@@ -594,27 +616,38 @@ export default function ResultsScreen() {
                   </View>
                 )}
 
-                {/* Diamond bullets — the editorial reasons this wine
-                    stands out. Currently only the top pick comes back
-                    with topPickReasons populated; #2 and #3 fall through
-                    this block until the recommend prompt is updated. */}
-                {wine.topPickReasons && wine.topPickReasons.length > 0 && (
-                  <View style={styles.standoutBlock}>
-                    {wine.topPickReasons.map((reason, ri) => (
-                      <View key={ri} style={styles.bulletRow}>
-                        <Text style={styles.diamondBullet}>◆</Text>
-                        <Text style={styles.standoutText}>{reason}</Text>
-                      </View>
-                    ))}
-                  </View>
-                )}
+                {/* Four labelled parameters, always in the same order for
+                    consistency and clarity — no bullets, one clean line each:
+                    Critic Score, Value, Vintage/Drinkability, Producer Note.
+                    Each renders only when it has content. */}
+                <View style={styles.paramBlock}>
+                  {criticScoreText ? (
+                    <Text style={styles.paramText}>
+                      <Text style={styles.paramLabel}>Critic Score — </Text>{criticScoreText}
+                    </Text>
+                  ) : null}
+                  {valueText ? (
+                    <Text style={styles.paramText}>
+                      <Text style={styles.paramLabel}>Value — </Text>{valueText}
+                    </Text>
+                  ) : null}
+                  {vintageText ? (
+                    <Text style={styles.paramText}>
+                      <Text style={styles.paramLabel}>Vintage/Drinkability — </Text>{vintageText}
+                    </Text>
+                  ) : null}
+                  {producerText ? (
+                    <Text style={styles.paramText}>
+                      <Text style={styles.paramLabel}>Producer Note — </Text>{producerText}
+                    </Text>
+                  ) : null}
+                </View>
 
-                {/* Star bullets — drinkability + rarity. Both components
-                    already render their own ★ glyph and prose, so they
-                    drop straight in. RarityBadge self-skips for
-                    'Widely Available'. */}
-                {!noVintages && <VintageWindowBadge assessment={wine.vintageAssessment} window={wine.drinkingWindow} />}
-                <RarityBadge rarity={wine.rarityAssessment} />
+                {/* Top pick only — one gold synthesis line (no bullet)
+                    summarising why it leads. */}
+                {i === 0 && standoutText ? (
+                  <Text style={styles.standoutStatement}>{standoutText}</Text>
+                ) : null}
 
                 {session && (
                   <View style={styles.detailActionsRow}>
@@ -961,29 +994,34 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
-  // ◆ Diamond bullets — editorial standout reasons. Currently only
-  // populated on wine #1 by the recommend prompt.
-  standoutBlock: {
-    gap: 6,
+  // Four labelled parameter lines — Critic Score / Value / Vintage /
+  // Producer. One clean centred line each, bold label + regular note.
+  paramBlock: {
+    gap: 7,
     marginTop: spacing.sm,
     marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
-  bulletRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
+  paramText: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 15,
+    color: colors.text,
+    lineHeight: 21,
+    textAlign: 'center',
   },
-  diamondBullet: {
-    fontSize: 10,
-    color: colors.gold,
-    marginTop: 5,
-  },
-  standoutText: {
-    flex: 1,
-    fontSize: 16,
+  paramLabel: {
     fontFamily: fonts.bodySemibold,
+    color: colors.text,
+  },
+  // Top-pick synthesis line — gold, no bullet, sits below the four params.
+  standoutStatement: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 15,
     color: colors.gold,
-    lineHeight: 20,
+    lineHeight: 21,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
   },
   // Two-button row — Review Wine + Add to Wish List, side by side.
   detailActionsRow: {
