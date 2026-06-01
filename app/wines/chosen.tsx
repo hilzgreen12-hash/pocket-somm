@@ -621,19 +621,6 @@ export default function ChosenWinesScreen() {
                           <Text style={styles.scoreCompact}>{item.score}</Text>
                         )}
                       </View>
-                      <TouchableOpacity
-                        onPress={() => handleShareReview(item)}
-                        // No-op long-press handler so the parent card's
-                        // onLongPress (delete prompt) doesn't fire when
-                        // the user holds the share icon for >400ms.
-                        onLongPress={() => handleShareReview(item)}
-                        delayLongPress={400}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        accessibilityRole="button"
-                        accessibilityLabel="Share this review"
-                      >
-                        <ShareIcon />
-                      </TouchableOpacity>
                     </View>
                   </View>
                   {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}

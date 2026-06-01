@@ -41,10 +41,9 @@ function PairingCard({
       <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.8}>
         <View style={styles.cardHeaderRow}>
           <Text style={[styles.dishName, { flex: 1 }]}>{pairing.dishName}</Text>
-          {/* Two corner actions — both claim press + long-press so the
-              outer expand/collapse toggle doesn't fire when the user
-              taps either. "+ FULL" opens the dedicated full-screen view
-              for sharing / printing; "+ SHARE" is the in-card quick path. */}
+          {/* "+ FULL" opens the dedicated full-screen recipe card, where
+              sharing and printing live. Press + long-press both claim the
+              gesture so the outer expand/collapse toggle doesn't fire. */}
           <TouchableOpacity
             onPress={onViewFull}
             onLongPress={onViewFull}
@@ -55,20 +54,6 @@ function PairingCard({
             accessibilityLabel="View this recipe in full screen"
           >
             <Text style={styles.cardShareLinkText}>+ FULL</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={onShare}
-            onLongPress={onShare}
-            delayLongPress={400}
-            disabled={sharing}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.cardShareLink}
-            accessibilityRole="button"
-            accessibilityLabel="Share this recipe"
-          >
-            <Text style={[styles.cardShareLinkText, sharing && { opacity: 0.5 }]}>
-              {sharing ? 'PREPARING…' : '+ SHARE'}
-            </Text>
           </TouchableOpacity>
         </View>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
@@ -96,7 +81,7 @@ function PairingCard({
             activeOpacity={0.8}
           >
             <Text style={styles.cardSaveButtonText}>
-              {saveState === 'saving' ? 'Saving…' : 'Quick Save Recipe'}
+              {saveState === 'saving' ? 'Saving…' : 'Quick Save to Cookbook'}
             </Text>
           </TouchableOpacity>
         )
@@ -115,17 +100,6 @@ function PairingCard({
           {pairing.recipe.instructions.map((step, i) => (
             <Text key={i} style={styles.recipeItem}>{step}</Text>
           ))}
-
-          <TouchableOpacity
-            style={[styles.cardShareButton, sharing && styles.cardSaveButtonDisabled]}
-            onPress={onShare}
-            disabled={sharing}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.cardShareButtonText}>
-              {sharing ? 'Preparing…' : 'Share Recipe'}
-            </Text>
-          </TouchableOpacity>
         </View>
       )}
     </View>
@@ -155,11 +129,9 @@ function PairingCardSaved({
 }) {
   return (
     <View style={styles.savedCard}>
-      {/* Actions sit in their own compact row above the title now, so
-          the recipe name can stretch across the full inner width
-          rather than being squeezed between "+ FULL" and "+ SHARE"
-          (which previously forced 2- or 3-line wraps on anything
-          longer than "Roast Chicken"). */}
+      {/* "+ FULL" opens the full-screen recipe card, where sharing and
+          printing live. Sits in its own row above the title so the recipe
+          name can stretch the full inner width. */}
       <View style={styles.savedActionsRow}>
         <TouchableOpacity
           onPress={onViewFull}
@@ -169,18 +141,6 @@ function PairingCardSaved({
           style={styles.cardShareLink}
         >
           <Text style={styles.cardShareLinkText}>+ FULL</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onShare}
-          onLongPress={onShare}
-          delayLongPress={400}
-          disabled={sharing}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={styles.cardShareLink}
-        >
-          <Text style={[styles.cardShareLinkText, sharing && { opacity: 0.5 }]}>
-            {sharing ? 'PREPARING…' : '+ SHARE'}
-          </Text>
         </TouchableOpacity>
       </View>
       <View>

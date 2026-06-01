@@ -47,14 +47,11 @@ export const STYLE_PROFILES: readonly StyleProfile[] = [
   { id: 'tank-fermented',  label: 'Tank Fermented',  description: 'Charmat method — Prosecco, Lambrusco, frizzante', applicableTypes: ['sparkling'] },
 
   // ---------- Natural / Low Intervention ----------
-  // "Cat's wee" is intentionally provocative — the user wanted the
-  // funky end of the spectrum named the way enthusiasts actually talk
-  // about it. "Somerset Cider-like" picks up the hazy, brisk, apple-y
-  // end. "The Good Kind" is the clean-natural slot — minimal sulphites,
-  // no faults, the kind that sceptics enjoy.
-  { id: 'natural-cider', label: 'Somerset Cider-like', description: 'Cloudy, brisk, apple-edged — wild and hazy',    applicableTypes: ['natural'] },
-  { id: 'natural-funky', label: "Cat's wee",           description: 'Pungent, polarising, vibrantly alive',           applicableTypes: ['natural'] },
-  { id: 'natural-clean', label: 'The Good Kind',       description: 'Clean naturals — minimal sulphites, no faults',  applicableTypes: ['natural'] },
+  // Playful labels for the natural-wine spectrum. IDs are kept stable so
+  // existing saved preferences still resolve; only the display labels change.
+  { id: 'natural-cider', label: 'Funk Me Up',             description: 'Cloudy, brisk, apple-edged — wild and hazy',    applicableTypes: ['natural'] },
+  { id: 'natural-funky', label: 'Reassuringly Ambiguous', description: 'Light, refreshing, and easy on the palate',     applicableTypes: ['natural'] },
+  { id: 'natural-clean', label: 'The Good Kind',          description: 'Clean naturals — minimal sulphites, no faults',  applicableTypes: ['natural'] },
 
   // ---------- Sweet & Fortified ----------
   // Distinct ids from the Rosé "Semi Sweet" so the two never collide.

@@ -26,7 +26,7 @@ export default function ChefTab() {
   const { height } = useWindowDimensions();
   // Match the Cellar / Community tabs so the header sits at a consistent
   // height across the bottom-nav surfaces.
-  const paddingTop = Math.max(60, height * 0.13);
+  const paddingTop = Math.max(55, height * 0.095);
   const { setImage, setWineDetails, setError, pairings, wineDetailsConfirmed } = useLabelStore();
   const { generalResult, cellarResult, setDish, setMode, setCellarResult, setGeneralResult } = useFoodPairingStore();
   const { sessions: labelSessions } = useChefLabelHistory();
@@ -223,11 +223,11 @@ const styles = StyleSheet.create({
   // Top blurb under the Chef heading — italic blurb directly under the
   // tab title, kept Cormorant per user spec ("blurbs below the headers
   // on the tab screens"). Italics retained.
-  topBlurb: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
+  topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs },
   // Body copy under each subheading — switched to Inter for readability.
   sectionDesc: { fontSize: 17, fontFamily: fonts.bodyRegular, color: '#FFFFFF', lineHeight: 24, marginBottom: spacing.xs },
   // "View last result" link — body / link, Inter.
-  lastResultLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
+  lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonRow: { flexDirection: 'row', gap: spacing.xs },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   buttonHalf: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center' },

@@ -359,18 +359,6 @@ export default function RestaurantReviewsScreen() {
                         {item.ratingOverall != null && (
                           <StarRating value={item.ratingOverall} size={14} readonly />
                         )}
-                        <TouchableOpacity
-                          onPress={() => handleShareRestaurant(item)}
-                          // Claim the long-press too so holding the share
-                          // icon doesn't fire the parent card's delete prompt.
-                          onLongPress={() => handleShareRestaurant(item)}
-                          delayLongPress={400}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                          accessibilityRole="button"
-                          accessibilityLabel="Share this restaurant review"
-                        >
-                          <ShareIcon />
-                        </TouchableOpacity>
                       </View>
                     </View>
                     <View style={styles.cardCompactMetaRow}>
@@ -401,9 +389,6 @@ export default function RestaurantReviewsScreen() {
                         )}
                       </View>
                     )}
-                    {item.restaurantNote ? (
-                      <Text style={styles.notePreview} numberOfLines={2}>{item.restaurantNote}</Text>
-                    ) : null}
                   </TouchableOpacity>
 
                   {chosen.length > 0 ? (
@@ -447,6 +432,14 @@ export default function RestaurantReviewsScreen() {
             wineList: editing.ratingWineList,
             overall: editing.ratingOverall,
           }}
+          city={editing.city}
+          date={formatDate(editing.capturedAt)}
+          wines={findChosenForVisit(editing).map((cw) => ({
+            producer: cw.producer,
+            wineName: cw.wine_name,
+            vintage: cw.vintage,
+            userScore: cw.user_score,
+          }))}
           onClose={() => setEditing(null)}
           onSaved={() => setEditing(null)}
         />
