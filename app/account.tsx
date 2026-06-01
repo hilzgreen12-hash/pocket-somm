@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
   backText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
-  thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
+  thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   block: { gap: 4 },
   // Section header label.

@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
@@ -22,7 +23,6 @@ import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../..
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import { SearchProgress } from '../../src/components/SearchProgress';
-import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
@@ -84,7 +84,7 @@ export default function CellarWineDetail() {
   const cameFromWishlist = from === 'wishlist';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
-  const { wines: wishlistWines, isLoading: wishlistLoading } = useWishList();
+  const { wines: wishlistWines, isLoading: wishlistLoading, deleteWine: deleteWishlistWine } = useWishList();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const { setWineDetailsConfirmed, setPairings, setFilters, setError } = useLabelStore();
@@ -663,6 +663,39 @@ export default function CellarWineDetail() {
     }
   }
 
+  // Wishlist-only delete. Confirms first, then removes the wishlist row
+  // and routes back to the Wish List. Reuses the justDeleted toast +
+  // auto-navigate pattern used by the cellar hard-delete above.
+  function handleDeleteFromWishlist() {
+    if (!wine) return;
+    showAlert({
+      title: 'Remove from wish list?',
+      body: 'This will remove the wine from your wish list. You can add it again any time.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            setRemoving(true);
+            try {
+              await deleteWishlistWine.mutateAsync(wine.id);
+              setJustDeleted(true);
+              setTimeout(() => {
+                if (router.canGoBack()) router.back();
+                else router.replace('/cellar/wishlist');
+              }, 1400);
+            } catch {
+              showAlert({ title: 'Could not remove', body: 'Please try again.' });
+            } finally {
+              setRemoving(false);
+            }
+          },
+        },
+      ],
+    });
+  }
+
   return (
     <ScrollView
       style={styles.container}
@@ -789,7 +822,9 @@ export default function CellarWineDetail() {
 
       {/* Bottles grid moved ABOVE the chef button so the user can see
           at a glance whether they own (or have owned) the wine before
-          deciding whether to pair a meal to it. */}
+          deciding whether to pair a meal to it. Hidden for wishlist
+          wines — bottle counts don't apply to a wine not yet bought. */}
+      {!isWishlist && (
       <View style={styles.statsGrid}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
@@ -810,6 +845,7 @@ export default function CellarWineDetail() {
           <Text style={[styles.statValue, bottlesInArchive === 0 && styles.statValueMuted]}>{bottleLabel(bottlesInArchive)}</Text>
         </View>
       </View>
+      )}
 
       {!isArchived && (
         <>
@@ -825,7 +861,7 @@ export default function CellarWineDetail() {
               onPress={() => router.push('/cellar/wishlist')}
               activeOpacity={0.7}
             >
-              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar (use the Wish List → Add to Cellar flow)</Text>
+              <Text style={[styles.chefBtnText, { color: colors.gold }]}>Add to Cellar</Text>
             </TouchableOpacity>
           ) : cameFromReviews ? (
             <TouchableOpacity
@@ -846,24 +882,28 @@ export default function CellarWineDetail() {
         </>
       )}
 
-      {/* Vinster's Note — collapsed by default. The "(what's this)"
-          link surfaces a short explanation for new users. Only renders
-          when Vinster actually has a tasting note for the wine; for
-          wishlist wines pre-intelligence-fetch this section is hidden. */}
-      {wine.tasting_notes ? (
+      {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
+          chevron toggle that mirrors the List results "Sommelier Note".
+          The "(what's this)" link surfaces a short explainer. Hidden for
+          wishlist wines: their stored note is the user's own, and
+          Vinster's AI review only exists once the wine is in the cellar. */}
+      {!isWishlist && wine.tasting_notes ? (
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
+          <View style={styles.vinsterReviewHeader}>
             <TouchableOpacity
               onPress={() => setVinstersNoteOpen((v) => !v)}
               activeOpacity={0.7}
-              style={{ flex: 1 }}
+              style={styles.vinsterReviewToggle}
             >
-              <Text style={styles.sectionTitle}>
-                {vinstersNoteOpen ? 'Hide Vinster’s Note' : 'View Vinster’s Note →'}
-              </Text>
+              <Text style={styles.vinsterReviewToggleText}>Vinster's Review</Text>
+              <Ionicons
+                name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
+                size={16}
+                color={colors.gold}
+              />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setWhatsThisOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.whatsThisLink}>(what’s this)</Text>
+              <Text style={styles.whatsThisLink}>(what's this)</Text>
             </TouchableOpacity>
           </View>
           {vinstersNoteOpen ? (
@@ -991,9 +1031,9 @@ export default function CellarWineDetail() {
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.reviewShareBtn, (sharingOutside || !wine.review_note) && styles.buttonDisabled]}
+                style={[styles.reviewShareBtn, sharingOutside && styles.buttonDisabled]}
                 onPress={handleShareReviewOutside}
-                disabled={sharingOutside || !wine.review_note}
+                disabled={sharingOutside}
                 activeOpacity={0.7}
               >
                 <Text style={styles.reviewShareBtnText}>
@@ -1005,6 +1045,7 @@ export default function CellarWineDetail() {
         )}
       </View>
 
+      {!isWishlist && (
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Personal Notes</Text>
@@ -1041,6 +1082,18 @@ export default function CellarWineDetail() {
           <Text style={styles.noteText}>{wine.user_notes}</Text>
         ) : null}
       </View>
+      )}
+
+      {isWishlist && (
+        <TouchableOpacity
+          style={[styles.chefBtn, { borderColor: colors.gold }]}
+          onPress={handleDeleteFromWishlist}
+          disabled={removing}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.chefBtnText, { color: colors.gold }]}>Delete from Wish List</Text>
+        </TouchableOpacity>
+      )}
 
       {!isArchived && !isWishlist && (
         <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
@@ -1278,6 +1331,12 @@ const styles = StyleSheet.create({
   editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — tasting notes body
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
+  // Vinster's Review toggle — mirrors the List results "Sommelier Note":
+  // gold uppercase label + chevron, centred, with the "(what's this)"
+  // explainer link beside it.
+  vinsterReviewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  vinsterReviewToggle: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+  vinsterReviewToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
   // Inter — form label
   fieldLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Inter — form input

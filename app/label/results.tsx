@@ -625,19 +625,13 @@ export default function LabelResultsScreen() {
         </>
       ) : (
         <>
-          {/* Stacked actions — primary path is Add to Cellar (yellow). The
-              two white buttons below cover the lighter commitments: save
-              for later (Wish List) and capture-only (Review without adding,
-              writes a chosen_wines review with no inventory side effect). */}
+          {/* This is the dedicated Add-to-Cellar flow (Cellar → Add Wine),
+              a committed action — so only the primary Add to Cellar button
+              shows. Wish List and review-only capture have their own entry
+              points and aren't offered here. */}
           <View style={styles.actionStack}>
             <TouchableOpacity style={styles.primaryAddBtn} onPress={() => setAddingToCellar(true)} activeOpacity={0.8}>
               <Text style={styles.primaryAddBtnText}>Add to Cellar</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryAddBtn} onPress={() => setAddingToWishList(true)} activeOpacity={0.8}>
-              <Text style={styles.secondaryAddBtnText}>Add to Wish List</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryAddBtn} onPress={() => setAddingReview(true)} activeOpacity={0.8}>
-              <Text style={styles.secondaryAddBtnText}>Review without adding</Text>
             </TouchableOpacity>
           </View>
 

@@ -532,19 +532,31 @@ export default function ChosenWinesScreen() {
             contentContainerStyle={styles.filterRow}
           >
             <TouchableOpacity style={[styles.filterChip, styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
-              <Text style={styles.filterChipLabel}>Sort</Text>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Sort</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>
+              </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
-              <Text style={styles.filterChipLabel}>Type</Text>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Type</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
+              </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{typeLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
-              <Text style={styles.filterChipLabel}>Favourites</Text>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Favourites</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
+              </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
-              <Text style={styles.filterChipLabel}>Location</Text>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Location</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
+              </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
             </TouchableOpacity>
           </ScrollView>
@@ -739,6 +751,10 @@ const styles = StyleSheet.create({
   filterChipSort: { borderColor: colors.gold },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  // Heading row inside a filter chip — label + a small up/down chevron
+  // (flips when this chip's dropdown is open) so users see it's selectable.
+  filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
+  filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
   searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   searchClear: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
