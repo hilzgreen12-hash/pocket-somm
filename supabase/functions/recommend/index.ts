@@ -111,6 +111,10 @@ For each recommended wine return:
 - outsidePreferences: if this wine breaches any of the diner's stated preferences (budget, colour, excluded region or grape), set this to a short string explaining what the exception is and why the wine is still worth serious consideration — e.g. "This exceeds your £50 budget at £75, but this vintage of Krug is exceptionally rare on restaurant lists and represents a genuinely special opportunity." If the wine is fully within preferences, set this to null.
 - standoutNote: FOR THE FIRST (TOP-RANKED) WINE ONLY — ONE brief sentence (max ~28 words, NOT bullet points) synthesising why this wine leads the three, drawing the decisive factors together (critic score, value, vintage/drinkability, preference fit). Example: "The combination of the list's top critic score, genuine value, and a peak-drinking 2019 makes this your standout match." For wines #2 and #3 set standoutNote to null.
 
+CRITICAL — COMPLETENESS: Every wine object MUST include both criticScoreNote and valueNote, and the #1 (top-ranked) wine MUST also include standoutNote. Never omit these fields for any wine.
+
+CRITICAL — SCORES ARE PER WINE: A critic score (and criticScoreNote) always describes the specific wine and vintage, never the producer as a whole. Do not phrase a score as if it belongs to the producer — e.g. say "this 2019 bottling scores 93" not "Raúl Pérez scores 93".
+
 Also return a top-level "summary" field: 1–2 sentences summarising your recommendation approach.
 
 Return ONLY valid JSON in this exact format:
@@ -237,7 +241,7 @@ ${dislikedGrapesLine}
 
     const wineListText = JSON.stringify(wines, null, 2);
 
-    const userPrompt = `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `IMPORTANT: The diner has already seen these wines — do NOT recommend any of them: ${excludeWines.join(', ')}. Choose completely different wines.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`;
+    const userPrompt = `${topScoringOverride}${userContext}\n\nWine list extracted from menu:\n${wineListText}\n\n${excludeWines?.length ? `HARD RULE — ALREADY SEEN: The diner has already been shown these wines and has asked for a completely fresh alternative set. You MUST NOT recommend any of them again: ${excludeWines.join('; ')}. Choose three DIFFERENT wines from the list. Even if one of these was the strongest option, exclude it and move down to the next-best alternatives — repeating any wine the diner has already seen is a failure.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`;
 
     // Call Claude with up to two attempts. Anthropic returns
     // non-deterministic content so a malformed-JSON failure on the
@@ -251,7 +255,7 @@ ${dislikedGrapesLine}
     async function attemptClaudeCall(attempt: number): Promise<any> {
       const response = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 8096,
+        max_tokens: 12000,
         system: [
           {
             type: 'text',

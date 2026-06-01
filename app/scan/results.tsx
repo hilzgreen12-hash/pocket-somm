@@ -21,7 +21,7 @@ import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { WineRecommendation } from '../../src/types/wine';
 
 if (Platform.OS === 'android') {
@@ -332,7 +332,12 @@ export default function ResultsScreen() {
     if (!extractedWines || !recommendation) return;
     setIsGenerating(true);
     try {
-      const excludeWines = recommendation.wines.map((w) => w.name);
+      // Exclude by full identity (producer + name + vintage), not just the
+      // bare name — a cuvée name alone is often ambiguous, which let Claude
+      // re-recommend the same wine. Full identity makes the exclusion exact.
+      const excludeWines = recommendation.wines.map((w) =>
+        [w.producer, w.name, w.vintage].filter(Boolean).join(' ')
+      );
       const newRec = await recommendWines({
         wines: extractedWines.slice(0, 80),
         ...preferences,
@@ -571,16 +576,27 @@ export default function ResultsScreen() {
           // legacy topPickReasons until standoutNote ships.
           const standoutText = wine.standoutNote
             ?? (wine.topPickReasons?.length ? wine.topPickReasons.join(' · ') : null);
+          // Title reads "Producer, Wine Name, Vintage"; the line below reads
+          // "Regional Placement · Grape". Producer is dropped from the title
+          // when it's identical to the wine name (e.g. a grower whose estate
+          // name IS the wine) so it isn't printed twice.
+          const producerSameAsName = !!wine.producer && !!wine.name
+            && wine.producer.trim().toLowerCase() === wine.name.trim().toLowerCase();
+          const wineTitle = [
+            wine.producer,
+            producerSameAsName ? null : wine.name,
+            wine.vintage ? String(wine.vintage) : null,
+          ].filter(Boolean).join(', ');
+          const regionalPlacement = [wine.appellation, wine.region].filter(Boolean).join(', ');
+          const wineSubline = [regionalPlacement, wine.grape].filter(Boolean).join(' · ');
           return (
             <View key={wine.name + i} style={styles.card}>
               <View style={styles.cardInner}>
 
-                <Text style={styles.wineName}>
-                  {wine.vintage ? `${wine.vintage} ` : ''}{wine.name}{wine.appellation ? `, ${wine.appellation}` : ''}
-                </Text>
-                <Text style={styles.wineProducer}>
-                  {wine.producer}{wine.region ? ` · ${wine.region}` : ''}{wine.grape ? ` · ${wine.grape}` : ''}
-                </Text>
+                <Text style={styles.wineName}>{wineTitle}</Text>
+                {wineSubline ? (
+                  <Text style={styles.wineProducer}>{wineSubline}</Text>
+                ) : null}
 
                 {/* Price + score share one line beneath the name. Either
                     field can be missing (some lists omit the price, some
@@ -616,10 +632,17 @@ export default function ResultsScreen() {
                   </View>
                 )}
 
+                {/* Top pick only — one gold synthesis line (no bullet),
+                    sitting directly above the four parameter notes. */}
+                {i === 0 && standoutText ? (
+                  <Text style={styles.standoutStatement}>{standoutText}</Text>
+                ) : null}
+
                 {/* Four labelled parameters, always in the same order for
                     consistency and clarity — no bullets, one clean line each:
                     Critic Score, Value, Vintage/Drinkability, Producer Note.
-                    Each renders only when it has content. */}
+                    Each renders only when it has content. Left-aligned; only
+                    the top-pick gold line above is centred. */}
                 <View style={styles.paramBlock}>
                   {criticScoreText ? (
                     <Text style={styles.paramText}>
@@ -642,12 +665,6 @@ export default function ResultsScreen() {
                     </Text>
                   ) : null}
                 </View>
-
-                {/* Top pick only — one gold synthesis line (no bullet)
-                    summarising why it leads. */}
-                {i === 0 && standoutText ? (
-                  <Text style={styles.standoutStatement}>{standoutText}</Text>
-                ) : null}
 
                 {session && (
                   <View style={styles.detailActionsRow}>
@@ -1007,7 +1024,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: colors.text,
     lineHeight: 21,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   paramLabel: {
     fontFamily: fonts.bodySemibold,
