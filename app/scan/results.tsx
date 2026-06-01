@@ -20,7 +20,6 @@ import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { VintageWindowBadge } from '../../src/components/results/VintageWindowBadge';
 import { RarityBadge } from '../../src/components/results/RarityBadge';
-import { RationaleBlock } from '../../src/components/results/RationaleBlock';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
@@ -383,7 +382,6 @@ export default function ResultsScreen() {
   // Prefer the persisted city (server-confirmed), falling back to the
   // live GPS reading taken on mount.
   const stampCity = historyCity ?? autoSave.data?.[0]?.city ?? liveCity;
-  const stampLocation = [stampRestaurant, stampCity].filter(Boolean).join(' · ');
 
   function toggleWine(i: number) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -475,12 +473,57 @@ export default function ResultsScreen() {
             </Text>
           </TouchableOpacity>
         </View>
-        {(stampDate || stampLocation) && (
+        {stampDate ? (
           <View style={styles.stampRow}>
-            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
-            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+            <Text style={styles.stampDate}>{stampDate}</Text>
           </View>
+        ) : null}
+
+        {/* Compact restaurant line — single line between the date and
+            'Vinster Recommends'. Empty state shows the pin + a tap-to-add
+            prompt. Once a name lands, the row reads pin · name · city.
+            Locked to read-only display when a scan_sessions row already
+            backs this result (edits happen via the CTA at the bottom of
+            the page). */}
+        {effectiveSessionId && restaurantName.trim().length > 0 ? (
+          <View style={styles.restaurantLine}>
+            <Text style={styles.restaurantPin}>📍</Text>
+            <Text style={styles.restaurantLineText} numberOfLines={1}>
+              {restaurantName}{stampCity ? ` · ${stampCity}` : ''}
+            </Text>
+          </View>
+        ) : editingRestaurant ? (
+          <View style={styles.restaurantLine}>
+            <Text style={styles.restaurantPin}>📍</Text>
+            <TextInput
+              style={styles.restaurantLineInput}
+              value={restaurantName}
+              onChangeText={setRestaurantName}
+              placeholder="Tap to add restaurant"
+              placeholderTextColor="rgba(255,255,255,0.45)"
+              autoFocus
+              onBlur={handleSaveRestaurant}
+              onSubmitEditing={handleSaveRestaurant}
+              returnKeyType="done"
+            />
+            {stampCity ? <Text style={styles.restaurantLineCity}> · {stampCity}</Text> : null}
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.restaurantLine}
+            onPress={() => setEditingRestaurant(true)}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.restaurantPin}>📍</Text>
+            <Text
+              style={[styles.restaurantLineText, !restaurantName && styles.restaurantLinePlaceholder]}
+              numberOfLines={1}
+            >
+              {restaurantName || 'Tap to add restaurant'}{stampCity ? ` · ${stampCity}` : ''}
+            </Text>
+          </TouchableOpacity>
         )}
+
         <Text style={styles.heading}>Vinster Recommends</Text>
         {recommendation.topScoringMode && (
           <View style={styles.topScoringBanner}>
@@ -498,244 +541,171 @@ export default function ResultsScreen() {
         ) : null}
       </View>
 
-      {/* Dining card — prominent restaurant entry / review CTA. Shown
-          for fresh scans AND when a saved result is reopened via View
-          Last Result. Typing a name promotes the scan to scan_sessions
-          so the row appears in Your Restaurants. Once the row exists
-          the name is locked here — further edits happen in the proper
-          restaurant review in Your Restaurants. The CTA below always
-          routes there for adding or editing. */}
-      <View style={styles.restaurantCard}>
-        <Text style={styles.restaurantCardLabel}>Dining at</Text>
-        {effectiveSessionId ? (
-          // Locked display once a scan_sessions row backs the result.
-          // Editing the restaurant name only here would leave the
-          // change out of sync with chosen_wines and other surfaces,
-          // so we steer the user to the proper Your Restaurants entry
-          // for any rename.
-          <View style={styles.restaurantNameRow}>
-            <Text style={styles.locationPin}>📍</Text>
-            <Text style={styles.restaurantNameDisplay}>{restaurantName}</Text>
-          </View>
-        ) : (
-          <>
-            <TouchableOpacity
-              style={styles.restaurantNameRow}
-              onPress={() => setEditingRestaurant(true)}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.locationPin}>📍</Text>
-              {editingRestaurant ? (
-                <TextInput
-                  style={styles.restaurantNameInput}
-                  value={restaurantName}
-                  onChangeText={setRestaurantName}
-                  placeholder="Restaurant name"
-                  placeholderTextColor="rgba(255,255,255,0.45)"
-                  autoFocus
-                  onBlur={handleSaveRestaurant}
-                  onSubmitEditing={handleSaveRestaurant}
-                  returnKeyType="done"
-                />
-              ) : (
-                <Text
-                  style={[
-                    styles.restaurantNameDisplay,
-                    !restaurantName && styles.restaurantNamePlaceholder,
-                  ]}
-                >
-                  {restaurantName || 'Tap to add restaurant name'}
-                </Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Explicit Save for the restaurant input. The keyboard return
-                key fires onSubmitEditing, but onBlur is unreliable on
-                Android — without this an unticked name could be lost.
-                handleSaveRestaurant's inFlightSaveRef guard means tapping
-                Save and hitting return can't double-save. */}
-            {editingRestaurant && restaurantName.trim().length > 0 && (
-              <TouchableOpacity
-                style={[styles.reviewRestaurantBtn, autoSave.isPending && { opacity: 0.6 }]}
-                onPress={handleSaveRestaurant}
-                disabled={autoSave.isPending}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.reviewRestaurantBtnText}>{autoSave.isPending ? 'Saving…' : 'Save'}</Text>
-              </TouchableOpacity>
-            )}
-          </>
-        )}
-
-        {/* Once a restaurant name has been entered AND the input is no
-            longer being edited, a single CTA persists the scan to
-            scan_sessions and routes to Your Restaurants. While editing,
-            the Save button above is the action instead. */}
-        {restaurantName.trim().length > 0 && !editingRestaurant && (
-          <TouchableOpacity
-            style={styles.reviewRestaurantBtn}
-            onPress={async () => {
-              // Make sure the scan_sessions row is in place before we
-              // route to Your Restaurants. Without this, a user who
-              // tapped the CTA before onBlur fired could land on an
-              // empty list.
-              await handleSaveRestaurant();
-              qc.invalidateQueries({ queryKey: ['scan-archive'] });
-              router.push('/restaurants/reviews');
-            }}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.reviewRestaurantBtnText}>Review or Edit Your Restaurant →</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Wine accordions */}
+      {/* Wine cards — flat, scannable layout. No row-level accordion;
+          everything except the long-form sommelier note is visible by
+          default. Each card flows: name → producer line → price + score
+          → outside-prefs warning → ◆ standout points → ★ drinkability +
+          rarity → action buttons → expandable sommelier note. */}
       <View style={styles.list}>
         {recommendation.wines.map((wine, i) => {
-          const isOpen = openIndex === i;
-          const isTop = i === 0;
+          const sommOpen = openIndex === i;
           return (
             <View key={wine.name + i} style={styles.card}>
+              <View style={styles.cardInner}>
 
-              {/* Collapsed row — always visible */}
-              <TouchableOpacity
-                style={styles.row}
-                onPress={() => toggleWine(i)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.rowLeft}>
-                  <View style={styles.rankRow}>
-                    <Text style={styles.rankLabel}>
-                      {RANK_LABELS[i] ?? `#${i + 1}`}
-                    </Text>
+                <Text style={styles.wineName}>
+                  {wine.vintage ? `${wine.vintage} ` : ''}{wine.name}{wine.appellation ? `, ${wine.appellation}` : ''}
+                </Text>
+                <Text style={styles.wineProducer}>
+                  {wine.producer}{wine.region ? ` · ${wine.region}` : ''}{wine.grape ? ` · ${wine.grape}` : ''}
+                </Text>
+
+                {/* Price + score share one line beneath the name. Either
+                    field can be missing (some lists omit the price, some
+                    wines lack a critic score) — the row stays balanced
+                    by rendering only the present halves. */}
+                {(wine.menuPrice != null || wine.criticScore > 0) && (
+                  <View style={styles.priceScoreRow}>
+                    {wine.menuPrice != null && (
+                      <Text style={styles.priceScoreText}>£{wine.menuPrice}</Text>
+                    )}
+                    {wine.menuPrice != null && wine.criticScore > 0 && (
+                      <Text style={styles.priceScoreDot}> · </Text>
+                    )}
                     {wine.criticScore > 0 && (
-                      <View style={styles.scoreChip}>
-                        <Text style={styles.scoreText}>{wine.criticScore}</Text>
-                        <Text style={styles.scoreUnit}> pts</Text>
-                      </View>
+                      <Text style={styles.priceScoreText}>{wine.criticScore} pts</Text>
                     )}
                   </View>
-                  <Text style={styles.wineName}>
-                    {wine.vintage ? `${wine.vintage} ` : ''}{wine.name}{wine.appellation ? `, ${wine.appellation}` : ''}
-                  </Text>
-                  <Text style={styles.wineProducer}>
-                    {wine.producer}{wine.region ? ` · ${wine.region}` : ''}{wine.grape ? ` · ${wine.grape}` : ''}
-                  </Text>
-                  {/* One-line flavour profile — pure tasting note,
-                      always visible on the compact card so the user
-                      gets a sense of how the wine drinks before they
-                      decide whether to expand. Falls back gracefully
-                      if Claude omitted the field (older sessions
-                      saved before this prompt change). */}
-                  {wine.flavourProfile ? (
-                    <Text style={styles.wineFlavour} numberOfLines={2}>{wine.flavourProfile}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.rowRight}>
-                  {wine.menuPrice != null && (
-                    <Text style={styles.price}>£{wine.menuPrice}</Text>
-                  )}
-                  <Ionicons
-                    name={isOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
-                    size={16}
-                    color={colors.text}
-                  />
-                </View>
-              </TouchableOpacity>
+                )}
 
-              {/* Quick Select — primary CTA on the collapsed card. The
-                  user tells Vinster "I chose this one" without writing a
-                  full review. Once selected, the button switches to a
-                  read-only "✓ Selected" state; the user can still upgrade
-                  to a full review via the Review Wine button inside the
-                  expanded view below. */}
-              {session && (
-                <TouchableOpacity
-                  style={[styles.chosenButton, chosenIndexes.has(i) && styles.chosenButtonDone]}
-                  onPress={() => {
-                    if (chosenIndexes.has(i)) {
-                      router.push('/wines/chosen');
-                    } else {
-                      handleQuickSelect(wine, i);
-                    }
-                  }}
-                  disabled={saveChosen.isPending && !chosenIndexes.has(i)}
-                >
-                  <Text style={[styles.chosenButtonText, chosenIndexes.has(i) && styles.chosenButtonTextDone]}>
-                    {chosenIndexes.has(i) ? '✓ Selected · View in Your Wine Reviews' : 'Quick Select From List'}
-                  </Text>
-                </TouchableOpacity>
-              )}
+                {/* One-line flavour profile — pure tasting note. Sits
+                    between the price/score and the bulleted standouts so
+                    the user reads "this is what it tastes like" before
+                    "this is why we picked it". */}
+                {wine.flavourProfile ? (
+                  <Text style={styles.wineFlavour}>{wine.flavourProfile}</Text>
+                ) : null}
 
-              {/* Top pick reasons — always visible on card #1 */}
-              {isTop && wine.topPickReasons && wine.topPickReasons.length > 0 && (
-                <View style={styles.topPickReasons}>
-                  {wine.topPickReasons.map((reason, ri) => (
-                    <View key={ri} style={styles.topPickReasonRow}>
-                      <Text style={styles.topPickBullet}>◆</Text>
-                      <Text style={styles.topPickReasonText}>{reason}</Text>
-                    </View>
-                  ))}
-                </View>
-              )}
+                {wine.outsidePreferences && (
+                  <View style={styles.outsideNotice}>
+                    <Text style={styles.outsideText}>
+                      ⚠ This is outside your preferences, but it's worth your consideration — {wine.outsidePreferences}
+                    </Text>
+                  </View>
+                )}
 
-              {/* Expanded details */}
-              {isOpen && (
-                <View style={styles.details}>
+                {/* Diamond bullets — the editorial reasons this wine
+                    stands out. Currently only the top pick comes back
+                    with topPickReasons populated; #2 and #3 fall through
+                    this block until the recommend prompt is updated. */}
+                {wine.topPickReasons && wine.topPickReasons.length > 0 && (
+                  <View style={styles.standoutBlock}>
+                    {wine.topPickReasons.map((reason, ri) => (
+                      <View key={ri} style={styles.bulletRow}>
+                        <Text style={styles.diamondBullet}>◆</Text>
+                        <Text style={styles.standoutText}>{reason}</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
 
-                  {wine.outsidePreferences && (
-                    <View style={styles.outsideNotice}>
-                      <Text style={styles.outsideText}>
-                        ⚠ This is outside your preferences, but it's worth your consideration — {wine.outsidePreferences}
+                {/* Star bullets — drinkability + rarity. Both components
+                    already render their own ★ glyph and prose, so they
+                    drop straight in. RarityBadge self-skips for
+                    'Widely Available'. */}
+                {!noVintages && <VintageWindowBadge assessment={wine.vintageAssessment} window={wine.drinkingWindow} />}
+                <RarityBadge rarity={wine.rarityAssessment} />
+
+                {session && (
+                  <View style={styles.detailActionsRow}>
+                    <TouchableOpacity
+                      style={styles.detailActionBtn}
+                      onPress={() => setChosenModalWine(wine)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.detailActionBtnText}>Review Wine</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.detailActionBtn, !!wishlistRowIds[i] && styles.detailActionBtnDone]}
+                      onPress={() => handleToggleWishlist(wine, i)}
+                      disabled={addToWishList.isPending || removeFromWishList.isPending}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.detailActionBtnText, !!wishlistRowIds[i] && styles.detailActionBtnTextDone]}>
+                        {wishlistRowIds[i] ? '✓ On Wish List — tap to remove' : 'Add to Wish List'}
                       </Text>
-                    </View>
-                  )}
+                    </TouchableOpacity>
+                  </View>
+                )}
 
-                  <View style={styles.divider} />
+                {session && (
+                  <TouchableOpacity
+                    style={[styles.bottlePicksButton, chosenIndexes.has(i) && styles.bottlePicksButtonDone]}
+                    onPress={() => {
+                      if (chosenIndexes.has(i)) {
+                        router.push('/wines/chosen');
+                      } else {
+                        handleQuickSelect(wine, i);
+                      }
+                    }}
+                    disabled={saveChosen.isPending && !chosenIndexes.has(i)}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
+                      {chosenIndexes.has(i) ? '✓ Added · View in Your Wine Reviews' : 'Add to Your Bottle Picks'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
 
-                  {!noVintages && <VintageWindowBadge assessment={wine.vintageAssessment} window={wine.drinkingWindow} />}
-                  <RarityBadge rarity={wine.rarityAssessment} />
+                {/* Vinster's Sommelier Note — collapsed by default. The
+                    rationale is the longest prose block on the card, so
+                    hiding it behind a tap keeps the page scannable while
+                    leaving the full sommelier reasoning a tap away. */}
+                <TouchableOpacity
+                  style={styles.sommNoteToggle}
+                  onPress={() => toggleWine(i)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.sommNoteToggleText}>
+                    Vinster's Sommelier Note
+                  </Text>
+                  <Ionicons
+                    name={sommOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
+                    size={16}
+                    color={colors.gold}
+                  />
+                </TouchableOpacity>
+                {sommOpen && (
+                  <Text style={styles.sommNoteText}>{wine.rationale}</Text>
+                )}
 
-                  {/* Review Wine + Add to Wish List sit above the sommelier
-                      note as the two-action set the user reaches for once
-                      they've read the badges. The Quick Select button at
-                      the top of the card is the no-friction signal path;
-                      these are the heavier actions. */}
-                  {session && (
-                    <View style={styles.detailActionsRow}>
-                      <TouchableOpacity
-                        style={styles.detailActionBtn}
-                        onPress={() => setChosenModalWine(wine)}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={styles.detailActionBtnText}>Review Wine</Text>
-                      </TouchableOpacity>
-                      {/* Tap toggles wish-list membership. When on
-                          the list the button reads "✓ On Wish List —
-                          tap to remove" so the user knows they can
-                          undo without leaving the screen. Disabled
-                          only while a mutation is mid-flight. */}
-                      <TouchableOpacity
-                        style={[styles.detailActionBtn, !!wishlistRowIds[i] && styles.detailActionBtnDone]}
-                        onPress={() => handleToggleWishlist(wine, i)}
-                        disabled={addToWishList.isPending || removeFromWishList.isPending}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.detailActionBtnText, !!wishlistRowIds[i] && styles.detailActionBtnTextDone]}>
-                          {wishlistRowIds[i] ? '✓ On Wish List — tap to remove' : 'Add to Wish List'}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-
-                  <RationaleBlock text={wine.rationale} />
-                </View>
-              )}
+              </View>
             </View>
           );
         })}
       </View>
+
+      {/* Review or Edit Your Restaurant — moved to the foot of the
+          results page so the wine cards are the visual focus above it.
+          Shown only when a restaurant name is set; the compact header
+          line is the path for adding one in the first place. */}
+      {restaurantName.trim().length > 0 && !editingRestaurant && (
+        <TouchableOpacity
+          style={styles.reviewRestaurantBtn}
+          onPress={async () => {
+            // Make sure the scan_sessions row is in place before we
+            // route to Your Restaurants. Without this, a user who
+            // tapped the CTA before onBlur fired could land on an
+            // empty list.
+            await handleSaveRestaurant();
+            qc.invalidateQueries({ queryKey: ['scan-archive'] });
+            router.push('/restaurants/reviews');
+          }}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.reviewRestaurantBtnText}>Review or Edit Your Restaurant →</Text>
+        </TouchableOpacity>
+      )}
 
       {!isFromHistory && (
         <TouchableOpacity
@@ -788,10 +758,6 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.xl,
     alignItems: 'center',
   },
-  backRow: {
-    alignSelf: 'flex-start',
-    marginBottom: spacing.sm,
-  },
   topRow: {
     width: '100%',
     flexDirection: 'row',
@@ -830,11 +796,45 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
-  stampLocation: {
-    fontFamily: fonts.headingItalic,
-    fontSize: 20,
+  // Compact restaurant line — pin · name · city. Sits between the
+  // date stamp and the 'Vinster Recommends' heading. Replaces the old
+  // bordered "Dining at" card.
+  restaurantLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.md,
+    maxWidth: '100%',
+  },
+  restaurantPin: {
+    fontSize: 16,
+  },
+  restaurantLineText: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 16,
     color: colors.text,
-    textAlign: 'center',
+    letterSpacing: 0.2,
+    flexShrink: 1,
+  },
+  restaurantLinePlaceholder: {
+    fontFamily: fonts.bodyItalic,
+    color: 'rgba(255,255,255,0.55)',
+  },
+  restaurantLineInput: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 16,
+    color: colors.text,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.30)',
+    minWidth: 140,
+    paddingVertical: 2,
+  },
+  restaurantLineCity: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 16,
+    color: colors.text,
   },
   heading: {
     fontFamily: fonts.headingSemibold,
@@ -885,76 +885,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     lineHeight: 24,
   },
-  restaurantCard: {
-    marginHorizontal: spacing.md,
-    marginBottom: spacing.lg,
-    borderWidth: 1.5,
-    borderColor: colors.gold,
-    borderRadius: 14,
-    padding: spacing.md,
-    backgroundColor: 'rgba(212,176,96,0.06)',
-  },
-  restaurantCardLabel: {
-    fontFamily: fonts.headingBold,
-    fontSize: 12,
-    color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    marginBottom: spacing.xs,
-  },
-  restaurantNameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingVertical: spacing.xs,
-  },
-  locationPin: {
-    fontSize: 18,
-  },
-  // Restaurant name value display inside the card — body (data value).
-  restaurantNameDisplay: {
-    flex: 1,
-    fontFamily: fonts.bodyBold,
-    fontSize: 20,
-    color: colors.text,
-    letterSpacing: 0.3,
-  },
-  // Italic placeholder inside the restaurant-name input — body italic.
-  restaurantNamePlaceholder: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 18,
-    color: 'rgba(255,255,255,0.50)',
-    letterSpacing: 0,
-  },
-  // Editable restaurant name input — form input, body.
-  restaurantNameInput: {
-    flex: 1,
-    fontFamily: fonts.bodyBold,
-    fontSize: 20,
-    color: colors.text,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.30)',
-    paddingVertical: 2,
-  },
-  restaurantHint: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 14,
-    color: colors.textMuted,
-    marginTop: spacing.sm,
-    lineHeight: 20,
-  },
+  // Footer CTA — sits below the third wine card, routes the user to
+  // Your Restaurants for the proper review/edit flow. Margin-wide so it
+  // mirrors the alternativeButton beneath it.
   reviewRestaurantBtn: {
-    marginTop: spacing.sm,
-    paddingVertical: 7,
+    marginHorizontal: spacing.md,
+    marginTop: spacing.lg,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 8,
+    borderRadius: 10,
     alignItems: 'center',
   },
   reviewRestaurantBtnText: {
     fontFamily: fonts.headingSemibold,
-    fontSize: 13,
+    fontSize: 14,
     color: '#FFFFFF',
   },
   list: {
@@ -966,35 +912,11 @@ const styles = StyleSheet.create({
     borderWidth: 1.5,
     borderColor: colors.gold,
     marginBottom: spacing.md,
-    overflow: 'hidden',
   },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+  cardInner: {
     padding: spacing.md,
   },
-  rowLeft: {
-    flex: 1,
-    paddingRight: spacing.sm,
-    alignItems: 'center',
-  },
-  rankRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    marginBottom: 3,
-  },
-  rankLabel: {
-    fontSize: 21,
-    fontFamily: fonts.headingBold,
-    color: colors.text,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-    textAlign: 'center',
-  },
-  // Wine name on the recommendation card — body (data value, readability).
+  // Wine name on the recommendation card — body (data value).
   wineName: {
     fontSize: 21,
     fontFamily: fonts.bodyBold,
@@ -1004,16 +926,31 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   wineProducer: {
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: fonts.bodyRegular,
-    color: colors.text,
+    color: colors.textMuted,
     letterSpacing: 0.2,
     textAlign: 'center',
+    marginBottom: 6,
   },
-  // Flavour-profile line — italic gold so it reads as "Vinster's voice"
-  // (matching the personality popup, sommelier rationale and other
-  // first-person prose surfaces). Sits between the producer line and
-  // the chevron, always visible on the compact card.
+  // Price + score share one line directly below the producer row.
+  priceScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    marginBottom: 6,
+  },
+  priceScoreText: {
+    fontFamily: fonts.bodyBold,
+    fontSize: 19,
+    color: colors.text,
+  },
+  priceScoreDot: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 19,
+    color: colors.textMuted,
+  },
+  // Flavour-profile line — italic gold "Vinster's voice".
   wineFlavour: {
     fontSize: 14,
     fontFamily: fonts.bodyItalic,
@@ -1021,79 +958,39 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     textAlign: 'center',
     marginTop: 4,
+    marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
   },
-  rowRight: {
-    alignItems: 'flex-end',
+  // ◆ Diamond bullets — editorial standout reasons. Currently only
+  // populated on wine #1 by the recommend prompt.
+  standoutBlock: {
     gap: 6,
-  },
-  // Price value display — body.
-  price: {
-    fontSize: 21,
-    fontFamily: fonts.bodyBold,
-    color: colors.text,
-  },
-  scoreChip: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  // Score value display — body.
-  scoreText: {
-    fontSize: 21,
-    fontFamily: fonts.bodyBold,
-    color: colors.text,
-  },
-  // Score unit (e.g. /100) — body value.
-  scoreUnit: {
-    fontSize: 16,
-    color: colors.text,
-    fontFamily: fonts.bodySemibold,
-  },
-  details: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-  },
-  grape: {
-    fontSize: 14,
-    color: colors.textMuted,
-    fontFamily: fonts.bodyItalic,
-    marginBottom: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.md,
-  },
-  chosenButton: {
-    marginHorizontal: spacing.md,
     marginTop: spacing.sm,
-    marginBottom: 2,
-    paddingVertical: 7,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 8,
-    alignItems: 'center',
+    marginBottom: spacing.sm,
   },
-  chosenButtonDone: {
-    borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.10)',
+  bulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
   },
-  chosenButtonText: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 15,
-    color: '#FFFFFF',
-  },
-  chosenButtonTextDone: {
+  diamondBullet: {
+    fontSize: 10,
     color: colors.gold,
+    marginTop: 5,
   },
-  // Two-button row sitting above the sommelier's note on each expanded
-  // card — Review Wine (full review modal) + Add to Wish List, side by
-  // side. Buttons are equal-width via flex: 1.
+  standoutText: {
+    flex: 1,
+    fontSize: 16,
+    fontFamily: fonts.bodySemibold,
+    color: colors.gold,
+    lineHeight: 20,
+  },
+  // Two-button row — Review Wine + Add to Wish List, side by side.
   detailActionsRow: {
     flexDirection: 'row',
     gap: spacing.sm,
     marginTop: spacing.md,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
   detailActionBtn: {
     flex: 1,
@@ -1115,48 +1012,52 @@ const styles = StyleSheet.create({
   detailActionBtnTextDone: {
     color: colors.gold,
   },
-  topPickReasons: {
-    paddingHorizontal: spacing.md,
-    paddingBottom: spacing.md,
-    gap: 6,
-  },
-  topPickReasonRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-  },
-  topPickBullet: {
-    fontSize: 8,
-    color: colors.gold,
-    marginTop: 5,
-  },
-  // Bullet-point reasons listed inside the expanded card — body text.
-  topPickReasonText: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: fonts.bodySemibold,
-    color: colors.gold,
-    lineHeight: 20,
-  },
-  wishlistAddButton: {
-    marginTop: spacing.md,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.25)',
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  wishlistAddButtonDone: {
+  // Long primary CTA — Add to Your Bottle Picks. Sits below the
+  // two-button row as the headline action on each card.
+  bottlePicksButton: {
+    marginTop: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderWidth: 1.5,
     borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.10)',
+    borderRadius: 10,
+    alignItems: 'center',
+    backgroundColor: 'rgba(212,176,96,0.06)',
   },
-  wishlistAddButtonText: {
+  bottlePicksButtonDone: {
+    backgroundColor: 'rgba(212,176,96,0.18)',
+  },
+  bottlePicksButtonText: {
     fontFamily: fonts.headingSemibold,
     fontSize: 15,
-    color: '#FFFFFF',
-  },
-  wishlistAddButtonTextDone: {
     color: colors.gold,
+    letterSpacing: 0.4,
+  },
+  bottlePicksButtonTextDone: {
+    color: colors.gold,
+  },
+  // Sommelier note expand toggle — collapsed by default, label + chevron.
+  sommNoteToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: spacing.md,
+    paddingVertical: 6,
+  },
+  sommNoteToggleText: {
+    fontFamily: fonts.headingSemibold,
+    fontSize: 13,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 1.2,
+  },
+  sommNoteText: {
+    marginTop: 4,
+    fontFamily: fonts.bodyRegular,
+    fontSize: 16,
+    color: colors.text,
+    lineHeight: 23,
+    paddingHorizontal: spacing.xs,
   },
   outsideNotice: {
     backgroundColor: 'rgba(180,140,60,0.12)',
@@ -1173,15 +1074,6 @@ const styles = StyleSheet.create({
     color: colors.gold,
     lineHeight: 22,
   },
-  scoreNote: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.xl,
-    fontSize: 17,
-    fontFamily: fonts.bodyItalic,
-    color: '#FFFFFF',
-    textAlign: 'center',
-    lineHeight: 24,
-  },
   alternativeButton: {
     marginHorizontal: spacing.md,
     marginTop: spacing.lg,
@@ -1197,25 +1089,5 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontFamily: fonts.headingSemibold,
     fontSize: 16,
-  },
-  // Save confirmation status — body note.
-  savedConfirm: {
-    fontFamily: fonts.bodySemibold,
-    fontSize: 15,
-    color: colors.gold,
-    textAlign: 'center',
-    marginTop: spacing.md,
-  },
-  newScanButton: {
-    marginHorizontal: spacing.md,
-    marginTop: spacing.lg,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  newScanText: {
-    color: colors.textMuted,
-    fontFamily: fonts.headingSemibold,
-    fontSize: 15,
-    textDecorationLine: 'underline',
   },
 });

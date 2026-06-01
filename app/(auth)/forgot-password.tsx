@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
+import * as Linking from 'expo-linking';
 import { supabase } from '../../src/api/supabase';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -15,7 +16,14 @@ export default function ForgotPassword() {
     setError('');
     if (!email.trim()) { setError('Please enter your email address.'); return; }
     setLoading(true);
-    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim());
+    // redirectTo lands the user on our reset-password screen after the
+    // recovery link is verified. The _layout deep-link handler detects
+    // type=recovery and routes there (rather than home) so the user can
+    // set a new password. This URL MUST be in the Supabase Redirect URLs
+    // allow-list, or Supabase falls back to the Site URL.
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: Linking.createURL('/auth/reset-password'),
+    });
     setLoading(false);
     if (resetError) {
       setError(resetError.message);
