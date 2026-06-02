@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample } from '../../src/stores/foodPairingStore';
@@ -8,6 +9,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
+import { findFoodWinePairing } from '../../src/api/label';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -15,6 +17,12 @@ import type { CellarWine } from '../../src/types/wine';
 
 function isPriceBandExample(ex: PriceBandExample | string): ex is PriceBandExample {
   return typeof ex === 'object' && ex !== null && 'priceBand' in ex;
+}
+
+// Capitalise the dish so the results heading reads as a proper title
+// regardless of how the user typed their brief.
+function titleCase(s: string): string {
+  return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 const RANK_LABELS = ['1st choice', '2nd choice', '3rd choice'];
@@ -74,7 +82,14 @@ function GeneralResults({ results, summary, currency }: { results: GeneralRecomm
             <Text style={[styles.cardItem, { color: colors.gold, marginTop: spacing.xs }]}>{result.priceGuide}</Text>
           ) : null}
 
-          {result.examples && result.examples.length > 0 && (
+          {/* Current pairings carry a single budget-appropriate whereToLook.
+              Older archived pairings fall back to the price-band examples. */}
+          {result.whereToLook ? (
+            <>
+              <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Where to look</Text>
+              <Text style={styles.cardItem}>{result.whereToLook}</Text>
+            </>
+          ) : result.examples && result.examples.length > 0 ? (
             <>
               <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Where to look for it</Text>
               {result.examples.map((ex, j) => {
@@ -91,7 +106,7 @@ function GeneralResults({ results, summary, currency }: { results: GeneralRecomm
                 return <Text key={j} style={styles.cardItem}>· {ex}</Text>;
               })}
             </>
-          )}
+          ) : null}
         </View>
       ))}
     </>
@@ -101,13 +116,50 @@ function GeneralResults({ results, summary, currency }: { results: GeneralRecomm
 export default function PairingResultsScreen() {
   const { fromHistory, savedAt, city } = useLocalSearchParams<{ fromHistory?: string; savedAt?: string; city?: string }>();
   const isFromHistory = fromHistory === 'true';
-  const { dish, mode, cellarResult, generalResult, generalSummary } = useFoodPairingStore();
+  const { dish, mode, cellarResult, generalResult, generalSummary, stylePreference, budget, setCellarResult, setMode } = useFoodPairingStore();
   const { wines } = useCellar();
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const userCurrency = preferences?.defaultCurrency ?? 'GBP';
   const qc = useQueryClient();
   const [renderedAt] = useState(() => new Date().toISOString());
+  const [requerying, setRequerying] = useState(false);
+
+  // "Show me all of the wines from my cellar that could work" — re-runs the
+  // same brief against the user's cellar without sending them back to the
+  // form. Reuses the stored style preference + budget.
+  async function handleShowCellarOptions() {
+    if (wines.length === 0) return;
+    setRequerying(true);
+    try {
+      const cellarSummary = wines.map((w) => ({
+        id: w.id,
+        wine_name: w.wine_name,
+        producer: w.producer,
+        region: w.region,
+        vintage: w.vintage,
+        grape_variety: w.grape_variety,
+        drinking_window_status: w.drinking_window_status,
+        purchase_price: w.purchase_price ?? null,
+        purchase_price_currency: w.purchase_price_currency ?? null,
+      }));
+      const result = await findFoodWinePairing(
+        dish,
+        'cellar',
+        cellarSummary,
+        undefined,
+        preferences ? (preferences as unknown as Record<string, unknown>) : null,
+        stylePreference,
+        budget,
+      ) as any;
+      setCellarResult(result.recommendations as CellarRecommendation[]);
+      setMode('cellar');
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not search your cellar. Please try again.' });
+    } finally {
+      setRequerying(false);
+    }
+  }
 
   // Selection modal — opens when the user taps "Select This Wine" on a
   // cellar recommendation. Lets them archive bottles without leaving the
@@ -193,6 +245,17 @@ export default function PairingResultsScreen() {
     }
   }
 
+  if (requerying) {
+    return (
+      <SearchProgress
+        title="Searching your cellar…"
+        subtitle="Vinster needs up to a minute for your result"
+        body="Our sommelier is searching your cellar for the ideal match"
+        durationMs={60000}
+      />
+    );
+  }
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity onPress={handleBack} style={styles.backRow}>
@@ -208,7 +271,12 @@ export default function PairingResultsScreen() {
 
       <View style={styles.header}>
         <Text style={styles.headerLine}>Your Brief</Text>
-        <Text style={styles.dish}>{dish}</Text>
+        <Text style={styles.dish}>{titleCase(dish)}</Text>
+        {mode === 'general' && wines.length > 0 && (
+          <TouchableOpacity onPress={handleShowCellarOptions} activeOpacity={0.7}>
+            <Text style={styles.cellarPromptLink}>Show me all of the wines from my cellar that could work</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       <View style={styles.section}>
@@ -301,6 +369,7 @@ const styles = StyleSheet.create({
   // dominated by "Your Pairing" at 20pt bold). Now reads as a proper
   // headline so the user can quickly see what they asked for.
   dish: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, marginTop: spacing.xs, lineHeight: 28 },
+  cellarPromptLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textDecorationLine: 'underline', marginTop: spacing.md },
   successTick: { fontFamily: fonts.headingBold, fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   successCount: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
   section: { padding: spacing.xl },

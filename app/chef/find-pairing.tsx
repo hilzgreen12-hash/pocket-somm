@@ -1,8 +1,9 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -18,16 +19,26 @@ export default function FindPairingScreen() {
   const { session } = useAuth();
   const { wines } = useCellar();
   const { preferences: savedPreferences } = usePreferences();
-  const { setCellarResult, setGeneralResult, setDish, setMode } = useFoodPairingStore();
+  const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget } = useFoodPairingStore();
 
   const [dish, setDishLocal] = useState('');
-  const [flavours, setFlavours] = useState('');
   const [stylePreference, setStylePreference] = useState<string | null>(null);
+  const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [signInPromptShown, setSignInPromptShown] = useState(false);
   const pendingFindRef = useRef(false);
+
+  // Seed the budget from the user's saved default once preferences load
+  // (they arrive async, so the initial useState above often sees null).
+  const budgetSeededRef = useRef(false);
+  useEffect(() => {
+    if (!budgetSeededRef.current && savedPreferences?.defaultBudget != null) {
+      setBudget(savedPreferences.defaultBudget);
+      budgetSeededRef.current = true;
+    }
+  }, [savedPreferences?.defaultBudget]);
 
   async function handleFind(skipPrompt = false) {
     if (!dish.trim()) {
@@ -47,10 +58,14 @@ export default function FindPairingScreen() {
     }
 
     setLoading(true);
-    const baseDish = flavours.trim() ? `${dish.trim()}. Key flavours/ingredients: ${flavours.trim()}` : dish.trim();
-    const fullDish = stylePreference ? `${baseDish}. Wine colour/style preference: ${stylePreference}` : baseDish;
-    setDish(fullDish);
+    // Keep the displayed/stored dish as the user's clean cooking brief; the
+    // style preference and budget travel as structured params so the results
+    // heading stays tidy and the cellar re-query can reuse them.
+    const cleanDish = dish.trim();
+    setDish(cleanDish);
     setMode(mode);
+    storeStyle(stylePreference);
+    storeBudget(budget);
 
     try {
       const cellarSummary = wines.map((w) => ({
@@ -61,9 +76,19 @@ export default function FindPairingScreen() {
         vintage: w.vintage,
         grape_variety: w.grape_variety,
         drinking_window_status: w.drinking_window_status,
+        purchase_price: w.purchase_price ?? null,
+        purchase_price_currency: w.purchase_price_currency ?? null,
       }));
 
-      const result = await findFoodWinePairing(fullDish, mode, mode === 'cellar' ? cellarSummary : undefined, undefined, mode === 'general' && savedPreferences ? (savedPreferences as unknown as Record<string, unknown>) : null) as any;
+      const result = await findFoodWinePairing(
+        cleanDish,
+        mode,
+        mode === 'cellar' ? cellarSummary : undefined,
+        undefined,
+        savedPreferences ? (savedPreferences as unknown as Record<string, unknown>) : null,
+        stylePreference,
+        budget,
+      ) as any;
 
       if (mode === 'cellar') {
         setCellarResult(result.recommendations as CellarRecommendation[]);
@@ -100,20 +125,21 @@ export default function FindPairingScreen() {
 
       <Text style={styles.heading}>Find a Wine Pairing</Text>
       <Text style={styles.subheading}>
-        Tell us what you're cooking and we'll find the perfect wine. Vinster will use your settings under About You - Your Wine Preferences to guide its results.{' '}
-        <Text
-          style={styles.profileNoteLink}
-          onPress={() => {
-            if (!session) {
-              setSignInPromptVisible(true);
-              return;
-            }
-            router.push('/profile/wine');
-          }}
-        >Update your preferences here.</Text>
+        Tell us what you're cooking and we'll find the perfect wine. Vinster will use your settings under About You - Your Wine Preferences to guide its results.
       </Text>
+      <Text
+        style={styles.preferencesLink}
+        onPress={() => {
+          if (!session) {
+            setSignInPromptVisible(true);
+            return;
+          }
+          router.push('/profile/wine');
+        }}
+      >Update your preferences here.</Text>
 
       <Text style={styles.label}>What are you cooking?</Text>
+      <Text style={styles.helperText}>Include any strong flavours or ingredients that will help guide your pairing.</Text>
       <TextInput
         style={styles.input}
         value={dish}
@@ -125,19 +151,7 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
-      <Text style={styles.label}>Any strong flavours or ingredients?</Text>
-      <TextInput
-        style={styles.input}
-        value={flavours}
-        onChangeText={setFlavours}
-        placeholder="e.g. Truffle, anchovies, chilli, lemon"
-        placeholderTextColor={colors.textMuted}
-        multiline
-        numberOfLines={3}
-        textAlignVertical="top"
-      />
-
-      <Text style={styles.label}>Any specific style preference?</Text>
+      <Text style={styles.label}>Any specific wine style preference?</Text>
       <View style={styles.styleGrid}>
         {['Any', 'White', 'Red', 'Rosé', 'Sparkling', 'Fortified'].map((s) => {
           const val = s === 'Any' ? null : s;
@@ -152,6 +166,11 @@ export default function FindPairingScreen() {
             </TouchableOpacity>
           );
         })}
+      </View>
+
+      <View style={styles.budgetBlock}>
+        <Text style={styles.label}>Budget?</Text>
+        <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} />
       </View>
 
       <Text style={styles.label}>Where should Vinster look?</Text>
@@ -204,7 +223,12 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
   profileNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
   profileNoteLink: { fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
+  // "Update your preferences here." sits on its own line beneath the blurb.
+  preferencesLink: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.xl },
   label: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm, textAlign: 'center' },
+  // Lower-case helper line beneath "What are you cooking?".
+  helperText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.md },
+  budgetBlock: { width: '100%', marginBottom: spacing.xl },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   difficultyGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%' },
   difficultyBtn: { borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 8, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', width: '48.5%' },

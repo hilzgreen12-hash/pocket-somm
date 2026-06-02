@@ -84,9 +84,11 @@ export async function generatePersonality(category: 'wine' | 'recipe' | 'restaur
 export async function findFoodWinePairing(
   dish: string,
   mode: 'cellar' | 'general',
-  cellarWines?: { id: string; wine_name: string; producer: string | null; region: string | null; vintage: string | null; grape_variety: string | null; drinking_window_status: string }[],
+  cellarWines?: { id: string; wine_name: string; producer: string | null; region: string | null; vintage: string | null; grape_variety: string | null; drinking_window_status: string; purchase_price: number | null; purchase_price_currency: string | null }[],
   difficulty?: string,
   userPreferences?: Record<string, unknown> | null,
+  stylePreference?: string | null,
+  budget?: number | null,
 ): Promise<unknown> {
-  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty, userPreferences });
+  return invokeFunction('food-wine-pairing', { dish, mode, cellarWines, difficulty, userPreferences, stylePreference, budget });
 }
