@@ -84,11 +84,11 @@ export default function ChosenWinesScreen() {
   // 'date' option, renamed for consistency with Full Cellar List).
   type SortMode = 'recent' | 'score-desc' | 'score-asc';
   type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
-  type FavouriteFilter = 'all' | 'favourites';
+  type WishlistFilter = 'all' | 'wishlist';
   type FilterField = 'sort' | 'type' | 'favourite' | 'location' | null;
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
+  const [wishlistFilter, setWishlistFilter] = useState<WishlistFilter>('all');
   const [locationFilter, setLocationFilter] = useState<string>('All');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
@@ -115,10 +115,10 @@ export default function ChosenWinesScreen() {
     ...cellarReviews.map((w): ReviewItem => ({ source: 'cellar', date: w.review_date ?? w.created_at, score: w.review_score, wine: w })),
   ];
 
-  // Both ChosenWine and CellarWine carry an is_favourite flag, so the
-  // favourite filter applies symmetrically on either side.
-  function isFavourite(item: ReviewItem): boolean {
-    return !!(item.wine as { is_favourite?: boolean }).is_favourite;
+  // Wish-list is a review-level flag on chosen_wines only — cellar-source
+  // reviews are never wish-list.
+  function isWishlist(item: ReviewItem): boolean {
+    return item.source !== 'cellar' && !!(item.wine as ChosenWine).wishlist;
   }
 
   // Canonical city for a review — restaurant reviews carry a clean
@@ -155,7 +155,7 @@ export default function ChosenWinesScreen() {
   const q = search.trim().toLowerCase();
   const filtered = items.filter((it) => {
     if (typeFilter !== 'all' && it.source !== typeFilter) return false;
-    if (favouriteFilter === 'favourites' && !isFavourite(it)) return false;
+    if (wishlistFilter === 'wishlist' && !isWishlist(it)) return false;
     if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
     if (q) {
       const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
@@ -201,20 +201,20 @@ export default function ChosenWinesScreen() {
     // a placeholder bucket while we figure out the longer-term taxonomy.
     { value: 'other',      label: 'Other' },
   ];
-  const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
-    { value: 'all',        label: 'All reviews' },
-    { value: 'favourites', label: 'Favourites only' },
+  const WISHLIST_OPTIONS: { value: WishlistFilter; label: string }[] = [
+    { value: 'all',      label: "Don't Apply" },
+    { value: 'wishlist', label: 'Wish List Wines Only' },
   ];
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added';
   const typeLabel = TYPE_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All reviews';
-  const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All reviews';
+  const wishlistLabel = WISHLIST_OPTIONS.find((o) => o.value === wishlistFilter)?.label ?? "Don't Apply";
   const locationLabel = locationFilter === 'All' ? 'All' : locationFilter;
 
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'sort') return { title: 'Sort', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
     if (field === 'type') return { title: 'Filter by type', options: TYPE_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
-    if (field === 'favourite') return { title: 'Favourites', options: FAVOURITE_OPTIONS, selected: favouriteFilter, onSelect: (v) => setFavouriteFilter(v as FavouriteFilter) };
+    if (field === 'favourite') return { title: 'Wish List Wines', options: WISHLIST_OPTIONS, selected: wishlistFilter, onSelect: (v) => setWishlistFilter(v as WishlistFilter) };
     if (field === 'location') {
       return {
         title: 'Filter by location',
@@ -547,10 +547,10 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Favourites</Text>
+                <Text style={styles.filterChipLabel}>Wish List Wines</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{wishlistLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
               <View style={styles.filterChipHeadingRow}>
