@@ -3,7 +3,7 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -39,9 +39,15 @@ const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
   { value: 'favourites', label: 'Favourites only' },
 ];
 
+// Archived view — last chip on the filter carousel. Swaps the list source
+// from live cellar wines to archived ones (replaces the old Cellar tab
+// "Archived Wines" button).
+type ArchivedFilter = 'live' | 'archived';
+
 export default function FullCellarListScreen() {
   const { session } = useAuth();
   const { wines, isLoading } = useCellar();
+  const { wines: archivedWines } = useArchive();
   const { racks } = useRacks();
   const qc = useQueryClient();
 
@@ -87,6 +93,7 @@ export default function FullCellarListScreen() {
   const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
+  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>('live');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
   // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
@@ -136,7 +143,9 @@ export default function FullCellarListScreen() {
   // Apply filters. The search query is applied last so the chips still
   // own their truth — typing a query just narrows whatever filters are on.
   const q = search.trim().toLowerCase();
-  const filtered = wines.filter((w) => {
+  // Archived view swaps the source list; the other filters still apply.
+  const baseWines = archivedFilter === 'archived' ? archivedWines : wines;
+  const filtered = baseWines.filter((w) => {
     if (rackFilter !== 'All') {
       if (rackFilter === 'Unassigned') {
         if (wineToRackId[w.id]) return false;
@@ -304,6 +313,23 @@ export default function FullCellarListScreen() {
             <Text style={styles.filterChipChevron}>{openDropdown === 'colour' ? '▴' : '▾'}</Text>
           </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
+        </TouchableOpacity>
+        {/* Archived view toggle — replaces the old Cellar-tab Archived Wines
+            button. Tap to swap the list between live and archived wines. */}
+        <TouchableOpacity
+          style={styles.filterChip}
+          onPress={() => setArchivedFilter((f) => (f === 'archived' ? 'live' : 'archived'))}
+        >
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Archived</Text>
+          </View>
+          <Text
+            style={[styles.filterChipValue, archivedFilter === 'archived' && { color: colors.gold }]}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {archivedFilter === 'archived' ? 'Showing' : 'Hidden'}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
