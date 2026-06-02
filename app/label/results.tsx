@@ -553,28 +553,21 @@ export default function LabelResultsScreen() {
       </View>
 
       <View style={styles.section}>
-        {/* Compact header: label on the left, yellow Generate link on the
-            right. After the user taps Generate the section expands below
-            with the value (or the "not enough data" caption). */}
-        <View style={styles.estimateHeaderRow}>
-          <Text style={[styles.sectionTitle, { marginBottom: 0 }]}>Estimated Value</Text>
-          {!showEstimate && (
-            <TouchableOpacity onPress={() => setShowEstimate(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.estimateGenerateLink}>Generate</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        {showEstimate && (intel.estimatedValue != null ? (
+        {/* Estimated value is shown straight away (no "Generate" tap) and
+            stamped with today's date — it's saved against the wine when it
+            goes into the cellar. */}
+        <Text style={styles.sectionTitle}>Estimated Value</Text>
+        {intel.estimatedValue != null ? (
           <View style={{ marginTop: spacing.sm }}>
             <Text style={styles.estimateValue}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
-            <Text style={styles.estimateCaption}>per bottle · AI estimate based on producer, region, and vintage</Text>
+            <Text style={styles.estimateCaption}>per bottle · AI estimate as of {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · based on producer, region, and vintage</Text>
           </View>
         ) : (
           <View style={{ marginTop: spacing.sm }}>
             <Text style={styles.estimateUnavailable}>Not enough market data</Text>
-            <Text style={styles.estimateCaption}>This wine is too obscure for Vinster to estimate reliably. Add a purchase price when saving to your cellar to track value yourself.</Text>
+            <Text style={styles.estimateCaption}>This wine is too obscure for Vinster to estimate reliably. Adjust the estimated purchase price when saving to your cellar to track value yourself.</Text>
           </View>
-        ))}
+        )}
       </View>
 
       <View style={styles.section}>
@@ -630,7 +623,16 @@ export default function LabelResultsScreen() {
               shows. Wish List and review-only capture have their own entry
               points and aren't offered here. */}
           <View style={styles.actionStack}>
-            <TouchableOpacity style={styles.primaryAddBtn} onPress={() => setAddingToCellar(true)} activeOpacity={0.8}>
+            <TouchableOpacity
+              style={styles.primaryAddBtn}
+              onPress={() => {
+                // Seed the price field with Vinster's estimate so the user
+                // adjusts for accuracy rather than entering from scratch.
+                if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(intel.estimatedValue));
+                setAddingToCellar(true);
+              }}
+              activeOpacity={0.8}
+            >
               <Text style={styles.primaryAddBtnText}>Add to Cellar</Text>
             </TouchableOpacity>
           </View>
@@ -826,7 +828,7 @@ export default function LabelResultsScreen() {
               <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
             </View>
 
-            <Text style={styles.modalLabel}>Purchase price (optional)</Text>
+            <Text style={styles.modalLabel}>Estimated Purchase Price, Adjust for Accuracy</Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
               <TextInput
