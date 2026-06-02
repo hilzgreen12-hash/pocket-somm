@@ -804,7 +804,7 @@ export default function CellarWineDetail() {
           ) : (
             <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
               {wine.purchase_price != null ? (
-                <Text style={styles.statValue}>{formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 2 })}</Text>
+                <Text style={styles.statValue}>{formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 0 })}</Text>
               ) : (
                 <Text style={styles.statAction}>+ Add Price</Text>
               )}
@@ -823,7 +823,10 @@ export default function CellarWineDetail() {
             <Text style={[styles.statValue, styles.statValueMuted]}>Estimating…</Text>
           ) : wine.estimated_value != null ? (
             <>
-              <Text style={styles.statValue}>{formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}</Text>
+              <Text style={[styles.statValue, styles.estimatedValueGold]}>
+                {formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}
+                <Text style={styles.estimateUpdateLink}> (update)</Text>
+              </Text>
               {wine.estimated_value_at ? (
                 <Text style={styles.statSub}>{new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
               ) : null}
@@ -1487,6 +1490,16 @@ const styles = StyleSheet.create({
   statValueMuted: {
     color: colors.textMuted,
     fontFamily: fonts.bodyItalic,
+  },
+  // Estimated Value shown in gold with an inline "(update)" link.
+  estimatedValueGold: {
+    color: colors.gold,
+  },
+  estimateUpdateLink: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 13,
+    color: colors.gold,
+    textDecorationLine: 'underline',
   },
   // Inter — small caption sub
   statSub: {
