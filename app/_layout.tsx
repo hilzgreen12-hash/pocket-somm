@@ -171,8 +171,6 @@ export default function RootLayout() {
             <Stack.Screen name="chef/archive" />
             <Stack.Screen name="cellar/list" />
             <Stack.Screen name="cellar/stats" />
-            <Stack.Screen name="cellar/wishlist" />
-            <Stack.Screen name="cellar/add-to-wishlist" />
             <Stack.Screen name="cellar/add" />
             <Stack.Screen name="cellar/import-preview" />
             <Stack.Screen name="cellar/racks" />

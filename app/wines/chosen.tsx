@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { useCellar, useWishList } from '../../src/hooks/useCellar';
+import { useCellar } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
@@ -68,7 +68,6 @@ type ReviewItem =
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
-  const { wines: wishlistWines } = useWishList();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -233,19 +232,13 @@ export default function ChosenWinesScreen() {
   const cellarByIdentity = new Map(
     cellarWines.map((w) => [wineIdentityKey(w.producer, w.wine_name, w.vintage), w] as const),
   );
-  const wishlistByIdentity = new Map(
-    wishlistWines.map((w) => [wineIdentityKey(w.producer, w.wine_name, w.vintage), w] as const),
-  );
-
-  function addedNote(item: ReviewItem): { kind: 'cellar' | 'wish list'; date: string } | null {
+  function addedNote(item: ReviewItem): { kind: 'cellar'; date: string } | null {
     if (item.source === 'cellar') {
       return { kind: 'cellar', date: item.wine.date_received ?? item.wine.created_at };
     }
     const key = wineIdentityKey(item.wine.producer, item.wine.wine_name, item.wine.vintage);
     const cellarMatch = cellarByIdentity.get(key);
     if (cellarMatch) return { kind: 'cellar', date: cellarMatch.date_received ?? cellarMatch.created_at };
-    const wishMatch = wishlistByIdentity.get(key);
-    if (wishMatch) return { kind: 'wish list', date: wishMatch.date_received ?? wishMatch.created_at };
     return null;
   }
 
