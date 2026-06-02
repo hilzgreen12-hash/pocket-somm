@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   buttonHalf: {
     flex: 1,
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: '#FFFFFF',
     borderRadius: 14,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.xs,
@@ -502,7 +502,7 @@ const styles = StyleSheet.create({
   // Button label — Cormorant (button rule).
   buttonHalfText: {
     fontFamily: fonts.headingSemibold,
-    color: colors.gold,
+    color: '#FFFFFF',
     fontSize: 14,
     textAlign: 'center',
   },
@@ -557,7 +557,7 @@ const styles = StyleSheet.create({
   },
   introPrimaryBtn: {
     borderWidth: 1,
-    borderColor: colors.gold,
+    borderColor: '#FFFFFF',
     borderRadius: 12,
     paddingVertical: spacing.sm,
     alignItems: 'center',
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
   introPrimaryBtnText: {
     fontFamily: fonts.headingSemibold,
     fontSize: 16,
-    color: colors.gold,
+    color: '#FFFFFF',
     letterSpacing: 0.5,
   },
   introDismissBtn: {
