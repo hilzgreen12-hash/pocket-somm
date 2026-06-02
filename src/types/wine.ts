@@ -257,6 +257,16 @@ export interface ChosenWine {
   other_observations: string | null;
   user_score: number | null;
   is_favourite: boolean;
+  // Review-level wish-list flag (migration 045) — set via "Add to Wish
+  // List" on the review card; drives the Wish List Wines filter.
+  wishlist: boolean;
+  // Purchase price + AI estimated value (migration 044) — mirror the
+  // equivalent cellar_wines columns so the review card can show them.
+  purchase_price: number | null;
+  purchase_price_currency: string | null;
+  estimated_value: number | null;
+  estimated_value_currency: string | null;
+  estimated_value_at: string | null;
   // Source discriminator (migration 042). 'restaurant' = came from a
   // List scan or manual entry on Your Wine Reviews. 'other' = reviewed
   // via the "Review without adding" path on /label/results (Cellar

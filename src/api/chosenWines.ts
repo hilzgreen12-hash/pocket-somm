@@ -116,6 +116,12 @@ export interface UpdateChosenWineInput {
   userScore: number | null;
   listPrice: number | null;
   isFavourite: boolean;
+  // Purchase price + review-level wish-list flag (migrations 044/045).
+  // Optional so callers that don't touch them are unaffected; each is
+  // only written to the row when explicitly provided.
+  purchasePrice?: number | null;
+  purchasePriceCurrency?: string | null;
+  wishlist?: boolean;
   // Identity carried through so the post-update sync can find any
   // matching wishlist row without an extra round-trip. The chosen_wines
   // update endpoint itself doesn't change these fields.
@@ -125,7 +131,7 @@ export interface UpdateChosenWineInput {
 }
 
 export async function updateChosenWine(id: string, input: UpdateChosenWineInput): Promise<void> {
-  const { error } = await supabase.from('chosen_wines').update({
+  const updates: Record<string, unknown> = {
     restaurant_name: input.restaurantName || null,
     city: input.city || null,
     tasting_note: input.tastingNote || null,
@@ -133,7 +139,13 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
     user_score: input.userScore,
     menu_price: input.listPrice,
     is_favourite: input.isFavourite,
-  }).eq('id', id);
+  };
+  if (input.purchasePrice !== undefined) {
+    updates.purchase_price = input.purchasePrice;
+    updates.purchase_price_currency = input.purchasePriceCurrency ?? null;
+  }
+  if (input.wishlist !== undefined) updates.wishlist = input.wishlist;
+  const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
   if (error) throw new Error(error.message);
 }
 
@@ -222,6 +234,12 @@ export async function patchChosenWine(
     tasting_note: string | null;
     other_observations: string | null;
     user_score: number | null;
+    purchase_price: number | null;
+    purchase_price_currency: string | null;
+    estimated_value: number | null;
+    estimated_value_currency: string | null;
+    estimated_value_at: string | null;
+    wishlist: boolean;
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
