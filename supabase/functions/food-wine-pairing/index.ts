@@ -2,6 +2,13 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
+function symbolFor(code?: string | null): string {
+  const map: Record<string, string> = {
+    GBP: '£', USD: '$', EUR: '€', AUD: '$', CAD: '$', NZD: '$', JPY: '¥', CHF: 'CHF ', ZAR: 'R',
+  };
+  return map[code ?? 'GBP'] ?? '';
+}
+
 function buildPreferenceBlock(prefs: Record<string, any> | null | undefined): string {
   if (!prefs) return '';
   const lines: string[] = [];
@@ -21,26 +28,60 @@ function buildPreferenceBlock(prefs: Record<string, any> | null | undefined): st
   return lines.length ? '\n\nUser wine profile preferences:\n' + lines.join('\n') : '';
 }
 
-function buildCellarPrompt(dish: string, wines: Record<string, string | null>[], difficulty?: string, userPreferences?: Record<string, any> | null): string {
-  const wineList = wines.map((w, i) =>
-    `${i + 1}. ${w.wine_name}${w.producer ? ` by ${w.producer}` : ''}${w.region ? `, ${w.region}` : ''}${w.vintage ? ` (${w.vintage})` : ''}${w.grape_variety ? ` — ${w.grape_variety}` : ''} [status: ${w.drinking_window_status}] [id: ${w.id}]`
-  ).join('\n');
+// The cooking brief's structured extras — the wine-colour/style preference
+// and the per-bottle budget — shared by both prompt builders. Budget is
+// expressed differently per mode: cellar filters on what the user already
+// paid; general targets a buying price.
+function buildBriefBlock(
+  stylePreference: string | null | undefined,
+  budget: number | null | undefined,
+  currency: string,
+  mode: 'cellar' | 'general',
+): string {
+  const lines: string[] = [];
+  if (stylePreference) {
+    lines.push(`WINE STYLE PREFERENCE: The user wants ${stylePreference} wine. Recommend only ${stylePreference} wines unless nothing of that colour could pair acceptably, in which case explain why.`);
+  }
+  const sym = symbolFor(currency);
+  if (budget != null) {
+    if (mode === 'cellar') {
+      lines.push(`BUDGET CONTEXT: The user's budget is around ${sym}${budget} per bottle. Each cellar wine below shows its purchase price where known. Favour wines at or below this price when the pairing is strong; recommend a more expensive bottle only if it is a clearly superior match, and say so in the rationale.`);
+    } else {
+      lines.push(`BUDGET: The user's budget is around ${sym}${budget} per bottle. All three recommendations must be findable at roughly this price. Differentiate the three options by style, grape, region and how well they match the dish — NOT by offering cheaper and pricier tiers.`);
+    }
+  } else if (mode === 'general') {
+    lines.push(`BUDGET: The user has not set a budget. Recommend the three best matches for the dish regardless of price.`);
+  }
+  return lines.length ? '\n' + lines.join('\n') + '\n' : '';
+}
 
-  const difficultyBlock = difficulty
-    ? `\nRecipe Difficulty Preference: ${difficulty} — if you include any recipe tips or serving suggestions, keep them appropriate to this level.\n`
-    : '';
+function buildCellarPrompt(
+  dish: string,
+  wines: Record<string, string | number | null>[],
+  stylePreference: string | null | undefined,
+  budget: number | null | undefined,
+  currency: string,
+  userPreferences?: Record<string, any> | null,
+): string {
+  const wineList = wines.map((w, i) => {
+    const price = w.purchase_price != null
+      ? ` [paid: ${symbolFor(w.purchase_price_currency as string | null)}${w.purchase_price}]`
+      : '';
+    return `${i + 1}. ${w.wine_name}${w.producer ? ` by ${w.producer}` : ''}${w.region ? `, ${w.region}` : ''}${w.vintage ? ` (${w.vintage})` : ''}${w.grape_variety ? ` — ${w.grape_variety}` : ''} [status: ${w.drinking_window_status}]${price} [id: ${w.id}]`;
+  }).join('\n');
 
+  const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'cellar');
   const preferenceBlock = buildPreferenceBlock(userPreferences);
 
   return `You are a world-class sommelier. A user is cooking the following dish and wants to know which wine from their cellar to open.
 
 Dish: ${dish}
-${difficultyBlock}${preferenceBlock}
+${briefBlock}${preferenceBlock}
 
 Their cellar:
 ${wineList}
 
-Select the 1 to 3 wines from this cellar that pair best with the dish. Prioritise wines at "peak" or "approaching" drinking window. Where multiple wines pair equally well, favour those matching the user's profile preferences. If no wines are a strong match, say so honestly and suggest the closest option.
+Select the 1 to 3 wines from this cellar that pair best with the dish. Prioritise wines at "peak" or "approaching" drinking window. Where multiple wines pair equally well, favour those matching the user's profile preferences and budget. If no wines are a strong match, say so honestly and suggest the closest option.
 
 Return ONLY valid JSON with this structure:
 {
@@ -57,28 +98,30 @@ Return ONLY valid JSON with this structure:
 Return raw JSON only. No markdown. No explanation.`;
 }
 
-function buildGeneralPrompt(dish: string, difficulty?: string, userPreferences?: Record<string, any> | null): string {
-  const difficultyBlock = difficulty
-    ? `\nRecipe Difficulty Preference: ${difficulty} — if you include any recipe tips or serving suggestions, keep them appropriate to this level.\n`
-    : '';
+function buildGeneralPrompt(
+  dish: string,
+  stylePreference: string | null | undefined,
+  budget: number | null | undefined,
+  currency: string,
+  userPreferences?: Record<string, any> | null,
+): string {
+  const briefBlock = buildBriefBlock(stylePreference, budget, currency, 'general');
   const preferenceBlock = buildPreferenceBlock(userPreferences);
 
-  return `You are a world-class sommelier. A user is cooking the following dish and wants to know what style of wine to buy.
+  return `You are a world-class sommelier. A user is cooking the following dish and wants to know what wine to buy.
 
 Dish: ${dish}
-${difficultyBlock}${preferenceBlock}
+${briefBlock}${preferenceBlock}
 
-Recommend the top 3 wine styles that would complement this dish, ranked from best to third-best match. Be specific — name the grape variety and region, not just a broad colour. Where possible, offer variety across the three recommendations (different grapes, regions, or styles) so the user has genuine options to consider.
-
-For each style, also provide three concrete BUYING SUGGESTIONS at three price bands — band 1 (least expensive entry into this style), band 2 (mid-range), band 3 (premium). Each suggestion should be a country + region pairing, NOT a producer or brand name. Where possible, the three bands should come from DIFFERENT countries to give the user real geographic breadth at any budget. Use the price bands as relative tiers within the style — for example, for white Burgundy, band 1 might be a Mâcon-Villages, band 2 a Côte de Beaune village wine, band 3 a Premier Cru.
+Recommend the top 3 wines that would complement this dish, ranked from best to third-best match. All three must sit at the user's budget level (where one is given) — these are three genuine alternatives at the same price point, NOT a cheap / mid / premium ladder. Be specific — name the grape variety and region, not just a broad colour. Offer real variety across the three (different grapes, regions or styles) so the user has distinct options to choose between.
 
 SOFT RULE — REGIONAL AFFINITY:
 Where you can identify the dish's culinary origin (e.g. Italian, French, Spanish, Japanese), give positive weight to wines from that same region or country. A regional match — e.g. a Sicilian white with a Sicilian fish dish, or a Rhône red with a Provençal lamb stew — reflects the centuries of pairing wisdom built into those cuisines and should be favoured where quality allows. This is a preference, not a hard rule: if a non-regional wine is clearly superior on pairing harmony or quality, rank it accordingly and explain why.
 
 SOFT RULE — GRAPE VARIETY AND WORLD EXAMPLES:
-When recommending a grape variety strongly associated with one region (e.g. Vermentino with Sardinia/Liguria, Malbec with Mendoza, Grüner Veltliner with Austria), include a note in the "characteristics" or "whyItWorks" field acknowledging that excellent examples exist elsewhere in the world — e.g. "While Vermentino is most celebrated in Sardinia and Liguria, you'll find outstanding examples from Corsica, southern France, and California." This helps the user find the style at their local merchant regardless of origin.
+When recommending a grape variety strongly associated with one region (e.g. Vermentino with Sardinia/Liguria, Malbec with Mendoza, Grüner Veltliner with Austria), include a note in the "characteristics" or "whyItWorks" field acknowledging that excellent examples exist elsewhere in the world. This helps the user find the style at their local merchant regardless of origin.
 
-Rank by: pairing harmony with the dish → regional affinity → quality and value at the stated price point → availability and ease of finding a good example.
+Rank by: pairing harmony with the dish → regional affinity → quality and value at the stated budget → availability and ease of finding a good example.
 
 Return ONLY valid JSON with this structure:
 {
@@ -88,28 +131,23 @@ Return ONLY valid JSON with this structure:
       "region": "e.g. Côte de Beaune, Burgundy, France",
       "whyItWorks": "2-3 sentences explaining the pairing logic and why this ranks above the others",
       "characteristics": "What to look for on the label or shelf — body, oak, acidity etc.",
-      "examples": [
-        { "priceBand": 1, "region": "Country, Region — e.g. France, Mâcon-Villages" },
-        { "priceBand": 2, "region": "Country, Region — e.g. New Zealand, Marlborough" },
-        { "priceBand": 3, "region": "Country, Region — e.g. France, Puligny-Montrachet Premier Cru" }
-      ]
+      "whereToLook": "A specific country + region/appellation where the user can find a good example AT THEIR BUDGET — e.g. 'France, Mâcon-Villages'. Lead with the country. No producers or brand names."
     }
   ],
   "summary": "1-2 sentences on your overall pairing approach for this dish"
 }
-
-Each "region" string must lead with the country, then the specific region/appellation — no producers, no brand names. priceBand is an integer 1, 2, or 3 (1 = least expensive entry into this style, 3 = premium). The three examples within a single recommendation should ideally span DIFFERENT countries.
 
 Return raw JSON only. No markdown. No explanation.`;
 }
 
 Deno.serve(async (req) => {
   try {
-    const { dish, mode, cellarWines, difficulty, userPreferences } = await req.json();
+    const { dish, mode, cellarWines, userPreferences, stylePreference, budget } = await req.json();
+    const currency = (userPreferences?.defaultCurrency as string | undefined) ?? 'GBP';
 
     const prompt = mode === 'cellar'
-      ? buildCellarPrompt(dish, cellarWines ?? [], difficulty, userPreferences)
-      : buildGeneralPrompt(dish, difficulty, userPreferences);
+      ? buildCellarPrompt(dish, cellarWines ?? [], stylePreference, budget, currency, userPreferences)
+      : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences);
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
