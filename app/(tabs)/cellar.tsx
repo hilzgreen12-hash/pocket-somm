@@ -90,48 +90,25 @@ export default function CellarTab() {
           <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={styles.buttonText}>Your Wines: Wine Racks and Cellar List</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
+          <Text style={styles.buttonText}>Your Full Cellar List</Text>
         </TouchableOpacity>
 
-        {/* Two half-width rows below Your Wines: Quick Cellar Stats sits
-            above Wish List on the left, Your Wine Reviews sits above
-            Archived Wines on the right. */}
-        <View style={[styles.buttonRow, { marginTop: spacing.lg }]}>
-          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
-            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Quick Cellar Stats</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
-            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Your Wine Reviews</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
+          <Text style={styles.buttonText}>Your Wine Racks & Fridges</Text>
+        </TouchableOpacity>
 
-        <View style={[styles.buttonRow, { marginTop: spacing.xs }]}>
-          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/wishlist'))}>
-            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Wish List</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.buttonHalf, { borderColor: '#FFFFFF' }]} onPress={() => requireAuth(() => router.push('/cellar/archive'))}>
-            <Text style={[styles.buttonText, { color: '#FFFFFF' }]}>Archived Wines</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
+          <Text style={styles.buttonText}>Quick Cellar Stats</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
-      {/* Section 3 — Import */}
       <View style={styles.section}>
-        <Text style={styles.sectionDesc}>
-          Import wines into your cellar from a photo (printed inventory, receipt, invoice) or a spreadsheet (CSV with columns: wine, producer, region, vintage, quantity, price).
-        </Text>
-        <Text style={styles.comingSoonNote}>(coming soon)</Text>
-        <View style={styles.buttonRow}>
-          <View style={[styles.buttonHalf, styles.buttonDisabled]}>
-            <Text style={styles.buttonTextDisabled}>Photo / Receipt</Text>
-          </View>
-          <View style={[styles.buttonHalf, styles.buttonDisabled]}>
-            <Text style={styles.buttonTextDisabled}>Upload Spreadsheet</Text>
-          </View>
-        </View>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
+          <Text style={styles.buttonText}>Your Wine Reviews</Text>
+        </TouchableOpacity>
       </View>
 
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
