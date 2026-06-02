@@ -12,7 +12,6 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { normaliseCity } from '../../src/utils/city';
@@ -52,8 +51,6 @@ export default function ResultsScreen() {
   // a row id stored, the same button removes it; otherwise it adds
   // and stashes the new id. Lets a user undo an accidental tap
   // without leaving the screen.
-  const [wishlistRowIds, setWishlistRowIds] = useState<Record<number, string>>({});
-  const { addWine: addToWishList, deleteWine: removeFromWishList } = useWishList();
   const { save: saveChosen, update: updateChosen, chosenWines } = useChosenWines();
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
@@ -278,55 +275,6 @@ export default function ResultsScreen() {
     }
   }
 
-  async function handleToggleWishlist(wine: WineRecommendation, i: number) {
-    if (!session) return;
-    const existingId = wishlistRowIds[i];
-
-    // Already on the wish list — tap removes it. Lets the user undo
-    // an accidental add without navigating away from the recommendation.
-    if (existingId) {
-      try {
-        await removeFromWishList.mutateAsync(existingId);
-        setWishlistRowIds((prev) => {
-          const next = { ...prev };
-          delete next[i];
-          return next;
-        });
-      } catch (err) {
-        showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
-      }
-      return;
-    }
-
-    // Not on the wish list yet — add it and stash the new row id so a
-    // subsequent tap can remove it.
-    try {
-      const created = await addToWishList.mutateAsync({
-        user_id: session.user.id,
-        wine_name: wine.name,
-        producer: wine.producer,
-        region: wine.region ?? null,
-        vintage: wine.vintage ? String(wine.vintage) : null,
-        quantity: 1,
-        storage_location: null,
-        date_received: new Date().toISOString().split('T')[0],
-        critic_score: wine.criticScore ?? null,
-        drinking_window_from: wine.drinkingWindow?.from ?? null,
-        drinking_window_to: wine.drinkingWindow?.to ?? null,
-        drinking_window_status: 'unknown',
-        tasting_notes: null,
-        grape_variety: wine.grape ?? null,
-        label_image_path: null,
-        user_notes: null,
-        is_wishlist: true,
-      });
-      if (created?.id) {
-        setWishlistRowIds((prev) => ({ ...prev, [i]: created.id }));
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
 
   async function handleAlternativeList() {
     if (!extractedWines || !recommendation) return;
@@ -674,16 +622,6 @@ export default function ResultsScreen() {
                       activeOpacity={0.7}
                     >
                       <Text style={styles.detailActionBtnText}>Review Wine</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.detailActionBtn, !!wishlistRowIds[i] && styles.detailActionBtnDone]}
-                      onPress={() => handleToggleWishlist(wine, i)}
-                      disabled={addToWishList.isPending || removeFromWishList.isPending}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.detailActionBtnText, !!wishlistRowIds[i] && styles.detailActionBtnTextDone]}>
-                        {wishlistRowIds[i] ? '✓ On Wish List — tap to remove' : 'Add to Wish List'}
-                      </Text>
                     </TouchableOpacity>
                   </View>
                 )}
