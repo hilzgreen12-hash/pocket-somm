@@ -3,9 +3,9 @@ import { useFocusEffect } from 'expo-router';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
-import { TabFooter } from '../../src/components/TabFooter';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
+import { VinsterHeader } from '../../src/components/VinsterHeader';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 if (Platform.OS === 'android') {
@@ -249,6 +249,7 @@ export default function ScanTab() {
     >
 
       <View style={styles.header}>
+        <VinsterHeader />
         <View style={styles.titleRow}>
           <Text style={styles.appName}>List</Text>
         </View>
@@ -323,9 +324,6 @@ export default function ScanTab() {
             <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Wine List'}</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
-          <Text style={styles.buttonHalfText}>Your Restaurants</Text>
-        </TouchableOpacity>
         <TouchableOpacity onPress={handleViewLastSearch}>
           <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
@@ -365,7 +363,6 @@ export default function ScanTab() {
       />
 
     </ScrollView>
-    <TabFooter />
     </TabSwipeView>
   );
 }

@@ -1,7 +1,6 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal, ActivityIndicator } from 'react-native';
 import { useRef, useState } from 'react';
 import { router } from 'expo-router';
-import { TabFooter } from '../../src/components/TabFooter';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
@@ -9,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
+import { VinsterHeader } from '../../src/components/VinsterHeader';
 
 const CELLAR_HELP = `Add Wine/Generate Wine Intel – This function will return a wine's critic score, tasting and quality notes, drinking window, and market price, then give you the option to add to it to your cellar.
 
@@ -76,6 +76,8 @@ export default function CellarTab() {
   return (
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
+
+      <VinsterHeader />
 
       <View style={styles.titleRow}>
         <Text style={styles.title}>Cellar</Text>
@@ -171,7 +173,6 @@ export default function CellarTab() {
         onContinue={continueWithoutAccount}
       />
     </ScrollView>
-    <TabFooter />
     </TabSwipeView>
   );
 }

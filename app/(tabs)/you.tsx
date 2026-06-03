@@ -1,22 +1,24 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal, Keyboard } from 'react-native';
-import { showAlert } from '../src/components/AppAlert';
-import { ArchiveSignInPrompt } from '../src/components/ArchiveSignInPrompt';
+import { showAlert } from '../../src/components/AppAlert';
+import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { TabSwipeView } from '../../src/components/TabSwipeView';
+import { VinsterHeader } from '../../src/components/VinsterHeader';
 import * as Linking from 'expo-linking';
 import { router } from 'expo-router';
-import { useAuth } from '../src/hooks/useAuth';
-import { usePreferences } from '../src/hooks/usePreferences';
-import { supabase } from '../src/api/supabase';
-import { CURRENCIES } from '../src/constants/currency';
-import { colors, spacing } from '../src/constants/theme';
-import { fonts } from '../src/constants/fonts';
+import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { supabase } from '../../src/api/supabase';
+import { CURRENCIES } from '../../src/constants/currency';
+import { colors, spacing } from '../../src/constants/theme';
+import { fonts } from '../../src/constants/fonts';
 
 function formatJoinedDate(iso: string | undefined): string {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
-export default function AccountScreen() {
+export default function YouScreen() {
   const { session } = useAuth();
   const { preferences, updatePreferences } = usePreferences();
   const currentUsername = session?.user.user_metadata?.display_name ?? '';
@@ -38,10 +40,6 @@ export default function AccountScreen() {
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
   async function updateNotifySetting(key: string, value: boolean, revert: (v: boolean) => void) {
-    // Optimistic switch flip happens before this runs. If the update fails
-    // we revert the local state and surface an alert — previously this
-    // returned silently, so the next app launch quietly snapped back to the
-    // server's value with no explanation.
     try {
       const { error } = await supabase.auth.updateUser({ data: { [key]: value } });
       if (error) throw new Error(error.message);
@@ -131,16 +129,16 @@ export default function AccountScreen() {
 
   if (!session) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Text style={styles.backText}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.heading}>About You</Text>
-        <ArchiveSignInPrompt
-          title="Sign in to manage your account"
-          body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
-        />
-      </ScrollView>
+      <TabSwipeView style={styles.container}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+          <VinsterHeader />
+          <Text style={styles.heading}>You</Text>
+          <ArchiveSignInPrompt
+            title="Sign in to manage your account"
+            body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
+          />
+        </ScrollView>
+      </TabSwipeView>
     );
   }
 
@@ -161,12 +159,11 @@ export default function AccountScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
-      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
+    <TabSwipeView style={styles.container}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+      <VinsterHeader />
 
-      <Text style={styles.heading}>About You</Text>
+      <Text style={styles.heading}>You</Text>
 
       <Text style={styles.thanks}>You're one of the first 10,000 users — thank you for being here. Your subscription is on us.</Text>
 
@@ -240,6 +237,9 @@ export default function AccountScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Restaurants</Text>
         </TouchableOpacity>
       </View>
 
@@ -366,15 +366,13 @@ export default function AccountScreen() {
         </TouchableOpacity>
       </Modal>
     </ScrollView>
+    </TabSwipeView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: 40 },
-  backButton: { marginBottom: spacing.sm, alignSelf: 'flex-start' },
-  // Back nav link.
-  backText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  content: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 40 },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
   thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },

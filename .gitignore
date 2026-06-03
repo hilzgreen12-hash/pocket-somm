@@ -3,6 +3,11 @@
 # dependencies
 node_modules/
 
+# Brand design sources (kept locally; app uses the exported PNG/SVG assets)
+assets/*.ai
+assets/*.eps
+assets/*.pdf
+
 # Expo
 .expo/
 dist/

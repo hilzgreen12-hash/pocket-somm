@@ -6,7 +6,7 @@ import { router, useSegments } from 'expo-router';
 // Tab order matches the bottom tab bar left-to-right. Swipe left = next tab,
 // swipe right = previous tab. Wrap each tab screen's root in this view to
 // enable carousel-style navigation between the main tabs.
-const TAB_ORDER = ['scan', 'chef', 'cellar', 'community'] as const;
+const TAB_ORDER = ['scan', 'chef', 'cellar', 'community', 'you'] as const;
 
 // Tunables — set to feel firm enough that small finger drags don't trigger.
 const ACTIVATE_OFFSET = 30;   // px horizontal before the gesture takes over

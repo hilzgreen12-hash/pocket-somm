@@ -191,7 +191,6 @@ export default function RootLayout() {
             <Stack.Screen name="community/view" />
             <Stack.Screen name="community/search" />
             <Stack.Screen name="community/profile" />
-            <Stack.Screen name="account" />
             <Stack.Screen name="about" />
             <Stack.Screen name="age-gate" />
             <Stack.Screen name="legal/privacy" />

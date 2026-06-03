@@ -1,11 +1,10 @@
 import { useCallback, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { usePersonalityPrompt } from '../src/hooks/usePersonalityPrompt';
-import { TabFooter } from '../src/components/TabFooter';
 import { PersonalityPromptModal } from '../src/components/PersonalityPromptModal';
 import { supabase } from '../src/api/supabase';
 import { splitPersonality } from '../src/utils/personalityText';
@@ -169,7 +168,7 @@ export default function HomeScreen() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.hero}>
-          <Text style={styles.appName}>VINSTER</Text>
+          <Image source={require('../assets/vinster-logo.png')} style={styles.logo} resizeMode="contain" />
           <Text style={styles.tagline}>Your AI Sommelier</Text>
           <View style={styles.ruleRow}>
             <View style={styles.rule} />
@@ -203,8 +202,6 @@ export default function HomeScreen() {
           })}
         </View>
       </ScrollView>
-
-      <TabFooter />
 
       <PersonalityPromptModal
         visible={!!personalityCategory && !promptDismissed}
@@ -259,6 +256,7 @@ const styles = StyleSheet.create({
   // small decorative rule with a diamond marker so the brand block reads
   // more "wine list" than "app shell".
   hero: { alignItems: 'center', marginBottom: spacing.lg },
+  logo: { width: 240, height: 210, marginBottom: spacing.xs },
   appName: { fontFamily: fonts.headingBold, fontSize: 44, color: '#FFFFFF', letterSpacing: 8 },
   tagline: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, marginTop: 2, letterSpacing: 1 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.sm, marginBottom: spacing.sm, paddingHorizontal: spacing.xxl },

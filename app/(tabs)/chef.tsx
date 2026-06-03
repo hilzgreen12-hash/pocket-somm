@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
 import { router } from 'expo-router';
-import { TabFooter } from '../../src/components/TabFooter';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
+import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
@@ -81,6 +81,8 @@ export default function ChefTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
+      <VinsterHeader />
+
       <View style={styles.titleRow}>
         <Text style={styles.appName}>Chef</Text>
       </View>
@@ -136,8 +138,6 @@ export default function ChefTab() {
         </TouchableOpacity>
       </Modal>
     </ScrollView>
-
-    <TabFooter />
     </TabSwipeView>
   );
 }
