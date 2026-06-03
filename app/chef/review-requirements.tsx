@@ -241,7 +241,7 @@ export default function ReviewRequirementsScreen() {
             <Text style={styles.continueButtonText}>Scan A Wine Label</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.continueButton, { marginTop: spacing.sm }]} onPress={handleUpload}>
-            <Text style={styles.continueButtonText}>Upload Label</Text>
+            <Text style={styles.continueButtonText}>Upload A Wine Label</Text>
           </TouchableOpacity>
         </>
       )}

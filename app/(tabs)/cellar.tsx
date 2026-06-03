@@ -130,7 +130,7 @@ export default function CellarTab() {
               style={[styles.modalButton, { marginTop: spacing.sm }]}
               onPress={() => { setAddWineOpen(false); handleUpload(); }}
             >
-              <Text style={styles.modalButtonText}>Upload Label</Text>
+              <Text style={styles.modalButtonText}>Upload A Wine Label</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
