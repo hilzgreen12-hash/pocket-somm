@@ -25,7 +25,7 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 const LIST_HELP = `Point your camera at any wine list — or upload a screenshot — and Vinster reads every bottle on the page.
 
-It weighs each one against your preferences (wine type, style, what you're eating, your budget) and everything it's learned about your taste, then hands you its top three — each with critic scores, vintage notes, value against market price, and when to drink.
+It weighs each one against your preferences — wine type, style, what you're eating, your budget — and against its own criteria of critic score, value compared to market, vintage quality, and readiness for drinking, before handing you its top three.
 
 Tap "Review Wine" on the one you ordered and it lands in Your Wine Reviews, quietly helping Vinster know you better next time. You can review the restaurants you've visited too, kept in Your Restaurants and ready to share with the community.`;
 
