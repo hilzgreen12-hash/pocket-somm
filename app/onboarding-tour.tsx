@@ -14,22 +14,27 @@ const SLIDES: Slide[] = [
   {
     badge: 'List',
     title: 'Scan any wine list',
-    body: 'Like the smoothest Somm, Vinster reads any restaurant list and offers three wines fitted to your taste, budget, and what you\'re eating. Sweat over your wine pairing no longer.',
+    body: 'Point your camera at any wine list and Vinster will dive deep into online resources to find the best wines for your tastes based on critic scores, value for money, rarity, vintage quality and drinkability. Don\'t ever sweat a wine pairing again.',
   },
   {
     badge: 'Chef',
     title: 'Cook & Drink better',
-    body: 'Tell Vinster what you\'re cooking and it offers you a wine, scan a label and it serves up three chef-inspired recipes.',
+    body: 'Tell Vinster what you\'re cooking and it offers you a wine, scan a label and it serves up three chef-inspired recipes. Save, edit and organise your recipes in your Cookbook for future reference.',
   },
   {
     badge: 'Cellar',
     title: 'Save & Track',
-    body: 'Scan labels to input your wines and have your cellar stats all in one place — what you paid, what it\'s worth, when to drink it, and even where the heck it is in your home cellar.',
+    body: 'Photograph your wine racks and fridges for digital storage that mirrors your own. Scan wine labels to input your collection while generating market and quality intel. All your wine stats and reviews at your fingertips, even a locator to know where every bottle is in your cellar.',
   },
   {
-    badge: 'Personality + Community',
-    title: 'Meet your gastronomic self & others',
-    body: 'Vinster watches how you drink and what you eat not only to improve your recommendations, it sketches a witty character profile of you to share with friends and within the Vinster community.',
+    badge: 'You',
+    title: 'Meet your Vinous and Gastronomic Alter-Egos',
+    body: 'Vinster tracks how you drink and what you\'re cooking not only to improve its recommendations. The more you engage with each function Vinster is able to sketch witty personality profiles based on your likes and leanings which you can share with friends and within the Vinster community.',
+  },
+  {
+    badge: 'Community',
+    title: 'Find your people',
+    body: 'Where you can share experiences with wines, restaurants, and recipes. A vibrant community of those who share your enthusiasm for matters of taste. Coming soon.',
   },
 ];
 
