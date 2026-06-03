@@ -11,8 +11,8 @@ import { generatePairings, prepareImageBase64, scanLabel } from '../../src/api/l
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-const DIETARY_OPTIONS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian'];
-const ALLERGY_OPTIONS = ['None', 'Nut Free', 'Dairy Free', 'Gluten Free'];
+const DIETARY_OPTIONS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian', 'Other'];
+const ALLERGY_OPTIONS = ['None', 'Nut Free', 'Dairy Free', 'Gluten Free', 'Other'];
 const DIFFICULTY_OPTIONS = ['Any', 'Super Simple', 'Easy to Moderate', 'Challenging', 'Very Technical'];
 
 const TIME_OPTIONS: { value: string; label: string; sub?: string }[] = [
@@ -43,6 +43,9 @@ export default function ReviewRequirementsScreen() {
 
   const [dietary, setDietary] = useState<string>('None');
   const [allergy, setAllergy] = useState<string>('None');
+  // Free-text entries revealed when "Other" is chosen in either dropdown.
+  const [customDietary, setCustomDietary] = useState('');
+  const [customAllergy, setCustomAllergy] = useState('');
   const [specificConcerns, setSpecificConcerns] = useState('');
   const [difficulty, setDifficulty] = useState<string>('Any');
   const [timeChoice, setTimeChoice] = useState<string>('any');
@@ -60,8 +63,12 @@ export default function ReviewRequirementsScreen() {
   function buildFilters() {
     const profileDietary = preferences?.dietaryNeeds ?? [];
     const profileAllergies = preferences?.allergyRisks ?? [];
-    const dietaryAdds = dietary !== 'None' ? [dietary] : [];
-    const allergyAdds = allergy !== 'None' ? [allergy] : [];
+    const dietaryAdds = dietary === 'Other'
+      ? (customDietary.trim() ? [customDietary.trim()] : [])
+      : dietary !== 'None' ? [dietary] : [];
+    const allergyAdds = allergy === 'Other'
+      ? (customAllergy.trim() ? [customAllergy.trim()] : [])
+      : allergy !== 'None' ? [allergy] : [];
     const mergedDietary = Array.from(new Set([...profileDietary, ...dietaryAdds]));
     const mergedAllergies = Array.from(new Set([...profileAllergies, ...allergyAdds]));
     const mergedConcerns = [
@@ -200,12 +207,32 @@ export default function ReviewRequirementsScreen() {
         <Text style={styles.selectValue}>{dietary}</Text>
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
+      {dietary === 'Other' ? (
+        <TextInput
+          style={styles.customInput}
+          value={customDietary}
+          onChangeText={setCustomDietary}
+          placeholder="Type your dietary need"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="sentences"
+        />
+      ) : null}
 
       <Text style={styles.label}>Allergies <Text style={styles.labelHint}>(additional to your settings)</Text></Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('allergy')}>
         <Text style={styles.selectValue}>{allergy}</Text>
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
+      {allergy === 'Other' ? (
+        <TextInput
+          style={styles.customInput}
+          value={customAllergy}
+          onChangeText={setCustomAllergy}
+          placeholder="Type your allergy"
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="sentences"
+        />
+      ) : null}
 
       <Text style={styles.label}>Specific Requirements</Text>
       <TextInput
@@ -314,6 +341,8 @@ const styles = StyleSheet.create({
   // Lower-case parenthetical beside the Dietary/Allergies labels.
   labelHint: { textTransform: 'none', fontFamily: fonts.bodyItalic, fontSize: 11, letterSpacing: 0, color: colors.textMuted },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
+  // Free-text box shown when "Other" is picked in the Dietary/Allergies dropdowns.
+  customInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginTop: -spacing.sm, marginBottom: spacing.lg },
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: colors.surface, marginBottom: spacing.lg },
   selectValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, flex: 1 },
   selectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },

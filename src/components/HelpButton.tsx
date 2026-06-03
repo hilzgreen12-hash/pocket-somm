@@ -62,7 +62,7 @@ const styles = StyleSheet.create({
   link: {
     fontSize: 13,
     fontFamily: fonts.bodyRegular,
-    color: '#FFFFFF',
+    color: colors.gold,
     textDecorationLine: 'underline',
     textAlign: 'center',
     marginTop: spacing.sm,
