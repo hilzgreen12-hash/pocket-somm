@@ -23,5 +23,5 @@ export function VinsterHeader() {
 
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', alignSelf: 'center', marginBottom: spacing.xs },
-  mark: { width: 48, height: 48 },
+  mark: { width: 64, height: 64 },
 });
