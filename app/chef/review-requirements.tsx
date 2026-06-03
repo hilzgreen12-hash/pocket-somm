@@ -1,12 +1,13 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, Modal, Image, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
+import * as ImagePicker from 'expo-image-picker';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { generatePairings } from '../../src/api/label';
+import { generatePairings, prepareImageBase64, scanLabel } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -27,10 +28,17 @@ type DropdownField = 'dietary' | 'allergy' | 'difficulty' | 'time' | null;
 export default function ReviewRequirementsScreen() {
   useKeepAwake();
   const { from, wineId } = useLocalSearchParams<{ from?: string; wineId?: string }>();
+  // Two entry modes:
+  //  - from === 'cellar': the bottle is already known (came from a cellar
+  //    wine card). We generate pairings immediately ("Get Pairings").
+  //  - otherwise (Chef tab "Find Me a Recipe"): no bottle yet. We capture the
+  //    requirements here, then scan/upload the label; pairings are generated
+  //    after the wine is confirmed.
+  const isFromCellar = from === 'cellar';
   // When the user arrived from the cellar wine card, thread the source
   // through to /chef/results so its Back button can route home properly.
-  const resultsQuery = from === 'cellar' && wineId ? `?from=cellar&wineId=${wineId}` : '';
-  const { wineDetailsConfirmed, setPairings, setError, setFilters } = useLabelStore();
+  const resultsQuery = isFromCellar && wineId ? `?from=cellar&wineId=${wineId}` : '';
+  const { wineDetailsConfirmed, setPairings, setError, setFilters, setImage, setWineDetails } = useLabelStore();
   const { preferences } = usePreferences();
 
   const [dietary, setDietary] = useState<string>('None');
@@ -40,10 +48,45 @@ export default function ReviewRequirementsScreen() {
   const [timeChoice, setTimeChoice] = useState<string>('any');
   const [loading, setLoading] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<DropdownField>(null);
+  // Holds the picked screenshot while it's being read (Mode B upload).
+  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
 
   const timeBlock = TIME_OPTIONS.find((t) => t.value === timeChoice) ?? TIME_OPTIONS[0];
   const timeDisplay = timeBlock.sub ? `${timeBlock.label} · ${timeBlock.sub}` : timeBlock.label;
 
+  // Combine profile preferences with the per-pairing additions chosen here.
+  // Profile values stay the baseline; this screen adds extras for THIS recipe
+  // only. "None" / "Any" act as no-op selections.
+  function buildFilters() {
+    const profileDietary = preferences?.dietaryNeeds ?? [];
+    const profileAllergies = preferences?.allergyRisks ?? [];
+    const dietaryAdds = dietary !== 'None' ? [dietary] : [];
+    const allergyAdds = allergy !== 'None' ? [allergy] : [];
+    const mergedDietary = Array.from(new Set([...profileDietary, ...dietaryAdds]));
+    const mergedAllergies = Array.from(new Set([...profileAllergies, ...allergyAdds]));
+    const mergedConcerns = [
+      preferences?.specificConcerns?.trim() || '',
+      specificConcerns.trim(),
+    ].filter(Boolean).join('. ');
+
+    const timeLabel = timeChoice !== 'any' && timeBlock.sub
+      ? `${timeBlock.label} (${timeBlock.sub})`
+      : null;
+
+    return {
+      dietary: (mergedDietary[0] ?? null) as any,
+      allergens: mergedAllergies as any,
+      customAllergen: '',
+      dietaryNote: null,
+      difficulty: difficulty !== 'Any' ? difficulty : null,
+      timeConsideration: timeLabel,
+      specificConcerns: mergedConcerns || null,
+      regionalPreferences: preferences?.regionalPreferences ?? [],
+      nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
+    };
+  }
+
+  // Mode A (from a cellar wine) — the bottle is already known, so generate now.
   async function handleContinue() {
     if (!wineDetailsConfirmed) {
       showAlert({ title: 'Missing wine details', body: 'Please confirm the wine first.' });
@@ -52,35 +95,7 @@ export default function ReviewRequirementsScreen() {
     }
     setLoading(true);
     try {
-      // Combine profile preferences with the per-pairing additions chosen
-      // here. Profile values stay the baseline; this screen adds extras for
-      // THIS recipe only. "None" / "Any" act as no-op selections.
-      const profileDietary = preferences?.dietaryNeeds ?? [];
-      const profileAllergies = preferences?.allergyRisks ?? [];
-      const dietaryAdds = dietary !== 'None' ? [dietary] : [];
-      const allergyAdds = allergy !== 'None' ? [allergy] : [];
-      const mergedDietary = Array.from(new Set([...profileDietary, ...dietaryAdds]));
-      const mergedAllergies = Array.from(new Set([...profileAllergies, ...allergyAdds]));
-      const mergedConcerns = [
-        preferences?.specificConcerns?.trim() || '',
-        specificConcerns.trim(),
-      ].filter(Boolean).join('. ');
-
-      const timeLabel = timeChoice !== 'any' && timeBlock.sub
-        ? `${timeBlock.label} (${timeBlock.sub})`
-        : null;
-
-      const filters = {
-        dietary: (mergedDietary[0] ?? null) as any,
-        allergens: mergedAllergies as any,
-        customAllergen: '',
-        dietaryNote: null,
-        difficulty: difficulty !== 'Any' ? difficulty : null,
-        timeConsideration: timeLabel,
-        specificConcerns: mergedConcerns || null,
-        regionalPreferences: preferences?.regionalPreferences ?? [],
-        nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
-      };
+      const filters = buildFilters();
       const pairings = await generatePairings(wineDetailsConfirmed, filters);
       setPairings(pairings);
       setFilters(filters as unknown as Record<string, unknown>);
@@ -92,6 +107,35 @@ export default function ReviewRequirementsScreen() {
       showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
     } finally {
       setLoading(false);
+    }
+  }
+
+  // Mode B (from the Chef tab) — stash the requirements, then capture the wine
+  // label. Pairings are generated once the wine is confirmed (chef/confirm).
+  function handleScan() {
+    setFilters(buildFilters() as unknown as Record<string, unknown>);
+    router.push('/chef/camera');
+  }
+
+  async function handleUpload() {
+    setFilters(buildFilters() as unknown as Record<string, unknown>);
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    // Show the picked photo + a "Reading the label…" overlay during the
+    // base64-prepare + Claude scan call, mirroring the camera flow.
+    setUploadingImage(uri);
+    try {
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+      router.push('/chef/confirm');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to scan label');
+      router.push('/chef/confirm');
+    } finally {
+      setUploadingImage(null);
     }
   }
 
@@ -187,9 +231,20 @@ export default function ReviewRequirementsScreen() {
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={[styles.continueButton, loading && styles.buttonDisabled]} onPress={handleContinue} disabled={loading}>
-        <Text style={styles.continueButtonText}>{loading ? 'Crafting pairings…' : 'Get Pairings'}</Text>
-      </TouchableOpacity>
+      {isFromCellar ? (
+        <TouchableOpacity style={[styles.continueButton, loading && styles.buttonDisabled]} onPress={handleContinue} disabled={loading}>
+          <Text style={styles.continueButtonText}>{loading ? 'Crafting pairings…' : 'Get Pairings'}</Text>
+        </TouchableOpacity>
+      ) : (
+        <>
+          <TouchableOpacity style={styles.continueButton} onPress={handleScan}>
+            <Text style={styles.continueButtonText}>Scan A Wine Label</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.continueButton, { marginTop: spacing.sm }]} onPress={handleUpload}>
+            <Text style={styles.continueButtonText}>Upload Wine Label Screenshot</Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       <TouchableOpacity style={styles.back} onPress={() => router.back()}>
         <Text style={styles.backText}>Back</Text>
@@ -231,6 +286,21 @@ export default function ReviewRequirementsScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Upload-in-progress overlay (Mode B) — shows the picked screenshot
+          with a spinner while it's being read. */}
+      <Modal visible={!!uploadingImage} transparent animationType="fade">
+        <View style={styles.uploadOverlay}>
+          {uploadingImage ? (
+            <Image source={{ uri: uploadingImage }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+          ) : null}
+          <View style={styles.uploadScrim} />
+          <View style={styles.uploadStatus}>
+            <ActivityIndicator size="large" color={colors.gold} />
+            <Text style={styles.uploadStatusText}>Reading the label…</Text>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -262,4 +332,8 @@ const styles = StyleSheet.create({
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  uploadOverlay: { flex: 1, backgroundColor: '#000' },
+  uploadScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.55)' },
+  uploadStatus: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl },
+  uploadStatusText: { fontFamily: fonts.bodySemibold, fontSize: 18, color: '#FFFFFF', letterSpacing: 0.5, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4, textAlign: 'center' },
 });

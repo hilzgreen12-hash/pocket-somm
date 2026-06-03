@@ -3,22 +3,25 @@ import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react
 import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
 
 export default function ChefConfirmScreen() {
   useKeepAwake();
-  const { wineDetails, setWineDetailsConfirmed } = useLabelStore();
+  const { wineDetails, filters, setWineDetailsConfirmed, setPairings, setError } = useLabelStore();
 
   const [producer, setProducer] = useState(wineDetails?.producer ?? '');
   const [region, setRegion] = useState(wineDetails?.region ?? '');
   const [wineName, setWineName] = useState(wineDetails?.wineName ?? '');
   const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
   const [style, setStyle] = useState(wineDetails?.style ?? '');
+  const [loading, setLoading] = useState(false);
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (!producer.trim() || !region.trim()) {
       showAlert({ title: 'Missing details', body: 'Producer and region are required.' });
       return;
@@ -33,7 +36,36 @@ export default function ChefConfirmScreen() {
     };
 
     setWineDetailsConfirmed(confirmed);
-    router.push('/chef/review-requirements');
+
+    // The recipe requirements were captured before scanning (Chef tab flow),
+    // so generate the pairings now and go straight to the results. If we
+    // somehow arrived without requirements, fall back to collecting them.
+    if (!filters) {
+      router.push('/chef/review-requirements');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const pairings = await generatePairings(confirmed, filters as any);
+      setPairings(pairings);
+      router.replace('/chef/results');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate pairings');
+      showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
+      setLoading(false);
+    }
+  }
+
+  if (loading) {
+    return (
+      <SearchProgress
+        title="Crafting your pairings…"
+        subtitle="Vinster needs up to a minute for your result"
+        body="Vinster is selecting three chef-inspired dishes to complement your wine"
+        durationMs={65000}
+      />
+    );
   }
 
   return (
