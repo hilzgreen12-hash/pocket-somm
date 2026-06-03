@@ -354,7 +354,7 @@ export default function LabelResultsScreen() {
       setPendingWineId(savedWineId);
       setPendingStorageType('rack');
       setAddingToCellar(false);
-      router.replace('/cellar/rack/camera');
+      router.replace('/cellar/rack/camera?intro=1');
       return;
     }
 
