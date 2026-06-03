@@ -23,15 +23,11 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-const LIST_HELP = `Scan a wine list or upload a screenshot, and Vinster (powered by Anthropic's Claude AI) reads every bottle on the page.
+const LIST_HELP = `Point your camera at any wine list — or upload a screenshot — and Vinster reads every bottle on the page.
 
-It then weighs each one against the preferences you've set — wine type, style, the food you're eating, your budget — and against everything it's learned about your taste from past scans and reviews, before recommending three.
+It weighs each one against your preferences (wine type, style, what you're eating, your budget) and everything it's learned about your taste, then hands you its top three — each with critic scores, vintage notes, value against market price, and when to drink.
 
-For each recommendation Vinster pulls in critic scores, vintage notes, value compared to market prices, and drinking windows.
-
-Tap "Review This Wine" on the one you actually ordered. It goes into Your Wine Reviews and quietly helps Vinster get to know you a little better for next time.
-
-You can also review the restaurants you've visited, all saved within Your Restaurants and ready to share with the Vinster community.`;
+Tap "Review Wine" on the one you ordered and it lands in Your Wine Reviews, quietly helping Vinster know you better next time. You can review the restaurants you've visited too, kept in Your Restaurants and ready to share with the community.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
