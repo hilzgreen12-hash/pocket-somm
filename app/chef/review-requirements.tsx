@@ -195,13 +195,13 @@ export default function ReviewRequirementsScreen() {
         Vinster will use your profile preferences to guide its recipe recommendations. Input any dietary restrictions or allergies to consider for this particular recipe below.
       </Text>
 
-      <Text style={styles.label}>Dietary Concerns</Text>
+      <Text style={styles.label}>Dietary Concerns <Text style={styles.labelHint}>(additional to your settings)</Text></Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('dietary')}>
         <Text style={styles.selectValue}>{dietary}</Text>
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
 
-      <Text style={styles.label}>Allergies</Text>
+      <Text style={styles.label}>Allergies <Text style={styles.labelHint}>(additional to your settings)</Text></Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('allergy')}>
         <Text style={styles.selectValue}>{allergy}</Text>
         <Text style={styles.selectArrow}>▾</Text>
@@ -311,6 +311,8 @@ const styles = StyleSheet.create({
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
   subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
   label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Lower-case parenthetical beside the Dietary/Allergies labels.
+  labelHint: { textTransform: 'none', fontFamily: fonts.bodyItalic, fontSize: 11, letterSpacing: 0, color: colors.textMuted },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: colors.surface, marginBottom: spacing.lg },
   selectValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, flex: 1 },
