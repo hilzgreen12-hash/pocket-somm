@@ -129,6 +129,7 @@ export interface DietaryFilters {
   specificConcerns?: string | null;
   regionalPreferences?: string[];
   nutritionalPreferences?: string[];
+  servings?: number | null;
 }
 
 // Cellar types

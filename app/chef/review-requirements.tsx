@@ -23,7 +23,7 @@ const TIME_OPTIONS: { value: string; label: string; sub?: string }[] = [
   { value: 'low_slow',   label: 'Low & Slow',             sub: '3 hours plus' },
 ];
 
-type DropdownField = 'dietary' | 'allergy' | 'difficulty' | 'time' | null;
+type DropdownField = 'dietary' | 'allergy' | 'difficulty' | 'time' | 'people' | null;
 
 export default function ReviewRequirementsScreen() {
   useKeepAwake();
@@ -49,6 +49,7 @@ export default function ReviewRequirementsScreen() {
   const [specificConcerns, setSpecificConcerns] = useState('');
   const [difficulty, setDifficulty] = useState<string>('Any');
   const [timeChoice, setTimeChoice] = useState<string>('any');
+  const [people, setPeople] = useState<string>('2');
   const [loading, setLoading] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<DropdownField>(null);
   // Holds the picked screenshot while it's being read (Mode B upload).
@@ -90,6 +91,7 @@ export default function ReviewRequirementsScreen() {
       specificConcerns: mergedConcerns || null,
       regionalPreferences: preferences?.regionalPreferences ?? [],
       nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
+      servings: parseInt(people, 10) || null,
     };
   }
 
@@ -190,6 +192,14 @@ export default function ReviewRequirementsScreen() {
         onSelect: setTimeChoice,
       };
     }
+    if (field === 'people') {
+      return {
+        title: 'How many people are you cooking for?',
+        options: Array.from({ length: 12 }, (_, i) => ({ value: String(i + 1), label: String(i + 1) })),
+        selected: people,
+        onSelect: setPeople,
+      };
+    }
     return null;
   }
 
@@ -255,6 +265,12 @@ export default function ReviewRequirementsScreen() {
       <Text style={styles.label}>Time Consideration</Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('time')}>
         <Text style={styles.selectValue}>{timeDisplay}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.label}>How many people are you cooking for?</Text>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('people')}>
+        <Text style={styles.selectValue}>{people}</Text>
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
 

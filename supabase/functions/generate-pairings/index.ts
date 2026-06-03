@@ -54,6 +54,11 @@ function buildPrompt(
     ? `\nTime Budget (HARD RULE — combined prep + cook time must fit): ${timeConsideration}. The user has chosen this window deliberately; do not propose dishes that exceed it. "Time is of the Essence" = under 30 minutes total. "Easy Breezy" = under 1 hour total. "I've got all day" = up to 3 hours total. "Low & Slow" = 3 hours or more (lean into braises, slow roasts, fermentation, stocks, anything that benefits from extended time).\n`
     : `\nTime Budget: NOT specified by the user. Default to MIDDLING timeframes — each recipe's combined prep + cook should sit around 45–75 minutes (sweet spot for a deliberate weeknight or relaxed weekend dinner). Avoid both extremes — nothing under 30 minutes and nothing over 90 minutes.\n`;
 
+  const servings = filters.servings as number | undefined;
+  const servingsBlock = servings && servings > 0
+    ? `\nServings (HARD RULE): the user is cooking for ${servings} ${servings === 1 ? 'person' : 'people'}. Scale every recipe's ingredient quantities to serve exactly ${servings}, and set "servings" to ${servings} in each recipe.\n`
+    : '';
+
   const constraintBlock = constraints.length > 0
     ? `\nDietary & Allergen Constraints (STRICT — all three recipes must comply):\n${constraints.map((c) => `- ${c}`).join('\n')}\n`
     : '';
@@ -122,7 +127,7 @@ Wine Details:
 - Producer: ${wine.producer}
 - Region: ${wine.region}${wineNameStr}
 - Vintage: ${vintageStr}${colourStr}
-${constraintBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
+${constraintBlock}${servingsBlock}${softBlock}${asianBlock}${regionalDiversityBlock}${excludeChefsBlock}${additionalRequestBlock}${difficultyBlock}${diversityBlock}${timeBlock}
 Based on this wine's likely taste profile — considering its origin, regional traditions, grape variety, and vintage character — suggest exactly 3 dishes that would pair beautifully with it. Each recipe should be inspired by a real, well-known chef whose culinary style and regional cuisine are a natural fit for the pairing.
 
 Return ONLY a valid JSON object with this exact structure:
