@@ -1,4 +1,4 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image } from 'react-native';
 import { Redirect, router } from 'expo-router';
 import { useAuth } from '../src/hooks/useAuth';
 import { colors, spacing } from '../src/constants/theme';
@@ -17,7 +17,7 @@ export default function WelcomeScreen() {
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <View style={styles.hero}>
-        <Text style={styles.appName}>Vinster</Text>
+        <Image source={require('../assets/vinster-logo-caps.png')} style={styles.logo} resizeMode="contain" />
         <Text style={styles.tagline}>Your AI Somm — learning your tastes and fancies with every use, keeping your gastronomic life organised.</Text>
       </View>
 
@@ -80,6 +80,11 @@ const styles = StyleSheet.create({
   },
   hero: {
     alignItems: 'center',
+  },
+  logo: {
+    width: 230,
+    height: 190,
+    marginBottom: spacing.xs,
   },
   appName: {
     fontFamily: fonts.headingBold,
