@@ -89,7 +89,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Tell Vinster what you're cooking and it'll offer you a wine. Select your bottle first for an original, tailored recipe sure to satisfy. Keep, organise, and share your recipes to grow your cookbook.
+          Tell Vinster what you're cooking and it'll offer you a wine. What you're drinking and it'll generate original, chef-inspired recipes tailored to your tastes. Keep, organise, and share your recipes in Your Cookbook.
         </Text>
         <HelpButton label="More About Chef" title="How Chef works" body={CHEF_HELP} />
       </View>
