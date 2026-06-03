@@ -12,13 +12,13 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
-const CHEF_HELP = `Chef works two ways.
+const CHEF_HELP = `Chef works both ways.
 
-Start with a wine and Vinster picks a chef-style recipe to pair with it. Or start with a dish — and Vinster will suggest wines, either from your own cellar or out in the wild.
+Scan a wine and Vinster cooks up three original, chef-inspired recipes to match it — or tell Vinster what you're making and it'll pour you the perfect wine, from your own cellar or out in the wild.
 
-The recipes are generated fresh by Anthropic's Claude AI each time, not pulled from a database. They bend to your dietary needs, the food you usually cook, and the bottle you're matching to. Save your favourites to your Cookbook for later, and share them within the Vinster community or friends outside.
+Every recipe is dreamed up fresh and shaped around your dietary needs, the food you love, and the bottle you're pairing — and the more Vinster learns your tastes, the more personal it gets.
 
-The same AI reads your wine preferences, your recipe requirements, and your history — so each recipe and wine pairing is personal.`;
+Keep your favourites in Your Cookbook, and share them with the Vinster community or friends beyond it.`;
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();
