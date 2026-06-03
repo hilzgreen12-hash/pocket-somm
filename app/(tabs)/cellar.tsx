@@ -10,13 +10,11 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 
-const CELLAR_HELP = `Add Wine/Generate Wine Intel – This function will return a wine's critic score, tasting and quality notes, drinking window, and market price, then give you the option to add to it to your cellar.
+const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bottle by hand — and Vinster fills in the details for you: critic scores, tasting notes, drinking windows, and what each bottle is worth today.
 
-Your Wines: Wine Racks and Cellar List – Now this is cool, Vinster builds virtual wine racks that mirror your home storage using quick scan functions. Keep track of where your wines are, and see what's ready for drinking.
+Build virtual racks and fridges that mirror your real storage, so you always know where a bottle is and what's ready to open.
 
-How the rack works – Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.
-
-Keep track of your wine reviews, as well as wish list and archived wines, and see all of your cellar stats in one place.`;
+See your whole collection at a glance — bottles, value and stats — keep your own tasting reviews, and tuck anything you've drunk or gifted into your archive. Less time hunting, more time pouring.`;
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
