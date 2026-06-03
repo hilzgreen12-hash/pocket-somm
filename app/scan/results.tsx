@@ -594,37 +594,25 @@ export default function ResultsScreen() {
                 <View style={styles.paramBlock}>
                   {criticScoreText ? (
                     <Text style={styles.paramText}>
-                      <Text style={styles.paramLabel}>Critic Score — </Text>{criticScoreText}
+                      <Text style={styles.paramLabel}>Critic Score</Text>{`  ${criticScoreText}`}
                     </Text>
                   ) : null}
                   {valueText ? (
                     <Text style={styles.paramText}>
-                      <Text style={styles.paramLabel}>Value — </Text>{valueText}
+                      <Text style={styles.paramLabel}>Value</Text>{`  ${valueText}`}
                     </Text>
                   ) : null}
                   {vintageText ? (
                     <Text style={styles.paramText}>
-                      <Text style={styles.paramLabel}>Vintage/Drinkability — </Text>{vintageText}
+                      <Text style={styles.paramLabel}>Vintage/Readiness</Text>{`  ${vintageText}`}
                     </Text>
                   ) : null}
                   {producerText ? (
                     <Text style={styles.paramText}>
-                      <Text style={styles.paramLabel}>Producer Note — </Text>{producerText}
+                      <Text style={styles.paramLabel}>Producer Note</Text>{`  ${producerText}`}
                     </Text>
                   ) : null}
                 </View>
-
-                {session && (
-                  <View style={styles.detailActionsRow}>
-                    <TouchableOpacity
-                      style={styles.detailActionBtn}
-                      onPress={() => setChosenModalWine(wine)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.detailActionBtnText}>Review Wine</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
 
                 {session && (
                   <TouchableOpacity
@@ -643,6 +631,18 @@ export default function ResultsScreen() {
                       {chosenIndexes.has(i) ? '✓ Added · View in Your Wine Reviews' : 'Add to Your Restaurants - Bottle Picks'}
                     </Text>
                   </TouchableOpacity>
+                )}
+
+                {session && (
+                  <View style={styles.detailActionsRow}>
+                    <TouchableOpacity
+                      style={styles.detailActionBtn}
+                      onPress={() => setChosenModalWine(wine)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.detailActionBtnText}>Review Wine</Text>
+                    </TouchableOpacity>
+                  </View>
                 )}
 
                 {/* Vinster's Sommelier Note — collapsed by default. The
@@ -967,13 +967,13 @@ const styles = StyleSheet.create({
   },
   paramLabel: {
     fontFamily: fonts.bodySemibold,
-    color: colors.text,
-  },
-  // Top-pick synthesis line — gold, no bullet, sits below the four params.
-  standoutStatement: {
-    fontFamily: fonts.bodySemibold,
-    fontSize: 15,
     color: colors.gold,
+  },
+  // Top-pick synthesis line — italic white, no bullet, sits above the params.
+  standoutStatement: {
+    fontFamily: fonts.bodyItalic,
+    fontSize: 15,
+    color: '#FFFFFF',
     lineHeight: 21,
     textAlign: 'center',
     marginBottom: spacing.sm,
@@ -1009,21 +1009,22 @@ const styles = StyleSheet.create({
   // Long primary CTA — Add to Your Bottle Picks. Sits below the
   // two-button row as the headline action on each card.
   bottlePicksButton: {
-    marginTop: spacing.xs,
+    marginTop: spacing.sm,
     paddingVertical: spacing.sm,
     borderWidth: 1.5,
-    borderColor: colors.gold,
+    borderColor: '#FFFFFF',
     borderRadius: 10,
     alignItems: 'center',
-    backgroundColor: 'rgba(212,176,96,0.06)',
+    backgroundColor: 'transparent',
   },
   bottlePicksButtonDone: {
+    borderColor: colors.gold,
     backgroundColor: 'rgba(212,176,96,0.18)',
   },
   bottlePicksButtonText: {
     fontFamily: fonts.headingSemibold,
     fontSize: 15,
-    color: colors.gold,
+    color: '#FFFFFF',
     letterSpacing: 0.4,
   },
   bottlePicksButtonTextDone: {
