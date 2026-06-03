@@ -14,43 +14,16 @@ export default function WelcomeScreen() {
   // routing (tour → wine prefs → recipe prefs → list).
   if (session) return <Redirect href="/" />;
 
+  // Minimal landing: just the logo, the one-line tagline, and the
+  // create/sign-in prompt. The feature overview that used to live here is
+  // now the onboarding carousel a new user sees right after confirming
+  // their email — no need to say it twice.
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <View style={styles.hero}>
-        <Image source={require('../assets/vinster-logo-caps.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.tagline}>Your AI Somm — learning your tastes and fancies with every use, keeping your gastronomic life organised.</Text>
+        <Image source={require('../assets/vinster-logo.png')} style={styles.logo} resizeMode="contain" />
+        <Text style={styles.tagline}>Your AI Sommelier</Text>
       </View>
-
-      <View style={styles.heroDivider} />
-
-      <View style={styles.features}>
-        <View style={styles.feature}>
-          <Text style={styles.featureTitle}>List</Text>
-          <Text style={styles.featureBody}>Scan a restaurant wine list and I'll generate three recommendations fitted to your taste, your budget, and what you're eating — or spin the wheel and let me guide you.</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Chef</Text>
-          <Text style={styles.featureBody}>Tell me what you're cooking and I'll pour you a wine. Scan a bottle and I'll cook up three chef-inspired recipes.{'\n'}Two routes, destination gourmet.</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Cellar</Text>
-          <Text style={styles.featureBody}>Track every bottle: what you paid, what it's worth, when to drink it, where the heck it is in your IRL cellar. I know, so you don't have to.</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Community</Text>
-          <Text style={styles.featureBody}>Like-minded wine and food lovers who geek out over the same things you do.</Text>
-        </View>
-        <View style={styles.divider} />
-        <View style={styles.feature}>
-          <Text style={styles.featureTitle}>Profile</Text>
-          <Text style={styles.featureBody}>Set your preferences to complete your profile and I'll use them to tailor my recommendations to you. After a short while, I'll know you so well I'll draw you up a character sketch you can share.</Text>
-        </View>
-      </View>
-
-      <View style={styles.actionsDivider} />
 
       <View style={styles.actions}>
         <TouchableOpacity style={styles.secondaryButton} onPress={() => router.push('/(auth)/sign-up')}>
@@ -73,81 +46,29 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: spacing.xl,
-    paddingTop: 120,
+    paddingTop: 80,
     paddingBottom: 60,
     flexGrow: 1,
-    justifyContent: 'space-between',
+    justifyContent: 'center',
   },
   hero: {
     alignItems: 'center',
+    marginBottom: spacing.xxl,
   },
   logo: {
-    width: 230,
-    height: 190,
-    marginBottom: spacing.xs,
-  },
-  appName: {
-    fontFamily: fonts.headingBold,
-    fontSize: 38,
-    color: '#FFFFFF',
-    letterSpacing: 2,
-    marginBottom: spacing.xs,
+    width: 250,
+    height: 210,
+    marginBottom: spacing.sm,
   },
   tagline: {
     fontFamily: fonts.headingItalic,
-    fontSize: 21,
-    color: colors.textMuted,
+    fontSize: 22,
+    color: colors.gold,
     textAlign: 'center',
-    lineHeight: 30,
-  },
-  actionsDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.lg,
-  },
-  heroDivider: {
-    height: 1,
-    backgroundColor: colors.border,
-    marginVertical: spacing.lg,
-  },
-  features: {
-    gap: spacing.md,
-  },
-  feature: {
-    gap: 6,
-  },
-  featureTitle: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 17,
-    color: colors.text,
-    letterSpacing: 0.2,
-    textAlign: 'center',
-  },
-  featureBody: {
-    fontFamily: fonts.bodyRegular,
-    fontSize: 14,
-    color: colors.textMuted,
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.border,
+    letterSpacing: 0.5,
   },
   actions: {
     gap: spacing.sm,
-  },
-  primaryButton: {
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 14,
-    padding: spacing.md,
-    alignItems: 'center',
-  },
-  primaryText: {
-    fontFamily: fonts.headingBold,
-    fontSize: 18,
-    color: '#FFFFFF',
   },
   secondaryButton: {
     borderWidth: 1,
