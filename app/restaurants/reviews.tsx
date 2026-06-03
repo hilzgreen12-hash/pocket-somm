@@ -161,6 +161,9 @@ export default function RestaurantReviewsScreen() {
   const { chosenWines } = useChosenWines();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
+  // True when the review form was auto-opened via the ?openSession deep link
+  // (i.e. from the List results page) — closing then returns the user there.
+  const [editingFromLink, setEditingFromLink] = useState(false);
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
@@ -175,9 +178,21 @@ export default function RestaurantReviewsScreen() {
     const item = archive.find((a) => a.id === openSession);
     if (item) {
       setEditing(item);
+      setEditingFromLink(true);
       autoOpenedRef.current = true;
     }
   }, [openSession, archive]);
+
+  // Close the restaurant review form, returning to the origin screen: if it
+  // was opened from the List results page (deep link), pop back there;
+  // otherwise just dismiss and stay on the Your Restaurants list.
+  function closeRestaurantReview() {
+    setEditing(null);
+    if (editingFromLink) {
+      setEditingFromLink(false);
+      router.back();
+    }
+  }
 
   // Two indexes:
   //  - chosenBySession: precise FK lookup for wines saved after migration
@@ -360,7 +375,7 @@ export default function RestaurantReviewsScreen() {
                       Wines below have their own tap targets so the user can
                       jump straight into a wine review. */}
                   <TouchableOpacity
-                    onPress={() => setEditing(item)}
+                    onPress={() => { setEditing(item); setEditingFromLink(false); }}
                     onLongPress={() => handleLongPressRestaurant(item)}
                     delayLongPress={400}
                     activeOpacity={0.7}
@@ -454,8 +469,8 @@ export default function RestaurantReviewsScreen() {
             vintage: cw.vintage,
             userScore: cw.user_score,
           }))}
-          onClose={() => setEditing(null)}
-          onSaved={() => setEditing(null)}
+          onClose={closeRestaurantReview}
+          onSaved={closeRestaurantReview}
         />
       )}
 
