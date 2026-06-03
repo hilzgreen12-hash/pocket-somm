@@ -13,7 +13,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
-import { BottleSizePicker, detectPlacementMismatch, placementWarningBody } from '../../src/components/BottleSizePicker';
+import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -78,6 +78,12 @@ export default function LabelResultsScreen() {
   // Only used when the user came in from a tapped empty rack slot.
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
+  // Add-to-Cellar form: how many bottles, which compact field dropdown is
+  // open, and the "Other" custom bottle size.
+  const [bottleCount, setBottleCount] = useState(1);
+  const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count'>(null);
+  const [customSizeMode, setCustomSizeMode] = useState(false);
+  const [customSizeCl, setCustomSizeCl] = useState('');
 
   // When the user came in from a specific empty rack slot, load that
   // rack's slots so a multi-bottle placement can skip any occupied ones.
@@ -147,9 +153,10 @@ export default function LabelResultsScreen() {
       producer: wine.producer,
       region: wine.region,
       vintage: wine.vintage,
-      // Wine is always saved as 1 bottle at this step. Multi-bottle placement
-      // is asked later on the rack grid after the user has tapped a slot.
-      quantity: 1,
+      // Number of bottles chosen in the Add to Cellar form. When the bottles
+      // are later placed into specific rack slots, the placement count
+      // refines this; for "save without placing" it stands as the quantity.
+      quantity: bottleCount,
       storage_location: null,
       date_received: new Date().toISOString().split('T')[0],
       critic_score: intel.criticScore,
@@ -507,6 +514,28 @@ export default function LabelResultsScreen() {
     await performNewEntry();
   }
 
+  // Compact Add-to-Cellar field dropdowns.
+  const storageLabel = selectedRackId === '__new__'
+    ? '+ Create new rack'
+    : selectedRackId
+      ? (racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack')
+      : 'Save without placing';
+  const fieldOptions: { label: string; value: string | number; onSelect: () => void }[] =
+    openField === 'storage'
+      ? [
+          { label: 'Save without placing', value: 'none', onSelect: () => setSelectedRackId(null) },
+          ...racks.map((r) => ({ label: `Save to ${r.name}`, value: r.id, onSelect: () => setSelectedRackId(r.id) })),
+          { label: '+ Create new rack', value: '__new__', onSelect: () => setSelectedRackId('__new__') },
+        ]
+      : openField === 'bottle'
+        ? [
+            ...COMMON_BOTTLE_SIZES.map((s) => ({ label: s.label, value: s.ml, onSelect: () => { setBottleSizeMl(s.ml); setCustomSizeMode(false); } })),
+            { label: 'Other…', value: 'other', onSelect: () => setCustomSizeMode(true) },
+          ]
+        : openField === 'count'
+          ? Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1, onSelect: () => setBottleCount(i + 1) }))
+          : [];
+
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
@@ -787,46 +816,59 @@ export default function LabelResultsScreen() {
                     <Text style={[styles.orientationBtnText, placeOrientation === 'Horizontal' && styles.orientationBtnTextActive]}>Horizontal</Text>
                   </TouchableOpacity>
                 </View>
+                <Text style={styles.modalLabel}>Bottle size</Text>
+                <View style={styles.bottleSizeWrap}>
+                  <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
+                </View>
               </>
             )}
 
             {!pendingSlot && (
               <>
-                <Text style={styles.modalLabel}>Storage location</Text>
-                <Text style={styles.modalHint}>Pick a rack to place this bottle in now, or save without and assign later.</Text>
-                <View style={styles.rackList}>
-                  <TouchableOpacity
-                    style={[styles.rackOptionPrimary, selectedRackId === null && styles.rackOptionPrimaryActive]}
-                    onPress={() => setSelectedRackId(null)}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.rackOptionPrimaryText}>Save without placing</Text>
-                  </TouchableOpacity>
-                  {racks.map((r) => (
-                    <TouchableOpacity
-                      key={r.id}
-                      style={[styles.rackOption, selectedRackId === r.id && styles.rackOptionActive]}
-                      onPress={() => setSelectedRackId(r.id)}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={[styles.rackOptionText, selectedRackId === r.id && styles.rackOptionTextActive]}>Save to {r.name}</Text>
+                <View style={styles.fieldRow}>
+                  <View style={styles.fieldCol}>
+                    <Text style={styles.modalLabel}>Storage location</Text>
+                    <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('storage')} activeOpacity={0.7}>
+                      <Text style={styles.fieldSelectValue} numberOfLines={1}>{storageLabel}</Text>
+                      <Text style={styles.fieldSelectArrow}>▾</Text>
                     </TouchableOpacity>
-                  ))}
-                  <TouchableOpacity
-                    style={[styles.rackOptionPrimary, selectedRackId === '__new__' && styles.rackOptionPrimaryActive]}
-                    onPress={() => setSelectedRackId('__new__')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.rackOptionPrimaryText}>+ Create new rack</Text>
-                  </TouchableOpacity>
+                  </View>
+                  <View style={styles.fieldCol}>
+                    <Text style={styles.modalLabel}>Bottle size</Text>
+                    <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('bottle')} activeOpacity={0.7}>
+                      <Text style={styles.fieldSelectValue} numberOfLines={1}>{customSizeMode ? (customSizeCl ? `${customSizeCl}cl` : 'Other') : bottleSizeLabel(bottleSizeMl)}</Text>
+                      <Text style={styles.fieldSelectArrow}>▾</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
+
+                {customSizeMode && (
+                  <View style={styles.customSizeRow}>
+                    <TextInput
+                      style={styles.customSizeInput}
+                      value={customSizeCl}
+                      onChangeText={(t) => {
+                        const cleaned = t.replace(/[^0-9]/g, '').slice(0, 4);
+                        setCustomSizeCl(cleaned);
+                        const cl = parseInt(cleaned, 10);
+                        if (!Number.isNaN(cl) && cl > 0) setBottleSizeMl(cl * 10);
+                      }}
+                      placeholder="e.g. 62"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                    />
+                    <Text style={styles.customSizeSuffix}>cl</Text>
+                  </View>
+                )}
+
+                <Text style={styles.modalLabel}>Number of bottles</Text>
+                <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('count')} activeOpacity={0.7}>
+                  <Text style={styles.fieldSelectValue}>{bottleCount}</Text>
+                  <Text style={styles.fieldSelectArrow}>▾</Text>
+                </TouchableOpacity>
               </>
             )}
-
-            <Text style={styles.modalLabel}>Bottle size</Text>
-            <View style={styles.bottleSizeWrap}>
-              <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
-            </View>
 
             <Text style={styles.modalLabel}>Estimated Purchase Price, Adjust for Accuracy</Text>
             <View style={styles.priceRow}>
@@ -862,6 +904,31 @@ export default function LabelResultsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+      </Modal>
+
+      <Modal visible={openField !== null} transparent animationType="fade" onRequestClose={() => setOpenField(null)}>
+        <TouchableOpacity style={styles.fieldModalOverlay} activeOpacity={1} onPress={() => setOpenField(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.fieldModalSheet} onPress={() => {}}>
+            <Text style={styles.fieldModalTitle}>
+              {openField === 'storage' ? 'Storage location' : openField === 'bottle' ? 'Bottle size' : 'Number of bottles'}
+            </Text>
+            <ScrollView style={{ maxHeight: 320 }}>
+              {fieldOptions.map((opt) => (
+                <TouchableOpacity
+                  key={String(opt.value)}
+                  style={styles.fieldOption}
+                  onPress={() => { opt.onSelect(); setOpenField(null); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.fieldOptionText}>{opt.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setOpenField(null)} style={styles.fieldModalCancel}>
+              <Text style={styles.fieldModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
     </ScrollView>
   );
@@ -905,6 +972,23 @@ const styles = StyleSheet.create({
   secondaryAddBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   reviewNoteInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 100, lineHeight: 22, marginBottom: spacing.md },
   bottleSizeWrap: { marginBottom: spacing.md },
+  // Compact Add-to-Cellar field dropdowns (Storage location | Bottle size,
+  // then Number of bottles).
+  fieldRow: { flexDirection: 'row', gap: spacing.md },
+  fieldCol: { flex: 1 },
+  fieldSelect: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
+  fieldSelectValue: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  fieldSelectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
+  customSizeRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginTop: -spacing.xs, marginBottom: spacing.md },
+  customSizeInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
+  customSizeSuffix: { fontSize: 16, fontFamily: fonts.bodyMedium, color: colors.textMuted, marginLeft: spacing.xs },
+  fieldModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  fieldModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420, padding: spacing.lg },
+  fieldModalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  fieldOption: { paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  fieldOptionText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlign: 'center' },
+  fieldModalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
+  fieldModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   singleActionRow: { marginHorizontal: spacing.xl, marginTop: spacing.xl },
   singleActionButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   singleActionButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, textAlign: 'center' },
