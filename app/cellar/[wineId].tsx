@@ -765,13 +765,19 @@ export default function CellarWineDetail() {
           {(() => {
             const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
             const parts = sameName
-              ? [wine.producer, wine.vintage]
-              : [wine.producer, wine.wine_name, wine.vintage];
+              ? [wine.producer, wine.region, wine.vintage]
+              : [wine.producer, wine.wine_name, wine.region, wine.vintage];
             return parts.filter(Boolean).join(' · ');
           })()}
         </Text>
-        {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
-        {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
+        {(() => {
+          const added = wine.date_received ?? wine.created_at;
+          const addedLabel = added
+            ? `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
+            : null;
+          const sub = [wine.grape_variety || null, addedLabel].filter(Boolean).join(' · ');
+          return sub ? <Text style={styles.grape}>{sub}</Text> : null;
+        })()}
       </View>
 
       {/* Compact stats grid — score / window / bottle counts only. The
@@ -816,7 +822,12 @@ export default function CellarWineDetail() {
           ) : (
             <TouchableOpacity onPress={() => setEditingPrice(true)} activeOpacity={0.7}>
               {wine.purchase_price != null ? (
-                <Text style={styles.statValue}>{formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 0 })}</Text>
+                <>
+                  <Text style={styles.statValue}>{formatCurrency(Number(wine.purchase_price), wine.purchase_price_currency, { decimals: 0 })}</Text>
+                  {wine.estimated_value != null && Number(wine.purchase_price) === Number(wine.estimated_value) ? (
+                    <Text style={styles.priceEstimatedNote}>Estimated upon entry, update</Text>
+                  ) : null}
+                </>
               ) : (
                 <Text style={styles.statAction}>+ Add Price</Text>
               )}
@@ -1511,6 +1522,14 @@ const styles = StyleSheet.create({
   // Estimated Value shown in gold with an inline "(update)" link.
   estimatedValueGold: {
     color: colors.gold,
+  },
+  // Gold note under an auto-estimated purchase price, prompting an update.
+  priceEstimatedNote: {
+    fontFamily: fonts.bodyItalic,
+    fontSize: 12,
+    color: colors.gold,
+    textDecorationLine: 'underline',
+    marginTop: 2,
   },
   estimateUpdateLink: {
     fontFamily: fonts.bodyRegular,
