@@ -165,8 +165,10 @@ export default function OnboardingScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.subheading}>Wine Preferences</Text>
-        <Text style={styles.subheadingHint}>Hard rules — Vinster will never recommend these. Everything else you tune per search.</Text>
+        <Text style={styles.hardRulesTitle}>Hard Rules</Text>
+        <Text style={styles.hardRulesBody}>Vinster will apply these preferences to its wine and recipe recommendations, never deviating unless you edit them.</Text>
+
+        <Text style={styles.subheading}>Wines:</Text>
 
         <Accordion
           title="Regional Dislikes"
@@ -188,8 +190,7 @@ export default function OnboardingScreen() {
           <ChipPicker options={GRAPE_VARIETIES} selected={disGrapes} onChange={setDisGrapes} max={5} allowCustom />
         </Accordion>
 
-        <Text style={styles.subheading}>Recipe Requirements</Text>
-        <Text style={styles.subheadingHint}>Hard rules Vinster always respects for recipes and pairings.</Text>
+        <Text style={styles.subheading}>Recipes:</Text>
 
         <Accordion
           title="Dietary Needs & Allergens"
@@ -302,6 +303,8 @@ const styles = StyleSheet.create({
   selectChevron: { fontSize: 14, color: colors.gold },
   subheading: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, letterSpacing: 0.3, marginTop: spacing.md, marginBottom: 2 },
   subheadingHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
+  hardRulesTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.xs },
+  hardRulesBody: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 20, textAlign: 'center', marginBottom: spacing.sm },
   // Accordion chrome mirrors app/profile/wine.tsx so the look carries
   // across the profile/onboarding surfaces.
   accordionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: 4 },
