@@ -63,7 +63,7 @@ export default function ScanTab() {
 
   const styleLabel = styleProfiles.length
     ? styleProfiles.length === 1
-      ? styleProfiles[0].replace(/-/g, ' ')
+      ? styleProfiles[0].replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
       : `${styleProfiles.length} styles selected`
     : 'Any';
 
@@ -260,13 +260,13 @@ export default function ScanTab() {
           <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
               <Text style={styles.question}>What wine style would you like?</Text>
-              {!wineTypeOpen && <Text style={styles.selectionSummary}>{wineTypeLabel}</Text>}
+              {!wineTypeOpen && <Text style={[styles.selectionSummary, wineTypes.length > 0 && styles.selectionSummaryActive]}>{wineTypeLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
           {wineTypeOpen && (
             <View style={styles.pickerWrap}>
-              <WineTypePicker selected={wineTypes} onChange={setWineTypes} />
+              <WineTypePicker selected={wineTypes} onChange={(types) => { setWineTypes(types); setStyleProfiles([]); }} />
             </View>
           )}
         </View>
@@ -275,7 +275,7 @@ export default function ScanTab() {
           <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
               <Text style={styles.question}>Let's refine that further</Text>
-              {!styleOpen && <Text style={styles.selectionSummary}>{styleLabel}</Text>}
+              {!styleOpen && <Text style={[styles.selectionSummary, styleProfiles.length > 0 && styles.selectionSummaryActive]}>{styleLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
@@ -464,6 +464,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 2,
     textAlign: 'center',
+  },
+  // Gold readout once a preference has actually been chosen.
+  selectionSummaryActive: {
+    color: colors.gold,
   },
   bubbleWrap: {
     borderWidth: 1,
