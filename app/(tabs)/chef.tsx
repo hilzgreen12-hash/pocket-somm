@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   // Big "Chef" tab title — header, Cormorant.
   appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Section question prompts ("Chosen your bottle?", "Have a recipe & need
   // a wine?") — Cormorant.
@@ -158,9 +158,9 @@ const styles = StyleSheet.create({
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
   // "View last result" link — body / link, Inter.
   lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
-  buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center' },
-  // Button label — Cormorant.
-  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16, textAlign: 'center' },
+  buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  // Button label — Cormorant. Matched to the other tab pages (14pt).
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   // Pop-up title — Cormorant. Pop-up body — Inter.

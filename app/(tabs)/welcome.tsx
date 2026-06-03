@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.xs },
   tagline: { fontSize: 19, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
-  divider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl },
   sectionTitle: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, marginBottom: spacing.xs },
   // Italic blurb under each section title — tab-screen blurb, stays Cormorant.

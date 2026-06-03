@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: colors.divider,
     marginHorizontal: spacing.xl,
     marginTop: spacing.sm,
     marginBottom: spacing.lg,

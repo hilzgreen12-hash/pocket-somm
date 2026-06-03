@@ -23,6 +23,8 @@ export const colors = {
   // Borders — white with low opacity
   border: 'rgba(255,255,255,0.10)',
   borderLight: 'rgba(255,255,255,0.18)',
+  // Faded-gold content separators on the tab pages.
+  divider: 'rgba(224,184,74,0.30)',
 
   success: '#6DBF8A',
   warning: '#D4923A',

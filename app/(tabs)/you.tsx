@@ -36,6 +36,7 @@ export default function YouScreen() {
     session?.user.user_metadata?.notify_decline ?? false
   );
   const [currencyOpen, setCurrencyOpen] = useState(false);
+  const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
   const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
@@ -165,8 +166,6 @@ export default function YouScreen() {
 
       <Text style={styles.heading}>You</Text>
 
-      <Text style={styles.thanks}>You're one of the first 10,000 users — thank you for being here. Your subscription is on us.</Text>
-
       <View style={styles.divider} />
 
       <View style={styles.block}>
@@ -177,6 +176,12 @@ export default function YouScreen() {
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Username</Text>
           <Text style={styles.rowValue}>{currentUsername || '—'}</Text>
+        </View>
+        <View style={styles.row}>
+          <Text style={styles.rowLabel}>Currency</Text>
+          <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.rowValueLink}>{currentCurrencyLabel} ▾</Text>
+          </TouchableOpacity>
         </View>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Email</Text>
@@ -226,20 +231,36 @@ export default function YouScreen() {
       <View style={styles.divider} />
 
       <View style={styles.block}>
+        <View style={styles.sketchHeaderRow}>
+          <Text style={styles.sketchHeader}>Your Personality Sketch</Text>
+          <TouchableOpacity onPress={() => setSketchInfoOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.whatsThis}>what's this?</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=wine')} activeOpacity={0.7}>
           <Text style={styles.personalityButtonText}>Your Wine Personality</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=recipe')} activeOpacity={0.7}>
           <Text style={styles.personalityButtonText}>Your Foodie Personality</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Restaurants</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/wine')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Wine Preferences</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Restaurants</Text>
         </TouchableOpacity>
       </View>
 
@@ -264,17 +285,6 @@ export default function YouScreen() {
             trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
             thumbColor="#FFFFFF"
           />
-        </View>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.block}>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Currency</Text>
-          <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.rowValueLink}>{currentCurrencyLabel} ▾</Text>
-          </TouchableOpacity>
         </View>
       </View>
 
@@ -336,6 +346,20 @@ export default function YouScreen() {
         </TouchableOpacity>
       </Modal>
 
+      <Modal visible={sketchInfoOpen} transparent animationType="fade" onRequestClose={() => setSketchInfoOpen(false)}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setSketchInfoOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
+            <Text style={styles.confirmTitle}>Your Personality Sketch</Text>
+            <Text style={styles.confirmBody}>
+              As you scan, cellar, rate and cook, Vinster sketches a witty character profile of you — a separate Wine personality and Foodie personality drawn from your tastes. They evolve as you use the app, and you can share them with friends or post them to the community.
+            </Text>
+            <TouchableOpacity style={styles.confirmGoldBtn} onPress={() => setSketchInfoOpen(false)}>
+              <Text style={styles.confirmGoldBtnText}>Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
         <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setCurrencyOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.currencySheet} onPress={() => {}}>
@@ -376,25 +400,28 @@ const styles = StyleSheet.create({
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
   thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   block: { gap: 4 },
   // Section header label.
   blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
+  sketchHeaderRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  sketchHeader: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.text },
+  whatsThis: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   personalityButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   // Form-style label in identity rows.
-  rowLabel: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+  rowLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   // Form-style value rendered to the right of the row label.
-  rowValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
-  rowValueSmall: { fontSize: 15, fontFamily: fonts.bodyRegular },
+  rowValue: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
+  rowValueSmall: { fontSize: 13, fontFamily: fonts.bodyRegular },
   // Currency selector tappable value — still a value, leans Inter.
-  rowValueLink: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.gold },
+  rowValueLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   editLinkBtn: { alignSelf: 'flex-end', marginTop: 2 },
   // "Edit" link button text.
-  editLinkText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
+  editLinkText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.gold },
   editPanel: { marginTop: spacing.sm, gap: 4 },
   fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
