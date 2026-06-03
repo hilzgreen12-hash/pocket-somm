@@ -222,6 +222,18 @@ export default function CellarWineDetail() {
     setAddBottlesOpen(true);
   }
 
+  // Place an as-yet-unracked wine into a fridge/rack. Stash it as the
+  // pending wine, then send the user to a rack grid (straight there if they
+  // have just one) to tap a slot — or to the racks list to pick/create one.
+  function handleAddToRack() {
+    setPendingWineId(wine!.id);
+    if (racks.length === 1) {
+      router.push(`/cellar/rack/${racks[0].id}` as any);
+    } else {
+      router.push('/cellar/racks');
+    }
+  }
+
   async function handleSaveNote() {
     Keyboard.dismiss();
     setSavingNote(true);
@@ -865,6 +877,11 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>+ Add bottles</Text>
             </TouchableOpacity>
           )}
+          {!isArchived && !isWishlist && !wineRack && (
+            <TouchableOpacity onPress={handleAddToRack}>
+              <Text style={styles.statAction}>+ Add to Fridge/Rack</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Archive</Text>
@@ -921,7 +938,7 @@ export default function CellarWineDetail() {
               />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setWhatsThisOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.whatsThisLink}>(what's this)</Text>
+              <Text style={styles.whatsThisLink}>what's this</Text>
             </TouchableOpacity>
           </View>
           {vinstersNoteOpen ? (
@@ -1264,7 +1281,7 @@ export default function CellarWineDetail() {
           <TouchableOpacity activeOpacity={1} style={styles.removeModalSheet} onPress={() => {}}>
             <Text style={styles.removeModalTitle}>What is Vinster's Note?</Text>
             <Text style={styles.removeModalBody}>
-              Vinster's Note is a short tasting summary written by the AI sommelier when this wine landed in your cellar — fruit, acidity, tannin, body, finish. It's the AI's read of the wine, not yours. Your own thoughts live in "Your Review" and "Personal Notes" below.
+              Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
             </Text>
             <TouchableOpacity style={styles.removeModalConfirmBtn} onPress={() => setWhatsThisOpen(false)}>
               <Text style={styles.removeModalConfirmText}>Got it</Text>
