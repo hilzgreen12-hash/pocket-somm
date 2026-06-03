@@ -1,10 +1,10 @@
 import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { TabFooter } from '../../src/components/TabFooter';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
+import { VinsterHeader } from '../../src/components/VinsterHeader';
 
 const COMMUNITY_HELP = `Community is where Vinster users will share wine reviews, restaurant finds and personality sketches with friends.
 
@@ -59,6 +59,8 @@ export default function CommunityTab() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
+      <VinsterHeader />
+
       <View style={styles.titleRow}>
         <Text style={styles.title}>Community</Text>
       </View>
@@ -94,7 +96,6 @@ export default function CommunityTab() {
         onContinue={continueWithoutAccount}
       />
     </ScrollView>
-    <TabFooter />
     </TabSwipeView>
   );
 }

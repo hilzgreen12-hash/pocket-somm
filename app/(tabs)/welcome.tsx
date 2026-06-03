@@ -1,6 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
-import { TabFooter } from '../../src/components/TabFooter';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -62,7 +61,6 @@ export default function WelcomeTab() {
       </View>
 
     </ScrollView>
-    <TabFooter />
     </View>
   );
 }
