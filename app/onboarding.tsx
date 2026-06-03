@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView,
+  View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image,
   Switch, Modal, Keyboard, LayoutAnimation, Platform, UIManager,
 } from 'react-native';
 
@@ -138,9 +138,11 @@ export default function OnboardingScreen() {
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
       >
+        <Image source={require('../assets/vinster-mark.png')} style={styles.cornerIcon} resizeMode="contain" />
+
         <View style={styles.intro}>
-          <Text style={styles.brand}>Vinster</Text>
-          <Text style={styles.introBody}>Let's get you set up — you can change any of this later in About You.</Text>
+          <Text style={styles.brand}>Your Preferences</Text>
+          <Text style={styles.introBody}>Let's get You set up — you can add to or edit any of it later.</Text>
           <Text style={styles.thanks}>You're one of the first 10,000 users — thank you for being here. Your subscription is on us.</Text>
         </View>
 
@@ -282,8 +284,9 @@ export default function OnboardingScreen() {
 const styles = StyleSheet.create({
   wrapper: { flex: 1, backgroundColor: colors.background },
   container: { flex: 1, paddingHorizontal: spacing.md },
+  cornerIcon: { width: 42, height: 42, alignSelf: 'flex-start', marginBottom: spacing.sm },
   intro: { alignItems: 'center', marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  brand: { fontFamily: fonts.headingBold, fontSize: 40, color: '#FFFFFF', letterSpacing: 2, marginBottom: spacing.xs },
+  brand: { fontFamily: fonts.headingBold, fontSize: 32, color: '#FFFFFF', letterSpacing: 1, marginBottom: spacing.xs, textAlign: 'center' },
   introBody: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
   thanks: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.sm },
   section: { marginBottom: spacing.md },
