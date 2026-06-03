@@ -42,7 +42,7 @@ const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
 // Archived view — last chip on the filter carousel. Swaps the list source
 // from live cellar wines to archived ones (replaces the old Cellar tab
 // "Archived Wines" button).
-type ArchivedFilter = 'live' | 'archived';
+type ArchivedFilter = 'hide' | 'include' | 'only';
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
@@ -93,7 +93,7 @@ export default function FullCellarListScreen() {
   const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
-  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>('live');
+  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>('hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
   // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
@@ -144,7 +144,11 @@ export default function FullCellarListScreen() {
   // own their truth — typing a query just narrows whatever filters are on.
   const q = search.trim().toLowerCase();
   // Archived view swaps the source list; the other filters still apply.
-  const baseWines = archivedFilter === 'archived' ? archivedWines : wines;
+  const baseWines = archivedFilter === 'only'
+    ? archivedWines
+    : archivedFilter === 'include'
+      ? [...wines, ...archivedWines]
+      : wines;
   const filtered = baseWines.filter((w) => {
     if (rackFilter !== 'All') {
       if (rackFilter === 'Unassigned') {
@@ -318,17 +322,17 @@ export default function FullCellarListScreen() {
             button. Tap to swap the list between live and archived wines. */}
         <TouchableOpacity
           style={styles.filterChip}
-          onPress={() => setArchivedFilter((f) => (f === 'archived' ? 'live' : 'archived'))}
+          onPress={() => setArchivedFilter((f) => (f === 'hide' ? 'include' : f === 'include' ? 'only' : 'hide'))}
         >
           <View style={styles.filterChipHeadingRow}>
             <Text style={styles.filterChipLabel}>Archived</Text>
           </View>
           <Text
-            style={[styles.filterChipValue, archivedFilter === 'archived' && { color: colors.gold }]}
+            style={[styles.filterChipValue, archivedFilter !== 'hide' && { color: colors.gold }]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {archivedFilter === 'archived' ? 'Showing' : 'Hidden'}
+            {archivedFilter === 'only' ? 'Only Archived' : archivedFilter === 'include' ? 'Include' : 'Hide'}
           </Text>
         </TouchableOpacity>
       </ScrollView>
