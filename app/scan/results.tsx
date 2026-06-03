@@ -169,6 +169,17 @@ export default function ResultsScreen() {
     }
   }
 
+  // Save any restaurant name in place, then open Your Restaurants with
+  // THIS visit's review form already open (deep-link via ?openSession=).
+  // Used by both the tappable location line and the foot-of-page CTA — the
+  // old behaviour dropped the user on the bare list instead of the form.
+  async function openRestaurantReview() {
+    await handleSaveRestaurant();
+    const id = sessionId ?? autoSave.data?.[0]?.sessionId ?? null;
+    qc.invalidateQueries({ queryKey: ['scan-archive'] });
+    router.push(id ? `/restaurants/reviews?openSession=${id}` : '/restaurants/reviews');
+  }
+
   // The List Archive is gone — autoSave still fires from
   // handleSaveRestaurant so a scan with a restaurant name lands in
   // Your Restaurants, but there's no longer an explicit save button or
@@ -441,12 +452,12 @@ export default function ResultsScreen() {
             backs this result (edits happen via the CTA at the bottom of
             the page). */}
         {effectiveSessionId && restaurantName.trim().length > 0 ? (
-          <View style={styles.restaurantLine}>
+          <TouchableOpacity style={styles.restaurantLine} onPress={openRestaurantReview} activeOpacity={0.7}>
             <Text style={styles.restaurantPin}>📍</Text>
             <Text style={styles.restaurantLineText} numberOfLines={1}>
               {restaurantName}{stampCity ? ` · ${stampCity}` : ''}
             </Text>
-          </View>
+          </TouchableOpacity>
         ) : editingRestaurant ? (
           <View style={styles.restaurantLine}>
             <Text style={styles.restaurantPin}>📍</Text>
@@ -680,15 +691,7 @@ export default function ResultsScreen() {
       {restaurantName.trim().length > 0 && !editingRestaurant && (
         <TouchableOpacity
           style={styles.reviewRestaurantBtn}
-          onPress={async () => {
-            // Make sure the scan_sessions row is in place before we
-            // route to Your Restaurants. Without this, a user who
-            // tapped the CTA before onBlur fired could land on an
-            // empty list.
-            await handleSaveRestaurant();
-            qc.invalidateQueries({ queryKey: ['scan-archive'] });
-            router.push('/restaurants/reviews');
-          }}
+          onPress={openRestaurantReview}
           activeOpacity={0.8}
         >
           <Text style={styles.reviewRestaurantBtnText}>Review or Edit Your Restaurant →</Text>

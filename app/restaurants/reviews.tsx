@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
@@ -164,6 +164,20 @@ export default function RestaurantReviewsScreen() {
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
+
+  // Deep-link from the List results page (?openSession=<id>) — auto-open
+  // that visit's review form once the archive has loaded, so the user lands
+  // on the input rather than the bare list. Only fires once.
+  const { openSession } = useLocalSearchParams<{ openSession?: string }>();
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenedRef.current || !openSession) return;
+    const item = archive.find((a) => a.id === openSession);
+    if (item) {
+      setEditing(item);
+      autoOpenedRef.current = true;
+    }
+  }, [openSession, archive]);
 
   // Two indexes:
   //  - chosenBySession: precise FK lookup for wines saved after migration
