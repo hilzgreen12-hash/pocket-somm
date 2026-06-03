@@ -34,36 +34,35 @@ function PairingCard({
   sharing: boolean;
   onViewFull: () => void;
 }) {
-  const [expanded, setExpanded] = useState(false);
-
   return (
     <View style={styles.card}>
-      <TouchableOpacity onPress={() => setExpanded((v) => !v)} activeOpacity={0.8}>
-        <View style={styles.cardHeaderRow}>
-          <Text style={[styles.dishName, { flex: 1 }]}>{pairing.dishName}</Text>
-          {/* "+ FULL" opens the dedicated full-screen recipe card, where
-              sharing and printing live. Press + long-press both claim the
-              gesture so the outer expand/collapse toggle doesn't fire. */}
-          <TouchableOpacity
-            onPress={onViewFull}
-            onLongPress={onViewFull}
-            delayLongPress={400}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.cardShareLink}
-            accessibilityRole="button"
-            accessibilityLabel="View this recipe in full screen"
-          >
-            <Text style={styles.cardShareLinkText}>+ FULL</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
-        <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
-        <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
-        <Text style={styles.toggle}>{expanded ? 'Hide Recipe' : 'View Recipe'}</Text>
+      <View style={styles.cardHeaderRow}>
+        <Text style={[styles.dishName, { flex: 1 }]}>{pairing.dishName}</Text>
+        {/* "+ SHARE" shares the FULL recipe (the off-screen RecipeShareCard),
+            not the thumbnail. */}
+        <TouchableOpacity
+          onPress={onShare}
+          disabled={sharing}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={styles.cardShareLink}
+          accessibilityRole="button"
+          accessibilityLabel="Share this recipe"
+        >
+          <Text style={styles.cardShareLinkText}>{sharing ? '…' : '+ SHARE'}</Text>
+        </TouchableOpacity>
+      </View>
+      <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
+      <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
+      <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
+
+      {/* "View Full Recipe" opens the dedicated full-screen recipe page —
+          the destination the old "+ FULL" link used. */}
+      <TouchableOpacity onPress={onViewFull} activeOpacity={0.7}>
+        <Text style={styles.toggle}>View Full Recipe</Text>
       </TouchableOpacity>
 
-      {/* Quick-save sits just under the View Recipe toggle so the user can
-          save without expanding the full recipe. Saved recipes land in the
+      {/* Quick-save sits under the View Full Recipe link so the user can
+          save without leaving the thumbnail. Saved recipes land in the
           Cookbook as Unfiled (no folder assignment, not starred). */}
       {!isFromHistory && (
         saveState === 'saved' ? (
@@ -85,22 +84,6 @@ function PairingCard({
             </Text>
           </TouchableOpacity>
         )
-      )}
-
-      {expanded && (
-        <View style={styles.recipe}>
-          <Text style={styles.recipeIntro}>{pairing.introduction}</Text>
-
-          <Text style={styles.recipeSection}>Ingredients</Text>
-          {pairing.recipe.ingredients.map((ing, i) => (
-            <Text key={i} style={styles.recipeItem}>· {ing}</Text>
-          ))}
-
-          <Text style={[styles.recipeSection, { marginTop: spacing.md }]}>Method</Text>
-          {pairing.recipe.instructions.map((step, i) => (
-            <Text key={i} style={styles.recipeItem}>{step}</Text>
-          ))}
-        </View>
       )}
     </View>
   );
@@ -173,6 +156,22 @@ function PairingCardSaved({
       </View>
     </View>
   );
+}
+
+// Build a short "You requested…" line from the recipe filters so the user
+// sees, on the results card, what they asked Vinster for. (A future
+// iteration can swap this for an AI-written summary from the edge function.)
+function buildBriefSummary(filters: Record<string, any> | null | undefined): string | null {
+  if (!filters) return null;
+  const reqs: string[] = [];
+  if (filters.dietary) reqs.push(String(filters.dietary));
+  if (Array.isArray(filters.allergens)) reqs.push(...filters.allergens.map((a: any) => String(a)));
+  const reqStr = reqs.filter(Boolean).join(', ').trim();
+  const concerns = typeof filters.specificConcerns === 'string' ? filters.specificConcerns.trim() : '';
+  if (!reqStr && !concerns) return null;
+  let s = reqStr ? `You requested a ${reqStr.toLowerCase()} recipe` : 'You requested a recipe';
+  if (concerns) s += ` — ${concerns}`;
+  return s.endsWith('.') ? s : `${s}.`;
 }
 
 export default function ChefResultsScreen() {
@@ -460,6 +459,7 @@ export default function ChefResultsScreen() {
   }
 
   const headerLine = wineHeaderLine(wine.producer, wine.wineName, wine.vintage);
+  const briefSummary = !isFromHistory ? buildBriefSummary(filters as Record<string, any> | null) : null;
 
   if (regenerating) {
     return (
@@ -502,19 +502,17 @@ export default function ChefResultsScreen() {
           card carries its own recipe-name-first layout with the wine
           as subhead. Fresh-result flow keeps the wine header at top. */}
       {!isFromHistory && (
-        <View style={styles.header}>
-          <Text style={styles.headerLine}>{headerLine}</Text>
-          {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
+        <View style={styles.freshHeader}>
+          <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${wine.region}` : ''}</Text>
+          {briefSummary ? (
+            <Text style={styles.briefSummary}>
+              <Text style={styles.briefSummaryLabel}>Brief Summary: </Text>{briefSummary}
+            </Text>
+          ) : null}
         </View>
       )}
 
       <View style={styles.section}>
-        {/* "Chef-Inspired Pairings" section title is hidden for cookbook
-            entries — there's a single recipe and the dish name is the
-            new top header. */}
-        {!isFromHistory && (
-          <Text style={styles.sectionTitle}>Chef-Inspired Pairings</Text>
-        )}
         {pairings.map((p, i) => (
           isFromHistory && viewingSession ? (
             <PairingCardSaved
@@ -676,6 +674,12 @@ const styles = StyleSheet.create({
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerLine: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.5 },
   region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs },
+  // Fresh-result header — wine line centred in gold beneath the date, with
+  // a "Brief Summary" of the requested requirements below it.
+  freshHeader: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md, alignItems: 'center' },
+  freshWineLine: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, lineHeight: 26 },
+  briefSummary: { fontSize: 14, fontFamily: fonts.bodyRegular, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 20, marginTop: spacing.sm },
+  briefSummaryLabel: { fontFamily: fonts.bodySemibold, color: '#FFFFFF' },
   section: { padding: spacing.xl },
   sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
