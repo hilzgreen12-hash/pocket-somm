@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
+import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { colors, spacing } from '../src/constants/theme';
 import { fonts } from '../src/constants/fonts';
@@ -65,7 +65,7 @@ export default function OnboardingTour() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Text style={styles.brand}>Vinster</Text>
+        <Image source={require('../assets/vinster-logo.png')} style={styles.brandLogo} resizeMode="contain" />
       </View>
 
       <ScrollView
@@ -102,11 +102,12 @@ export default function OnboardingTour() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingTop: 60, paddingBottom: 40 },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginTop: spacing.xl, marginBottom: spacing.lg },
-  topBarSide: { flex: 1, alignItems: 'flex-end' },
-  brand: { fontFamily: fonts.headingBold, fontSize: 38, color: '#FFFFFF', letterSpacing: 2, textAlign: 'center', flex: 1 },
+  topBar: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.lg },
+  brandLogo: { width: 180, height: 130 },
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
-  badge: { fontFamily: fonts.headingBold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2, textAlign: 'center', marginBottom: spacing.lg },
+  // Slide eyebrow (List / Chef / …) — sized to match the title beneath it,
+  // in gold Cormorant, per the onboarding brief.
+  badge: { fontFamily: fonts.headingBold, fontSize: 38, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, lineHeight: 44, textAlign: 'center', marginBottom: spacing.sm },
   title: { fontFamily: fonts.headingBold, fontSize: 38, color: colors.text, letterSpacing: 0.5, lineHeight: 46, textAlign: 'center', marginBottom: spacing.lg },
   // Slide body copy.
   body: { fontFamily: fonts.bodyItalic, fontSize: 19, color: '#FFFFFF', textAlign: 'center', lineHeight: 28 },
