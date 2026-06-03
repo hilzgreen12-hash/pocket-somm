@@ -83,13 +83,13 @@ export default function ChefTab() {
 
       <View style={styles.titleRow}>
         <Text style={styles.appName}>Chef</Text>
-        <HelpButton title="How Chef works" body={CHEF_HELP} />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
           Tell Vinster what you're cooking and it'll offer you a wine. Select your bottle first for an original, tailored recipe sure to satisfy. Keep, organise, and share your recipes to grow your cookbook.
         </Text>
+        <HelpButton label="More About Chef" title="How Chef works" body={CHEF_HELP} />
       </View>
 
       <View style={styles.divider} />
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   // Top blurb under the Chef heading — italic blurb directly under the
   // tab title, kept Cormorant per user spec ("blurbs below the headers
   // on the tab screens"). Italics retained.
-  topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs },
+  topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
   // "View last result" link — body / link, Inter.
   lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center' },

@@ -79,9 +79,9 @@ export default function CellarTab() {
 
       <View style={styles.titleRow}>
         <Text style={styles.title}>Cellar</Text>
-        <HelpButton title="How Cellar works" body={CELLAR_HELP} />
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
+      <HelpButton label="More About Cellar" title="How Cellar works" body={CELLAR_HELP} />
 
       <View style={styles.divider} />
 
@@ -130,7 +130,7 @@ export default function CellarTab() {
               style={[styles.modalButton, { marginTop: spacing.sm }]}
               onPress={() => { setAddWineOpen(false); handleUpload(); }}
             >
-              <Text style={styles.modalButtonText}>Upload Screenshot / Photo</Text>
+              <Text style={styles.modalButtonText}>Upload Label</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}

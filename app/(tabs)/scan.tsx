@@ -251,9 +251,9 @@ export default function ScanTab() {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <Text style={styles.appName}>List</Text>
-          <HelpButton title="How List works" body={LIST_HELP} />
         </View>
         <Text style={styles.subtitle}>Set your preferences below then scan or upload a wine list to generate recommendations. Revisit and review restaurants, and those bottles you drank in them.</Text>
+        <HelpButton label="More About List" title="How List works" body={LIST_HELP} />
       </View>
 
       <View style={styles.body}>
@@ -320,17 +320,15 @@ export default function ScanTab() {
             <Text style={styles.buttonHalfText}>Scan Wine List</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
-            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Screenshot'}</Text>
+            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Wine List'}</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={() => router.push('/restaurants/reviews')}>
-            <Text style={styles.buttonHalfText}>Your Restaurants</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.buttonHalf} onPress={handleViewLastSearch}>
-            <Text style={styles.buttonHalfText}>View Last Result</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
+          <Text style={styles.buttonHalfText}>Your Restaurants</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleViewLastSearch}>
+          <Text style={styles.lastResultLink}>View Last Result</Text>
+        </TouchableOpacity>
 
       </View>
 
@@ -488,6 +486,25 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  buttonFull: {
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
+    borderRadius: 14,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    alignItems: 'center',
+    marginTop: spacing.sm,
+  },
+  // "View Last Result" link beneath the action buttons — matches the
+  // underlined link format used on the other tabs.
+  lastResultLink: {
+    fontSize: 13,
+    fontFamily: fonts.bodyRegular,
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+    textAlign: 'center',
     marginTop: spacing.sm,
   },
   buttonHalf: {
