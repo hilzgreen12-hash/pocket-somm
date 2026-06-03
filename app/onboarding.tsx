@@ -158,10 +158,10 @@ export default function OnboardingScreen() {
           />
         </View>
 
-        <View style={styles.section}>
+        <View style={styles.currencyRow}>
           <Text style={styles.sectionLabel}>Currency</Text>
-          <TouchableOpacity style={styles.selectRow} onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.selectValue}>{currencyLabel}</Text>
+          <TouchableOpacity style={styles.currencyPick} onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.currencyValue} numberOfLines={1}>{currencyLabel}</Text>
             <Text style={styles.selectChevron}>▾</Text>
           </TouchableOpacity>
         </View>
@@ -291,9 +291,11 @@ const styles = StyleSheet.create({
   thanks: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.sm },
   section: { marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  selectRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface },
-  selectValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Clean underline inputs (no boxed fill) for the username + currency.
+  input: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm, fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.text },
+  currencyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, marginBottom: spacing.md },
+  currencyPick: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, marginLeft: spacing.md },
+  currencyValue: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.gold, flexShrink: 1, textAlign: 'right' },
   selectChevron: { fontSize: 14, color: colors.gold },
   subheading: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, letterSpacing: 0.3, marginTop: spacing.md, marginBottom: 2 },
   subheadingHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
