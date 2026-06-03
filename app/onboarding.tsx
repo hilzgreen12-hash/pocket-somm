@@ -248,6 +248,10 @@ export default function OnboardingScreen() {
         >
           <Text style={styles.finishButtonText}>{saving ? 'Saving…' : 'Finish'}</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity onPress={() => router.replace('/onboarding-tour')} style={styles.backLink} activeOpacity={0.7}>
+          <Text style={styles.backLinkText}>Back through carousel</Text>
+        </TouchableOpacity>
       </ScrollView>
 
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
@@ -313,6 +317,8 @@ const styles = StyleSheet.create({
   finishButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   finishButtonDisabled: { opacity: 0.6 },
   finishButtonText: { fontFamily: fonts.headingBold, fontSize: 17, color: colors.gold, letterSpacing: 0.5 },
+  backLink: { alignItems: 'center', paddingVertical: spacing.md },
+  backLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   currencyOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   currencySheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, width: '100%', maxWidth: 420, padding: spacing.lg },
   currencySheetTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
