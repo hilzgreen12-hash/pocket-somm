@@ -61,12 +61,12 @@ export default function CommunityTab() {
 
       <View style={styles.titleRow}>
         <Text style={styles.title}>Community</Text>
-        <HelpButton title="How Community works" body={COMMUNITY_HELP} />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
         <Text style={styles.comingSoonNotice}>Coming Soon</Text>
+        <HelpButton label="More About Community" title="How Community works" body={COMMUNITY_HELP} />
       </View>
 
       <View style={styles.divider} />

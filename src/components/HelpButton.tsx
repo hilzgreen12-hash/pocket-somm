@@ -1,32 +1,33 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
+import { Text, TouchableOpacity, Modal, ScrollView, StyleSheet } from 'react-native';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-// Small gold-bordered "i" sat next to a tab title. Tapping opens a centered
-// modal with a brief explanation of how the AI on that tab actually works.
-// Self-contained — drop one in next to a title and pass title + body.
+// An underlined text link (e.g. "More About List") that sits beneath a tab's
+// blurb. Tapping it opens a centered modal explaining how the AI on that tab
+// actually works. Self-contained — drop one in below the blurb and pass the
+// link label plus the modal title + body. (Replaced the old circled-"i" icon
+// that used to sit next to the tab title.)
 
 interface Props {
+  label: string;
   title: string;
   body: string;
 }
 
-export function HelpButton({ title, body }: Props) {
+export function HelpButton({ label, title, body }: Props) {
   const [open, setOpen] = useState(false);
 
   return (
     <>
       <TouchableOpacity
         onPress={() => setOpen(true)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`How ${title.replace(/^How\s+/i, '').replace(/\s+works$/i, '')} works`}
+        accessibilityLabel={label}
       >
-        <View style={styles.icon}>
-          <Text style={styles.iconLetter}>i</Text>
-        </View>
+        <Text style={styles.link}>{label}</Text>
       </TouchableOpacity>
 
       <Modal
@@ -56,24 +57,15 @@ export function HelpButton({ title, body }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // Small gold-outlined circle with an italic "i" — bespoke rather than a
-  // Unicode glyph so it renders identically across iOS / Android.
-  icon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: colors.gold,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  iconLetter: {
-    fontFamily: fonts.headingItalic,
-    fontSize: 14,
-    color: colors.gold,
-    lineHeight: 16,
-    // Nudge the italic glyph optically into the circle's centre.
-    marginTop: -1,
+  // Underlined link beneath the blurb — matched to the "View last result"
+  // links (13pt, Inter/Spectral body, white, underlined, centred).
+  link: {
+    fontSize: 13,
+    fontFamily: fonts.bodyRegular,
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+    marginTop: spacing.sm,
   },
   overlay: {
     flex: 1,

@@ -466,7 +466,7 @@ export default function FullCellarListScreen() {
               style={[styles.addBtn, { marginTop: spacing.sm }]}
               onPress={() => { setAddWineOpen(false); handleUpload(); }}
             >
-              <Text style={styles.addBtnText}>Upload Screenshot / Photo</Text>
+              <Text style={styles.addBtnText}>Upload Label</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}

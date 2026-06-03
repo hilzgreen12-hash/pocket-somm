@@ -444,7 +444,7 @@ export default function ChosenWinesScreen() {
               <Text style={styles.chooserBtnText}>Scan a label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseUpload} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>Upload screenshot or photo</Text>
+              <Text style={styles.chooserBtnText}>Upload Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseManual} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Manual input</Text>
