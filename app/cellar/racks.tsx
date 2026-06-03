@@ -96,10 +96,19 @@ export default function RacksScreen() {
     winesByRack[slot.rack_id] = list;
   }
 
-  // useCellar returns wines newest-first, so the three most recent
-  // additions are just the head of the list — they update and roll off
-  // automatically as the cellar query refreshes.
-  const recentAdditions = wines.slice(0, 3);
+  // Reverse map: which rack each wine sits in (first match wins), for the
+  // "Recently Added" list.
+  const rackNameByWineId: Record<string, string> = {};
+  for (const rack of racks) {
+    for (const w of winesByRack[rack.id] ?? []) {
+      if (!rackNameByWineId[w.id]) rackNameByWineId[w.id] = rack.name;
+    }
+  }
+
+  // useCellar returns wines newest-first, so the most recent additions are
+  // just the head of the list — they update and roll off automatically as
+  // the cellar query refreshes.
+  const recentAdditions = wines.slice(0, 5);
 
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
@@ -140,7 +149,7 @@ export default function RacksScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wines</Text>
+        <Text style={styles.title}>Wine Racks & Fridges</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -151,24 +160,20 @@ export default function RacksScreen() {
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          <Text style={styles.subHeader}>Racks & Fridges</Text>
-
-          {/* Add Wine Rack + Add Wine Fridge sit above the rack list now
-              (was below) and render as a white side-by-side pair so the
-              two creation entry points read as siblings, distinct from
-              the yellow "primary action" buttons elsewhere in the app. */}
+          {/* Add a Wine Rack + Add a Wine Fridge — gold side-by-side pair
+              directly beneath the page header. */}
           <View style={styles.addButtonRow}>
             <TouchableOpacity
-              style={[styles.addButtonWhite, { flex: 1 }]}
+              style={[styles.addButtonGold, { flex: 1 }]}
               onPress={() => handleAddType('rack')}
             >
-              <Text style={styles.addButtonWhiteText}>Add Wine Rack</Text>
+              <Text style={styles.addButtonGoldText}>Add a Wine Rack</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.addButtonWhite, { flex: 1 }]}
+              style={[styles.addButtonGold, { flex: 1 }]}
               onPress={() => handleAddType('fridge')}
             >
-              <Text style={styles.addButtonWhiteText}>Add Wine Fridge</Text>
+              <Text style={styles.addButtonGoldText}>Add a Wine Fridge</Text>
             </TouchableOpacity>
           </View>
 
@@ -181,18 +186,11 @@ export default function RacksScreen() {
             />
           ))}
 
-          <View style={styles.divider} />
-
-          <Text style={styles.subHeader}>Cellar List</Text>
-
-          <View style={styles.cellarListSection}>
-            <TouchableOpacity style={styles.fullListButton} onPress={() => router.push('/cellar/list')}>
-              <Text style={styles.fullListButtonText}>View Full Cellar List</Text>
-            </TouchableOpacity>
-
-            {recentAdditions.length > 0 && (
-              <>
-                <Text style={styles.recentLabel}>Recently added</Text>
+          {recentAdditions.length > 0 && (
+            <>
+              <View style={styles.divider} />
+              <Text style={styles.subHeader}>Recently Added</Text>
+              <View style={styles.cellarListSection}>
                 {recentAdditions.map((w) => (
                   <TouchableOpacity
                     key={w.id}
@@ -203,12 +201,18 @@ export default function RacksScreen() {
                     <Text style={styles.recentName} numberOfLines={1}>
                       {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                     </Text>
-                    {w.region ? <Text style={styles.recentDetail} numberOfLines={1}>{w.region}</Text> : null}
+                    <View style={styles.recentMetaRow}>
+                      <Text style={styles.recentMeta}>{formatCreatedDate(w.created_at)}</Text>
+                      <Text style={styles.recentMetaDot}>·</Text>
+                      <Text style={styles.recentMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
+                      <Text style={styles.recentMetaDot}>·</Text>
+                      <Text style={styles.recentMeta} numberOfLines={1}>{rackNameByWineId[w.id] ?? 'Not in a rack'}</Text>
+                    </View>
                   </TouchableOpacity>
                 ))}
-              </>
-            )}
-          </View>
+              </View>
+            </>
+          )}
         </ScrollView>
       )}
 
@@ -271,10 +275,11 @@ const styles = StyleSheet.create({
   // White side-by-side Add Wine Rack / Add Wine Fridge buttons. Sized
   // a touch tighter than the old stacked yellow pair so two read
   // comfortably across the screen width.
-  addButtonRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md },
-  addButtonWhite: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center' },
+  addButtonRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  // Gold side-by-side Add a Wine Rack / Add a Wine Fridge buttons.
+  addButtonGold: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center' },
   // Cormorant — button text
-  addButtonWhiteText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  addButtonGoldText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   cellarListSection: { paddingHorizontal: spacing.xl },
   fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
@@ -287,6 +292,10 @@ const styles = StyleSheet.create({
   recentName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   // Inter — wine detail caption
   recentDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  // "Recently Added" meta line: date · bottles · rack
+  recentMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  recentMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, flexShrink: 1 },
+  recentMetaDot: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   // Photograph / manual chooser overlay
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
