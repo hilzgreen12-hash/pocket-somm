@@ -143,7 +143,6 @@ export default function OnboardingScreen() {
         <View style={styles.intro}>
           <Text style={styles.brand}>Your Preferences</Text>
           <Text style={styles.introBody}>Let's get You set up — you can add to or edit any of it later.</Text>
-          <Text style={styles.thanks}>You're one of the first 10,000 users — thank you for being here. Your subscription is on us.</Text>
         </View>
 
         <View style={styles.section}>
