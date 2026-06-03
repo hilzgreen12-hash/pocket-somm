@@ -21,17 +21,35 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
 
-type SortMode = 'recent' | 'score' | 'value';
+type SortMode =
+  | 'recent'
+  | 'est_desc' | 'est_asc'
+  | 'purch_desc' | 'purch_asc'
+  | 'critic_desc' | 'critic_asc'
+  | 'your_desc' | 'your_asc';
 
-const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'recent', label: 'Recently added' },
-  { value: 'score',  label: 'Score: high to low' },
-  { value: 'value',  label: 'Estimated value: high to low' },
+// The list defaults to most-recently-added (handled implicitly); the Price
+// and Score chips each offer the four directional sorts plus a reset.
+const PRICE_SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'est_desc',   label: 'Estimated Price Descending' },
+  { value: 'est_asc',    label: 'Estimated Price Ascending' },
+  { value: 'purch_desc', label: 'Purchase Price Descending' },
+  { value: 'purch_asc',  label: 'Purchase Price Ascending' },
 ];
+
+const SCORE_SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: 'critic_desc', label: 'Critic Score Descending' },
+  { value: 'critic_asc',  label: 'Critic Score Ascending' },
+  { value: 'your_desc',   label: 'Your Score Descending' },
+  { value: 'your_asc',    label: 'Your Score Ascending' },
+];
+
+const PRICE_SORTS: SortMode[] = ['est_desc', 'est_asc', 'purch_desc', 'purch_asc'];
+const SCORE_SORTS: SortMode[] = ['critic_desc', 'critic_asc', 'your_desc', 'your_asc'];
 
 const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
 
-type FilterField = 'rack' | 'country' | 'colour' | 'sort' | 'favourite' | null;
+type FilterField = 'rack' | 'country' | 'colour' | 'price' | 'score' | 'favourite' | null;
 
 type FavouriteFilter = 'all' | 'favourites';
 const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
@@ -170,15 +188,20 @@ export default function FullCellarListScreen() {
     return true;
   });
 
-  // Sort
+  // Sort. Default ('recent') is newest-added first; the Price/Score chips
+  // override with directional sorts. Nulls sort to the bottom either way.
   const sorted = [...filtered].sort((a, b) => {
-    if (sortMode === 'score') {
-      return (b.critic_score ?? -1) - (a.critic_score ?? -1);
+    switch (sortMode) {
+      case 'est_desc':   return Number(b.estimated_value ?? -1) - Number(a.estimated_value ?? -1);
+      case 'est_asc':    return Number(a.estimated_value ?? Infinity) - Number(b.estimated_value ?? Infinity);
+      case 'purch_desc': return Number(b.purchase_price ?? -1) - Number(a.purchase_price ?? -1);
+      case 'purch_asc':  return Number(a.purchase_price ?? Infinity) - Number(b.purchase_price ?? Infinity);
+      case 'critic_desc': return (b.critic_score ?? -1) - (a.critic_score ?? -1);
+      case 'critic_asc':  return (a.critic_score ?? Infinity) - (b.critic_score ?? Infinity);
+      case 'your_desc':   return (b.review_score ?? -1) - (a.review_score ?? -1);
+      case 'your_asc':    return (a.review_score ?? Infinity) - (b.review_score ?? Infinity);
+      default:            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
     }
-    if (sortMode === 'value') {
-      return Number(b.estimated_value ?? 0) - Number(a.estimated_value ?? 0);
-    }
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
   });
 
   const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
@@ -191,7 +214,10 @@ export default function FullCellarListScreen() {
   }, [racks]);
 
   const rackLabel = rackOptions.find((o) => o.value === rackFilter)?.label ?? 'All racks';
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added';
+  const priceActive = PRICE_SORTS.includes(sortMode);
+  const scoreActive = SCORE_SORTS.includes(sortMode);
+  const priceLabel = priceActive ? (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
+  const scoreLabel = scoreActive ? (SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
   const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
@@ -214,10 +240,18 @@ export default function FullCellarListScreen() {
         onSelect: setColourFilter,
       };
     }
-    if (field === 'sort') {
+    if (field === 'price') {
       return {
-        title: 'Sort',
-        options: SORT_OPTIONS.map((s) => ({ value: s.value, label: s.label })),
+        title: 'Sort by Price',
+        options: [{ value: 'recent', label: 'Recently added (default)' }, ...PRICE_SORT_OPTIONS],
+        selected: sortMode,
+        onSelect: (v) => setSortMode(v as SortMode),
+      };
+    }
+    if (field === 'score') {
+      return {
+        title: 'Sort by Score',
+        options: [{ value: 'recent', label: 'Recently added (default)' }, ...SCORE_SORT_OPTIONS],
         selected: sortMode,
         onSelect: (v) => setSortMode(v as SortMode),
       };
@@ -283,12 +317,19 @@ export default function FullCellarListScreen() {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
-        <TouchableOpacity style={[styles.filterChip, styles.sortChip]} onPress={() => setOpenDropdown('sort')}>
+        <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Sort</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>
+            <Text style={styles.filterChipLabel}>Price</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'price' ? '▴' : '▾'}</Text>
           </View>
-          <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
+          <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.filterChip, scoreActive && styles.sortChip]} onPress={() => setOpenDropdown('score')}>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Score</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'score' ? '▴' : '▾'}</Text>
+          </View>
+          <Text style={[styles.filterChipValue, scoreActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{scoreLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
           <View style={styles.filterChipHeadingRow}>
