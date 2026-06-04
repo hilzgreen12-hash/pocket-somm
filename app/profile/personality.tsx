@@ -345,5 +345,7 @@ const styles = StyleSheet.create({
   sketchText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 26 },
   archiveLink: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.sm },
   archiveLinkText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
-  offscreenShareWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
+  // Hidden off-screen by position only (NOT opacity:0 — that degrades the
+  // view-shot rasterisation on Android, which was softening the text).
+  offscreenShareWrap: { position: 'absolute', left: -10000, top: 0 },
 });
