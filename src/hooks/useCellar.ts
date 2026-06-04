@@ -59,7 +59,13 @@ export function useCellar() {
 
   const deleteWine = useMutation({
     mutationFn: (id: string) => archiveCellarWine(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      // Prune the removed wine from the cached cellar list immediately so its
+      // "memory" is gone the instant the archive succeeds — the fresh-add
+      // duplicate check can't match it even if the background refetch below
+      // is slow or fails on a flaky connection.
+      qc.setQueryData<CellarWine[]>(['cellar', userId], (old) =>
+        (old ?? []).filter((w) => w.id !== id));
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
       // Archiving a wine that was on the wishlist (is_wishlist=true) sets
