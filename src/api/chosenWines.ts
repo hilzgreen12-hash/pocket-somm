@@ -39,6 +39,9 @@ export interface ManualSaveChosenWineInput {
   // /label/results passes 'other' so those reviews can be filtered out
   // of the Restaurant Wines bucket in Your Wine Reviews.
   source?: 'restaurant' | 'other';
+  // Optional yyyy-mm-dd drinking date — overrides the chosen_at default of
+  // now() so Your Wine Reviews carries the date the user actually drank it.
+  reviewDate?: string | null;
 }
 
 export async function saveManualChosenWine(userId: string, input: ManualSaveChosenWineInput): Promise<ChosenWine> {
@@ -68,6 +71,7 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
     // omitting the key lets the DB default ('restaurant') kick in for
     // every existing call site that hasn't been updated.
     ...(input.source ? { source: input.source } : {}),
+    ...(input.reviewDate ? { chosen_at: input.reviewDate } : {}),
   }).select().single();
   if (error) throw new Error(error.message);
   return data as ChosenWine;
