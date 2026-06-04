@@ -29,6 +29,22 @@ if (Platform.OS === 'android') {
 
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
 
+// Join appellation + region without repeating the location. The AI sometimes
+// puts the country in both (e.g. appellation "West Sussex/England" + region
+// "England"), which read as "West Sussex/England, England". If one already
+// contains the other, keep the more specific one.
+function joinPlace(appellation?: string | null, region?: string | null): string {
+  const a = (appellation ?? '').trim();
+  const r = (region ?? '').trim();
+  if (!a) return r;
+  if (!r) return a;
+  const al = a.toLowerCase();
+  const rl = r.toLowerCase();
+  if (al.includes(rl)) return a;
+  if (rl.includes(al)) return r;
+  return `${a}, ${r}`;
+}
+
 export default function ResultsScreen() {
   const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
@@ -546,7 +562,7 @@ export default function ResultsScreen() {
             producerSameAsName ? null : wine.name,
             wine.vintage ? String(wine.vintage) : null,
           ].filter(Boolean).join(', ');
-          const regionalPlacement = [wine.appellation, wine.region].filter(Boolean).join(', ');
+          const regionalPlacement = joinPlace(wine.appellation, wine.region);
           const wineSubline = [regionalPlacement, wine.grape].filter(Boolean).join(' · ');
           return (
             <View key={wine.name + i} style={styles.card}>
