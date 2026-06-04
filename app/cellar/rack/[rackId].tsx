@@ -6,6 +6,7 @@ import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../../src/hooks/useAuth';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
@@ -32,6 +33,7 @@ function truncate(str: string, max: number) {
 export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
   const navigation = useNavigation();
+  const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
   const { racks, remove: removeRack, rename: renameRackMutation, wipe: wipeRackMutation } = useRacks();
   // useCellar gives us access to updateWine so we can bump the wine's
@@ -371,34 +373,77 @@ export default function RackGridScreen() {
     const wine = slot?.wine as CellarWine | null | undefined;
     if (!wine || !slot?.cellar_wine_id) return;
     const wineId = slot.cellar_wine_id;
+    const qty = wine.quantity ?? 1;
     // Long-press now opens an action sheet rather than dropping straight
     // into move-mode — this is also the user-facing entry point for
-    // deleting a wine directly from the rack grid.
+    // removing a wine directly from the rack grid.
+    const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = [
+      {
+        text: 'Move to another slot',
+        onPress: () => {
+          setMoving({ row, col, wineId, wineName: wine.wine_name });
+          setMovingMsg(`Moving ${wine.wine_name} — tap a slot to place, or tap the source slot to cancel`);
+        },
+      },
+    ];
+    // When more than one bottle is on record, deleting from a single slot
+    // must only remove THAT bottle — not wipe the whole listing. Offer the
+    // per-bottle removal as the primary destructive action, with the
+    // whole-listing delete as a clearly separate, heavier option.
+    if (qty > 1) {
+      buttons.push({
+        text: `Remove this bottle (1 of ${qty})`,
+        style: 'destructive',
+        onPress: () => confirmRemoveOneBottle(row, col, wineId, wine.wine_name, qty),
+      });
+    }
+    buttons.push({
+      text: qty > 1 ? `Delete all ${qty} bottles from cellar` : 'Delete wine from cellar',
+      style: 'destructive',
+      onPress: () => confirmDeleteWine(wineId, wine.wine_name, qty),
+    });
+    buttons.push({ text: 'Cancel', style: 'cancel' });
     showAlert({
       title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
       body: 'What would you like to do?',
+      buttons,
+    });
+  }
+
+  // Remove a single physical bottle from this slot: clear the slot and
+  // decrement the wine's recorded quantity by one. The listing (and any
+  // other bottles) stay in the cellar. Used only when qty > 1, so the
+  // post-decrement quantity is always >= 1.
+  function confirmRemoveOneBottle(row: number, col: number, wineId: string, wineName: string, qty: number) {
+    showAlert({
+      title: 'Remove this bottle?',
+      body: `Permanently remove one bottle of ${wineName} from this slot. You'll have ${qty - 1} left in your cellar.`,
       buttons: [
         {
-          text: 'Move to another slot',
-          onPress: () => {
-            setMoving({ row, col, wineId, wineName: wine.wine_name });
-            setMovingMsg(`Moving ${wine.wine_name} — tap a slot to place, or tap the source slot to cancel`);
-          },
-        },
-        {
-          text: 'Delete wine from cellar',
+          text: 'Remove one bottle',
           style: 'destructive',
-          onPress: () => confirmDeleteWine(wineId, wine.wine_name),
+          onPress: async () => {
+            try {
+              await clearSlot(rackId, row, col);
+              await updateWine.mutateAsync({ id: wineId, updates: { quantity: Math.max(1, qty - 1) } });
+              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+            } catch (err) {
+              showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
         },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  function confirmDeleteWine(wineId: string, wineName: string) {
+  function confirmDeleteWine(wineId: string, wineName: string, qty: number) {
     showAlert({
-      title: 'Delete wine?',
-      body: `Permanently remove ${wineName} from your records. This can't be undone.`,
+      title: qty > 1 ? `Delete all ${qty} bottles?` : 'Delete wine?',
+      body: qty > 1
+        ? `Permanently remove all ${qty} bottles of ${wineName} from your records. This can't be undone.`
+        : `Permanently remove ${wineName} from your records. This can't be undone.`,
       buttons: [
         {
           text: 'Delete permanently',
@@ -408,6 +453,13 @@ export default function RackGridScreen() {
               await clearWineFromRacks(wineId);
               const { error } = await supabase.from('cellar_wines').delete().eq('id', wineId);
               if (error) throw error;
+              // Prune from the cellar cache immediately so the deleted wine
+              // can't linger (and falsely match a fresh add) if the refetch
+              // below is slow or fails — same pattern as the wine card.
+              if (session?.user.id) {
+                qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
+                  (old ?? []).filter((w) => w.id !== wineId));
+              }
               qc.invalidateQueries({ queryKey: ['cellar'] });
               qc.invalidateQueries({ queryKey: ['cellar-archive'] });
               qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
@@ -699,7 +751,7 @@ export default function RackGridScreen() {
                   key={wine.id}
                   style={[styles.wineRow, active && styles.wineRowActive]}
                   onPress={() => toggleHighlight(wine.id)}
-                  onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name)}
+                  onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name, wine.quantity ?? 1)}
                   delayLongPress={400}
                 >
                   <View style={styles.wineRowMain}>
