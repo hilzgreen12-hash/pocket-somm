@@ -577,6 +577,16 @@ export default function RackGridScreen() {
           return (
             <View style={styles.pendingBanner}>
               <Text style={styles.pendingBannerText}>Tap an empty slot to place {headerLine}</Text>
+              {/* Always offer a way out — placing a wine is optional. Without
+                  this the prompt persists across every rack the user opens
+                  until they place it. Dismissing leaves the wine safely in
+                  the cellar, unplaced, to be racked later (or never). */}
+              <TouchableOpacity
+                onPress={() => { setPendingWineId(null); setPendingAddMode(false); }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.pendingBannerCancel}>Not now — leave it in my cellar</Text>
+              </TouchableOpacity>
             </View>
           );
         })()}
@@ -1071,4 +1081,5 @@ const styles = StyleSheet.create({
   pendingBanner: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, alignItems: 'center' },
   // Inter — banner body
   pendingBannerText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.gold, letterSpacing: 0.3 },
+  pendingBannerCancel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginTop: spacing.xs, textDecorationLine: 'underline' },
 });
