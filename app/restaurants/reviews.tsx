@@ -46,6 +46,7 @@ export default function RestaurantReviewsScreen() {
     ratingFood: number | null;
     ratingService: number | null;
     ratingWineList: number | null;
+    ratingValue: number | null;
     note: string | null;
     wines: Array<{ producer: string | null; wineName: string; vintage: string | number | null; userScore: number | null }>;
   } | null>(null);
@@ -84,6 +85,7 @@ export default function RestaurantReviewsScreen() {
       ratingFood: item.ratingFood,
       ratingService: item.ratingService,
       ratingWineList: item.ratingWineList,
+      ratingValue: item.ratingValue,
       note: item.restaurantNote?.trim() || null,
       wines: winesForCard,
     });
@@ -109,8 +111,9 @@ export default function RestaurantReviewsScreen() {
       const ratings = [
         ratingLine('Overall',  item.ratingOverall),
         ratingLine('Food',     item.ratingFood),
-        ratingLine('Service',  item.ratingService),
         ratingLine('Wine list', item.ratingWineList),
+        ratingLine('Service',  item.ratingService),
+        ratingLine('Value',    item.ratingValue),
       ].filter(Boolean).join('\n');
       const note = item.restaurantNote?.trim()
         ? `\n\n"${item.restaurantNote.trim()}"`
@@ -368,7 +371,7 @@ export default function RestaurantReviewsScreen() {
           ) : (
             sorted.map((item) => {
               const chosen = findChosenForVisit(item);
-              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null;
+              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingValue != null;
               return (
                 <View key={item.id} style={styles.cardCompact}>
                   {/* Restaurant header — tap to edit the restaurant review.
@@ -416,6 +419,12 @@ export default function RestaurantReviewsScreen() {
                             <StarRating value={item.ratingWineList} size={11} readonly />
                           </View>
                         )}
+                        {item.ratingValue != null && (
+                          <View style={styles.ratingCell}>
+                            <Text style={styles.ratingCellLabel}>Value</Text>
+                            <StarRating value={item.ratingValue} size={11} readonly />
+                          </View>
+                        )}
                       </View>
                     )}
                   </TouchableOpacity>
@@ -460,7 +469,9 @@ export default function RestaurantReviewsScreen() {
             service: editing.ratingService,
             wineList: editing.ratingWineList,
             overall: editing.ratingOverall,
+            value: editing.ratingValue,
           }}
+          initialFavourite={editing.isFavourite}
           city={editing.city}
           date={formatDate(editing.capturedAt)}
           wines={findChosenForVisit(editing).map((cw) => ({
@@ -469,6 +480,10 @@ export default function RestaurantReviewsScreen() {
             vintage: cw.vintage,
             userScore: cw.user_score,
           }))}
+          onReviewWine={(i) => {
+            const cw = findChosenForVisit(editing)[i];
+            if (cw) { closeRestaurantReview(); setEditingWine(cw); }
+          }}
           onClose={closeRestaurantReview}
           onSaved={closeRestaurantReview}
         />
@@ -494,6 +509,7 @@ export default function RestaurantReviewsScreen() {
             ratingFood={restaurantSharePayload.ratingFood}
             ratingService={restaurantSharePayload.ratingService}
             ratingWineList={restaurantSharePayload.ratingWineList}
+            ratingValue={restaurantSharePayload.ratingValue}
             note={restaurantSharePayload.note}
             wines={restaurantSharePayload.wines}
           />
@@ -513,8 +529,10 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   // Hides the off-screen branded share card from the visible layout
   // while still mounting it so react-native-view-shot can snapshot.
-  // Matches the WineListShareCard / WineReviewShareCard pattern.
-  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
+  // Matches the WineListShareCard / WineReviewShareCard pattern. No
+  // opacity:0 — on Android that degrades the rasterised PNG, so the card
+  // is hidden by off-screen position alone.
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
   cardCompactRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   // Star rating sits above the share icon on the right of each card.
