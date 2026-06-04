@@ -33,10 +33,17 @@ Return ONLY a valid JSON object with exactly this structure:
   "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining">,
   "grapeVariety": <primary grape variety or blend, e.g. "Pinot Noir" or "Grenache/Syrah/Mourvèdre">,
   "tastingNotes": <2-3 sentences describing the wine's character in an elegant sommelier style>,
-  "estimatedValue": <integer per-bottle retail estimate in ${cur} from typical independent merchants in the relevant market, or null if too obscure to estimate. Account for vintage scarcity, producer reputation, and current market trends. This is a single point estimate, not a range — be honest about uncertainty by returning null rather than guessing wildly. Return the number only — no currency symbol, no decimals>
+  "estimatedValue": <integer single best per-bottle retail estimate in ${cur} from typical independent merchants in the relevant market, or null. Return null READILY — whenever the wine is rare, obscure, from a small or low-distribution producer, or you are not genuinely confident of its current market price. A wrong number is far worse than null, so when in doubt return null rather than guessing. Account for vintage scarcity, producer reputation, and current market trends. Return the number only — no currency symbol, no decimals>,
+  "estimatedValueLow": <integer low end of a plausible per-bottle price range in ${cur}, or null. Set this together with estimatedValueHigh whenever you provide an estimatedValue>,
+  "estimatedValueHigh": <integer high end of the plausible per-bottle price range in ${cur}, or null>,
+  "valueConfidence": <"high" | "medium" | "low" reflecting how confident you are in estimatedValue, or null when estimatedValue is null. Use "high" ONLY for widely-traded wines with well-established, stable pricing; "medium" when you have a reasonable sense but limited data; "low" when you are estimating from sparse knowledge>
 }
 
-Always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown". Base the status on the current year ${currentYear} relative to the from/to years. Return only the raw JSON — no markdown, no explanation.`;
+Always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown". Base the status on the current year ${currentYear} relative to the from/to years.
+
+Be conservative and honest with valuation: it is better to return null for estimatedValue (and valueConfidence) than to publish a confident-looking but wrong price. Only mark "high" confidence for wines you genuinely know trade actively at an established price.
+
+Return only the raw JSON — no markdown, no explanation.`;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
