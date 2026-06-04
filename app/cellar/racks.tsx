@@ -57,7 +57,7 @@ export default function RacksScreen() {
   const { session } = useAuth();
   const { racks, isLoading, remove: removeRack } = useRacks();
   const { wines } = useCellar();
-  const { setPendingStorageType, reset: resetRackStore } = useRackStore();
+  const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
   // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
   // that storage type (photograph vs manual layout).
   const [chooser, setChooser] = useState<'rack' | 'fridge' | null>(null);
@@ -117,9 +117,21 @@ export default function RacksScreen() {
     setChooser(type);
   }
 
+  // Clear any stale "place this wine" intent left over from an earlier,
+  // abandoned add flow. Creating a rack here is a fresh start — the new
+  // rack should open empty, not demanding the user place a wine they chose
+  // not to place earlier. (The legitimate "create a rack to hold this
+  // scanned wine" flow sets pendingWineId and goes straight to the camera
+  // from the scan results, bypassing this screen, so it's unaffected.)
+  function clearStalePendingWine() {
+    setPendingWineId(null);
+    setPendingAddMode(false);
+  }
+
   // "Photograph your rack/fridge" — the existing camera-then-detect flow.
   function handleChoosePhotograph() {
     if (!chooser) return;
+    clearStalePendingWine();
     setPendingStorageType(chooser);
     setChooser(null);
     router.push('/cellar/rack/camera');
@@ -131,6 +143,7 @@ export default function RacksScreen() {
   // from a previous photograph attempt don't bleed through.
   function handleChooseManual() {
     if (!chooser) return;
+    clearStalePendingWine();
     resetRackStore();
     setPendingStorageType(chooser);
     setChooser(null);
