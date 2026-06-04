@@ -418,10 +418,10 @@ const styles = StyleSheet.create({
   rowValue: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'right', flexShrink: 1, marginLeft: spacing.md },
   rowValueSmall: { fontSize: 13, fontFamily: fonts.bodyRegular },
   // Currency selector tappable value — still a value, leans Inter.
-  rowValueLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
+  rowValueLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: '#FFFFFF' },
   editLinkBtn: { alignSelf: 'flex-end', marginTop: 2 },
   // "Edit" link button text.
-  editLinkText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.gold },
+  editLinkText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold },
   editPanel: { marginTop: spacing.sm, gap: 4 },
   fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, paddingVertical: 8, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: 4 },
