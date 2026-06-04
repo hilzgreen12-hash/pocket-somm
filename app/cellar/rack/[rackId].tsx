@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
@@ -31,6 +31,7 @@ function truncate(str: string, max: number) {
 
 export default function RackGridScreen() {
   const { rackId } = useLocalSearchParams<{ rackId: string }>();
+  const navigation = useNavigation();
   const { slots, isLoading, assign } = useRack(rackId);
   const { racks, remove: removeRack, rename: renameRackMutation, wipe: wipeRackMutation } = useRacks();
   // useCellar gives us access to updateWine so we can bump the wine's
@@ -140,6 +141,28 @@ export default function RackGridScreen() {
         }),
     [prevRack?.id, nextRack?.id],
   );
+
+  // Back navigation. A rack can be reached two ways:
+  //   1. Cellar → Racks → Rack (or via the Camera → Detect scanner flow),
+  //      where the Racks landing page sits below us in the stack.
+  //   2. Directly from a wine detail / cellar list (router.push), where
+  //      there is NO Racks page in the stack at all.
+  // dismissTo('/cellar/racks') is right for (1) — it collapses any scanner
+  // screens and lands on the existing Racks page. But in case (2) dismissTo
+  // falls back to PUSHING a fresh Racks page; its Back then returns here,
+  // and our Back pushes Racks again — an infinite loop. So we only dismissTo
+  // when a Racks route actually exists in the stack, otherwise plain back().
+  function handleBack() {
+    const state = navigation.getState?.();
+    const hasRacks = state?.routes?.some((r) => r.name === 'cellar/racks') ?? false;
+    if (hasRacks) {
+      router.dismissTo('/cellar/racks');
+    } else if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace('/(tabs)/cellar');
+    }
+  }
 
   const slotMap = useMemo(() => {
     const map: Record<string, RackSlot> = {};
@@ -467,7 +490,7 @@ export default function RackGridScreen() {
             Detect → Rack) the same way. Using router.navigate() here
             pushed a SECOND copy of racks onto the stack, which then
             looped the user back through the rack on the next Back. */}
-        <TouchableOpacity onPress={() => router.dismissTo('/cellar/racks')}>
+        <TouchableOpacity onPress={handleBack}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
