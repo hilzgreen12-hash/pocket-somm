@@ -386,7 +386,7 @@ export default function FullCellarListScreen() {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search producer, wine, region…"
+          placeholder="Search producer, wine, region, vintage…"
           placeholderTextColor={colors.textMuted}
           returnKeyType="search"
           clearButtonMode="while-editing"
