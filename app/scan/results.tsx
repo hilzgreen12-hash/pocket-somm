@@ -18,6 +18,7 @@ import { normaliseCity } from '../../src/utils/city';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
+import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -49,7 +50,7 @@ export default function ResultsScreen() {
   const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
-  const { autoSave } = useScanHistory();
+  const { autoSave, archive } = useScanHistory();
   const { session } = useAuth();
   const { preferences: userPrefs } = usePreferences();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
@@ -102,6 +103,8 @@ export default function ResultsScreen() {
   // via View Last Result or the archive), falling back to whatever
   // autoSave landed in this session.
   const effectiveSessionId = sessionId ?? autoSave.data?.[0]?.sessionId ?? null;
+  const [restaurantReviewOpen, setRestaurantReviewOpen] = useState(false);
+  const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
 
   // Fetch a fresh GPS reading on mount so the stamp can show the user's
   // city in real time, before the server-side autoSave round-trip lands.
@@ -185,15 +188,19 @@ export default function ResultsScreen() {
     }
   }
 
-  // Save any restaurant name in place, then open Your Restaurants with
-  // THIS visit's review form already open (deep-link via ?openSession=).
-  // Used by both the tappable location line and the foot-of-page CTA — the
-  // old behaviour dropped the user on the bare list instead of the form.
+  // Save any restaurant name in place, then open the restaurant review form
+  // right here on the results screen. Used by both the tappable location
+  // line and the foot-of-page CTA — the form opens in place rather than
+  // bouncing the user to the Your Restaurants list.
   async function openRestaurantReview() {
     await handleSaveRestaurant();
     const id = sessionId ?? autoSave.data?.[0]?.sessionId ?? null;
-    qc.invalidateQueries({ queryKey: ['scan-archive'] });
-    router.push(id ? `/restaurants/reviews?openSession=${id}` : '/restaurants/reviews');
+    if (!id) {
+      showAlert({ title: 'Add a restaurant first', body: 'Add the restaurant name above, then you can review it.' });
+      return;
+    }
+    setReviewSessionId(id);
+    setRestaurantReviewOpen(true);
   }
 
   // The List Archive is gone — autoSave still fires from
@@ -736,6 +743,26 @@ export default function ResultsScreen() {
           setChosenModalWine(null);
         }}
       />
+
+      {/* Restaurant review form — opened from the location line or the
+          foot-of-page CTA. Pre-filled from the saved scan_session when one
+          exists (e.g. View Last Result), blank for a fresh review. */}
+      {reviewSessionId ? (() => {
+        const item = archive.find((a) => a.id === reviewSessionId) ?? null;
+        return (
+          <RestaurantReviewModal
+            visible={restaurantReviewOpen}
+            sessionId={reviewSessionId}
+            initialName={restaurantName || item?.restaurantName || null}
+            initialNote={item?.restaurantNote ?? null}
+            initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall } : null}
+            city={stampCity}
+            date={stampDate}
+            onClose={() => setRestaurantReviewOpen(false)}
+            onSaved={() => { setRestaurantReviewOpen(false); qc.invalidateQueries({ queryKey: ['scan-archive'] }); }}
+          />
+        );
+      })() : null}
 
       {/* Off-screen share card. Positioned out of view; captured to a
           PNG when the user taps Share so the system share sheet gets a
