@@ -8,10 +8,12 @@ import { router, useSegments } from 'expo-router';
 // enable carousel-style navigation between the main tabs.
 const TAB_ORDER = ['scan', 'chef', 'cellar', 'community', 'you'] as const;
 
-// Tunables — set to feel firm enough that small finger drags don't trigger.
-const ACTIVATE_OFFSET = 30;   // px horizontal before the gesture takes over
-const FAIL_OFFSET_Y = 30;     // px vertical before the gesture gives up (lets ScrollView win)
-const COMMIT_DISTANCE = 80;   // px translation required to actually switch tab
+// Tunables — firm enough that small finger drags don't trigger, but a
+// quick flick still switches tabs even when it travels a short distance.
+const ACTIVATE_OFFSET = 18;   // px horizontal before the gesture takes over
+const FAIL_OFFSET_Y = 28;     // px vertical before the gesture gives up (lets ScrollView win)
+const COMMIT_DISTANCE = 55;   // px translation that commits a switch on release
+const FLING_VELOCITY = 450;   // px/s — a fast flick commits even below COMMIT_DISTANCE
 
 interface Props {
   children: ReactNode;
@@ -33,9 +35,14 @@ export function TabSwipeView({ children, style }: Props) {
         .onEnd((e) => {
           const idx = TAB_ORDER.indexOf(currentTab as (typeof TAB_ORDER)[number]);
           if (idx === -1) return;
-          if (e.translationX < -COMMIT_DISTANCE && idx < TAB_ORDER.length - 1) {
+          // Commit on either a long-enough drag OR a fast flick in the same
+          // direction. The velocity path is what makes a quick swipe feel
+          // responsive — you no longer have to drag the full COMMIT_DISTANCE.
+          const goNext = e.translationX < 0 && (e.translationX < -COMMIT_DISTANCE || e.velocityX < -FLING_VELOCITY);
+          const goPrev = e.translationX > 0 && (e.translationX > COMMIT_DISTANCE || e.velocityX > FLING_VELOCITY);
+          if (goNext && idx < TAB_ORDER.length - 1) {
             router.replace(`/(tabs)/${TAB_ORDER[idx + 1]}` as any);
-          } else if (e.translationX > COMMIT_DISTANCE && idx > 0) {
+          } else if (goPrev && idx > 0) {
             router.replace(`/(tabs)/${TAB_ORDER[idx - 1]}` as any);
           }
         }),
