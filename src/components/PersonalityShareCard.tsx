@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/theme';
+import { personalityBlurb } from '../utils/personalityText';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 
 // Branded card for sharing personality sketches — 1080 wide and as tall
@@ -27,6 +28,8 @@ export const PersonalityShareCard = forwardRef<View, Props>(({ title, body, cate
         <View style={styles.divider} />
 
         <Text style={styles.subhead}>{heading}</Text>
+
+        <Text style={styles.blurb}>{personalityBlurb(category)}</Text>
 
         {title ? <Text style={styles.title}>{title}</Text> : null}
 
@@ -88,6 +91,14 @@ const styles = StyleSheet.create({
     letterSpacing: 6,
     textAlign: 'center',
     marginBottom: 24,
+  },
+  blurb: {
+    fontFamily: 'CormorantGaramond_400Regular_Italic',
+    fontSize: 30,
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 42,
+    textAlign: 'center',
+    marginBottom: 36,
   },
   title: {
     fontFamily: 'CormorantGaramond_700Bold',

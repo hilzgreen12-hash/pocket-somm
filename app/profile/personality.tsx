@@ -14,7 +14,7 @@ import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
-import { splitPersonality } from '../../src/utils/personalityText';
+import { splitPersonality, personalityBlurb } from '../../src/utils/personalityText';
 import { PersonalityShareCard } from '../../src/components/PersonalityShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -257,7 +257,7 @@ export default function PersonalityScreen() {
           <Text style={styles.heading}>{
             cat === 'wine' ? 'Your Wine Personality' : 'Your Foodie Personality'
           }</Text>
-          <Text style={styles.subheading}>A character sketch through the lens of your profile and your choices so far.</Text>
+          <Text style={styles.subheading}>{personalityBlurb(cat)}</Text>
         </View>
 
         {loading ? (
