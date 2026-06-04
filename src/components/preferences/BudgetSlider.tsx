@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Slider from '@react-native-community/slider';
-import { spacing } from '../../constants/theme';
+import { colors, spacing } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
 import { currencySymbol } from '../../constants/currency';
 
@@ -47,6 +47,9 @@ export function BudgetSlider({ value, onChange, currency, label }: Props) {
   // controlled `value` prop (each parent update would otherwise force the
   // thumb back and break the gesture). Commit upstream on release.
   const [localIndex, setLocalIndex] = useState(() => valueToIndex(value));
+  // Goes gold once the user actually sets a budget (drags the slider),
+  // confirming the choice the same way the other preference inputs do.
+  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     setLocalIndex(valueToIndex(value));
@@ -58,7 +61,7 @@ export function BudgetSlider({ value, onChange, currency, label }: Props) {
 
   return (
     <View style={{ width: '100%' }}>
-      <Text style={styles.value}>
+      <Text style={[styles.value, touched && styles.valueConfirmed]}>
         {label ? `${label}  ` : ''}{atMax ? 'Baller' : `${sym}${current}`}.
       </Text>
       <Slider
@@ -67,7 +70,7 @@ export function BudgetSlider({ value, onChange, currency, label }: Props) {
         step={1}
         value={localIndex}
         onValueChange={(i) => setLocalIndex(Math.round(i))}
-        onSlidingComplete={(i) => onChange(VALUES[Math.round(i)])}
+        onSlidingComplete={(i) => { setTouched(true); onChange(VALUES[Math.round(i)]); }}
         minimumTrackTintColor="rgba(255,255,255,0.80)"
         maximumTrackTintColor="rgba(255,255,255,0.20)"
         thumbTintColor="#FFFFFF"
@@ -87,6 +90,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: spacing.sm,
     textAlign: 'center',
+  },
+  valueConfirmed: {
+    color: colors.gold,
   },
   labels: {
     flexDirection: 'row',
