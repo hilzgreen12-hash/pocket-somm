@@ -755,9 +755,12 @@ export default function ResultsScreen() {
             sessionId={reviewSessionId}
             initialName={restaurantName || item?.restaurantName || null}
             initialNote={item?.restaurantNote ?? null}
-            initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall } : null}
+            initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall, value: item.ratingValue } : null}
+            initialFavourite={item?.isFavourite ?? false}
             city={stampCity}
             date={stampDate}
+            wines={recommendation.wines.map((w) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
+            onReviewWine={(i) => { setRestaurantReviewOpen(false); setChosenModalWine(recommendation.wines[i]); }}
             onClose={() => setRestaurantReviewOpen(false)}
             onSaved={() => { setRestaurantReviewOpen(false); qc.invalidateQueries({ queryKey: ['scan-archive'] }); }}
           />
