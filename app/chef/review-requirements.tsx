@@ -249,7 +249,7 @@ export default function ReviewRequirementsScreen() {
         style={styles.input}
         value={specificConcerns}
         onChangeText={setSpecificConcerns}
-        placeholder="e.g. High Protein, Low Calorie, Include Asparagus"
+        placeholder="e.g. High Protein, Low Calorie, Spring Vibes, No Anchovies"
         placeholderTextColor={colors.textMuted}
         multiline
         numberOfLines={3}
