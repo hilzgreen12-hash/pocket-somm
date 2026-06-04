@@ -22,6 +22,10 @@ export function VinsterHeader() {
 }
 
 const styles = StyleSheet.create({
-  wrap: { alignItems: 'center', alignSelf: 'center', marginBottom: spacing.xs },
-  mark: { width: 64, height: 64 },
+  // Sits top-left of each tab page. The negative bottom margin lets the tab
+  // title pull up alongside it so the mark costs almost no vertical space —
+  // it was previously a centred row above the title, pushing content down
+  // (and clipping the List page's bottom buttons).
+  wrap: { alignSelf: 'flex-start', marginBottom: -36 },
+  mark: { width: 48, height: 48 },
 });
