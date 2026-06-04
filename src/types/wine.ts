@@ -86,12 +86,27 @@ export interface WineDetailsComplete {
   bottleSizeMl?: number | null;
 }
 
+// A single named critic's published score. `critic` is a short
+// abbreviation (JS = James Suckling, JR = Jancis Robinson, NM = Neal
+// Martin, WK = William Kelly, etc.). Most critics score out of 100;
+// `scale` carries the denominator since Jancis Robinson uses /20.
+export interface CriticScore {
+  critic: string;
+  score: number;
+  scale: string;
+}
+
 export interface WineIntelligence {
+  // Average / consensus critic score (out of 100). Shown as "Avg Critic
+  // Score" on the Wine Intel card, with the per-critic breakdown below.
   criticScore: number | null;
   // Short explanation surfaced when criticScore is null — e.g. "small
   // producer, no published reviews." Lets Vinster say WHY rather than
   // showing a blank score with no context.
   criticScoreNote?: string | null;
+  // Individual published scores Vinster is confident are real for this
+  // exact wine + vintage. Empty / absent when none are recalled.
+  criticScores?: CriticScore[] | null;
   drinkingWindowFrom: number | null;
   drinkingWindowTo: number | null;
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';

@@ -25,8 +25,9 @@ Provide intelligence on this wine:
 
 Return ONLY a valid JSON object with exactly this structure:
 {
-  "criticScore": <integer 0-100 representing typical critic consensus, or null if very obscure>,
+  "criticScore": <integer 0-100 representing the AVERAGE / consensus critic score for this exact wine and vintage, or null if very obscure. When you list individual scores in criticScores below, this should be their rough average (convert any /20 scores to /100 first)>,
   "criticScoreNote": <single short sentence — 20 words max — explaining why no critic score is available when criticScore is null. e.g. "No published reviews — this is a small-production producer rarely covered by mainstream critics." or "Vintage too young — no major critics have scored this release yet." Set to null when criticScore is provided>,
+  "criticScores": <array of individual PUBLISHED critic scores for this EXACT wine and vintage that you genuinely recall as real. Each item: {"critic": <short abbreviation>, "score": <number on that critic's own scale>, "scale": <"100" for most critics; "20" for Jancis Robinson>}. Use these standard abbreviations only: "JS" (James Suckling), "JR" (Jancis Robinson, /20), "NM" (Neal Martin), "WK" (William Kelly), "AG" (Antonio Galloni), "WA" (Wine Advocate), "WS" (Wine Spectator), "WE" (Wine Enthusiast), "D" (Decanter), "V" (Vinous), "JD" (Jeb Dunnuck), "BH" (Burghound). CRITICAL: include ONLY scores you are genuinely confident were actually published for this precise wine+vintage — never invent, guess, or approximate a plausible-looking number. Return an empty array [] if you do not confidently recall any specific published scores. Maximum 6 entries>,
   "drinkingWindowFrom": <4-digit year when ready to drink, or null>,
   "drinkingWindowTo": <4-digit year by which it should ideally be drunk, or null>,
   "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining">,

@@ -559,13 +559,28 @@ export default function LabelResultsScreen() {
       </View>
 
       {intel.criticScore !== null ? (
-        <View style={styles.scoreRow}>
-          <Text style={styles.scoreLabel}>Critic Score</Text>
-          <Text style={styles.score}>{intel.criticScore}</Text>
+        <View style={styles.criticBlock}>
+          <View style={styles.criticScoreRow}>
+            <Text style={styles.scoreLabel}>Avg Critic Score</Text>
+            <Text style={styles.score}>{intel.criticScore}</Text>
+          </View>
+          {intel.criticScores && intel.criticScores.length > 0 ? (
+            <>
+              <View style={styles.criticBreakdown}>
+                {intel.criticScores.map((c, i) => (
+                  <Text key={`${c.critic}-${i}`} style={styles.criticChipText}>
+                    <Text style={styles.criticChipName}>{c.critic}</Text>
+                    {` ${c.scale && c.scale !== '100' ? `${c.score}/${c.scale}` : c.score}`}
+                  </Text>
+                ))}
+              </View>
+              <Text style={styles.criticBreakdownCaption}>Published scores as recalled by Vinster — verify against the critic before relying on them.</Text>
+            </>
+          ) : null}
         </View>
       ) : intel.criticScoreNote ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Critic Score</Text>
+          <Text style={styles.sectionTitle}>Avg Critic Score</Text>
           <Text style={styles.tastingNotes}>{intel.criticScoreNote}</Text>
         </View>
       ) : null}
@@ -950,6 +965,13 @@ const styles = StyleSheet.create({
   scoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   scoreLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   score: { fontSize: 28, fontFamily: fonts.bodyBold, color: colors.gold },
+  // Avg Critic Score header row + per-critic breakdown beneath it.
+  criticBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  criticScoreRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  criticBreakdown: { flexDirection: 'row', flexWrap: 'wrap', marginTop: spacing.sm, columnGap: spacing.md, rowGap: spacing.xs },
+  criticChipText: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text },
+  criticChipName: { fontFamily: fonts.bodyBold, color: colors.gold },
+  criticBreakdownCaption: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 18 },
   badge: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   badgeText: { fontSize: 14, fontFamily: fonts.bodySemibold },
   badgeWindow: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },

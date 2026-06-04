@@ -785,7 +785,7 @@ export default function CellarWineDetail() {
           below so each has room to breathe and a clearer call to action. */}
       <View style={styles.statsGrid}>
         <View style={styles.statCell}>
-          <Text style={styles.statLabel}>Critic Score</Text>
+          <Text style={styles.statLabel}>Avg Critic Score</Text>
           <Text style={styles.statValue}>{wine.critic_score != null ? wine.critic_score : '—'}</Text>
         </View>
         <View style={styles.statCell}>
