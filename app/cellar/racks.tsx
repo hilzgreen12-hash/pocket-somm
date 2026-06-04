@@ -26,7 +26,10 @@ function formatCreatedDate(iso: string) {
 
 function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
   const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-  const blurb = rackHomeToBlurb(rack.id, wines);
+  // rackHomeToBlurb was phrased to follow "Home to" (now removed), so it's
+  // lower-case — capitalise the first letter for the standalone line.
+  const rawBlurb = rackHomeToBlurb(rack.id, wines);
+  const blurb = rawBlurb ? rawBlurb.charAt(0).toUpperCase() + rawBlurb.slice(1) : rawBlurb;
 
   return (
     <TouchableOpacity
@@ -42,7 +45,6 @@ function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWi
           <Text style={styles.rowCreated}>Created {formatCreatedDate(rack.created_at)}</Text>
         </View>
         <View style={styles.homeToRow}>
-          <Text style={styles.homeToLabel}>Home to</Text>
           <Text style={styles.homeToBlurb}>{blurb}</Text>
         </View>
       </View>
