@@ -922,7 +922,7 @@ const styles = StyleSheet.create({
   // Inter — pop-up body
   placeBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   // Inter — form input
-  placeInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 20, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
+  placeInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 20, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', width: 96, alignSelf: 'center', marginBottom: spacing.md },
   // Inter — form label
   placeFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   placeOrientationRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
