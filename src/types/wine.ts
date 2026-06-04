@@ -112,7 +112,14 @@ export interface WineIntelligence {
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
   grapeVariety: string | null;
   tastingNotes: string;
+  // Single best per-bottle estimate. Returned null readily — only set when
+  // Vinster is reasonably confident — since a wrong number is worse than
+  // none. The low/high bracket a plausible range; valueConfidence flags how
+  // much to trust it. Range + confidence are display-only (not persisted).
   estimatedValue: number | null;
+  estimatedValueLow?: number | null;
+  estimatedValueHigh?: number | null;
+  valueConfidence?: 'high' | 'medium' | 'low' | null;
 }
 
 export interface Recipe {

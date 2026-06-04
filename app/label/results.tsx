@@ -604,12 +604,21 @@ export default function LabelResultsScreen() {
         {intel.estimatedValue != null ? (
           <View style={{ marginTop: spacing.sm }}>
             <Text style={styles.estimateValue}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
-            <Text style={styles.estimateCaption}>per bottle · AI estimate as of {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })} · based on producer, region, and vintage</Text>
+            {(intel.estimatedValueLow != null && intel.estimatedValueHigh != null) || intel.valueConfidence ? (
+              <Text style={styles.estimateRange}>
+                {intel.estimatedValueLow != null && intel.estimatedValueHigh != null
+                  ? `Likely ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}`
+                  : ''}
+                {intel.estimatedValueLow != null && intel.estimatedValueHigh != null && intel.valueConfidence ? '  ·  ' : ''}
+                {intel.valueConfidence ? `${intel.valueConfidence} confidence` : ''}
+              </Text>
+            ) : null}
+            <Text style={styles.estimateCaption}>Vinster's estimate — verify before insuring or selling. Based on producer, region and vintage as of {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Adjust the price when saving to your cellar.</Text>
           </View>
         ) : (
           <View style={{ marginTop: spacing.sm }}>
             <Text style={styles.estimateUnavailable}>Not enough market data</Text>
-            <Text style={styles.estimateCaption}>This wine is too obscure for Vinster to estimate reliably. Adjust the estimated purchase price when saving to your cellar to track value yourself.</Text>
+            <Text style={styles.estimateCaption}>Vinster won't guess at a price for this one — it's too rare or obscure to estimate reliably. Set the estimated value yourself when saving it to your cellar.</Text>
           </View>
         )}
       </View>
@@ -981,6 +990,7 @@ const styles = StyleSheet.create({
   estimateHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   estimateGenerateLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   estimateValue: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.5 },
+  estimateRange: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 2, textTransform: 'capitalize' },
   estimateUnavailable: { fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   estimateCaption: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs, lineHeight: 19 },
   communityRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
