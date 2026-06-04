@@ -98,9 +98,8 @@ export default function ChefTab() {
 
       {/* Wine → Recipe */}
       <View style={styles.section}>
-        <Text style={styles.subheading}>Chosen your bottle?</Text>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/review-requirements')}>
-          <Text style={styles.buttonText}>Find Me a Recipe</Text>
+          <Text style={styles.buttonText}>I've got a wine, find me a recipe</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleViewLastLabelSearch}>
           <Text style={styles.lastResultLink}>View last result</Text>
@@ -109,9 +108,8 @@ export default function ChefTab() {
 
       {/* Recipe → Wine (flow unchanged) */}
       <View style={[styles.section, { marginTop: spacing.lg }]}>
-        <Text style={styles.subheading}>Have a recipe & need a wine?</Text>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/find-pairing')}>
-          <Text style={styles.buttonText}>Find a Wine Pairing</Text>
+          <Text style={styles.buttonText}>I've got a recipe, find me a wine</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleViewLastPairing}>
           <Text style={styles.lastResultLink}>View last result</Text>
