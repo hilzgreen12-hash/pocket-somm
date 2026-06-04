@@ -26,7 +26,7 @@ import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
-import type { WineDetailsComplete } from '../../src/types/wine';
+import type { WineDetailsComplete, CellarWine } from '../../src/types/wine';
 
 function todayISO() {
   return new Date().toISOString().split('T')[0];
@@ -289,6 +289,13 @@ export default function CellarWineDetail() {
         });
         await clearWineFromRacks(wine!.id);
         if (session?.user.id) {
+          // Drop the archived wine from the live cellar cache straight away —
+          // it no longer belongs in the Cellar List, and leaving it there
+          // would let a fresh add falsely match it as a duplicate if the
+          // refetch lags or fails.
+          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
+            (old ?? []).filter((w) => w.id !== wine!.id));
+          qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
         }
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -448,6 +455,16 @@ export default function CellarWineDetail() {
       await clearWineFromRacks(wine.id);
       const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
       if (error) throw error;
+      // Prune the deleted wine from the cached cellar list synchronously, so
+      // its "memory" is gone immediately and the duplicate-detection on a
+      // fresh add can never match it — even if the background refetch below
+      // is slow or fails on a flaky connection (which previously left the
+      // stale row in cache for up to gcTime and triggered a false
+      // "already in your cellar" prompt).
+      if (session?.user.id) {
+        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
+          (old ?? []).filter((w) => w.id !== wine.id));
+      }
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['cellar-archive'] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
