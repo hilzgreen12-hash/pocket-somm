@@ -38,6 +38,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
   const [isFavourite, setIsFavourite] = useState(false);
+  const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().split('T')[0]);
 
   useEffect(() => {
     if (visible) {
@@ -107,6 +108,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
           otherObservations,
           userScore,
           isFavourite,
+          reviewDate: reviewDate.trim() || null,
         });
       } else {
         const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
@@ -211,7 +213,16 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Where did you drink it?</Text>
+            <Text style={styles.sectionLabel}>When/where did you drink it?</Text>
+
+            <Text style={styles.fieldLabel}>Date</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewDate}
+              onChangeText={setReviewDate}
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor={colors.textMuted}
+            />
 
             <Text style={styles.fieldLabel}>Restaurant name</Text>
             <TextInput
