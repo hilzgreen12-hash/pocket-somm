@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { TextInput, StyleSheet } from 'react-native';
 import { colors } from '../../constants/theme';
 import { fonts } from '../../constants/fonts';
@@ -9,17 +8,15 @@ interface Props {
 }
 
 export function FoodPairingInput({ value, onChange }: Props) {
-  const [focused, setFocused] = useState(false);
-  // White while the user is typing; gold once they move on with content,
-  // mirroring the style/refinement confirmation cue.
-  const confirmed = !focused && value.trim().length > 0;
+  // Gold as soon as the field has content, so the user sees their entry
+  // acknowledged immediately — even while typing, before they tap away —
+  // mirroring how the other preference inputs confirm a selection.
+  const confirmed = value.trim().length > 0;
   return (
     <TextInput
       style={[styles.input, confirmed && styles.inputConfirmed]}
       value={value}
       onChangeText={onChange}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
       placeholder="e.g. rack of lamb, truffle risotto, grilled sea bass…"
       placeholderTextColor="rgba(255,255,255,0.25)"
       multiline
