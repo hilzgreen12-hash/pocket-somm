@@ -90,8 +90,8 @@ export default function CellarTab() {
           <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={styles.buttonText}>Your Wine Racks & Fridges</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
+          <Text style={styles.buttonText}>Quick Cellar Stats</Text>
         </TouchableOpacity>
       </View>
 
@@ -102,8 +102,8 @@ export default function CellarTab() {
           <Text style={styles.buttonText}>Your Full Cellar List</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
-          <Text style={styles.buttonText}>Quick Cellar Stats</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
+          <Text style={styles.buttonText}>Your Wine Racks & Fridges</Text>
         </TouchableOpacity>
       </View>
 
