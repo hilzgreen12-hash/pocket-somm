@@ -3,6 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Image,
   Switch, Modal, Keyboard, LayoutAnimation, Platform, UIManager,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -131,12 +132,13 @@ export default function OnboardingScreen() {
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.container}
         contentContainerStyle={{ paddingTop: 80, paddingBottom: 60 }}
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
+        bottomOffset={24}
       >
         <Image source={require('../assets/vinster-mark.png')} style={styles.cornerIcon} resizeMode="contain" />
 
@@ -253,7 +255,7 @@ export default function OnboardingScreen() {
         <TouchableOpacity onPress={() => router.replace('/onboarding-tour')} style={styles.backLink} activeOpacity={0.7}>
           <Text style={styles.backLinkText}>Back through carousel</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
         <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setCurrencyOpen(false)}>

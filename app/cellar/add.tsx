@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -142,12 +143,13 @@ export default function AddWineScreen() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       keyboardShouldPersistTaps="always"
       automaticallyAdjustKeyboardInsets
       keyboardDismissMode="interactive"
+      bottomOffset={24}
     >
       <TouchableOpacity onPress={() => router.back()}>
         <Text style={styles.back}>Back</Text>
@@ -241,7 +243,7 @@ export default function AddWineScreen() {
           : <Text style={styles.saveButtonText}>Save to Cellar</Text>
         }
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

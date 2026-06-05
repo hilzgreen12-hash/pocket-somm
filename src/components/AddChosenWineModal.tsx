@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard,
+  StyleSheet, Keyboard,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from './AppAlert';
 import { CityAutocomplete } from './CityAutocomplete';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -150,10 +151,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <View style={styles.overlay}>
         <View style={styles.sheet}>
           <TouchableOpacity
             style={styles.favouriteBtn}
@@ -164,7 +162,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
             <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
           </TouchableOpacity>
 
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+          <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
             <Text style={styles.heading}>Add a Review</Text>
             <Text style={styles.subheading}>Record a wine you drank — every field is editable.</Text>
@@ -313,9 +311,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
 
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

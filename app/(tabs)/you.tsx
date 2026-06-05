@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal, Keyboard } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
@@ -161,7 +162,7 @@ export default function YouScreen() {
 
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+    <KeyboardAwareScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
       <VinsterHeader />
 
       <Text style={styles.heading}>You</Text>
@@ -389,7 +390,7 @@ export default function YouScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
-    </ScrollView>
+    </KeyboardAwareScrollView>
     </TabSwipeView>
   );
 }

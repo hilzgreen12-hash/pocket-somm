@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Share,
+  StyleSheet, Keyboard, Share,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
@@ -274,9 +275,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+      <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+          <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
             <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
               <Text style={styles.backText}>← Back</Text>
@@ -437,9 +438,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               <Text style={styles.deleteText}>{remove.isPending ? 'Deleting…' : 'Delete this review'}</Text>
             </TouchableOpacity>
 
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       {/* Remove-from-wishlist choice */}
       <Modal visible={removeWishlistOpen} transparent animationType="fade" onRequestClose={() => setRemoveWishlistOpen(false)}>

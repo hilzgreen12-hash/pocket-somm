@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
@@ -69,7 +70,7 @@ export default function ChefConfirmScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.content} bottomOffset={24}>
       <Text style={styles.heading}>Confirm Wine Details</Text>
       <Text style={styles.subheading}>Check the details we've extracted and correct anything that looks wrong.</Text>
 
@@ -102,7 +103,7 @@ export default function ChefConfirmScreen() {
       <TouchableOpacity style={styles.scanAgain} onPress={() => router.replace('/chef/camera')}>
         <Text style={styles.scanAgainText}>Scan again</Text>
       </TouchableOpacity>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

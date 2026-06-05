@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform,
+  StyleSheet,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useChosenRecipes } from '../hooks/useChosenRecipes';
 import { useAuth } from '../hooks/useAuth';
@@ -60,12 +61,9 @@ export function ChosenRecipeModal({ pairing, wine, visible, onClose, onSaved }: 
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" bottomOffset={24}>
 
             <Text style={styles.heading}>{pairing.dishName}</Text>
             {pairing.chefInspiration ? (
@@ -159,9 +157,9 @@ export function ChosenRecipeModal({ pairing, wine, visible, onClose, onSaved }: 
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
 
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
