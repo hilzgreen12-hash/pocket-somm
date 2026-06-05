@@ -107,9 +107,15 @@ For each recommended wine return:
     - notes: 1 sentence on the current drinking status (string)
 - rarityAssessment: object with:
     - label: one of "Very Rare" | "Rare" | "Uncommon" | "Widely Available" (string)
-    - notes: 1 sentence explaining the rarity (e.g. production size, limited distribution) (string)
+    - notes: 1 sentence on the producer's standing and/or the wine's rarity (e.g. production size, limited distribution, estate reputation). This line is shown on the card under the label "Producer Note", so it MUST OPEN with the producer or the wine's rarity/availability — e.g. "A tiny Mosel grower with barely 4ha…", "Widely available, but…". Never open this sentence with a grape variety, region, or vintage — those each appear elsewhere on the card and leading with them loses the reader. (string)
 - outsidePreferences: if this wine breaches any of the diner's stated preferences (budget, colour, excluded region or grape), set this to a short string explaining what the exception is and why the wine is still worth serious consideration — e.g. "This exceeds your £50 budget at £75, but this vintage of Krug is exceptionally rare on restaurant lists and represents a genuinely special opportunity." If the wine is fully within preferences, set this to null.
 - standoutNote: FOR THE FIRST (TOP-RANKED) WINE ONLY — ONE brief sentence (max ~28 words, NOT bullet points) synthesising why this wine leads the three, drawing the decisive factors together (critic score, value, vintage/drinkability, preference fit). Example: "The combination of the list's top critic score, genuine value, and a peak-drinking 2019 makes this your standout match." For wines #2 and #3 set standoutNote to null.
+
+CRITICAL — CARD NOTE OPENINGS: Four notes are shown on the results card on their own labelled line, and the reader scans only the first few words of each. Every one MUST OPEN with the specific fact named by its label — do not bury it mid-sentence behind a grape variety, region, or other context:
+- criticScoreNote (label "Critic Score") → open with the score or critic standing. E.g. "94 points — the highest of the three…", not "This Nebbiolo scores 94…".
+- valueNote (label "Value") → open with the value verdict or price-to-retail ratio. E.g. "Strong value at about 1.4× retail…", not "This Barolo is strong value…".
+- vintageAssessment.notes + drinkingWindow.notes (label "Vintage/Readiness") → vintageAssessment.notes opens with the vintage's quality for this appellation ("A superb 2016 in Barolo…"); drinkingWindow.notes opens with the readiness status ("Drinking at peak now…").
+- rarityAssessment.notes (label "Producer Note") → open with the producer's standing or the wine's rarity/availability. Never open with a grape variety, region, or vintage.
 
 CRITICAL — COMPLETENESS: Every wine object MUST include both criticScoreNote and valueNote, and the #1 (top-ranked) wine MUST also include standoutNote. Never omit these fields for any wine.
 
@@ -212,8 +218,8 @@ Deno.serve(async (req) => {
 TOP SCORING MODE — ACTIVE:
 The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, criticScoreNote, valueNote, standoutNote, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
 
-SUMMARY FIELD — TOP SCORING MODE:
-The top-level "summary" must open by framing the task as a critic-score sweep. Start with a phrase along the lines of "My task to sort through this list for the highest-scoring wines led me to…" — you may vary the exact wording (e.g. "Sorting this list for the highest critic scores led me to…", "Combing the list for the top-scoring bottles brought me to…") but it must always open by acknowledging that the task was to find the highest scorers. Then briefly explain what stood out about the three picks (1–2 sentences total).
+SUMMARY FIELD — TOP SCORING MODE (MANDATORY OPENING):
+The top-level "summary" MUST open by explicitly acknowledging that the diner asked for the highest-scoring wines on the list. This acknowledgement is the VERY FIRST thing in the summary — before any discussion of individual wines, regions, value, or anything else. Address the diner directly in the second person. Open with a sentence along the lines of "You've requested the three top-scoring wines from this list…" — you may vary the wording (e.g. "You asked for the three highest-scoring bottles on this list, so that's what I've sorted for…", "As requested, here are the three top-scoring wines on the list…") but it MUST state up front, in the first sentence, that the selection criterion was top critic score. Only AFTER that opening acknowledgement may you go on to discuss the three picks and their attributes (1–2 further sentences). A summary that opens by describing a wine instead of acknowledging the top-scoring request is a failure.
 ` : '';
 
     const mergedStyleProfiles = [...new Set([...(styleProfiles ?? []), ...(profileStyleProfiles ?? [])])];
