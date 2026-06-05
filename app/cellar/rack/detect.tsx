@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useRackStore } from '../../../src/stores/rackStore';
@@ -86,7 +87,7 @@ export default function RackDetectScreen() {
         <View style={{ width: 60 }} />
       </View>
 
-      <View style={styles.body}>
+      <KeyboardAwareScrollView style={styles.body} contentContainerStyle={styles.bodyContent} bottomOffset={24} keyboardShouldPersistTaps="handled">
         <Text style={styles.intro}>
           {cameFromCamera
             ? `We detected the dimensions below. Adjust if needed, then give your ${isFridge ? 'fridge' : 'rack'} a name.`
@@ -112,7 +113,7 @@ export default function RackDetectScreen() {
           placeholder={isFridge ? 'e.g. Kitchen Wine Fridge' : 'e.g. Dining Room Rack'}
           placeholderTextColor={colors.textMuted}
         />
-      </View>
+      </KeyboardAwareScrollView>
 
       <View style={styles.footer}>
         <TouchableOpacity style={styles.saveButton} onPress={handleSave}>
@@ -146,7 +147,8 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 60 },
   // Cormorant — page header
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  body: { flex: 1, padding: spacing.xl },
+  body: { flex: 1 },
+  bodyContent: { padding: spacing.xl },
   // Inter — intro body
   intro: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl },
   preview: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xl },

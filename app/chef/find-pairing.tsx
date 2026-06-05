@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
@@ -118,7 +119,7 @@ export default function FindPairingScreen() {
   }
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
+    <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.content} bottomOffset={24}>
       <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
         <Text style={styles.back}>Back</Text>
       </TouchableOpacity>
@@ -203,7 +204,7 @@ export default function FindPairingScreen() {
         onCreateAccount={() => { setSignInPromptVisible(false); router.push('/(auth)/sign-up'); }}
         onContinue={() => { setSignInPromptVisible(false); handleFind(true); }}
       />
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

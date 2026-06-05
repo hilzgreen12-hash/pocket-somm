@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -425,12 +426,13 @@ export default function ResultsScreen() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={{ paddingBottom: 80 }}
       automaticallyAdjustKeyboardInsets
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
+      bottomOffset={24}
     >
 
       {/* Header */}
@@ -780,7 +782,7 @@ export default function ResultsScreen() {
         />
       </View>
 
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

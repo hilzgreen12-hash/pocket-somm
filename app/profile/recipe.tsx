@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, ScrollView, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
@@ -93,12 +94,13 @@ export default function RecipeProfileScreen() {
 
   return (
     <View style={styles.wrapper}>
-      <ScrollView
+      <KeyboardAwareScrollView
         style={styles.container}
         contentContainerStyle={{ paddingBottom: 60 }}
         automaticallyAdjustKeyboardInsets
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
+        bottomOffset={24}
       >
         <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
           <Text style={styles.back}>Back</Text>
@@ -192,7 +194,7 @@ export default function RecipeProfileScreen() {
             <Text style={styles.saveButtonText}>{isSaving ? 'SAVING…' : savedFlash ? 'SAVED ✓' : 'SAVE PREFERENCES'}</Text>
           </TouchableOpacity>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }

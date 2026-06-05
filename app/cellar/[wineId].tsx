@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
@@ -747,12 +748,13 @@ export default function CellarWineDetail() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={{ paddingBottom: 80 }}
       keyboardShouldPersistTaps="always"
       automaticallyAdjustKeyboardInsets
       keyboardDismissMode="interactive"
+      bottomOffset={24}
     >
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -1355,7 +1357,7 @@ export default function CellarWineDetail() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

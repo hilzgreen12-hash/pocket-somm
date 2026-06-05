@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -723,10 +724,11 @@ export default function LabelResultsScreen() {
 
       <Modal visible={addingReview} transparent animationType="slide" onRequestClose={() => !saving && setAddingReview(false)}>
         <View style={styles.modalOverlay}>
-          <ScrollView
+          <KeyboardAwareScrollView
             contentContainerStyle={{ flexGrow: 1, justifyContent: 'flex-end' }}
             keyboardShouldPersistTaps="handled"
             automaticallyAdjustKeyboardInsets
+            bottomOffset={24}
           >
             <View style={styles.modalContent}>
               <Text style={styles.modalTitle}>Review this Wine</Text>
@@ -797,7 +799,7 @@ export default function LabelResultsScreen() {
                 <Text style={styles.cancelText}>Cancel</Text>
               </TouchableOpacity>
             </View>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
       </Modal>
 

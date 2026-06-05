@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, typography, spacing } from '../../src/constants/theme';
@@ -35,7 +36,7 @@ export default function SignIn() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={styles.container} bottomOffset={24} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Vinster</Text>
       <Text style={styles.subtitle}>Your personal AI sommelier</Text>
 
@@ -79,13 +80,13 @@ export default function SignIn() {
       <Link href="/(auth)/sign-up" style={styles.link}>
         Don't have an account? Sign up
       </Link>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    flexGrow: 1,
     padding: spacing.xl,
     justifyContent: 'center',
     backgroundColor: colors.background,

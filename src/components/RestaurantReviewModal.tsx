@@ -1,8 +1,9 @@
 import { useRef, useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard, Share,
+  StyleSheet, Keyboard, Share,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
@@ -167,10 +168,7 @@ export function RestaurantReviewModal({
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <View style={styles.overlay}>
         <View style={styles.sheet}>
           {/* Favourite star — top-left, mirroring the wine review page. */}
           <TouchableOpacity
@@ -182,7 +180,7 @@ export function RestaurantReviewModal({
             <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
           </TouchableOpacity>
 
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+          <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
             <Text style={styles.heading}>Add a Review</Text>
             <Text style={styles.subheading}>Your verdict on the visit — rate it, note it, share it.</Text>
 
@@ -288,9 +286,9 @@ export function RestaurantReviewModal({
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </View>
 
       {/* Off-screen branded share card — mounted only during a share so
           react-native-view-shot can snapshot it for the native share. No

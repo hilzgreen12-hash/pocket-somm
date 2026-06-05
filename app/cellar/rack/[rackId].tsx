@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -601,7 +602,7 @@ export default function RackGridScreen() {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24}>
         {/* Short hint pointing at the search box below the grid. The
             full "tap slot to add / tap wine to highlight" instructions
             now live on a per-mount modal that the user can dismiss
@@ -779,7 +780,7 @@ export default function RackGridScreen() {
         >
           <Text style={styles.editRackBtnText}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation

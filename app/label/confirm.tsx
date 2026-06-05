@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
+import { Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -67,12 +68,13 @@ export default function LabelConfirmScreen() {
   }
 
   return (
-    <ScrollView
+    <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
       automaticallyAdjustKeyboardInsets
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="interactive"
+      bottomOffset={24}
     >
       <Text style={styles.heading}>Confirm Wine Details</Text>
       <Text style={styles.subheading}>
@@ -148,7 +150,7 @@ export default function LabelConfirmScreen() {
           <Text style={styles.backText}>Scan Again</Text>
         </TouchableOpacity>
       )}
-    </ScrollView>
+    </KeyboardAwareScrollView>
   );
 }
 

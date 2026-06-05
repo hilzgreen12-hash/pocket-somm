@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors, spacing } from '../src/constants/theme';
@@ -173,7 +174,7 @@ export default function AgeGateScreen() {
   }
 
   return (
-    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+    <KeyboardAwareScrollView style={styles.container} contentContainerStyle={{ flexGrow: 1 }} bottomOffset={24} keyboardShouldPersistTaps="handled">
       <View style={styles.content}>
         <Text style={styles.brand}>VINSTER</Text>
         <View style={styles.rule} />
@@ -245,7 +246,7 @@ export default function AgeGateScreen() {
           <Text style={styles.privacyLinkText}>Privacy Policy</Text>
         </TouchableOpacity>
       </View>
-    </KeyboardAvoidingView>
+    </KeyboardAwareScrollView>
   );
 }
 

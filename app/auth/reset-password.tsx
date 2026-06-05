@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { colors, spacing } from '../../src/constants/theme';
@@ -91,7 +92,7 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={[styles.container, { flex: undefined, flexGrow: 1 }]} bottomOffset={24} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Set a new password</Text>
       <Text style={styles.subtitle}>Choose a new password for your account.</Text>
 
@@ -122,7 +123,7 @@ export default function ResetPasswordScreen() {
       <TouchableOpacity style={styles.button} onPress={handleUpdate} disabled={loading}>
         <Text style={styles.buttonText}>{loading ? 'Updating…' : 'Update Password'}</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 

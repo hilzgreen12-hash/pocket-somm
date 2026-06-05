@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  ScrollView, StyleSheet, KeyboardAvoidingView, Platform, Keyboard,
+  StyleSheet, Keyboard,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from './AppAlert';
 import { CityAutocomplete } from './CityAutocomplete';
 import { router } from 'expo-router';
@@ -218,10 +219,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <KeyboardAvoidingView
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
+      <View style={styles.overlay}>
         <View style={styles.sheet}>
           {/* Back link in the top-left mirrors the rest of the app's
               header pattern (Cellar, Reviews, Restaurants etc.). The
@@ -246,7 +244,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
           </TouchableOpacity>
 
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always">
+          <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
             <Text style={styles.heading}>{wineName}</Text>
             <Text style={styles.wineProducer}>{wine.producer}{wine.region ? ` · ${wine.region}` : ''}</Text>
@@ -380,9 +378,9 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
               </>
             )}
 
-          </ScrollView>
+          </KeyboardAwareScrollView>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }

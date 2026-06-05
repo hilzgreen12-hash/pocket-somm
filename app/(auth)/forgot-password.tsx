@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../src/api/supabase';
@@ -45,7 +46,7 @@ export default function ForgotPassword() {
   }
 
   return (
-    <View style={styles.container}>
+    <KeyboardAwareScrollView contentContainerStyle={[styles.container, { flex: undefined, flexGrow: 1 }]} bottomOffset={24} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Reset Password</Text>
       <Text style={styles.subtitle}>Enter your email address and we'll send you a link to reset your password.</Text>
 
@@ -68,7 +69,7 @@ export default function ForgotPassword() {
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <Text style={styles.backText}>Back to Sign In</Text>
       </TouchableOpacity>
-    </View>
+    </KeyboardAwareScrollView>
   );
 }
 
