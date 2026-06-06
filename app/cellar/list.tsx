@@ -49,7 +49,19 @@ const SCORE_SORTS: SortMode[] = ['critic_desc', 'critic_asc', 'your_desc', 'your
 
 const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
 
-type FilterField = 'rack' | 'country' | 'colour' | 'price' | 'score' | 'favourite' | null;
+// Maturity (drinking-window) filter. Values match the stored
+// `drinking_window_status` that the racks colour-code and Quick Cellar
+// Stats buckets by. Ordered youngest → oldest so the dropdown reads
+// as a natural maturity progression.
+const MATURITY_OPTIONS: { value: string; label: string }[] = [
+  { value: 'All', label: 'All maturities' },
+  { value: 'too_young', label: 'Too Young' },
+  { value: 'approaching', label: 'Approaching' },
+  { value: 'peak', label: 'Peak' },
+  { value: 'declining', label: 'Declining' },
+];
+
+type FilterField = 'rack' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | null;
 
 type FavouriteFilter = 'all' | 'favourites';
 const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
@@ -109,6 +121,7 @@ export default function FullCellarListScreen() {
   const [rackFilter, setRackFilter] = useState<string>('All');           // 'All' | rackId | 'Unassigned'
   const [countryFilter, setCountryFilter] = useState<string>('All');     // 'All' | country canonical
   const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
+  const [maturityFilter, setMaturityFilter] = useState<string>('All');   // 'All' | 'too_young' | 'approaching' | 'peak' | 'declining'
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
   const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>('hide');
@@ -177,6 +190,7 @@ export default function FullCellarListScreen() {
     }
     if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
     if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
+    if (maturityFilter !== 'All' && w.drinking_window_status !== maturityFilter) return false;
     if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
     if (q) {
       const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
@@ -219,6 +233,7 @@ export default function FullCellarListScreen() {
   const priceLabel = priceActive ? (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
   const scoreLabel = scoreActive ? (SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
   const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
+  const maturityLabel = maturityFilter === 'All' ? 'All' : (MATURITY_OPTIONS.find((o) => o.value === maturityFilter)?.label ?? 'All');
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'rack') {
@@ -238,6 +253,14 @@ export default function FullCellarListScreen() {
         options: COLOUR_OPTIONS.map((c) => ({ value: c, label: c === 'All' ? 'All colours' : c })),
         selected: colourFilter,
         onSelect: setColourFilter,
+      };
+    }
+    if (field === 'maturity') {
+      return {
+        title: 'Filter by maturity',
+        options: MATURITY_OPTIONS,
+        selected: maturityFilter,
+        onSelect: setMaturityFilter,
       };
     }
     if (field === 'price') {
@@ -358,6 +381,13 @@ export default function FullCellarListScreen() {
             <Text style={styles.filterChipChevron}>{openDropdown === 'colour' ? '▴' : '▾'}</Text>
           </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('maturity')}>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Maturity</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
+          </View>
+          <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
         </TouchableOpacity>
         {/* Archived view toggle — replaces the old Cellar-tab Archived Wines
             button. Tap to swap the list between live and archived wines. */}
