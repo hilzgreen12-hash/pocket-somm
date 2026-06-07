@@ -13,6 +13,7 @@ import { StarRating } from './StarRating';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
+import { MicButton, appendDictation } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -232,7 +233,10 @@ export function RestaurantReviewModal({
               </View>
             </View>
 
-            <Text style={styles.fieldLabel}>Your review</Text>
+            <View style={styles.dictateRow}>
+              <Text style={styles.fieldLabel}>Your review</Text>
+              <MicButton onResult={(t) => setNote((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={note}
@@ -359,6 +363,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 4,
   },
+  // Field label + dictation mic on one row.
+  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   input: {
     borderWidth: 1,
     borderColor: colors.border,

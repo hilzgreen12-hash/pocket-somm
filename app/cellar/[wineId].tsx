@@ -26,6 +26,7 @@ import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { MicButton, appendDictation } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -1084,7 +1085,10 @@ export default function CellarWineDetail() {
               placeholderTextColor={colors.textMuted}
             />
             {/* Review prose — the sharable body. Maps to review_note. */}
-            <Text style={styles.fieldLabel}>Your review</Text>
+            <View style={styles.dictateRow}>
+              <Text style={styles.fieldLabel}>Your review</Text>
+              <MicButton onResult={(t) => setReviewNoteDraft((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={reviewNoteDraft}
@@ -1162,6 +1166,10 @@ export default function CellarWineDetail() {
         <Text style={styles.personalNotesHint}>Private — not shared with the community or with friends.</Text>
         {editingNote ? (
           <>
+            <View style={styles.dictateRow}>
+              <Text style={styles.fieldLabel}>Note</Text>
+              <MicButton onResult={(t) => setNoteText((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={noteText}
@@ -1469,6 +1477,8 @@ const styles = StyleSheet.create({
   reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, marginBottom: spacing.xs },
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
+  // Field label + dictation mic on one row.
+  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: 6 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   // Cormorant — section header
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },

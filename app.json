@@ -44,6 +44,14 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Vinster uses your location to stamp wine list scans with the city and restaurant, so you can find them again in your archive."
         }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Vinster uses your microphone so you can dictate tasting notes and reviews, and ask about your wines by voice.",
+          "speechRecognitionPermission": "Vinster uses speech recognition to turn what you say into text for your notes, reviews and voice questions.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
       ]
     ],
     "extra": {
