@@ -113,6 +113,10 @@ export default function CellarTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
           <Text style={styles.buttonText}>Your Wine Reviews</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/labels'))}>
+          <Text style={styles.buttonText}>My Labels</Text>
+        </TouchableOpacity>
       </View>
 
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
