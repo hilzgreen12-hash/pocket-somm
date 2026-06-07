@@ -50,9 +50,12 @@ async function processToBase64(uri: string): Promise<string> {
 // wine id as the key so re-adding a photo overwrites (upsert) cleanly.
 export async function uploadLabelImage(userId: string, localUri: string, wineId: string): Promise<string> {
   const base64 = await processToBase64(localUri);
+  // Pass the underlying ArrayBuffer (exact-sized — see base64ToBytes) which
+  // is the canonical, proven body type for supabase-js storage uploads on
+  // React Native / Expo (a raw typed-array view is less reliable here).
   const bytes = base64ToBytes(base64);
   const path = `${userId}/${wineId}.jpg`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes, {
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer, {
     contentType: 'image/jpeg',
     upsert: true,
   });
