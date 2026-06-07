@@ -25,7 +25,7 @@ function truncate(str: string, max: number) {
 }
 
 export default function RackGridScreen() {
-  const { rackId } = useLocalSearchParams<{ rackId: string }>();
+  const { rackId, highlight } = useLocalSearchParams<{ rackId: string; highlight?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
@@ -117,11 +117,14 @@ export default function RackGridScreen() {
   // they don't carry over a stale query from the previous one.
   useEffect(() => {
     setSearchQuery('');
-    setHighlightedWineId(null);
+    // Highlight the bottle the user came in to find (e.g. from a wine card's
+    // "In {rack} →" link), otherwise clear any carried-over highlight when
+    // swiping to another rack.
+    setHighlightedWineId(highlight ?? null);
     // Don't reset moving/pending placement state — those are global
     // workflows (Wish List → place in rack) that should survive a
     // sideways navigation.
-  }, [rackId]);
+  }, [rackId, highlight]);
 
   // Pinch-zoom state — when the rack is zoomed in, the swipe-between-racks
   // gesture is disabled so one-finger drags pan the grid instead of
