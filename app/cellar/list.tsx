@@ -32,8 +32,8 @@ type SortMode =
 // The list defaults to most-recently-added (handled implicitly); the Price
 // and Score chips each offer the four directional sorts plus a reset.
 const PRICE_SORT_OPTIONS: { value: SortMode; label: string }[] = [
-  { value: 'est_desc',   label: 'Estimated Price Descending' },
-  { value: 'est_asc',    label: 'Estimated Price Ascending' },
+  { value: 'est_desc',   label: 'Estimated Value Descending' },
+  { value: 'est_asc',    label: 'Estimated Value Ascending' },
   { value: 'purch_desc', label: 'Purchase Price Descending' },
   { value: 'purch_asc',  label: 'Purchase Price Ascending' },
 ];
@@ -62,7 +62,7 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'Declining' },
 ];
 
-type FilterField = 'rack' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | null;
+type FilterField = 'rack' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | 'archived' | null;
 
 type FavouriteFilter = 'all' | 'favourites';
 const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
@@ -74,6 +74,11 @@ const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
 // from live cellar wines to archived ones (replaces the old Cellar tab
 // "Archived Wines" button).
 type ArchivedFilter = 'hide' | 'include' | 'only';
+const ARCHIVED_OPTIONS: { value: ArchivedFilter; label: string }[] = [
+  { value: 'hide', label: 'Hide' },
+  { value: 'include', label: 'Include' },
+  { value: 'only', label: 'Only Archived' },
+];
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
@@ -235,6 +240,14 @@ export default function FullCellarListScreen() {
   const scoreLabel = scoreActive ? (SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
   const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
   const maturityLabel = maturityFilter === 'All' ? 'All' : (MATURITY_OPTIONS.find((o) => o.value === maturityFilter)?.label ?? 'All');
+  const archivedLabel = ARCHIVED_OPTIONS.find((o) => o.value === archivedFilter)?.label ?? 'Hide';
+  // Current ordering, shown in the hint above the filters. Dynamic so it stays
+  // accurate when the user switches to a Price/Score sort.
+  const sortLabel = sortMode === 'recent'
+    ? 'Recently Added'
+    : (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label
+        ?? SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label
+        ?? 'Recently Added');
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'rack') {
@@ -288,6 +301,14 @@ export default function FullCellarListScreen() {
         onSelect: (v) => setFavouriteFilter(v as FavouriteFilter),
       };
     }
+    if (field === 'archived') {
+      return {
+        title: 'Archived wines',
+        options: ARCHIVED_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
+        selected: archivedFilter,
+        onSelect: (v) => setArchivedFilter(v as ArchivedFilter),
+      };
+    }
     return null;
   }
 
@@ -334,7 +355,7 @@ export default function FullCellarListScreen() {
       {/* Filter row — Sort first so the most common interaction (changing
           order) is closest to the user's thumb. Rack / Country / Colour
           follow in descending likelihood of use. */}
-      <Text style={styles.filterHint}>Swipe to see all filters →</Text>
+      <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -390,21 +411,19 @@ export default function FullCellarListScreen() {
           </View>
           <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
         </TouchableOpacity>
-        {/* Archived view toggle — replaces the old Cellar-tab Archived Wines
-            button. Tap to swap the list between live and archived wines. */}
-        <TouchableOpacity
-          style={styles.filterChip}
-          onPress={() => setArchivedFilter((f) => (f === 'hide' ? 'include' : f === 'include' ? 'only' : 'hide'))}
-        >
+        {/* Archived view — a dropdown like the other filters. Swaps the list
+            between live and archived wines (Hide / Include / Only Archived). */}
+        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('archived')}>
           <View style={styles.filterChipHeadingRow}>
             <Text style={styles.filterChipLabel}>Archived</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'archived' ? '▴' : '▾'}</Text>
           </View>
           <Text
             style={[styles.filterChipValue, archivedFilter !== 'hide' && { color: colors.gold }]}
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {archivedFilter === 'only' ? 'Only Archived' : archivedFilter === 'include' ? 'Include' : 'Hide'}
+            {archivedLabel}
           </Text>
         </TouchableOpacity>
       </ScrollView>
