@@ -12,6 +12,7 @@ import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { supabase } from '../../src/api/supabase';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { LabelThumb } from '../../src/components/LabelThumb';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
 import { inferCountry } from '../../src/utils/wineCountry';
@@ -468,6 +469,7 @@ export default function FullCellarListScreen() {
                 delayLongPress={400}
                 activeOpacity={0.7}
               >
+                <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} />
                 <View style={styles.rowMain}>
                   <Text style={styles.rowName} numberOfLines={1}>
                     {w.is_favourite ? <Text style={styles.rowStar}>★ </Text> : null}
@@ -624,6 +626,7 @@ const styles = StyleSheet.create({
   // Inter — empty body
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowThumb: { width: 38, height: 48, marginRight: spacing.md },
   rowMain: { flex: 1, marginRight: spacing.md },
   // Inter — wine card name
   rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
