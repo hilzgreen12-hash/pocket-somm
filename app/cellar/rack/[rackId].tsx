@@ -14,18 +14,11 @@ import { useCellar } from '../../../src/hooks/useCellar';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks } from '../../../src/api/racks';
 import { supabase } from '../../../src/api/supabase';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
 import * as ScreenOrientation from 'expo-screen-orientation';
-
-const STATUS_COLORS: Record<string, string> = {
-  too_young: '#6DBF8A',
-  approaching: '#5B9BD5',
-  peak: colors.gold,
-  declining: colors.error,
-  unknown: colors.textMuted,
-};
 
 function truncate(str: string, max: number) {
   return str.length > max ? str.slice(0, max - 1) + '…' : str;
@@ -200,8 +193,10 @@ export default function RackGridScreen() {
   // Natural size fills the screen width; minimum 20pt so slots remain tappable.
   // For wide racks the grid scrolls horizontally — no overflow clipping.
   const naturalSlotSize = Math.floor((width - PADDING - GAP * (cols - 1)) / cols);
-  const slotSize = Math.max(20, naturalSlotSize);
-  const gridFitsScreen = naturalSlotSize >= 20;
+  // Minimum 64pt so each slot can legibly show a framed label thumbnail;
+  // wider racks scroll horizontally rather than shrinking past readability.
+  const slotSize = Math.max(64, naturalSlotSize);
+  const gridFitsScreen = naturalSlotSize >= 64;
   // Build the rows the grid will render. The optional large-format row
   // is row_index = -1 and sits above the standard rows; its slots take
   // up the same total width as the standard grid, so fewer slots means
@@ -593,14 +588,6 @@ export default function RackGridScreen() {
         </View>
       )}
 
-      <View style={styles.legend}>
-        {Object.entries({ peak: 'Peak', approaching: 'Approaching', too_young: 'Too Young', declining: 'Declining' }).map(([k, v]) => (
-          <View key={k} style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: STATUS_COLORS[k] }]} />
-            <Text style={styles.legendText}>{v}</Text>
-          </View>
-        ))}
-      </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24}>
         {/* Short hint pointing at the search box below the grid. The
@@ -659,10 +646,14 @@ export default function RackGridScreen() {
           contentContainerStyle={{ padding: spacing.xl }}
           bounces={false}
         >
-          <View>
+          {/* Cream "boxing" the rack sits in — turns the grid into a framed
+              gallery object. Each filled slot shows the wine's own label as a
+              framed thumbnail; empty slots stay as tappable + cells. */}
+          <View style={styles.rackBoxing}>
             {gridRows.map((rowDef) => {
               const isLargeFormat = rowDef.rowIndex === -1;
-              const slotFont = fontForSlot(rowDef.slotWidth);
+              // Scale the no-photo "blank label" text to the slot size.
+              const fallbackFont = Math.max(7, Math.min(12, Math.round(rowDef.slotWidth / 7)));
               return (
                 <View
                   key={rowDef.rowIndex}
@@ -677,7 +668,6 @@ export default function RackGridScreen() {
                   {Array.from({ length: rowDef.cols }, (_, col) => {
                     const slot = slotMap[`${rowDef.rowIndex},${col}`];
                     const wine = slot?.wine as CellarWine | null | undefined;
-                    const status = wine?.drinking_window_status ?? null;
                     const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
                     const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
                     const isMovingSource = !!moving && moving.row === rowDef.rowIndex && moving.col === col;
@@ -687,28 +677,25 @@ export default function RackGridScreen() {
                         style={[
                           styles.slot,
                           { width: rowDef.slotWidth, height: rowDef.slotWidth },
-                          wine
-                            ? { backgroundColor: STATUS_COLORS[status ?? 'unknown'] + '33', borderColor: STATUS_COLORS[status ?? 'unknown'] }
-                            : styles.slotEmpty,
-                          isHighlighted && styles.slotHighlighted,
+                          wine ? styles.slotFilled : styles.slotEmpty,
+                          isHighlighted && styles.slotHighlightRing,
                           isDimmed && styles.slotDimmed,
                           isMovingSource && styles.slotMovingSource,
                         ]}
                         onPress={() => openSlot(rowDef.rowIndex, col)}
                         onLongPress={() => pickUpSlot(rowDef.rowIndex, col)}
                         delayLongPress={400}
+                        activeOpacity={0.8}
                       >
                         {wine ? (
-                          <Text
-                            style={[
-                              styles.slotText,
-                              { fontSize: slotFont.fontSize, lineHeight: slotFont.lineHeight },
-                              isHighlighted && styles.slotTextHighlighted,
-                            ]}
-                            numberOfLines={2}
-                          >
-                            {truncate(wine.wine_name, slotFont.maxChars)}{wine.vintage ? `\n${wine.vintage}` : ''}
-                          </Text>
+                          <LabelThumb
+                            path={wine.label_image_path}
+                            fallbackText={wine.wine_name}
+                            style={styles.slotThumb}
+                            radius={2}
+                            frame={2}
+                            fallbackFontSize={fallbackFont}
+                          />
                         ) : (
                           <Text style={styles.slotPlus}>+</Text>
                         )}
@@ -1043,15 +1030,23 @@ const styles = StyleSheet.create({
   // Inter — small caption
   legendText: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   gridRow: { flexDirection: 'row' },
-  slot: { borderRadius: 4, borderWidth: 1, alignItems: 'center', justifyContent: 'center', padding: 2 },
-  slotEmpty: { borderColor: 'rgba(255,255,255,0.15)', backgroundColor: 'transparent' },
+  slot: { borderRadius: 4, borderWidth: 1, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center', padding: 2, overflow: 'hidden' },
+  // Filled slot — the framed label thumbnail is the visual, so drop the
+  // cell's own border/padding and let the thumb fill it edge to edge.
+  slotFilled: { borderWidth: 0, padding: 0, backgroundColor: 'transparent' },
+  slotThumb: { width: '100%', height: '100%' },
+  // Search highlight — a gold ring around the matched bottle.
+  slotHighlightRing: { borderWidth: 2, borderColor: colors.gold },
+  // Cream backdrop the whole rack sits on — the "boxing" that frames it.
+  rackBoxing: { backgroundColor: colors.creamDim, borderRadius: 14, padding: spacing.md },
+  slotEmpty: { borderColor: 'rgba(87,47,43,0.20)', backgroundColor: 'rgba(255,255,255,0.35)' },
   slotHighlighted: { borderColor: '#FFFFFF', borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
   slotDimmed: { opacity: 0.25 },
   // Inter — tiny slot label
   slotText: { fontSize: 8, fontFamily: fonts.bodySemibold, color: colors.text, textAlign: 'center', lineHeight: 10 },
   slotTextHighlighted: { color: '#FFFFFF' },
   // Inter — slot plus glyph
-  slotPlus: { fontSize: 14, color: 'rgba(255,255,255,0.20)', fontFamily: fonts.bodyRegular },
+  slotPlus: { fontSize: 16, color: 'rgba(87,47,43,0.40)', fontFamily: fonts.bodyRegular },
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   // Inter — hint
   rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, lineHeight: 20 },
