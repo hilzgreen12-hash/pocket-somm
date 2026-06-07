@@ -115,7 +115,7 @@ export default function CellarTab() {
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/labels'))}>
-          <Text style={styles.buttonText}>My Labels</Text>
+          <Text style={styles.buttonText}>Your Label Library</Text>
         </TouchableOpacity>
       </View>
 
