@@ -48,9 +48,10 @@ export function RestaurantReviewModal({
   city, date, wines, onReviewWine, onClose, onSaved,
 }: Props) {
   const qc = useQueryClient();
-  // Restaurant identity is Vinster-filled from the scan and shown read-only
-  // here — the user edits the name on the results header, not in the review.
-  const restaurantName = (initialName ?? '').trim();
+  // Restaurant identity — prefilled from the scan but editable here so the
+  // user can correct the name or place while saving their review.
+  const [restaurantName, setRestaurantName] = useState((initialName ?? '').trim());
+  const [cityValue, setCityValue] = useState((city ?? '').trim());
   const [note, setNote] = useState(initialNote ?? '');
   const [overall, setOverall] = useState<number | null>(initialRatings?.overall ?? null);
   const [food, setFood] = useState<number | null>(initialRatings?.food ?? null);
@@ -77,7 +78,8 @@ export function RestaurantReviewModal({
 
   async function persist() {
     await supabase.from('scan_sessions').update({
-      restaurant_name: restaurantName || null,
+      restaurant_name: restaurantName.trim() || null,
+      city: cityValue.trim() || null,
       restaurant_note: note.trim() || null,
       rating_food: food,
       rating_service: service,
@@ -142,7 +144,7 @@ export function RestaurantReviewModal({
       // Plain-text fallback for devices without share-sheet support.
       const ratingText = (label: string, v: number | null) =>
         v == null ? null : `${label}: ${'★'.repeat(v)}${'☆'.repeat(5 - v)} (${v}/5)`;
-      const header = city?.trim() ? `${restaurant} · ${city.trim()}` : restaurant;
+      const header = cityValue.trim() ? `${restaurant} · ${cityValue.trim()}` : restaurant;
       const ratings = [
         ratingText('Overall', overall),
         ratingText('Food', food),
@@ -164,8 +166,6 @@ export function RestaurantReviewModal({
     }
   }
 
-  const metaLine = [city?.trim() || null, date || null].filter(Boolean).join('  ·  ');
-
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={styles.overlay}>
@@ -186,13 +186,26 @@ export function RestaurantReviewModal({
 
             <View style={styles.divider} />
 
-            {/* Restaurant identity — Vinster-filled from the scan, read-only. */}
+            {/* Restaurant identity — prefilled from the scan, editable here.
+                No pin icon (that lives only on the List results page). */}
             <View style={styles.stamp}>
-              <View style={styles.stampNameRow}>
-                <Text style={styles.stampPin}>📍</Text>
-                <Text style={styles.stampName}>{restaurantName || 'Restaurant visit'}</Text>
-              </View>
-              {metaLine ? <Text style={styles.stampMeta}>{metaLine}</Text> : null}
+              <Text style={styles.fieldLabel}>Restaurant</Text>
+              <TextInput
+                style={styles.input}
+                value={restaurantName}
+                onChangeText={setRestaurantName}
+                placeholder="Restaurant name"
+                placeholderTextColor={colors.textMuted}
+              />
+              <Text style={styles.fieldLabel}>Place</Text>
+              <TextInput
+                style={styles.input}
+                value={cityValue}
+                onChangeText={setCityValue}
+                placeholder="City or location"
+                placeholderTextColor={colors.textMuted}
+              />
+              {date ? <Text style={styles.stampMeta}>{date}</Text> : null}
             </View>
 
             <Text style={styles.fieldLabel}>Ratings</Text>
