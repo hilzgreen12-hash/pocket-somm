@@ -955,7 +955,7 @@ export default function CellarWineDetail() {
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
           {wineRack && !cameFromRack && (
-            <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}`)}>
+            <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}?highlight=${wine.id}`)}>
               <Text style={styles.statAction}>In {wineRack.name} →</Text>
             </TouchableOpacity>
           )}
