@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard } from 'react-native';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard, Animated } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -122,9 +122,15 @@ export default function RackGridScreen() {
     // workflows (Wish List → place in rack) that should survive a
     // sideways navigation.
   }, [rackId]);
+
+  // Pinch-zoom state — when the rack is zoomed in, the swipe-between-racks
+  // gesture is disabled so one-finger drags pan the grid instead of
+  // navigating away.
+  const [isZoomed, setIsZoomed] = useState(false);
   const swipeGesture = useMemo(
     () =>
       Gesture.Pan()
+        .enabled(!isZoomed)
         .activeOffsetX([-30, 30])
         .failOffsetY([-30, 30])
         .runOnJS(true)
@@ -135,8 +141,59 @@ export default function RackGridScreen() {
             router.replace(`/cellar/rack/${prevRack.id}` as any);
           }
         }),
-    [prevRack?.id, nextRack?.id],
+    [prevRack?.id, nextRack?.id, isZoomed],
   );
+
+  // ---- Rack pinch-zoom + pan ----
+  // Uses RN Animated (this project has no Reanimated worklet babel plugin),
+  // with gestures on the JS thread via runOnJS — matching swipeGesture above.
+  // Pinch zooms 1–4×; when zoomed, a one-finger drag pans the grid. zoomBase
+  // is the value committed at gesture start; zoomCur tracks the live value.
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const txAnim = useRef(new Animated.Value(0)).current;
+  const tyAnim = useRef(new Animated.Value(0)).current;
+  const zoomBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  const zoomCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  const gridGesture = useMemo(() => {
+    const pinch = Gesture.Pinch()
+      .runOnJS(true)
+      .onUpdate((e) => {
+        let s = zoomBase.scale * e.scale;
+        if (s < 1) s = 1;
+        if (s > 4) s = 4;
+        zoomCur.scale = s;
+        scaleAnim.setValue(s);
+      })
+      .onEnd(() => {
+        zoomBase.scale = zoomCur.scale;
+        if (zoomCur.scale <= 1.02) {
+          // Snapped back to fit — recenter and re-enable rack swiping.
+          zoomBase.scale = 1; zoomCur.scale = 1;
+          zoomBase.tx = 0; zoomBase.ty = 0; zoomCur.tx = 0; zoomCur.ty = 0;
+          scaleAnim.setValue(1);
+          txAnim.setValue(0);
+          tyAnim.setValue(0);
+          setIsZoomed(false);
+        } else {
+          setIsZoomed(true);
+        }
+      });
+    const pan = Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(8)
+      .enabled(isZoomed)
+      .onUpdate((e) => {
+        zoomCur.tx = zoomBase.tx + e.translationX;
+        zoomCur.ty = zoomBase.ty + e.translationY;
+        txAnim.setValue(zoomCur.tx);
+        tyAnim.setValue(zoomCur.ty);
+      })
+      .onEnd(() => {
+        zoomBase.tx = zoomCur.tx;
+        zoomBase.ty = zoomCur.ty;
+      });
+    return Gesture.Simultaneous(pinch, pan);
+  }, [isZoomed]);
 
   // Back navigation. A rack can be reached two ways:
   //   1. Cellar → Racks → Rack (or via the Camera → Detect scanner flow),
@@ -193,10 +250,9 @@ export default function RackGridScreen() {
   // Natural size fills the screen width; minimum 20pt so slots remain tappable.
   // For wide racks the grid scrolls horizontally — no overflow clipping.
   const naturalSlotSize = Math.floor((width - PADDING - GAP * (cols - 1)) / cols);
-  // Minimum 64pt so each slot can legibly show a framed label thumbnail;
-  // wider racks scroll horizontally rather than shrinking past readability.
-  const slotSize = Math.max(64, naturalSlotSize);
-  const gridFitsScreen = naturalSlotSize >= 64;
+  // Fit the whole rack to the screen width at rest; pinch-zoom lets the user
+  // lean in to read individual labels. Tiny floor keeps slots non-zero.
+  const slotSize = Math.max(16, naturalSlotSize);
   // Build the rows the grid will render. The optional large-format row
   // is row_index = -1 and sits above the standard rows; its slots take
   // up the same total width as the standard grid, so fewer slots means
@@ -635,21 +691,19 @@ export default function RackGridScreen() {
             <Text style={styles.savedBannerText}>{savedMsg} ✓</Text>
           </View>
         )}
-        {/* Rack grid — horizontally scrollable for wide racks */}
-        {!gridFitsScreen && (
-          <Text style={styles.scrollHint}>← Scroll to see full rack →</Text>
-        )}
-        <ScrollView
-          horizontal
-          scrollEnabled={!gridFitsScreen}
-          showsHorizontalScrollIndicator={!gridFitsScreen}
-          contentContainerStyle={{ padding: spacing.xl }}
-          bounces={false}
-        >
-          {/* Cream "boxing" the rack sits in — turns the grid into a framed
-              gallery object. Each filled slot shows the wine's own label as a
-              framed thumbnail; empty slots stay as tappable + cells. */}
-          <View style={styles.rackBoxing}>
+        {/* Rack grid — pinch to zoom, drag to move when zoomed. The cream
+            "boxing" is a clipped viewport the grid scales/pans inside; each
+            filled slot shows the wine's label as a framed thumbnail. Swipe
+            between racks stays active at rest (see swipeGesture / isZoomed). */}
+        <Text style={styles.zoomHint}>Pinch to zoom · drag to move</Text>
+        <View style={styles.rackViewport}>
+          <GestureDetector gesture={gridGesture}>
+            <Animated.View
+              style={[
+                styles.rackCanvas,
+                { transform: [{ translateX: txAnim }, { translateY: tyAnim }, { scale: scaleAnim }] },
+              ]}
+            >
             {gridRows.map((rowDef) => {
               const isLargeFormat = rowDef.rowIndex === -1;
               // Scale the no-photo "blank label" text to the slot size.
@@ -705,8 +759,9 @@ export default function RackGridScreen() {
                 </View>
               );
             })}
-          </View>
-        </ScrollView>
+            </Animated.View>
+          </GestureDetector>
+        </View>
 
         {/* Wine list */}
         {winesInRack.length > 0 && (
@@ -1038,7 +1093,13 @@ const styles = StyleSheet.create({
   // Search highlight — a gold ring around the matched bottle.
   slotHighlightRing: { borderWidth: 2, borderColor: colors.gold },
   // Cream backdrop the whole rack sits on — the "boxing" that frames it.
-  rackBoxing: { backgroundColor: colors.creamDim, borderRadius: 14, padding: spacing.md },
+  // Clipped cream viewport the rack grid scales/pans inside. marginHorizontal
+  // (md) + padding (md) = 64 total inset, matching PADDING used for slotSize,
+  // so the grid fits the width exactly at rest. overflow:hidden turns it into
+  // a pan window once zoomed.
+  rackViewport: { marginHorizontal: spacing.md, marginVertical: spacing.sm, padding: spacing.md, backgroundColor: colors.creamDim, borderRadius: 14, overflow: 'hidden', alignItems: 'center' },
+  rackCanvas: { alignItems: 'center' },
+  zoomHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingTop: spacing.sm },
   slotEmpty: { borderColor: 'rgba(87,47,43,0.20)', backgroundColor: 'rgba(255,255,255,0.35)' },
   slotHighlighted: { borderColor: '#FFFFFF', borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
   slotDimmed: { opacity: 0.25 },
