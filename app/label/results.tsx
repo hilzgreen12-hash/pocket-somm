@@ -6,6 +6,7 @@ import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -388,6 +389,17 @@ export default function LabelResultsScreen() {
     setSaving(true);
     try {
       const saved = await addWine.mutateAsync(buildWinePayload(session.user.id));
+      // Persist the scanned label photo as this wine's framed thumbnail.
+      // Best-effort: a photo failure must never block the cellar save.
+      const labelUri = useLabelStore.getState().imageUri;
+      if (labelUri) {
+        try {
+          const path = await uploadLabelImage(session.user.id, labelUri, saved.id);
+          await updateWine.mutateAsync({ id: saved.id, updates: { label_image_path: path } });
+        } catch (photoErr) {
+          console.warn('[label-photo] upload failed (non-fatal):', photoErr);
+        }
+      }
       await performSaveFlow(saved.id, 'new', 1);
     } catch (err) {
       // Surface the underlying error so RLS / FK / schema failures are

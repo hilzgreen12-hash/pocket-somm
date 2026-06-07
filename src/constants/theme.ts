@@ -15,6 +15,12 @@ export const colors = {
   gold: '#E0B84A',
   goldDim: '#9A7F40',
 
+  // Brand cream — used as the "boxing" backdrop for the live rack gallery
+  // and the frame around each label thumbnail, so the colourful labels pop
+  // against a calm, light surface (distinct from the terracotta app bg).
+  cream: '#F4EBE0',
+  creamDim: '#E2D6C6',
+
   // White text system
   text: '#FFFFFF',
   textMuted: '#FFFFFF',

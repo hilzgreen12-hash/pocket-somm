@@ -23,6 +23,9 @@ import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadLabelImage } from '../../src/api/labelPhotos';
+import { LabelThumb } from '../../src/components/LabelThumb';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -143,6 +146,7 @@ export default function CellarWineDetail() {
   const [purchasePriceDraft, setPurchasePriceDraft] = useState(wine?.purchase_price != null ? String(wine.purchase_price) : '');
   const [savingPrice, setSavingPrice] = useState(false);
   const [refreshingValue, setRefreshingValue] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
 
   const [reviewExpanded, setReviewExpanded] = useState(false);
   const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
@@ -169,6 +173,48 @@ export default function CellarWineDetail() {
   const reviewShareRef = useRef<View>(null);
   const [sharingOutside, setSharingOutside] = useState(false);
   const [reviewSharePayload, setReviewSharePayload] = useState<React.ComponentProps<typeof WineReviewShareCard> | null>(null);
+
+  // Add or replace this wine's framed label photo. Take a fresh photo or
+  // pick one from the library, then upload + persist the path. Best-effort
+  // with surfaced errors; this is how photo-less / manually-added wines get
+  // their label thumbnail (the scan flow fills it automatically).
+  async function handleAddPhoto() {
+    if (!session?.user.id || !wine) return;
+    const pick = async (fromCamera: boolean) => {
+      const perm = fromCamera
+        ? await ImagePicker.requestCameraPermissionsAsync()
+        : await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        showAlert({ title: 'Permission needed', body: fromCamera ? 'Allow camera access to photograph your label.' : 'Allow photo access to choose a label.' });
+        return;
+      }
+      const result = fromCamera
+        ? await ImagePicker.launchCameraAsync({ quality: 1 })
+        : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (result.canceled || !result.assets?.[0]) return;
+      setUploadingPhoto(true);
+      try {
+        const path = await uploadLabelImage(session.user.id, result.assets[0].uri, wine.id);
+        await updateWine.mutateAsync({ id: wine.id, updates: { label_image_path: path } });
+        qc.invalidateQueries({ queryKey: ['cellar'] });
+        qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+        qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      } catch (err) {
+        showAlert({ title: 'Could not save photo', body: err instanceof Error ? err.message : 'Please try again.' });
+      } finally {
+        setUploadingPhoto(false);
+      }
+    };
+    showAlert({
+      title: wine.label_image_path ? 'Change label photo' : 'Add a label photo',
+      body: 'Take a photo of the bottle label, or choose one from your library.',
+      buttons: [
+        { text: 'Take Photo', onPress: () => pick(true) },
+        { text: 'Choose from Library', onPress: () => pick(false) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
 
   // Brief "Wine removed from your records" toast — shown for ~1.4s after
   // a permanent delete, then the auto-dismiss timer navigates back. The
@@ -797,6 +843,17 @@ export default function CellarWineDetail() {
           const sub = [wine.grape_variety || null, addedLabel].filter(Boolean).join(' · ');
           return sub ? <Text style={styles.grape}>{sub}</Text> : null;
         })()}
+        {/* Framed label photo + add/change control. The scan flow fills this
+            automatically; here the user can add one to a manual wine or
+            replace it. */}
+        <View style={styles.photoRow}>
+          <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.detailThumb} />
+          <TouchableOpacity onPress={handleAddPhoto} disabled={uploadingPhoto} style={styles.photoBtn} activeOpacity={0.7}>
+            <Text style={styles.photoBtnText}>
+              {uploadingPhoto ? 'Saving photo…' : wine.label_image_path ? 'Change photo' : '+ Add a photo'}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {/* Compact stats grid — score / window / bottle counts only. The
@@ -1386,6 +1443,10 @@ const styles = StyleSheet.create({
   favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
   favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  photoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  detailThumb: { width: 60, height: 76 },
+  photoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
+  photoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   // Inter — wine card name (card content, not a page header)
   headerLine: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 28 },
   // Inter — region caption
