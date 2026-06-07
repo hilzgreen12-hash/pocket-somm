@@ -977,32 +977,14 @@ export default function CellarWineDetail() {
       </View>
       )}
 
-      {!isArchived && (
-        <>
-          {rackRemovalMsg && (
-            <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
-          )}
-          {/* Wishlist mode shows an Add-to-Cellar CTA in place of the
-              Chef pairing button — the user hasn't bought the bottle
-              yet, so the natural next action is moving it across. */}
-          {isWishlist ? null : cameFromReviews ? (
-            <TouchableOpacity
-              style={[styles.chefBtn, (postingReview || reviewPosted) && styles.chefBtnDisabled]}
-              onPress={handlePostToCommunity}
-              disabled={postingReview || reviewPosted}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.chefBtnText}>
-                {reviewPosted ? '✓ Posted to Community' : postingReview ? 'Posting…' : 'Post Review To Community'}
-              </Text>
-            </TouchableOpacity>
-          ) : (
-            <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
-              <Text style={styles.chefBtnText}>Chef, find me a recipe for this wine</Text>
-            </TouchableOpacity>
-          )}
-        </>
+      {!isArchived && rackRemovalMsg && (
+        <Text style={[styles.rackRemovalMsg, { marginHorizontal: spacing.xl }]}>{rackRemovalMsg}</Text>
       )}
+
+      {/* Reviews — Vinster's AI note, the user's review, and private notes,
+          grouped under one header with consistent sub-titles and no internal
+          dividers. The Chef button now sits lower, above Archive/Delete. */}
+      <Text style={styles.reviewsHeader}>Reviews</Text>
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
           chevron toggle that mirrors the List results "Sommelier Note".
@@ -1010,14 +992,14 @@ export default function CellarWineDetail() {
           wishlist wines: their stored note is the user's own, and
           Vinster's AI review only exists once the wine is in the cellar. */}
       {!isWishlist && wine.tasting_notes ? (
-        <View style={styles.section}>
-          <View style={styles.vinsterReviewHeader}>
+        <View style={styles.reviewSubsection}>
+          <View style={styles.sectionHeader}>
             <TouchableOpacity
               onPress={() => setVinstersNoteOpen((v) => !v)}
               activeOpacity={0.7}
               style={styles.vinsterReviewToggle}
             >
-              <Text style={styles.vinsterReviewToggleText}>Vinster's Review</Text>
+              <Text style={styles.reviewSubTitle}>Vinster's Review</Text>
               <Ionicons
                 name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
                 size={16}
@@ -1034,11 +1016,9 @@ export default function CellarWineDetail() {
         </View>
       ) : null}
 
-      {isWishlist && <View style={styles.reviewDivider} />}
-
-      <View style={styles.section}>
+      <View style={styles.reviewSubsection}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.reviewSectionTitle}>Your Review</Text>
+          <Text style={styles.reviewSubTitle}>Your Review</Text>
           {!reviewExpanded && (
             <TouchableOpacity onPress={() => setReviewExpanded(true)}>
               <Text style={styles.editLink}>
@@ -1170,9 +1150,9 @@ export default function CellarWineDetail() {
       </View>
 
       {!isWishlist && (
-      <View style={styles.section}>
+      <View style={styles.reviewSubsection}>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Personal Notes</Text>
+          <Text style={styles.reviewSubTitle}>Personal Notes</Text>
           {!editingNote && (
             <TouchableOpacity onPress={() => setEditingNote(true)}>
               <Text style={styles.editLink}>{wine.user_notes ? 'Edit Note' : 'Add Note'}</Text>
@@ -1227,6 +1207,28 @@ export default function CellarWineDetail() {
         >
           <Text style={[styles.chefBtnText, { color: colors.gold }]}>Delete from Wish List</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Chef pairing CTA — moved down to sit just above Archive/Delete.
+          Wishlist wines hide it (no bottle yet); the reviews-flow variant
+          posts the review to the community instead. */}
+      {!isArchived && (
+        isWishlist ? null : cameFromReviews ? (
+          <TouchableOpacity
+            style={[styles.chefBtn, (postingReview || reviewPosted) && styles.chefBtnDisabled]}
+            onPress={handlePostToCommunity}
+            disabled={postingReview || reviewPosted}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.chefBtnText}>
+              {reviewPosted ? '✓ Posted to Community' : postingReview ? 'Posting…' : 'Post Review To Community'}
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
+            <Text style={styles.chefBtnText}>Chef, find me a recipe for this wine</Text>
+          </TouchableOpacity>
+        )
       )}
 
       {!isArchived && !isWishlist && (
@@ -1462,6 +1464,11 @@ const styles = StyleSheet.create({
   // Inter — small caption sub
   infoSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'right', marginTop: 2 },
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Reviews group — one header over Vinster's / Your Review / Personal Notes,
+  // each a borderless subsection so they read as one consistent block.
+  reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, marginBottom: spacing.xs },
+  reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
   // Cormorant — section header
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
