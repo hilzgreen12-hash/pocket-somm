@@ -648,7 +648,10 @@ export default function RackGridScreen() {
       )}
 
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24}>
+      {/* Freeze the page's vertical scroll while the rack is zoomed in, so a
+          one-finger drag pans the grid cleanly instead of also scrolling the
+          page. Scrolling returns the moment the user zooms back out. */}
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Short hint pointing at the search box below the grid. The
             full "tap slot to add / tap wine to highlight" instructions
             now live on a per-mount modal that the user can dismiss
