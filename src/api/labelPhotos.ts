@@ -55,7 +55,7 @@ export async function uploadLabelImage(userId: string, localUri: string, wineId:
   // React Native / Expo (a raw typed-array view is less reliable here).
   const bytes = base64ToBytes(base64);
   const path = `${userId}/${wineId}.jpg`;
-  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer, {
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
     contentType: 'image/jpeg',
     upsert: true,
   });
