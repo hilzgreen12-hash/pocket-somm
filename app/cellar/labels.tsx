@@ -33,7 +33,7 @@ export default function MyLabelsScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>My Labels</Text>
+        <Text style={styles.title}>Your Label Library</Text>
         <View style={styles.headerSpacer} />
       </View>
 
