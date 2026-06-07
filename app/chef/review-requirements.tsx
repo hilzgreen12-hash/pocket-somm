@@ -208,7 +208,7 @@ export default function ReviewRequirementsScreen() {
 
   return (
     <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.content} bottomOffset={24}>
-      <Text style={styles.heading}>Review Recipe Requirements</Text>
+      <Text style={styles.heading}>Recipe Requirements</Text>
       <Text style={styles.subheading}>
         Vinster will use your profile preferences to guide its recipe recommendations. Input any dietary restrictions or allergies to consider for this particular recipe below.
       </Text>

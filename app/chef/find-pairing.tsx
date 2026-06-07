@@ -224,8 +224,9 @@ const styles = StyleSheet.create({
   subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
   profileNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
   profileNoteLink: { fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
-  // "Update your preferences here." sits on its own line beneath the blurb.
-  preferencesLink: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.xl },
+  // "Update your preferences here." — a quiet link tucked just beneath the
+  // blurb (negative top margin pulls it up close), not a prominent button.
+  preferencesLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginTop: -spacing.md, marginBottom: spacing.xl },
   label: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm, textAlign: 'center' },
   // Lower-case helper line beneath "What are you cooking?".
   helperText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginBottom: spacing.md },
