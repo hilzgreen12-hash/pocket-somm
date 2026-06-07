@@ -129,11 +129,10 @@ export default function RackGridScreen() {
   // Pinch-zoom state — when the rack is zoomed in, the swipe-between-racks
   // gesture is disabled so one-finger drags pan the grid instead of
   // navigating away.
-  const [isZoomed, setIsZoomed] = useState(false);
+  const [zoomOpen, setZoomOpen] = useState(false);
   const swipeGesture = useMemo(
     () =>
       Gesture.Pan()
-        .enabled(!isZoomed)
         .activeOffsetX([-30, 30])
         .failOffsetY([-30, 30])
         .runOnJS(true)
@@ -144,59 +143,52 @@ export default function RackGridScreen() {
             router.replace(`/cellar/rack/${prevRack.id}` as any);
           }
         }),
-    [prevRack?.id, nextRack?.id, isZoomed],
+    [prevRack?.id, nextRack?.id],
   );
 
-  // ---- Rack pinch-zoom + pan ----
-  // Uses RN Animated (this project has no Reanimated worklet babel plugin),
-  // with gestures on the JS thread via runOnJS — matching swipeGesture above.
-  // Pinch zooms 1–4×; when zoomed, a one-finger drag pans the grid. zoomBase
-  // is the value committed at gesture start; zoomCur tracks the live value.
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const txAnim = useRef(new Animated.Value(0)).current;
-  const tyAnim = useRef(new Animated.Value(0)).current;
-  const zoomBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
-  const zoomCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
-  const gridGesture = useMemo(() => {
+  // ---- Full-screen rack zoom ----
+  // Pinching the inline rack (or tapping the zoom hint) opens a full-screen
+  // viewer where the grid pinch-zooms + pans freely against the whole screen
+  // — far more controlled than scaling the small inline card. RN Animated on
+  // the JS thread via runOnJS (no Reanimated worklet plugin), matching
+  // swipeGesture above. zBase = value committed at gesture start; zCur = live.
+  const openZoomGesture = useMemo(
+    () => Gesture.Pinch().runOnJS(true).onStart(() => setZoomOpen(true)),
+    [],
+  );
+  const zScale = useRef(new Animated.Value(1)).current;
+  const zTx = useRef(new Animated.Value(0)).current;
+  const zTy = useRef(new Animated.Value(0)).current;
+  const zBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  const zCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  function closeZoom() {
+    zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
+    zScale.setValue(1); zTx.setValue(0); zTy.setValue(0);
+    setZoomOpen(false);
+  }
+  const zoomViewerGesture = useMemo(() => {
     const pinch = Gesture.Pinch()
       .runOnJS(true)
       .onUpdate((e) => {
-        let s = zoomBase.scale * e.scale;
+        let s = zBase.scale * e.scale;
         if (s < 1) s = 1;
-        if (s > 4) s = 4;
-        zoomCur.scale = s;
-        scaleAnim.setValue(s);
+        if (s > 5) s = 5;
+        zCur.scale = s;
+        zScale.setValue(s);
       })
-      .onEnd(() => {
-        zoomBase.scale = zoomCur.scale;
-        if (zoomCur.scale <= 1.02) {
-          // Snapped back to fit — recenter and re-enable rack swiping.
-          zoomBase.scale = 1; zoomCur.scale = 1;
-          zoomBase.tx = 0; zoomBase.ty = 0; zoomCur.tx = 0; zoomCur.ty = 0;
-          scaleAnim.setValue(1);
-          txAnim.setValue(0);
-          tyAnim.setValue(0);
-          setIsZoomed(false);
-        } else {
-          setIsZoomed(true);
-        }
-      });
+      .onEnd(() => { zBase.scale = zCur.scale; });
     const pan = Gesture.Pan()
       .runOnJS(true)
-      .minDistance(8)
-      .enabled(isZoomed)
+      .minDistance(2)
       .onUpdate((e) => {
-        zoomCur.tx = zoomBase.tx + e.translationX;
-        zoomCur.ty = zoomBase.ty + e.translationY;
-        txAnim.setValue(zoomCur.tx);
-        tyAnim.setValue(zoomCur.ty);
+        zCur.tx = zBase.tx + e.translationX;
+        zCur.ty = zBase.ty + e.translationY;
+        zTx.setValue(zCur.tx);
+        zTy.setValue(zCur.ty);
       })
-      .onEnd(() => {
-        zoomBase.tx = zoomCur.tx;
-        zoomBase.ty = zoomCur.ty;
-      });
+      .onEnd(() => { zBase.tx = zCur.tx; zBase.ty = zCur.ty; });
     return Gesture.Simultaneous(pinch, pan);
-  }, [isZoomed]);
+  }, []);
 
   // Back navigation. A rack can be reached two ways:
   //   1. Cellar → Racks → Rack (or via the Camera → Detect scanner flow),
@@ -648,10 +640,7 @@ export default function RackGridScreen() {
       )}
 
 
-      {/* Freeze the page's vertical scroll while the rack is zoomed in, so a
-          one-finger drag pans the grid cleanly instead of also scrolling the
-          page. Scrolling returns the moment the user zooms back out. */}
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24}>
         {/* Short hint pointing at the search box below the grid. The
             full "tap slot to add / tap wine to highlight" instructions
             now live on a per-mount modal that the user can dismiss
@@ -701,15 +690,12 @@ export default function RackGridScreen() {
             "boxing" is a clipped viewport the grid scales/pans inside; each
             filled slot shows the wine's label as a framed thumbnail. Swipe
             between racks stays active at rest (see swipeGesture / isZoomed). */}
-        <Text style={styles.zoomHint}>Pinch to zoom · drag to move</Text>
+        <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.7}>
+          <Text style={styles.zoomHint}>Tap or pinch the rack to zoom ⤢</Text>
+        </TouchableOpacity>
         <View style={styles.rackViewport}>
-          <GestureDetector gesture={gridGesture}>
-            <Animated.View
-              style={[
-                styles.rackCanvas,
-                { transform: [{ translateX: txAnim }, { translateY: tyAnim }, { scale: scaleAnim }] },
-              ]}
-            >
+          <GestureDetector gesture={openZoomGesture}>
+            <View style={styles.rackCanvas}>
             {gridRows.map((rowDef) => {
               const isLargeFormat = rowDef.rowIndex === -1;
               // Scale the no-photo "blank label" text to the slot size.
@@ -765,7 +751,7 @@ export default function RackGridScreen() {
                 </View>
               );
             })}
-            </Animated.View>
+            </View>
           </GestureDetector>
         </View>
 
@@ -829,6 +815,47 @@ export default function RackGridScreen() {
           <Text style={styles.editRackBtnText}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
         </TouchableOpacity>
       </KeyboardAwareScrollView>
+
+      {/* Full-screen rack zoom viewer — the rack breaks out of its inline card
+          to fill the screen on a dark backdrop so the labels pop. Pinch to
+          zoom (1–5×) and drag to move; tap ✕ to close. View-only (placement
+          stays on the inline rack). Tighter framing than the inline card. */}
+      <Modal visible={zoomOpen} transparent animationType="fade" onRequestClose={closeZoom}>
+        {zoomOpen && (
+          <View style={styles.zoomBackdrop}>
+            <GestureDetector gesture={zoomViewerGesture}>
+              <Animated.View
+                style={[styles.zoomCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
+              >
+                {gridRows.map((rowDef) => {
+                  const fallbackFont = Math.max(7, Math.min(13, Math.round(rowDef.slotWidth / 6)));
+                  return (
+                    <View key={rowDef.rowIndex} style={[styles.gridRow, { gap: 2, marginBottom: rowDef.rowIndex === -1 ? 6 : 2 }]}>
+                      {Array.from({ length: rowDef.cols }, (_, col) => {
+                        const slot = slotMap[`${rowDef.rowIndex},${col}`];
+                        const wine = slot?.wine as CellarWine | null | undefined;
+                        return (
+                          <View key={col} style={[styles.zoomSlot, { width: rowDef.slotWidth, height: rowDef.slotWidth }]}>
+                            {wine ? (
+                              <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.slotThumb} radius={2} frame={1} fallbackFontSize={fallbackFont} />
+                            ) : (
+                              <View style={styles.zoomSlotEmpty} />
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  );
+                })}
+              </Animated.View>
+            </GestureDetector>
+            <TouchableOpacity style={styles.zoomClose} onPress={closeZoom} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
+              <Text style={styles.zoomCloseText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.zoomViewerHint}>Pinch to zoom · drag to move</Text>
+          </View>
+        )}
+      </Modal>
 
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation
@@ -1105,7 +1132,15 @@ const styles = StyleSheet.create({
   // a pan window once zoomed.
   rackViewport: { marginHorizontal: spacing.md, marginVertical: spacing.sm, padding: spacing.md, backgroundColor: colors.creamDim, borderRadius: 14, overflow: 'hidden', alignItems: 'center' },
   rackCanvas: { alignItems: 'center' },
-  zoomHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingTop: spacing.sm },
+  zoomHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, textDecorationLine: 'underline' },
+  // Full-screen zoom viewer — dark backdrop so the labels pop; tighter slots.
+  zoomBackdrop: { flex: 1, backgroundColor: 'rgba(18,11,10,0.97)', alignItems: 'center', justifyContent: 'center' },
+  zoomCanvas: { alignItems: 'center' },
+  zoomSlot: { borderRadius: 3, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
+  zoomSlotEmpty: { width: '100%', height: '100%', borderRadius: 3, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  zoomClose: { position: 'absolute', top: 52, right: 24, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.16)', alignItems: 'center', justifyContent: 'center' },
+  zoomCloseText: { color: '#FFFFFF', fontSize: 20, fontFamily: fonts.bodySemibold },
+  zoomViewerHint: { position: 'absolute', bottom: 48, color: 'rgba(255,255,255,0.7)', fontSize: 13, fontFamily: fonts.bodyItalic },
   slotEmpty: { borderColor: 'rgba(87,47,43,0.20)', backgroundColor: 'rgba(255,255,255,0.35)' },
   slotHighlighted: { borderColor: '#FFFFFF', borderWidth: 2, backgroundColor: 'rgba(255,255,255,0.18)' },
   slotDimmed: { opacity: 0.25 },
