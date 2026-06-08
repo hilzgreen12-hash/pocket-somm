@@ -19,7 +19,8 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
 import { useLabelStore } from '../stores/labelStore';
-import { MicButton } from './MicButton';
+import { WineReviewFields } from './WineReviewFields';
+import { splitLocationString } from '../services/reviewSync';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -41,6 +42,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [tastingNote, setTastingNote] = useState('');      // Your Review
   const [personalNotes, setPersonalNotes] = useState('');  // Personal Notes (other_observations)
   const [purchasePrice, setPurchasePrice] = useState('');
+  const [discoveredAt, setDiscoveredAt] = useState('');
+  const [drinkingWindow, setDrinkingWindow] = useState('');
   const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
@@ -60,6 +63,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
       setTastingNote(wine.tasting_note ?? '');
       setPersonalNotes(wine.other_observations ?? '');
       setPurchasePrice(wine.purchase_price != null ? String(wine.purchase_price) : '');
+      setDiscoveredAt([wine.restaurant_name, wine.city].filter(Boolean).join(', '));
+      setDrinkingWindow(wine.user_drinking_window ?? '');
       setEstimatedValue(wine.estimated_value ?? null);
       setEstimatedValueAt(wine.estimated_value_at ?? null);
       setWishlist(!!wine.wishlist);
@@ -104,13 +109,13 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     if (!wine) return;
     const parsed = purchasePrice.trim() ? parseFloat(purchasePrice.trim()) : NaN;
     const validPrice = Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+    // "Discovered at" is one field; split it back into restaurant + city.
+    const { restaurantName, city } = splitLocationString(discoveredAt.trim());
     await update.mutateAsync({
       id: wine.id,
       input: {
-        // Where/when fields aren't edited on this card any more — pass the
-        // wine's existing values straight through so they're preserved.
-        restaurantName: wine.restaurant_name ?? '',
-        city: wine.city ?? '',
+        restaurantName,
+        city,
         tastingNote,
         otherObservations: personalNotes,
         userScore,
@@ -124,6 +129,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         vintage: wine.vintage,
       },
     });
+    // user_drinking_window isn't part of the structured update input.
+    await patchChosenWine(wine.id, { user_drinking_window: drinkingWindow.trim() || null });
   }
 
   async function handleSave() {
@@ -314,115 +321,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
             <View style={styles.divider} />
 
-            {/* Score | Drinking Window */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statCell}>
-                <Text style={styles.statLabel}>Your Score</Text>
-                <TextInput
-                  style={styles.statInput}
-                  value={userScore != null ? String(userScore) : ''}
-                  onChangeText={(t) => {
-                    if (t === '') { setUserScore(null); return; }
-                    const n = parseInt(t, 10);
-                    if (!isNaN(n)) setUserScore(Math.min(100, Math.max(1, n)));
-                  }}
-                  keyboardType="number-pad"
-                  placeholder="e.g. 92"
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={3}
-                />
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statLabel}>Drinking Window</Text>
-                {drinkingStatus ? (
-                  <>
-                    <Text style={styles.statValue}>{drinkingStatus}</Text>
-                    {drinkingRange ? <Text style={styles.statSub}>{drinkingRange}</Text> : null}
-                  </>
-                ) : (
-                  <Text style={[styles.statValue, styles.statMuted]}>—</Text>
-                )}
-              </View>
-            </View>
-
-            {/* Purchase Price | Estimated Value */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statCell}>
-                <Text style={styles.statLabel}>Purchase Price</Text>
-                <View style={styles.priceRow}>
-                  <Text style={styles.priceCurrency}>{formatCurrency(0, currency, { decimals: 0 }).replace(/[\d.,\s]/g, '') || currency}</Text>
-                  <TextInput
-                    style={styles.priceInput}
-                    value={purchasePrice}
-                    onChangeText={(t) => setPurchasePrice(t.replace(/[^0-9.]/g, ''))}
-                    keyboardType="decimal-pad"
-                    placeholder="0"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statLabel}>Estimated Value</Text>
-                {estimating ? (
-                  <Text style={[styles.statValue, styles.statMuted]}>Estimating…</Text>
-                ) : estimatedValue != null ? (
-                  <>
-                    <TouchableOpacity onPress={() => fetchEstimate(wine, true)} activeOpacity={0.7}>
-                      <Text style={[styles.statValue, styles.estimatedValueGold]}>
-                        {formatCurrency(estimatedValue, currency, { decimals: 0 })}
-                        <Text style={styles.estimateUpdateLink}> (update)</Text>
-                      </Text>
-                    </TouchableOpacity>
-                    {estimatedValueAt ? (
-                      <Text style={styles.statSub}>{new Date(estimatedValueAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
-                    ) : null}
-                  </>
-                ) : (
-                  <TouchableOpacity onPress={() => fetchEstimate(wine, true)} activeOpacity={0.7}>
-                    <Text style={styles.estimateUpdateLink}>(estimate)</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {/* Your Review */}
-            <View style={styles.dictateRow}>
-              <Text style={styles.sectionTitle}>Your Review</Text>
-              <MicButton value={tastingNote} onChangeText={setTastingNote} onClear={() => setTastingNote('')} />
-            </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={tastingNote}
-              onChangeText={setTastingNote}
-              placeholder="What you thought of the wine — taste, occasion, anything worth sharing."
-              placeholderTextColor={colors.textMuted}
-              multiline numberOfLines={4} textAlignVertical="top"
-            />
-
-            <View style={styles.shareRow}>
-              <TouchableOpacity style={[styles.shareBtn, posting && styles.btnDisabled]} onPress={handleShareToCommunity} disabled={posting} activeOpacity={0.8}>
-                <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.shareBtn, sharing && styles.btnDisabled]} onPress={handleShare} disabled={sharing} activeOpacity={0.8}>
-                <Text style={styles.shareBtnText}>{sharing ? 'Preparing…' : 'Share'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Personal Notes — no divider above (per spec). */}
-            <View style={styles.dictateRow}>
-              <Text style={styles.sectionTitle}>Personal Notes</Text>
-              <MicButton value={personalNotes} onChangeText={setPersonalNotes} onClear={() => setPersonalNotes('')} />
-            </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={personalNotes}
-              onChangeText={setPersonalNotes}
-              placeholder="Add a personal note about this wine…"
-              placeholderTextColor={colors.textMuted}
-              multiline numberOfLines={3} textAlignVertical="top"
-            />
-
-            {/* Vinster's Review — mirrors the cellar card's collapsible note. */}
+            {/* Vinster's Review — collapsed reference, above the input. */}
             {hasVinsterNotes ? (
               <View style={styles.vinsterWrap}>
                 <View style={styles.vinsterHeader}>
@@ -452,24 +351,37 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               </View>
             ) : null}
 
-            {/* Add to / In Wish List */}
-            <TouchableOpacity style={styles.wishlistBtn} onPress={handleWishlistButton} activeOpacity={0.8}>
-              <Text style={styles.wishlistBtnText}>{wishlist ? 'In Your Wish List — Remove' : 'Add to Wish List'}</Text>
-            </TouchableOpacity>
-
-            {/* Add to Cellar — runs the wine through the Wine Intel card and
-                the Add to Cellar form, skipping the label scan. */}
-            <TouchableOpacity style={styles.wishlistBtn} onPress={handleAddToCellarFlow} activeOpacity={0.8}>
-              <Text style={styles.wishlistBtnText}>Add to Cellar</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving || update.isPending}>
-              <Text style={styles.saveButtonText}>{saving || update.isPending ? 'Saving…' : 'Save Changes'}</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} disabled={remove.isPending}>
-              <Text style={styles.deleteText}>{remove.isPending ? 'Deleting…' : 'Delete this review'}</Text>
-            </TouchableOpacity>
+            <WineReviewFields
+              score={userScore}
+              onScore={setUserScore}
+              pricePaid={purchasePrice}
+              onPricePaid={setPurchasePrice}
+              currency={currency}
+              estimatedValue={estimatedValue}
+              estimatedValueAt={estimatedValueAt}
+              estimating={estimating}
+              onEstimate={() => fetchEstimate(wine, true)}
+              review={tastingNote}
+              onReview={setTastingNote}
+              personalNotes={personalNotes}
+              onPersonalNotes={setPersonalNotes}
+              discoveredAt={discoveredAt}
+              onDiscoveredAt={setDiscoveredAt}
+              drinkingWindow={drinkingWindow}
+              onDrinkingWindow={setDrinkingWindow}
+              onShareCommunity={handleShareToCommunity}
+              onShare={handleShare}
+              sharingCommunity={posting}
+              sharing={sharing}
+              wishlistActive={wishlist}
+              onWishlist={handleWishlistButton}
+              onAddToCellar={handleAddToCellarFlow}
+              saving={saving || update.isPending}
+              onSave={handleSave}
+              saveLabel="Save Review"
+              onDelete={handleDelete}
+              deleteLabel={remove.isPending ? 'Deleting…' : 'Delete this review'}
+            />
 
           </KeyboardAwareScrollView>
         </View>
