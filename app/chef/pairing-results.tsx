@@ -1,7 +1,10 @@
-import { useState } from 'react';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { useState, useRef } from 'react';
+import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, Share } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -125,6 +128,29 @@ export default function PairingResultsScreen() {
   const qc = useQueryClient();
   const [renderedAt] = useState(() => new Date().toISOString());
   const [requerying, setRequerying] = useState(false);
+  // Share the whole results area as a high-resolution PNG so the print stays
+  // crisp. captureRef renders at the device pixel ratio (no upscaling blur);
+  // we capture the laid-out content view so off-screen results are included.
+  const shareRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
+
+  async function handleSharePage() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      await new Promise((r) => setTimeout(r, 60)); // one paint before snapshot
+      if (shareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share your wine pairing', UTI: 'public.png' });
+        return;
+      }
+      await Share.share({ message: `My Vinster wine pairing for ${titleCase(dish)}${VINSTER_TEXT_SHARE_FOOTER}` });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharing(false);
+    }
+  }
 
   // "Show me all of the wines from my cellar that could work" — re-runs the
   // same brief against the user's cellar without sending them back to the
@@ -263,32 +289,40 @@ export default function PairingResultsScreen() {
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
 
-      {(stampDate || stampLocation) && (
-        <View style={styles.stampRow}>
-          {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
-          {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+      <View ref={shareRef} collapsable={false} style={styles.shareArea}>
+        {(stampDate || stampLocation) && (
+          <View style={styles.stampRow}>
+            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
+            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+          </View>
+        )}
+
+        <View style={styles.header}>
+          <Text style={styles.headerLine}>Your Brief</Text>
+          <Text style={styles.dish}>{titleCase(dish)}</Text>
+          {mode === 'general' && wines.length > 0 && (
+            <TouchableOpacity onPress={handleShowCellarOptions} activeOpacity={0.7}>
+              <Text style={styles.cellarPromptLink}>Show me all of the wines from my cellar that could work</Text>
+            </TouchableOpacity>
+          )}
         </View>
-      )}
 
-      <View style={styles.header}>
-        <Text style={styles.headerLine}>Your Brief</Text>
-        <Text style={styles.dish}>{titleCase(dish)}</Text>
-        {mode === 'general' && wines.length > 0 && (
-          <TouchableOpacity onPress={handleShowCellarOptions} activeOpacity={0.7}>
-            <Text style={styles.cellarPromptLink}>Show me all of the wines from my cellar that could work</Text>
-          </TouchableOpacity>
-        )}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{mode === 'cellar' ? 'From Your Cellar' : 'Style Recommendations'}</Text>
+          {mode === 'cellar' && cellarResult && (
+            <CellarResults recommendations={cellarResult} wines={wines} onSelect={openSelect} />
+          )}
+          {mode === 'general' && generalResult && (
+            <GeneralResults results={generalResult} summary={generalSummary} currency={userCurrency} />
+          )}
+        </View>
+
+        <Text style={styles.shareFooter}>Paired with Vinster</Text>
       </View>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>{mode === 'cellar' ? 'From Your Cellar' : 'Style Recommendations'}</Text>
-        {mode === 'cellar' && cellarResult && (
-          <CellarResults recommendations={cellarResult} wines={wines} onSelect={openSelect} />
-        )}
-        {mode === 'general' && generalResult && (
-          <GeneralResults results={generalResult} summary={generalSummary} currency={userCurrency} />
-        )}
-      </View>
+      <TouchableOpacity style={styles.shareButton} onPress={handleSharePage} disabled={sharing} activeOpacity={0.85}>
+        <Text style={styles.shareButtonText}>{sharing ? 'Preparing…' : 'Share this pairing'}</Text>
+      </TouchableOpacity>
 
 
       <Modal visible={selecting !== null} transparent animationType="fade" onRequestClose={closeSelect}>
@@ -358,6 +392,12 @@ export default function PairingResultsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Opaque wrapper so the captured PNG has the page's background (not
+  // transparent) and includes the full results, not just the visible part.
+  shareArea: { backgroundColor: colors.background },
+  shareFooter: { fontFamily: fonts.headingItalic, fontSize: 14, color: colors.gold, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
+  shareButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.lg },
+  shareButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   stampRow: { alignItems: 'center', gap: 2, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
