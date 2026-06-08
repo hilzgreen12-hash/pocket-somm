@@ -570,7 +570,7 @@ export default function ChosenWinesScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>
-            When you choose a wine from a Vinster recommendation, tap "Review This Wine" to record it here — or tap + Add at the top to enter a wine by hand. Notes you save on cellar wines also appear here.
+            When you review a wine from a Vinster recommendation, it's saved here. You can also dictate, photograph a label, or hand-write a review using the icons above — and the reviews you write on your cellar wines appear here too.
           </Text>
         </View>
       ) : (
