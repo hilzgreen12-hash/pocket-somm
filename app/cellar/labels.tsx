@@ -8,13 +8,12 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 // How many label tiles per row. "single" = one large label per row.
-type ViewMode = 'single' | 'two' | 'three';
+type ViewMode = 'thumbnails' | 'enlarge';
 const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
-  { value: 'single', label: 'Single photo (largest)' },
-  { value: 'two', label: 'Two per line' },
-  { value: 'three', label: 'Three per line' },
+  { value: 'thumbnails', label: 'Thumbnails' },
+  { value: 'enlarge', label: 'Enlarge' },
 ];
-const VIEW_COLS: Record<ViewMode, number> = { single: 1, two: 2, three: 3 };
+const VIEW_COLS: Record<ViewMode, number> = { thumbnails: 3, enlarge: 1 };
 
 type FavFilter = 'all' | 'fav';
 const FAV_OPTIONS: { value: FavFilter; label: string }[] = [
@@ -29,7 +28,7 @@ export default function MyLabelsScreen() {
   const { wines, isLoading } = useCellar();
   const { width } = useWindowDimensions();
 
-  const [viewMode, setViewMode] = useState<ViewMode>('three');
+  const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
   const [favFilter, setFavFilter] = useState<FavFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
 
@@ -46,7 +45,7 @@ export default function MyLabelsScreen() {
   const tileWidth = (width - spacing.xl * 2 - gap * (cols - 1)) / cols;
   const tileHeight = tileWidth * 1.3;
 
-  const viewLabel = VIEW_OPTIONS.find((o) => o.value === viewMode)?.label ?? 'Three per line';
+  const viewLabel = VIEW_OPTIONS.find((o) => o.value === viewMode)?.label ?? 'Thumbnails';
   const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All labels';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
@@ -88,7 +87,7 @@ export default function MyLabelsScreen() {
       ) : (
         <>
           {/* Default ordering + filter carousel — mirrors the Full Cellar List. */}
-          <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all filters →</Text>
+          <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
