@@ -16,6 +16,7 @@ import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../se
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
+import { WineReviewFields } from './WineReviewFields';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
@@ -47,6 +48,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   const [score, setScore] = useState<string>('');
   const [reviewDate, setReviewDate] = useState('');
   const [reviewLocation, setReviewLocation] = useState('');
+  const [pricePaid, setPricePaid] = useState('');
+  const [drinkingWindow, setDrinkingWindow] = useState('');
   const [saving, setSaving] = useState(false);
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -61,6 +64,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     setScore(wine.review_score != null ? String(wine.review_score) : '');
     setReviewDate(wine.review_date ?? todayISO());
     setReviewLocation(wine.review_location ?? '');
+    setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
+    setDrinkingWindow(wine.user_drinking_window ?? '');
   }, [wine?.id, visible]);
 
   async function persist() {
@@ -77,6 +82,9 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     }
     const locationTrim = reviewLocation.trim();
     const dateTrim = reviewDate.trim();
+    const parsedPrice = pricePaid.trim() ? parseFloat(pricePaid.trim()) : NaN;
+    const priceValue = Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
+    const currency = (wine.purchase_price_currency ?? 'GBP').toUpperCase();
     await updateWine.mutateAsync({
       id: wine.id,
       updates: {
@@ -85,6 +93,9 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
         review_date: dateTrim || null,
         review_note: reviewNote.trim() || null,
         user_notes: personalNotes.trim() || null,
+        purchase_price: priceValue,
+        purchase_price_currency: priceValue != null ? currency : null,
+        user_drinking_window: drinkingWindow.trim() || null,
       },
     });
     // Keep any duplicate rows (other cellar bottles / chosen reviews of the
@@ -234,81 +245,30 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
 
             <View style={styles.divider} />
 
-            {/* Your Score | When */}
-            <View style={styles.statsGrid}>
-              <View style={styles.statCell}>
-                <Text style={styles.statLabel}>Your Score</Text>
-                <TextInput
-                  style={styles.statInput}
-                  value={score}
-                  onChangeText={(t) => setScore(t.replace(/[^0-9]/g, '').slice(0, 3))}
-                  keyboardType="number-pad"
-                  placeholder="e.g. 92"
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={3}
-                />
-              </View>
-              <View style={styles.statCell}>
-                <Text style={styles.statLabel}>When did you drink it?</Text>
-                <TextInput
-                  style={styles.statInput}
-                  value={reviewDate}
-                  onChangeText={setReviewDate}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-            </View>
-
-            <Text style={styles.fieldLabel}>Where did you drink it?</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewLocation}
-              onChangeText={setReviewLocation}
-              placeholder="Restaurant, home, friend's place…"
-              placeholderTextColor={colors.textMuted}
+            <WineReviewFields
+              score={parsedScore}
+              onScore={(n) => setScore(n != null ? String(n) : '')}
+              pricePaid={pricePaid}
+              onPricePaid={setPricePaid}
+              currency={(wine.purchase_price_currency ?? 'GBP').toUpperCase()}
+              estimatedValue={wine.estimated_value ?? null}
+              estimatedValueAt={wine.estimated_value_at}
+              review={reviewNote}
+              onReview={setReviewNote}
+              personalNotes={personalNotes}
+              onPersonalNotes={setPersonalNotes}
+              discoveredAt={reviewLocation}
+              onDiscoveredAt={setReviewLocation}
+              drinkingWindow={drinkingWindow}
+              onDrinkingWindow={setDrinkingWindow}
+              onShareCommunity={handlePostToCommunity}
+              onShare={handleShare}
+              sharingCommunity={posting}
+              sharing={sharing}
+              saving={saving || updateWine.isPending}
+              onSave={handleSave}
+              saveLabel="Save Review"
             />
-
-            {/* Your Review — the shareable body. Maps to review_note. */}
-            <View style={styles.dictateRow}>
-              <Text style={styles.sectionTitle}>Your Review</Text>
-              <MicButton value={reviewNote} onChangeText={setReviewNote} onClear={() => setReviewNote('')} />
-            </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={reviewNote}
-              onChangeText={setReviewNote}
-              placeholder="What you thought of the wine — taste, occasion, anything worth sharing."
-              placeholderTextColor={colors.textMuted}
-              multiline numberOfLines={4} textAlignVertical="top"
-            />
-
-            <View style={styles.shareRow}>
-              <TouchableOpacity style={[styles.shareBtn, posting && styles.btnDisabled]} onPress={handlePostToCommunity} disabled={posting} activeOpacity={0.8}>
-                <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.shareBtn, sharing && styles.btnDisabled]} onPress={handleShare} disabled={sharing} activeOpacity={0.8}>
-                <Text style={styles.shareBtnText}>{sharing ? 'Preparing…' : 'Share'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Personal Notes — private, maps to user_notes. */}
-            <View style={styles.dictateRow}>
-              <Text style={styles.sectionTitle}>Personal Notes</Text>
-              <MicButton value={personalNotes} onChangeText={setPersonalNotes} onClear={() => setPersonalNotes('')} />
-            </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={personalNotes}
-              onChangeText={setPersonalNotes}
-              placeholder="Just for you — anything you'd rather keep private."
-              placeholderTextColor={colors.textMuted}
-              multiline numberOfLines={4} textAlignVertical="top"
-            />
-
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving || updateWine.isPending}>
-              <Text style={styles.saveButtonText}>{saving || updateWine.isPending ? 'Saving…' : 'Save Changes'}</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity style={styles.wishlistBtn} onPress={openFullCard} activeOpacity={0.8}>
               <Text style={styles.wishlistBtnText}>View full wine card</Text>
