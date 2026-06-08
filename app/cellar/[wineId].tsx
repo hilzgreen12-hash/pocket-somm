@@ -999,6 +999,7 @@ export default function CellarWineDetail() {
       {/* Reviews — Vinster's AI note, the user's review, and private notes,
           grouped under one header with consistent sub-titles and no internal
           dividers. The Chef button now sits lower, above Archive/Delete. */}
+      <View style={styles.cardDivider} />
       <Text style={styles.reviewsHeader}>Reviews</Text>
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
@@ -1008,13 +1009,13 @@ export default function CellarWineDetail() {
           Vinster's AI review only exists once the wine is in the cellar. */}
       {!isWishlist && wine.tasting_notes ? (
         <View style={styles.reviewSubsection}>
-          <View style={styles.sectionHeader}>
+          <View style={styles.vinsterHeaderRow}>
             <TouchableOpacity
               onPress={() => setVinstersNoteOpen((v) => !v)}
               activeOpacity={0.7}
               style={styles.vinsterReviewToggle}
             >
-              <Text style={styles.reviewSubTitle}>Vinster's Review</Text>
+              <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
               <Ionicons
                 name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
                 size={16}
@@ -1209,6 +1210,8 @@ export default function CellarWineDetail() {
       </View>
       )}
 
+      {!isWishlist && <View style={styles.cardDivider} />}
+
       {isWishlist && (
         <TouchableOpacity
           style={[styles.chefBtn, { borderColor: colors.gold }]}
@@ -1251,6 +1254,8 @@ export default function CellarWineDetail() {
           </TouchableOpacity>
         )
       )}
+
+      {!isArchived && <View style={styles.cardDivider} />}
 
       {!isArchived && !isWishlist && (
         <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
@@ -1490,6 +1495,11 @@ const styles = StyleSheet.create({
   reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, marginBottom: spacing.xs },
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
+  // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
+  vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+  vinsterReviewTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.gold },
+  // Full-width separator between card sections.
+  cardDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // Field label + dictation mic on one row.
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: 6 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
