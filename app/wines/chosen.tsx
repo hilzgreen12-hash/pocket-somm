@@ -229,7 +229,7 @@ export default function ChosenWinesScreen() {
   const PORTFOLIO_OPTIONS: { value: TypeFilter; label: string }[] = [
     { value: 'all',        label: 'All Reviews' },
     { value: 'cellar',     label: 'Cellar Wines' },
-    { value: 'restaurant', label: 'Restaurant Wines' },
+    { value: 'restaurant', label: 'Restaurant Bottle Picks' },
     { value: 'wishlist',   label: 'Wish List Wines' },
     // 'Other' captures reviews saved via the "Review without adding"
     // path on the Cellar add-wine flow (migration 042 column).
