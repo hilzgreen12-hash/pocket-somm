@@ -131,22 +131,30 @@ export default function FindPairingScreen() {
 
   return (
     <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.content} bottomOffset={24}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-        <Text style={styles.back}>Back</Text>
-      </TouchableOpacity>
+      {/* Cellar-style header bar — Back / title / spacer. */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.back}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Find a Wine Pairing</Text>
+        <View style={{ width: 44 }} />
+      </View>
 
-      <Text style={styles.heading}>Find a Wine Pairing</Text>
-      <Text style={styles.subheading}>
+      <Text style={styles.blurb}>
         Tell us what you're cooking and we'll find the perfect wine. Vinster will use your settings under{' '}
-        <Text style={styles.preferencesInline} onPress={handleOpenPreferences}>About You - Your Wine Preferences</Text>
+        <Text style={styles.blurbLink} onPress={handleOpenPreferences}>About You - Your Wine Preferences</Text>
         {' '}to guide its results.
       </Text>
 
-      <View style={styles.fieldHeaderRow}>
-        <Text style={styles.leftLabel}>What are you cooking?</Text>
+      <View style={styles.divider} />
+
+      {/* What are you cooking — caps label, helper, then the mic + bin on the
+          right, then the input. */}
+      <Text style={styles.fieldLabelCaps}>What are you cooking?</Text>
+      <Text style={styles.helper}>Include any strong flavours or ingredients that will help guide your pairing.</Text>
+      <View style={styles.micRow}>
         <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} />
       </View>
-      <Text style={styles.helperLeft}>Include any strong flavours or ingredients that will help guide your pairing.</Text>
       <TextInput
         style={styles.inputLeft}
         value={dish}
@@ -158,15 +166,18 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
-      <Text style={styles.leftLabel}>Any specific wine style preference?</Text>
-      <TouchableOpacity style={styles.dropdownChip} onPress={() => setStyleDropdownOpen(true)} activeOpacity={0.7}>
-        <Text style={styles.dropdownChipText}>{stylePreference ?? 'Any'}</Text>
-        <Text style={styles.dropdownChevron}>▾</Text>
-      </TouchableOpacity>
+      {/* Wine style — label left, dropdown to its right. */}
+      <View style={styles.styleRow}>
+        <Text style={[styles.fieldLabelCaps, styles.rowLabel]}>Wine Style Preference?</Text>
+        <TouchableOpacity style={styles.dropdownChip} onPress={() => setStyleDropdownOpen(true)} activeOpacity={0.7}>
+          <Text style={styles.dropdownChipText}>{stylePreference ?? 'Any'}</Text>
+          <Text style={styles.dropdownChevron}>▾</Text>
+        </TouchableOpacity>
+      </View>
 
+      {/* Budget? Baller — inline header via the slider's label prop, mirroring List. */}
       <View style={styles.budgetBlock}>
-        <Text style={styles.label}>Budget?</Text>
-        <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} />
+        <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" />
       </View>
 
       <View style={styles.toggleRow}>
@@ -175,7 +186,7 @@ export default function FindPairingScreen() {
           onPress={() => setModeLocal('cellar')}
         >
           <Text style={[styles.toggleText, mode === 'cellar' && styles.toggleTextActive]}>From My Cellar</Text>
-          {wines.length > 0 && <Text style={[styles.toggleSub, mode === 'cellar' && styles.toggleSubActive]}>{wines.length} bottles</Text>}
+          <Text style={[styles.toggleSub, mode === 'cellar' && styles.toggleSubActive]}>{wines.length} {wines.length === 1 ? 'bottle' : 'bottles'}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -234,9 +245,21 @@ const styles = StyleSheet.create({
   loadingBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   loadingStay: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textAlign: 'center', opacity: 0.8 },
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl, paddingTop: 80, paddingBottom: 60, alignItems: 'center' },
+  content: { padding: spacing.xl, paddingTop: 56, paddingBottom: 60 },
   backRow: { alignSelf: 'flex-start', marginBottom: spacing.xl },
-  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
+  // Cellar-style header bar.
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
+  blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, textAlign: 'center', marginBottom: spacing.md },
+  // Inline preferences link — inherits the blurb's font/size, gold + underline.
+  blurbLink: { color: colors.gold, textDecorationLine: 'underline' },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  fieldLabelCaps: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
+  helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
+  micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
+  styleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.lg },
+  rowLabel: { marginBottom: 0, flexShrink: 1 },
   heading: { fontSize: 30, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
   profileNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
