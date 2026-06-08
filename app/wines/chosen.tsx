@@ -586,7 +586,7 @@ export default function ChosenWinesScreen() {
               <CameraMotif />
             </TouchableOpacity>
           </View>
-          <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
+          <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
