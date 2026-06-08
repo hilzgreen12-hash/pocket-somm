@@ -15,7 +15,7 @@ import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
-import { MicButton, appendDictation } from './MicButton';
+import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
@@ -272,7 +272,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
             {/* Your Review — the shareable body. Maps to review_note. */}
             <View style={styles.dictateRow}>
               <Text style={styles.sectionTitle}>Your Review</Text>
-              <MicButton onResult={(t) => setReviewNote((prev) => appendDictation(prev, t))} />
+              <MicButton value={reviewNote} onChangeText={setReviewNote} onClear={() => setReviewNote('')} />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
@@ -295,7 +295,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
             {/* Personal Notes — private, maps to user_notes. */}
             <View style={styles.dictateRow}>
               <Text style={styles.sectionTitle}>Personal Notes</Text>
-              <MicButton onResult={(t) => setPersonalNotes((prev) => appendDictation(prev, t))} />
+              <MicButton value={personalNotes} onChangeText={setPersonalNotes} onClear={() => setPersonalNotes('')} />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}

@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from './AppAlert';
-import { MicButton, appendDictation } from './MicButton';
+import { MicButton } from './MicButton';
 import { CityAutocomplete } from './CityAutocomplete';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
@@ -300,7 +300,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.dictateRow}>
               <Text style={styles.sectionLabel}>Your Review</Text>
-              <MicButton onResult={(t) => setTastingNote((prev) => appendDictation(prev, t))} />
+              <MicButton value={tastingNote} onChangeText={setTastingNote} onClear={() => setTastingNote('')} />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
@@ -315,7 +315,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.dictateRow}>
               <Text style={styles.sectionLabel}>Personal Notes</Text>
-              <MicButton onResult={(t) => setOtherObservations((prev) => appendDictation(prev, t))} />
+              <MicButton value={otherObservations} onChangeText={setOtherObservations} onClear={() => setOtherObservations('')} />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
