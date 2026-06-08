@@ -14,7 +14,7 @@ const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bot
 
 Build virtual racks and fridges that mirror your real storage, so you always know where a bottle is and what's ready to open.
 
-See your whole collection at a glance — bottles, value and stats — keep your own tasting reviews, and tuck anything you've drunk or gifted into your archive. Less time hunting, more time pouring.`;
+Dictate your wine reviews and view your label library while enjoying easy access to your full cellar stats. Truly a masterpiece in Cellar management.`;
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
