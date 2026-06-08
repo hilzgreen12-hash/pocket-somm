@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
 import { useCellar } from './useCellar';
+import { useChosenWines } from './useChosenWines';
 import { useScanHistory } from './useScanHistory';
 import { useChefLabelHistory, useChefPairingHistory } from './useChefHistory';
 
@@ -25,6 +26,7 @@ export function usePersonalityPrompt(): PersonalityCategory | null {
   const { session } = useAuth();
   const userId = session?.user.id;
   const { wines } = useCellar();
+  const { chosenWines } = useChosenWines();
   const { archive } = useScanHistory();
   const { sessions: chefLabelSessions } = useChefLabelHistory();
   const { sessions: chefPairingSessions } = useChefPairingHistory();
@@ -53,10 +55,17 @@ export function usePersonalityPrompt(): PersonalityCategory | null {
     let cancelled = false;
 
     (async () => {
-      // Activity gates — same thresholds as the personality screen.
-      const totalBottles = (wines ?? []).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-      const wineScans = archive?.length ?? 0;
-      const wineReady = wineScans >= 2 || totalBottles >= 5;
+      // Activity gates — same thresholds as the personality screen. Wine
+      // needs real engagement before a sketch reads as personal: a started
+      // cellar (6+ distinct wines) OR three separate List searches where a
+      // bottle was actually picked.
+      const distinctCellarWines = (wines ?? []).length;
+      const listPickSessions = new Set(
+        (chosenWines ?? [])
+          .filter((cw) => cw.source !== 'other' && cw.scan_session_id)
+          .map((cw) => cw.scan_session_id)
+      ).size;
+      const wineReady = distinctCellarWines >= 6 || listPickSessions >= 3;
 
       const restaurantSignals = (archive ?? []).filter((a) =>
         (a.restaurantName && a.restaurantName.trim()) ||
@@ -99,7 +108,7 @@ export function usePersonalityPrompt(): PersonalityCategory | null {
     })();
 
     return () => { cancelled = true; };
-  }, [userId, generated, wines, archive, chefLabelSessions, chefPairingSessions]);
+  }, [userId, generated, wines, chosenWines, archive, chefLabelSessions, chefPairingSessions]);
 
   return category;
 }
