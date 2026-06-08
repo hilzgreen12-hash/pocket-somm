@@ -302,8 +302,8 @@ export default function ResultsScreen() {
       });
       setChosenIndexes((prev) => new Set([...prev, i]));
       showAlert({
-        title: 'Noted',
-        body: "Your selection has been noted — Vinster will apply this to their understanding of your vinous amour.",
+        title: 'Added to You · Your Restaurants',
+        body: "Saved to your Bottle Picks under You · Your Restaurants. Vinster will fold this into their understanding of your vinous amour.",
       });
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -655,7 +655,7 @@ export default function ResultsScreen() {
                     style={[styles.bottlePicksButton, chosenIndexes.has(i) && styles.bottlePicksButtonDone]}
                     onPress={() => {
                       if (chosenIndexes.has(i)) {
-                        router.push('/wines/chosen');
+                        router.push('/restaurants/reviews');
                       } else {
                         handleQuickSelect(wine, i);
                       }
@@ -664,7 +664,7 @@ export default function ResultsScreen() {
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? '✓ Added · View in Your Wine Reviews' : 'Add to Your Restaurants - Bottle Picks'}
+                      {chosenIndexes.has(i) ? '✓ Added · View in Your Restaurants' : 'Add to Your Restaurants - Bottle Picks'}
                     </Text>
                   </TouchableOpacity>
                 )}
