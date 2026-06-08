@@ -3,7 +3,9 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { showAlert } from '../../src/components/AppAlert';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import type { CellarWine } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -25,8 +27,17 @@ type FilterField = 'view' | 'fav' | null;
 
 export default function MyLabelsScreen() {
   useAuth();
-  const { wines, isLoading } = useCellar();
+  const { wines, isLoading, updateWine } = useCellar();
   const { width } = useWindowDimensions();
+
+  // Toggle a label as a Library favourite (distinct from a favourite wine).
+  async function toggleLabelFav(w: CellarWine) {
+    try {
+      await updateWine.mutateAsync({ id: w.id, updates: { label_favourite: !w.label_favourite } });
+    } catch (err) {
+      showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
   const [favFilter, setFavFilter] = useState<FavFilter>('all');
@@ -36,7 +47,7 @@ export default function MyLabelsScreen() {
   // limited to wines that actually have a label photo.
   const labels = useMemo(() => {
     let list = wines.filter((w) => w.label_image_path);
-    if (favFilter === 'fav') list = list.filter((w) => w.is_favourite);
+    if (favFilter === 'fav') list = list.filter((w) => w.label_favourite);
     return list;
   }, [wines, favFilter]);
 
@@ -124,13 +135,28 @@ export default function MyLabelsScreen() {
                   onPress={() => router.push(`/cellar/${w.id}`)}
                   activeOpacity={0.7}
                 >
-                  <LabelThumb
-                    path={w.label_image_path}
-                    fallbackText={w.wine_name}
-                    style={{ width: tileWidth, height: tileHeight }}
-                  />
+                  <View style={{ width: tileWidth, height: tileHeight }}>
+                    <LabelThumb
+                      path={w.label_image_path}
+                      fallbackText={w.wine_name}
+                      style={{ width: tileWidth, height: tileHeight }}
+                    />
+                    {/* Star selector — only on the large (Enlarge) view; a
+                        thumbnail is too small to tap. Sets a favourite LABEL,
+                        separate from a favourite wine. */}
+                    {viewMode === 'enlarge' && (
+                      <TouchableOpacity
+                        style={styles.favStar}
+                        onPress={() => toggleLabelFav(w)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={[styles.favStarText, w.label_favourite && styles.favStarActive]}>{w.label_favourite ? '★' : '☆'}</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
                   <Text style={styles.caption} numberOfLines={1}>
-                    {w.is_favourite ? '★ ' : ''}{w.wine_name}
+                    {w.label_favourite ? '★ ' : ''}{w.wine_name}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -191,6 +217,10 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
   caption: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.text, marginTop: spacing.xs, alignSelf: 'stretch' },
+  // Favourite-label star, top-right of the enlarged image.
+  favStar: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  favStarText: { fontSize: 24, color: '#FFFFFF', lineHeight: 26 },
+  favStarActive: { color: colors.gold },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },

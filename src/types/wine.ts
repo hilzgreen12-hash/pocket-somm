@@ -196,6 +196,9 @@ export interface CellarWine {
   // distinct from the Vinster drinking_window_* estimate above.
   user_drinking_window: string | null;
   is_favourite: boolean;
+  // Favourite LABEL flag (migration 049) — Label Library only, distinct
+  // from is_favourite (favourite wine).
+  label_favourite: boolean;
   // Bottle volume in millilitres. 750 = standard, 1500 = magnum, 375 =
   // half, etc. Defaults to 750 on legacy rows via migration 040.
   bottle_size_ml: number;
