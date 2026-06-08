@@ -36,15 +36,26 @@ export default function ScanTab() {
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
-  const [wineTypes, setWineTypes] = useState<WineType[]>([]);
-  const [styleProfiles, setStyleProfiles] = useState<string[]>([]);
-  const [budget, setBudget] = useState<number | null>(
-    savedPreferences?.defaultBudget ?? null
-  );
-  const [foodPairing, setFoodPairing] = useState('');
+  // Restore the inputs from the last search when it FAILED, so a retry doesn't
+  // force the user to re-enter everything (they're saved to the store on scan).
+  // A successful result's Back calls reset() — clearing preferences + flagging
+  // needsReset — so after success there's nothing to restore and the form
+  // resets instead (handled by the needsReset effect below).
+  const restored = useRef(useScanStore.getState().preferences).current;
+  const isRestoring = useRef(
+    !useScanStore.getState().needsReset && (
+      restored.wineTypes.length > 0 || restored.styleProfiles.length > 0 ||
+      !!restored.foodPairing || restored.budget != null || restored.topScoringMode
+    )
+  ).current;
+
+  const [wineTypes, setWineTypes] = useState<WineType[]>(isRestoring ? (restored.wineTypes as WineType[]) : []);
+  const [styleProfiles, setStyleProfiles] = useState<string[]>(isRestoring ? restored.styleProfiles : []);
+  const [budget, setBudget] = useState<number | null>(isRestoring ? restored.budget : (savedPreferences?.defaultBudget ?? null));
+  const [foodPairing, setFoodPairing] = useState(isRestoring ? restored.foodPairing : '');
   const [wineTypeOpen, setWineTypeOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const [topScoringMode, setTopScoringMode] = useState(false);
+  const [topScoringMode, setTopScoringMode] = useState(isRestoring ? restored.topScoringMode : false);
 
   function toggleSection(section: 'wineType' | 'style') {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -104,6 +115,8 @@ export default function ScanTab() {
   // Tracking the last-synced value avoids clobbering an in-progress
   // local override on every render.
   useEffect(() => {
+    // Don't clobber a restored failed-search budget with the profile default.
+    if (isRestoring) return;
     const profileBudget = savedPreferences?.defaultBudget ?? null;
     if (profileBudget !== lastSyncedBudgetRef.current) {
       setBudget(profileBudget);
