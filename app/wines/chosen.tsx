@@ -82,12 +82,10 @@ export default function ChosenWinesScreen() {
   // common interaction. Default sort is "Recently added" (the previous
   // 'date' option, renamed for consistency with Full Cellar List).
   type SortMode = 'recent' | 'score-desc' | 'score-asc';
-  type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
-  type WishlistFilter = 'all' | 'wishlist';
-  type FilterField = 'sort' | 'type' | 'favourite' | 'location' | null;
+  type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'wishlist' | 'other';
+  type FilterField = 'sort' | 'type' | 'location' | null;
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
-  const [wishlistFilter, setWishlistFilter] = useState<WishlistFilter>('all');
   const [locationFilter, setLocationFilter] = useState<string>('All');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
@@ -153,8 +151,11 @@ export default function ChosenWinesScreen() {
   // are on, matching Full Cellar List's behaviour.
   const q = search.trim().toLowerCase();
   const filtered = items.filter((it) => {
-    if (typeFilter !== 'all' && it.source !== typeFilter) return false;
-    if (wishlistFilter === 'wishlist' && !isWishlist(it)) return false;
+    if (typeFilter === 'wishlist') {
+      if (!isWishlist(it)) return false;
+    } else if (typeFilter !== 'all' && it.source !== typeFilter) {
+      return false;
+    }
     if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
     if (q) {
       const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
@@ -187,33 +188,30 @@ export default function ChosenWinesScreen() {
 
   // Labels surfaced inside each chip's value line.
   const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-    { value: 'recent',     label: 'Recently added' },
+    { value: 'recent',     label: 'Recently added (default)' },
     { value: 'score-desc', label: 'Descending score' },
     { value: 'score-asc',  label: 'Ascending score' },
   ];
-  const TYPE_OPTIONS: { value: TypeFilter; label: string }[] = [
-    { value: 'all',        label: 'All reviews' },
-    { value: 'cellar',     label: 'Cellar wines' },
-    { value: 'restaurant', label: 'Restaurant wines' },
+  // "Portfolio" — which slice of the user's reviews to show. Absorbs the old
+  // standalone Wish List filter as the "Wish List Wines" option.
+  const PORTFOLIO_OPTIONS: { value: TypeFilter; label: string }[] = [
+    { value: 'all',        label: 'All Reviews' },
+    { value: 'cellar',     label: 'Cellar Wines' },
+    { value: 'restaurant', label: 'Restaurant Wines' },
+    { value: 'wishlist',   label: 'Wish List Wines' },
     // 'Other' captures reviews saved via the "Review without adding"
-    // path on the Cellar add-wine flow (migration 042 column). Kept as
-    // a placeholder bucket while we figure out the longer-term taxonomy.
+    // path on the Cellar add-wine flow (migration 042 column).
     { value: 'other',      label: 'Other' },
   ];
-  const WISHLIST_OPTIONS: { value: WishlistFilter; label: string }[] = [
-    { value: 'all',      label: "Don't Apply" },
-    { value: 'wishlist', label: 'Wish List Wines Only' },
-  ];
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added';
-  const typeLabel = TYPE_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All reviews';
-  const wishlistLabel = WISHLIST_OPTIONS.find((o) => o.value === wishlistFilter)?.label ?? "Don't Apply";
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added (default)';
+  const portfolioLabel = PORTFOLIO_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Reviews';
+  const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'Any';
   const locationLabel = locationFilter === 'All' ? 'All' : locationFilter;
 
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
-    if (field === 'sort') return { title: 'Sort', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
-    if (field === 'type') return { title: 'Filter by type', options: TYPE_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
-    if (field === 'favourite') return { title: 'Wish List Wines', options: WISHLIST_OPTIONS, selected: wishlistFilter, onSelect: (v) => setWishlistFilter(v as WishlistFilter) };
+    if (field === 'sort') return { title: 'Your Score', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
+    if (field === 'type') return { title: 'Portfolio', options: PORTFOLIO_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
     if (field === 'location') {
       return {
         title: 'Filter by location',
@@ -517,7 +515,7 @@ export default function ChosenWinesScreen() {
               {filtered.length} {filtered.length === 1 ? 'review' : 'reviews'}
             </Text>
           </View>
-          <Text style={styles.filterHint}>Swipe to see all filters →</Text>
+          <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -526,24 +524,17 @@ export default function ChosenWinesScreen() {
           >
             <TouchableOpacity style={[styles.filterChip, styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Sort</Text>
+                <Text style={styles.filterChipLabel}>Your Score</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{sortLabel}</Text>
+              <Text style={[styles.filterChipValue, yourScoreLabel !== 'Any' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Type</Text>
+                <Text style={styles.filterChipLabel}>Portfolio</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{typeLabel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Wish List Wines</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{wishlistLabel}</Text>
+              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{portfolioLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
               <View style={styles.filterChipHeadingRow}>
