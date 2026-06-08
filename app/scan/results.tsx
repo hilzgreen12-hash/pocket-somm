@@ -143,6 +143,26 @@ export default function ResultsScreen() {
     cacheScanLocally({ extractedWines, recommendation, restaurantName: restaurantName || null });
   }, []);
 
+  // Keep the "Add to Bottle Picks" buttons in their saved state across
+  // navigation (e.g. List → View Last Result). The local chosenIndexes set
+  // is lost on remount, so reconcile it against the persisted chosen_wines:
+  // a wine already saved on this scan session shows as "✓ Added".
+  useEffect(() => {
+    if (!session || !recommendation || !effectiveSessionId) return;
+    setChosenIndexes((prev) => {
+      const next = new Set(prev);
+      recommendation.wines.forEach((wine, i) => {
+        const existing = findExistingReview(chosenWines, {
+          producer: wine.producer,
+          wineName: wine.name,
+          vintage: wine.vintage,
+        });
+        if (existing && existing.scan_session_id === effectiveSessionId) next.add(i);
+      });
+      return next;
+    });
+  }, [session, recommendation, chosenWines, effectiveSessionId]);
+
   async function handleSaveRestaurant() {
     setEditingRestaurant(false);
     const trimmed = restaurantName.trim();
