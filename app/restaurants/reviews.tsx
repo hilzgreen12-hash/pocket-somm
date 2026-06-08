@@ -449,7 +449,16 @@ export default function RestaurantReviewsScreen() {
                             Added {formatDate(cw.chosen_at)}{cw.restaurant_name ? ` · ${cw.restaurant_name}` : ''}
                           </Text>
                         </View>
-                        <Text style={[styles.pickStatus, isReviewed && styles.pickStatusDone]}>{isReviewed ? 'Reviewed ✓' : 'No review'}</Text>
+                        <View style={styles.pickStatusCol}>
+                          {isReviewed ? (
+                            <>
+                              <Text style={styles.pickStatusDone}>Reviewed</Text>
+                              {cw.reviewed_at ? <Text style={styles.pickStatusDate}>{formatDate(cw.reviewed_at)}</Text> : null}
+                            </>
+                          ) : (
+                            <Text style={styles.pickStatus}>No review</Text>
+                          )}
+                        </View>
                       </TouchableOpacity>
                     );
                   })}
@@ -701,8 +710,10 @@ const styles = StyleSheet.create({
   pickRowMain: { flex: 1 },
   pickWine: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
   pickMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  pickStatusCol: { alignItems: 'flex-end', minWidth: 64 },
   pickStatus: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.4 },
-  pickStatusDone: { color: colors.gold },
+  pickStatusDone: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
+  pickStatusDate: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.textMuted, marginTop: 2 },
   personalityButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(212,176,96,0.08)' },
   personalityButtonText: { fontFamily: fonts.headingBold, fontSize: 15, color: colors.gold, letterSpacing: 0.5 },
 });
