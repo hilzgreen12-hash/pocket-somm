@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard, Animated } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -862,7 +862,7 @@ export default function RackGridScreen() {
           only shown if > 1 bottle. Skips already-occupied slots so we don't
           stomp an existing wine in the path. */}
       <Modal visible={placingAt !== null} transparent animationType="fade" onRequestClose={() => !placing && setPlacingAt(null)}>
-        <View style={styles.placeOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
             <Text style={styles.placeTitle}>How many bottles?</Text>
             <Text style={styles.placeBody}>Place your wine in the rack — one slot per bottle, starting at the tapped position.</Text>
@@ -909,11 +909,11 @@ export default function RackGridScreen() {
               <Text style={styles.placeCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
       {/* Edit-rack modal — Wipe Contents / Rename / Delete. */}
       <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
-        <View style={styles.placeOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
             <Text style={styles.placeTitle}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
 
@@ -1011,7 +1011,7 @@ export default function RackGridScreen() {
               </>
             )}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* How-this-works overlay. Fires on every rack open until the

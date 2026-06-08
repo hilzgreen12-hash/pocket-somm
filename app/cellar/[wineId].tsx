@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
@@ -1278,7 +1278,7 @@ export default function CellarWineDetail() {
         animationType="slide"
         onRequestClose={() => !addingBottles && setAddBottlesOpen(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.archiveModalSheet}>
             <Text style={styles.archiveModalTitle}>Add bottles</Text>
             <Text style={styles.archiveModalWine}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
@@ -1307,7 +1307,7 @@ export default function CellarWineDetail() {
               <Text style={styles.archiveModalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal
@@ -1316,7 +1316,7 @@ export default function CellarWineDetail() {
         animationType="slide"
         onRequestClose={() => !removing && setArchiveModalOpen(false)}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.archiveModalSheet}>
             <Text style={styles.archiveModalTitle}>Archive or Delete Wine</Text>
             <Text style={styles.archiveModalWine}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
@@ -1367,7 +1367,7 @@ export default function CellarWineDetail() {
               <Text style={styles.archiveModalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* "(what's this)" explainer for Vinster's Note — a short

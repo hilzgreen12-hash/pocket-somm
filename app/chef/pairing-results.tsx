@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useQueryClient } from '@tanstack/react-query';
@@ -291,7 +292,7 @@ export default function PairingResultsScreen() {
 
 
       <Modal visible={selecting !== null} transparent animationType="fade" onRequestClose={closeSelect}>
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             {selecting && archivedSuccess ? (
               <>
@@ -348,7 +349,7 @@ export default function PairingResultsScreen() {
               </>
             ) : null}
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
     </ScrollView>

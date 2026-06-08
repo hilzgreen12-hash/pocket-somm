@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, Image, ScrollView, TouchableOpacity, StyleSheet, TextInput, Keyboard, ActivityIndicator, Modal } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -564,6 +565,7 @@ export default function ChefResultsScreen() {
         animationType="fade"
         onRequestClose={cancelRegen}
       >
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity style={styles.notesModalOverlay} activeOpacity={1} onPress={cancelRegen}>
           <TouchableOpacity activeOpacity={1} style={styles.notesModalSheet} onPress={() => {}}>
             <Text style={styles.notesModalTitle}>Anything in particular you'd like to see in the next set of recipes?</Text>
@@ -593,6 +595,7 @@ export default function ChefResultsScreen() {
             </View>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       <SignInPromptModal
@@ -612,6 +615,7 @@ export default function ChefResultsScreen() {
         animationType="fade"
         onRequestClose={handleCancelNotes}
       >
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity style={styles.notesModalOverlay} activeOpacity={1} onPress={handleCancelNotes}>
           <TouchableOpacity activeOpacity={1} style={styles.notesModalSheet} onPress={() => {}}>
             <Text style={styles.notesModalTitle}>Your Recipe Notes</Text>
@@ -644,6 +648,7 @@ export default function ChefResultsScreen() {
             ) : null}
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Off-screen branded share card. Mounted only while a share is in
