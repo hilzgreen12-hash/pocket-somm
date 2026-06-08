@@ -8,7 +8,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
+import { useCellar } from '../../src/hooks/useCellar';
 import { generatePairings, prepareImageBase64, scanLabel } from '../../src/api/label';
+import type { CellarWine } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -39,8 +41,9 @@ export default function ReviewRequirementsScreen() {
   // When the user arrived from the cellar wine card, thread the source
   // through to /chef/results so its Back button can route home properly.
   const resultsQuery = isFromCellar && wineId ? `?from=cellar&wineId=${wineId}` : '';
-  const { wineDetailsConfirmed, setPairings, setError, setFilters, setImage, setWineDetails } = useLabelStore();
+  const { wineDetailsConfirmed, setPairings, setError, setFilters, setImage, setWineDetails, setWineDetailsConfirmed } = useLabelStore();
   const { preferences } = usePreferences();
+  const { wines } = useCellar();
 
   const [dietary, setDietary] = useState<string>('None');
   const [allergy, setAllergy] = useState<string>('None');
@@ -55,6 +58,7 @@ export default function ReviewRequirementsScreen() {
   const [openDropdown, setOpenDropdown] = useState<DropdownField>(null);
   // Holds the picked screenshot while it's being read (Mode B upload).
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
 
   const timeBlock = TIME_OPTIONS.find((t) => t.value === timeChoice) ?? TIME_OPTIONS[0];
   const timeDisplay = timeBlock.sub ? `${timeBlock.label} · ${timeBlock.sub}` : timeBlock.label;
@@ -149,6 +153,33 @@ export default function ReviewRequirementsScreen() {
     }
   }
 
+  // Mode B alternative — pick a wine already in the cellar, skip scanning,
+  // and generate pairings straight away (reuses the Mode A generate path).
+  async function handleSelectCellarWine(cw: CellarWine) {
+    setCellarPickerOpen(false);
+    setLoading(true);
+    try {
+      const filters = buildFilters();
+      const wineDetails = {
+        producer: cw.producer ?? '',
+        region: cw.region ?? '',
+        wineName: cw.wine_name || null,
+        vintage: cw.vintage != null ? String(cw.vintage) : 'NV',
+        style: null,
+      };
+      const pairings = await generatePairings(wineDetails as any, filters);
+      setWineDetailsConfirmed(wineDetails);
+      setPairings(pairings);
+      setFilters(filters as unknown as Record<string, unknown>);
+      router.replace('/chef/results');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate pairings');
+      showAlert({ title: 'Error', body: 'Could not generate pairings. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <SearchProgress
@@ -208,6 +239,9 @@ export default function ReviewRequirementsScreen() {
 
   return (
     <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.content} bottomOffset={24}>
+      <TouchableOpacity onPress={() => router.back()} style={styles.backTop} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.backTopText}>Back</Text>
+      </TouchableOpacity>
       <Text style={styles.heading}>Recipe Requirements</Text>
       <Text style={styles.subheading}>
         Vinster will use your profile preferences to guide its recipe recommendations. Input any dietary restrictions or allergies to consider for this particular recipe below.
@@ -281,18 +315,19 @@ export default function ReviewRequirementsScreen() {
         </TouchableOpacity>
       ) : (
         <>
-          <TouchableOpacity style={styles.continueButton} onPress={handleScan}>
-            <Text style={styles.continueButtonText}>Scan A Wine Label</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.continueButton, { marginTop: spacing.sm }]} onPress={handleUpload}>
-            <Text style={styles.continueButtonText}>Upload A Wine Label</Text>
+          <View style={styles.scanRow}>
+            <TouchableOpacity style={[styles.continueButton, styles.halfButton]} onPress={handleScan}>
+              <Text style={styles.continueButtonText}>Scan a Wine Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.continueButton, styles.halfButton]} onPress={handleUpload}>
+              <Text style={styles.continueButtonText}>Upload Wine Label</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={[styles.continueButton, { marginTop: spacing.sm }]} onPress={() => setCellarPickerOpen(true)}>
+            <Text style={styles.continueButtonText}>Select From Your Cellar</Text>
           </TouchableOpacity>
         </>
       )}
-
-      <TouchableOpacity style={styles.back} onPress={() => router.back()}>
-        <Text style={styles.backText}>Back</Text>
-      </TouchableOpacity>
 
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
@@ -345,6 +380,31 @@ export default function ReviewRequirementsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Select a wine from the cellar — picks a known bottle and generates
+          pairings straight away, no scanning. */}
+      <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={() => setCellarPickerOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setCellarPickerOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Select a wine from your cellar</Text>
+            {wines.length === 0 ? (
+              <Text style={styles.pickerEmpty}>Your cellar is empty — add wines to your cellar first, or scan/upload a label above.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 380 }}>
+                {wines.map((cw) => (
+                  <TouchableOpacity key={cw.id} style={styles.pickerRow} onPress={() => handleSelectCellarWine(cw)} activeOpacity={0.7}>
+                    <Text style={styles.pickerWine} numberOfLines={2}>{[cw.producer, cw.wine_name, cw.vintage].filter(Boolean).join(' · ')}</Text>
+                    {cw.region ? <Text style={styles.pickerRegion} numberOfLines={1}>{cw.region}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setCellarPickerOpen(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAwareScrollView>
   );
 }
@@ -368,6 +428,15 @@ const styles = StyleSheet.create({
   continueButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
   back: { alignItems: 'center', paddingVertical: spacing.lg },
   backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
+  // Top-left Back, matching the rest of the app.
+  backTop: { alignSelf: 'flex-start', marginBottom: spacing.md },
+  backTopText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 16 },
+  scanRow: { flexDirection: 'row', gap: spacing.sm },
+  halfButton: { flex: 1 },
+  pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, paddingVertical: spacing.md },
+  pickerRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickerWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  pickerRegion: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
