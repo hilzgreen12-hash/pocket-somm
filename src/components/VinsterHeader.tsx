@@ -26,6 +26,6 @@ const styles = StyleSheet.create({
   // title pull up alongside it so the mark costs almost no vertical space —
   // it was previously a centred row above the title, pushing content down
   // (and clipping the List page's bottom buttons).
-  wrap: { alignSelf: 'flex-start', marginBottom: -36 },
-  mark: { width: 48, height: 48 },
+  wrap: { alignSelf: 'flex-start', marginBottom: -54 },
+  mark: { width: 72, height: 72 },
 });
