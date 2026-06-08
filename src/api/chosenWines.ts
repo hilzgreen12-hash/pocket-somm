@@ -244,6 +244,7 @@ export async function patchChosenWine(
     estimated_value_currency: string | null;
     estimated_value_at: string | null;
     wishlist: boolean;
+    user_drinking_window: string | null;
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
