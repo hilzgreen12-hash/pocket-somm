@@ -7,6 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
+import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
 import { ShareIcon } from '../../src/components/ShareIcon';
@@ -102,6 +103,7 @@ export default function ChosenWinesScreen() {
   const { wines: cellarWines, updateWine } = useCellar();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
+  const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
   // chosen path takes over (manual reuses the existing AddChosenWineModal;
@@ -459,6 +461,13 @@ export default function ChosenWinesScreen() {
         onSaved={() => setEditingWine(null)}
       />
 
+      <EditCellarReviewModal
+        wine={editingCellarWine}
+        visible={!!editingCellarWine}
+        onClose={() => setEditingCellarWine(null)}
+        onSaved={() => setEditingCellarWine(null)}
+      />
+
       <AddChosenWineModal
         visible={addOpen}
         onClose={() => setAddOpen(false)}
@@ -613,13 +622,14 @@ export default function ChosenWinesScreen() {
           ) : (
             sorted.map((item) => {
               const w = item.wine;
-              // chosen_wines reviews (restaurant + other) all open the
-              // EditChosenWineModal. Cellar reviews drill into the
-              // wine card under /cellar/[id].
+              // Every thumbnail opens a focused review input, never the full
+              // wine card: chosen_wines reviews (restaurant + other) open
+              // EditChosenWineModal; cellar reviews open the sibling
+              // EditCellarReviewModal (which saves to cellar_wines).
               const isChosen = item.source !== 'cellar';
               const onPress = isChosen
                 ? () => setEditingWine(item.wine as ChosenWine)
-                : () => router.push(`/cellar/${(item.wine as CellarWine).id}?from=reviews` as any);
+                : () => setEditingCellarWine(item.wine as CellarWine);
               const locText = isChosen
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
