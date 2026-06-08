@@ -192,6 +192,9 @@ export interface CellarWine {
   review_score: number | null;
   review_location: string | null;
   review_date: string | null;
+  // The user's own drinking-window opinion (migration 048) — free text,
+  // distinct from the Vinster drinking_window_* estimate above.
+  user_drinking_window: string | null;
   is_favourite: boolean;
   // Bottle volume in millilitres. 750 = standard, 1500 = magnum, 375 =
   // half, etc. Defaults to 750 on legacy rows via migration 040.
@@ -299,6 +302,8 @@ export interface ChosenWine {
   // a DB trigger; null for bare, unreviewed bottle picks. Drives the
   // "Reviewed <date>" marker on Your Restaurants · Your Bottle Picks.
   reviewed_at: string | null;
+  // The user's own drinking-window opinion (migration 048) — free text.
+  user_drinking_window: string | null;
 }
 
 export interface PricingData {
