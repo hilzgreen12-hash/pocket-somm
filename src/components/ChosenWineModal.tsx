@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from './AppAlert';
+import { MicButton, appendDictation } from './MicButton';
 import { CityAutocomplete } from './CityAutocomplete';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
@@ -297,7 +298,10 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Your tasting note</Text>
+            <View style={styles.dictateRow}>
+              <Text style={styles.sectionLabel}>Your Review</Text>
+              <MicButton onResult={(t) => setTastingNote((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={tastingNote}
@@ -309,7 +313,10 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
               textAlignVertical="top"
             />
 
-            <Text style={styles.sectionLabel}>Other observations</Text>
+            <View style={styles.dictateRow}>
+              <Text style={styles.sectionLabel}>Personal Notes</Text>
+              <MicButton onResult={(t) => setOtherObservations((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={otherObservations}
@@ -455,6 +462,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginBottom: spacing.sm,
   },
+  // Section label + dictation mic on one line.
+  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+
   fieldLabel: {
     // Field label — form label, Inter
     fontFamily: fonts.bodyMedium,
