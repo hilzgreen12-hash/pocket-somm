@@ -684,7 +684,7 @@ export default function ResultsScreen() {
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? '✓ Added · View in Your Restaurants' : 'Add to Your Restaurants - Bottle Picks'}
+                      {chosenIndexes.has(i) ? '✓ View in Your Restaurants - Bottle Picks' : 'Add to Your Restaurants - Bottle Picks'}
                     </Text>
                   </TouchableOpacity>
                 )}
