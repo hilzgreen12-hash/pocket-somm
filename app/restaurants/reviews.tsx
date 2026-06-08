@@ -402,34 +402,9 @@ export default function RestaurantReviewsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-          <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Date</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'date' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, dateFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateChipLabel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Location</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationChipLabel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rating')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Rating</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'rating' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, ratingFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{ratingChipLabel}</Text>
-            </TouchableOpacity>
-          </ScrollView>
-
-          {/* Your Bottle Picks — every pick the user has saved, behind a gold
-              prompt like the rack bottle list. Tap one to jump to the
-              restaurant it was picked at (and review the wine from there). */}
+          {/* Your Bottle Picks — the headline of this page, sitting above the
+              restaurant filters. Tap one to jump to the restaurant it was
+              picked at (and review the wine from there). */}
           <TouchableOpacity onPress={() => setBottlePicksOpen((v) => !v)} activeOpacity={0.7} style={styles.bottlePicksLinkRow}>
             <Text style={styles.bottlePicksLink}>Your Bottle Picks {bottlePicksOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
@@ -466,6 +441,33 @@ export default function RestaurantReviewsScreen() {
               )}
             </View>
           )}
+
+          <View style={styles.sectionDivider} />
+
+          <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Date</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'date' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, dateFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateChipLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Location</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationChipLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rating')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Rating</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'rating' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, ratingFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{ratingChipLabel}</Text>
+            </TouchableOpacity>
+          </ScrollView>
           {sorted.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyBody}>No visits match these filters. Try widening the date range or lowering the rating.</Text>
@@ -702,8 +704,9 @@ const styles = StyleSheet.create({
   dropdownOptionCheck: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
   dropdownCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   dropdownCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  bottlePicksLinkRow: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xs },
-  bottlePicksLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.5 },
+  sectionDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs },
+  bottlePicksLinkRow: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  bottlePicksLink: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 0.5 },
   bottlePicksList: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md },
   bottlePicksEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, paddingVertical: spacing.md, textAlign: 'center' },
   pickRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
