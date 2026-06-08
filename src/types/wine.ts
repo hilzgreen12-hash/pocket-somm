@@ -295,6 +295,10 @@ export interface ChosenWine {
   // via the "Review without adding" path on /label/results (Cellar
   // add-wine flow). Legacy rows default to 'restaurant'.
   source: 'restaurant' | 'other';
+  // When the pick first gained review content (migration 047). Stamped by
+  // a DB trigger; null for bare, unreviewed bottle picks. Drives the
+  // "Reviewed <date>" marker on Your Restaurants · Your Bottle Picks.
+  reviewed_at: string | null;
 }
 
 export interface PricingData {
