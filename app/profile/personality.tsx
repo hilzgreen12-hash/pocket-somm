@@ -43,9 +43,9 @@ export default function PersonalityScreen() {
   // don't get a personality sketch invented from nothing.
   // Wine: 6+ distinct cellar wines OR three separate List searches where a
   // bottle was picked — enough real engagement for a personal sketch.
-  // Foodie: ≥2 total signals across rated/noted restaurants + saved recipes
-  // (chef sessions) + chef pairings. Anything with content from the user
-  // counts as one signal.
+  // Foodie: ≥4 total signals across rated/noted restaurants + saved recipes
+  // (chef sessions) + chef pairings (raised to match the wine bar). Anything
+  // with content from the user counts as one signal.
   const hasEnoughData = (() => {
     if (cat === 'wine') {
       const distinctCellarWines = (wines ?? []).length;
@@ -63,7 +63,7 @@ export default function PersonalityScreen() {
     ).length;
     const labels = chefLabelSessions?.length ?? 0;
     const pairings = chefPairingSessions?.length ?? 0;
-    return restaurantSignals + labels + pairings >= 2;
+    return restaurantSignals + labels + pairings >= 4;
   })();
 
   const [text, setText] = useState<string | null>(null);

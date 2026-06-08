@@ -73,7 +73,9 @@ export function usePersonalityPrompt(): PersonalityCategory | null {
         (a.restaurantNote && a.restaurantNote.trim())
       ).length;
       const chefSignals = (chefLabelSessions?.length ?? 0) + (chefPairingSessions?.length ?? 0);
-      const foodieReady = restaurantSignals + chefSignals >= 2;
+      // Raised to match the wine bar — four real food-side engagements
+      // (rated/noted restaurants + saved recipes + pairings).
+      const foodieReady = restaurantSignals + chefSignals >= 4;
 
       const winePending = wineReady && !generated.wine;
       const foodiePending = foodieReady && !generated.recipe;
