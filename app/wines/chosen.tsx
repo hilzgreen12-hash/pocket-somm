@@ -171,6 +171,8 @@ export default function ChosenWinesScreen() {
   const availableCities = useMemo(() => {
     const set = new Set<string>();
     for (const it of items) {
+      // Restaurant picks aren't shown here, so don't offer their cities.
+      if (it.source === 'restaurant') continue;
       const c = cityFor(it);
       if (c) set.add(c);
     }
@@ -187,7 +189,12 @@ export default function ChosenWinesScreen() {
   const filtered = items.filter((it) => {
     if (typeFilter === 'wishlist') {
       if (!isWishlist(it)) return false;
-    } else if (typeFilter !== 'all' && it.source !== typeFilter) {
+    } else if (typeFilter === 'all') {
+      // Restaurant bottle picks live in You · Your Restaurants now — they're
+      // excluded from the default review list. (Wish-listed ones are still
+      // reachable via the Wish List portfolio slice above.)
+      if (it.source === 'restaurant') return false;
+    } else if (it.source !== typeFilter) {
       return false;
     }
     if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
@@ -231,7 +238,8 @@ export default function ChosenWinesScreen() {
   const PORTFOLIO_OPTIONS: { value: TypeFilter; label: string }[] = [
     { value: 'all',        label: 'All Reviews' },
     { value: 'cellar',     label: 'Cellar Wines' },
-    { value: 'restaurant', label: 'Restaurant Bottle Picks' },
+    // Restaurant bottle picks now live in You · Your Restaurants, so the
+    // 'restaurant' slice is gone from here.
     { value: 'wishlist',   label: 'Wish List Wines' },
     // 'Other' captures reviews saved via the "Review without adding"
     // path on the Cellar add-wine flow (migration 042 column).
