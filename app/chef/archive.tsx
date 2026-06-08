@@ -300,7 +300,7 @@ export default function ChefArchiveScreen() {
           <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'Your Cookbook is Empty' : 'Nothing here'}</Text>
           <Text style={styles.emptyBody}>
             {filter === FILTER_ALL
-              ? 'After scanning a wine label, save the chef-inspired recipes to your archive to keep them here.'
+              ? 'Generate recipes to pair with your wines through Chef and save them here for future reference and share them with friends.'
               : filter === FILTER_FAVOURITES
                 ? 'Tap the ★ on any recipe card to add it to your Favourites.'
                 : 'No recipes in this folder yet. From the All tab, open any recipe and add it to a folder.'}
