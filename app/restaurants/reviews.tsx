@@ -337,12 +337,12 @@ export default function RestaurantReviewsScreen() {
   }, [chosenWines]);
 
   // Chip value labels.
-  const dateChipLabel = dateFilter === 'all' ? 'All dates' : (availableMonths.find((m) => m.value === dateFilter)?.label ?? 'All dates');
+  const dateChipLabel = dateFilter === 'all' ? 'All' : (availableMonths.find((m) => m.value === dateFilter)?.label ?? 'All');
   const locationChipLabel = locationFilter === 'All' ? 'All' : locationFilter;
   const ratingChipLabel = ratingFilter === 'all' ? 'Any' : ratingFilter === '5' ? '5★' : ratingFilter === '4plus' ? '4★+' : '3★+';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
-    if (field === 'date') return { title: 'Filter by date', options: [{ value: 'all', label: 'All dates' }, ...availableMonths], selected: dateFilter, onSelect: setDateFilter };
+    if (field === 'date') return { title: 'Filter by month', options: [{ value: 'all', label: 'All' }, ...availableMonths], selected: dateFilter, onSelect: setDateFilter };
     if (field === 'location') {
       const opts = [
         { value: 'All', label: 'All locations' },
