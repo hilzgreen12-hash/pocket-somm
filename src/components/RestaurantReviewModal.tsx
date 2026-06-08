@@ -41,7 +41,9 @@ interface Props {
   // index. Wired by the results screen; absent when there's nothing to link.
   onReviewWine?: (index: number) => void;
   onClose: () => void;
-  onSaved: () => void;
+  // Reports the saved name + city back so callers (e.g. the List results
+  // card) can reflect edits without refetching.
+  onSaved: (details?: { name: string | null; city: string | null }) => void;
 }
 
 export function RestaurantReviewModal({
@@ -105,7 +107,7 @@ export function RestaurantReviewModal({
       }
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
-      onSaved();
+      onSaved({ name: restaurantName.trim() || null, city: cityValue.trim() || null });
     } finally {
       setSaving(false);
     }

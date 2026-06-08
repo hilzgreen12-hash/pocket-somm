@@ -78,6 +78,9 @@ export default function ResultsScreen() {
   // server round-trip completes. Surfacing the city in the stamp on mount
   // gives the user immediate feedback that Vinster knows where they are.
   const [liveCity, setLiveCity] = useState<string | null>(null);
+  // Set after editing the restaurant review so the results card reflects the
+  // new city immediately (autoSave.data isn't refetched on a review save).
+  const [cityOverride, setCityOverride] = useState<string | null>(null);
   const [editingCity, setEditingCity] = useState(false);
   const qc = useQueryClient();
   const shareCardRef = useRef<View>(null);
@@ -391,7 +394,7 @@ export default function ResultsScreen() {
   const stampRestaurant = historyRestaurant ?? autoSave.data?.[0]?.restaurantName ?? restaurantName ?? null;
   // Prefer the persisted city (server-confirmed), falling back to the
   // live GPS reading taken on mount.
-  const stampCity = historyCity ?? autoSave.data?.[0]?.city ?? liveCity;
+  const stampCity = cityOverride ?? historyCity ?? autoSave.data?.[0]?.city ?? liveCity;
 
   function toggleWine(i: number) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -473,16 +476,23 @@ export default function ResultsScreen() {
           >
             <Text style={styles.backLink}>Back</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleShare}
-            disabled={sharing}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.shareBtnText, sharing && { opacity: 0.5 }]}>
-              {sharing ? 'Preparing…' : '+ Share'}
-            </Text>
-          </TouchableOpacity>
+          <View style={styles.topRightCol}>
+            <TouchableOpacity
+              onPress={handleShare}
+              disabled={sharing}
+              hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.shareBtnText, sharing && { opacity: 0.5 }]}>
+                {sharing ? 'Preparing…' : '+ Share'}
+              </Text>
+            </TouchableOpacity>
+            {restaurantName.trim().length > 0 && !editingRestaurant && (
+              <TouchableOpacity onPress={openRestaurantReview} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
+                <Text style={styles.shareBtnText}>+ Review/Edit Restaurant</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
         {stampDate ? (
           <View style={styles.stampRow}>
@@ -729,19 +739,9 @@ export default function ResultsScreen() {
         })}
       </View>
 
-      {/* Review or Edit Your Restaurant — moved to the foot of the
-          results page so the wine cards are the visual focus above it.
-          Shown only when a restaurant name is set; the compact header
-          line is the path for adding one in the first place. */}
-      {restaurantName.trim().length > 0 && !editingRestaurant && (
-        <TouchableOpacity
-          style={styles.reviewRestaurantBtn}
-          onPress={openRestaurantReview}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.reviewRestaurantBtnText}>Review or Edit Your Restaurant →</Text>
-        </TouchableOpacity>
-      )}
+      {/* The "Review or Edit Your Restaurant" CTA now lives in the top-right
+          (below + Share) and on the restaurant line itself — the
+          foot-of-page button was never seen. */}
 
       {!isFromHistory && (
         <TouchableOpacity
@@ -784,7 +784,14 @@ export default function ResultsScreen() {
             wines={recommendation.wines.map((w) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
             onReviewWine={(i) => { setRestaurantReviewOpen(false); setChosenModalWine(recommendation.wines[i]); }}
             onClose={() => setRestaurantReviewOpen(false)}
-            onSaved={() => { setRestaurantReviewOpen(false); qc.invalidateQueries({ queryKey: ['scan-archive'] }); }}
+            onSaved={(details) => {
+              setRestaurantReviewOpen(false);
+              if (details) {
+                if (details.name != null) setRestaurantName(details.name);
+                setCityOverride(details.city);
+              }
+              qc.invalidateQueries({ queryKey: ['scan-archive'] });
+            }}
           />
         );
       })() : null}
@@ -821,9 +828,11 @@ const styles = StyleSheet.create({
     width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: spacing.sm,
   },
+  // Stacks + Share and + Review/Edit Restaurant at the top-right.
+  topRightCol: { alignItems: 'flex-end', gap: spacing.xs },
   backLink: {
     fontSize: 16,
     fontFamily: fonts.bodyRegular,
