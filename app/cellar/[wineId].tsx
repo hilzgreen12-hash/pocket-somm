@@ -1492,7 +1492,7 @@ const styles = StyleSheet.create({
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Reviews group — one header over Vinster's / Your Review / Personal Notes,
   // each a borderless subsection so they read as one consistent block.
-  reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, marginBottom: spacing.xs },
+  reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, marginBottom: spacing.xs },
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
