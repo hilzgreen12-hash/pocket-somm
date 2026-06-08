@@ -193,6 +193,12 @@ export default function RacksScreen() {
             </TouchableOpacity>
           </View>
 
+          {racks.length === 0 && (
+            <Text style={styles.introBlurb}>
+              This is a good place to start adding bottles to your cellar — create your rack or fridge first, then inputting wines is easy and instinctive. Once created, you'll be able to view your racks and fridges here, mirroring those at home, and search for where bottles are in your real-life storage. Bottles automatically add to your Full Cellar List with complete intel and reviews.
+            </Text>
+          )}
+
           {racks.map((rack) => (
             <RackRow
               key={rack.id}
@@ -295,10 +301,12 @@ const styles = StyleSheet.create({
   // a touch tighter than the old stacked yellow pair so two read
   // comfortably across the screen width.
   addButtonRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
-  // Gold side-by-side Add a Wine Rack / Add a Wine Fridge buttons.
-  addButtonGold: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center' },
+  // White side-by-side Add a Wine Rack / Add a Wine Fridge buttons.
+  addButtonGold: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, alignItems: 'center' },
   // Cormorant — button text
-  addButtonGoldText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  addButtonGoldText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  // New-user intro blurb, shown when no racks exist yet.
+  introBlurb: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg },
   divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   cellarListSection: { paddingHorizontal: spacing.xl },
   fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
