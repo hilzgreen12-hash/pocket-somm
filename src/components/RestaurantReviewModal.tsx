@@ -182,32 +182,61 @@ export function RestaurantReviewModal({
           </TouchableOpacity>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
-            <Text style={styles.heading}>Add a Review</Text>
-            <Text style={styles.subheading}>Your verdict on the visit — rate it, note it, share it.</Text>
+            {/* Restaurant + Place on one line — replaces the old "Add a
+                Review" heading. Both prefilled from the scan, editable here. */}
+            <View style={styles.identityRow}>
+              <View style={styles.identityCol}>
+                <Text style={styles.fieldLabel}>Restaurant</Text>
+                <TextInput
+                  style={styles.input}
+                  value={restaurantName}
+                  onChangeText={setRestaurantName}
+                  placeholder="Restaurant name"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+              <View style={styles.identityCol}>
+                <Text style={styles.fieldLabel}>Place</Text>
+                <TextInput
+                  style={styles.input}
+                  value={cityValue}
+                  onChangeText={setCityValue}
+                  placeholder="City or location"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+            </View>
+            {date ? <Text style={styles.stampMeta}>{date}</Text> : null}
+
+            {/* Bottle pick(s) — auto-attached by Vinster from the scan, sitting
+                directly under the restaurant line. Each links out to its own
+                wine review. */}
+            {wines && wines.length > 0 ? (
+              <View style={styles.bottlePickBlock}>
+                <Text style={styles.sectionLabel}>{wines.length > 1 ? 'Your Bottle Picks' : 'Your Bottle Pick'}</Text>
+                <View style={styles.wineBlock}>
+                  {wines.map((w, i) => {
+                    const line = [w.producer, w.wineName, w.vintage]
+                      .filter((x) => x != null && String(x).trim().length > 0)
+                      .join(' · ');
+                    return (
+                      <View key={i} style={styles.wineRow}>
+                        <Text style={styles.wineLine}>
+                          {line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}
+                        </Text>
+                        {onReviewWine ? (
+                          <TouchableOpacity onPress={() => onReviewWine(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                            <Text style={styles.wineReviewLink}>Review this wine →</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              </View>
+            ) : null}
 
             <View style={styles.divider} />
-
-            {/* Restaurant identity — prefilled from the scan, editable here.
-                No pin icon (that lives only on the List results page). */}
-            <View style={styles.stamp}>
-              <Text style={styles.fieldLabel}>Restaurant</Text>
-              <TextInput
-                style={styles.input}
-                value={restaurantName}
-                onChangeText={setRestaurantName}
-                placeholder="Restaurant name"
-                placeholderTextColor={colors.textMuted}
-              />
-              <Text style={styles.fieldLabel}>Place</Text>
-              <TextInput
-                style={styles.input}
-                value={cityValue}
-                onChangeText={setCityValue}
-                placeholder="City or location"
-                placeholderTextColor={colors.textMuted}
-              />
-              {date ? <Text style={styles.stampMeta}>{date}</Text> : null}
-            </View>
 
             <Text style={styles.fieldLabel}>Ratings</Text>
             <View style={styles.ratingsBlock}>
@@ -247,34 +276,6 @@ export function RestaurantReviewModal({
               numberOfLines={5}
               textAlignVertical="top"
             />
-
-            {/* The Wine — links each picked bottle out to its own wine review
-                rather than duplicating the wine-review inputs here. */}
-            {wines && wines.length > 0 ? (
-              <>
-                <View style={styles.divider} />
-                <Text style={styles.sectionLabel}>The Wine</Text>
-                <View style={styles.wineBlock}>
-                  {wines.map((w, i) => {
-                    const line = [w.producer, w.wineName, w.vintage]
-                      .filter((x) => x != null && String(x).trim().length > 0)
-                      .join(' · ');
-                    return (
-                      <View key={i} style={styles.wineRow}>
-                        <Text style={styles.wineLine}>
-                          {line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}
-                        </Text>
-                        {onReviewWine ? (
-                          <TouchableOpacity onPress={() => onReviewWine(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                            <Text style={styles.wineReviewLink}>Review this wine →</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </View>
-              </>
-            ) : null}
 
             {/* Share — community + native share, side by side. */}
             <View style={styles.shareRow}>
@@ -348,6 +349,11 @@ const styles = StyleSheet.create({
   heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
+  // Restaurant + Place inputs share one row at the top of the card.
+  identityRow: { flexDirection: 'row', gap: spacing.sm },
+  identityCol: { flex: 1 },
+  // Vinster's auto-attached bottle pick(s), sitting under the date.
+  bottlePickBlock: { marginTop: spacing.xs, marginBottom: spacing.sm },
   // Read-only restaurant identity stamp.
   stamp: { marginBottom: spacing.lg },
   stampNameRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
