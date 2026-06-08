@@ -472,6 +472,10 @@ export default function CellarWineDetail() {
     const scoreTrim = reviewScoreDraft.trim();
     const locationTrim = reviewLocationDraft.trim();
     const dateTrim = reviewDateDraft.trim();
+    const priceTrim = purchasePriceDraft.trim();
+    const parsedPrice = priceTrim ? parseFloat(priceTrim) : NaN;
+    const priceValue = Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
+    const priceCurrency = wine!.purchase_price_currency ?? preferences?.defaultCurrency ?? 'GBP';
     let parsedScore: number | null = null;
     if (scoreTrim) {
       const n = Number(scoreTrim);
@@ -492,6 +496,8 @@ export default function CellarWineDetail() {
           // Review prose lives in review_note (migration 043) so it
           // can be split cleanly from Personal Notes (user_notes).
           review_note: reviewNoteDraft.trim() || null,
+          purchase_price: priceValue,
+          purchase_price_currency: priceValue != null ? priceCurrency : null,
         },
       });
       // Mirror the review edit onto every matching record so reviews,
@@ -518,6 +524,17 @@ export default function CellarWineDetail() {
     } finally {
       setSavingReview(false);
     }
+  }
+
+  // Tapping the "Your Review" / "Personal Notes" header expands the inputs;
+  // tapping it again auto-saves and collapses (no Save/Cancel buttons).
+  function toggleReview() {
+    if (reviewExpanded) void handleSaveReview();
+    else setReviewExpanded(true);
+  }
+  function toggleNote() {
+    if (editingNote) void handleSaveNote();
+    else setEditingNote(true);
   }
 
   async function handleRemoveWine() {
@@ -1056,22 +1073,16 @@ export default function CellarWineDetail() {
       ) : null}
 
       <View style={styles.reviewSubsection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.reviewSubTitle}>Your Review</Text>
-          {!reviewExpanded && (
-            <TouchableOpacity onPress={() => setReviewExpanded(true)}>
-              <Text style={styles.editLink}>
-                {wine.review_score != null || wine.review_location || wine.review_date || wine.review_note ? 'Edit Review' : 'Add Review'}
-              </Text>
-            </TouchableOpacity>
-          )}
+        {/* Your Review — a chevron header (like Vinster's Review). Expand to
+            edit; tap the header again to auto-save and collapse. */}
+        <View style={styles.vinsterHeaderRow}>
+          <TouchableOpacity onPress={toggleReview} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+            <Text style={styles.vinsterReviewTitle}>Your Review</Text>
+            <Ionicons name={reviewExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+          </TouchableOpacity>
         </View>
 
-        {/* Score / Where / When quick-stats line — visible at all
-            times directly below "Your Review", even when the expanded
-            edit form is closed. Each cell only renders when its field
-            is populated so empty reviews don't show a row of dashes. */}
-        {(wine.review_score != null || wine.review_location || wine.review_date) ? (
+        {!reviewExpanded && (wine.review_score != null || wine.review_location || wine.review_date) ? (
           <View style={styles.reviewQuickStats}>
             <View style={styles.reviewQuickCell}>
               <Text style={styles.reviewQuickLabel}>Score</Text>
@@ -1080,7 +1091,7 @@ export default function CellarWineDetail() {
               </Text>
             </View>
             <View style={styles.reviewQuickCell}>
-              <Text style={styles.reviewQuickLabel}>Where</Text>
+              <Text style={styles.reviewQuickLabel}>Discovered at</Text>
               <Text style={[styles.reviewQuickValue, !wine.review_location && styles.reviewQuickValueMuted]} numberOfLines={1}>
                 {wine.review_location || '—'}
               </Text>
@@ -1096,25 +1107,9 @@ export default function CellarWineDetail() {
 
         {reviewExpanded ? (
           <>
-            <Text style={styles.fieldLabel}>Score (0–100)</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewScoreDraft}
-              onChangeText={setReviewScoreDraft}
-              keyboardType="number-pad"
-              placeholder="e.g. 92"
-              placeholderTextColor={colors.textMuted}
-              maxLength={3}
-            />
-            <Text style={styles.fieldLabel}>When did you drink it?</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewDateDraft}
-              onChangeText={setReviewDateDraft}
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor={colors.textMuted}
-            />
-            <Text style={styles.fieldLabel}>Where did you drink it?</Text>
+            {/* Discovered at → Your Review → Your Score → Price Paid, matching
+                the shared review input. Auto-saves when collapsed. */}
+            <Text style={styles.fieldLabel}>Discovered at</Text>
             <TextInput
               style={styles.input}
               value={reviewLocationDraft}
@@ -1122,7 +1117,6 @@ export default function CellarWineDetail() {
               placeholder="Restaurant, home, friend's place…"
               placeholderTextColor={colors.textMuted}
             />
-            {/* Review prose — the sharable body. Maps to review_note. */}
             <View style={styles.dictateRow}>
               <Text style={styles.fieldLabel}>Your review</Text>
               <MicButton value={reviewNoteDraft} onChangeText={setReviewNoteDraft} onClear={() => setReviewNoteDraft('')} />
@@ -1137,26 +1131,32 @@ export default function CellarWineDetail() {
               numberOfLines={4}
               textAlignVertical="top"
             />
-            <View style={styles.noteActions}>
-              <TouchableOpacity onPress={() => {
-                setReviewExpanded(false);
-                setReviewScoreDraft(wine.review_score != null ? String(wine.review_score) : '');
-                setReviewLocationDraft(wine.review_location ?? '');
-                setReviewDateDraft(wine.review_date ?? todayISO());
-                setReviewNoteDraft(wine.review_note ?? '');
-              }}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, savingReview && styles.buttonDisabled]} onPress={handleSaveReview} disabled={savingReview}>
-                <Text style={styles.saveBtnText}>{savingReview ? 'Saving…' : 'Save Review'}</Text>
-              </TouchableOpacity>
+            <Text style={styles.fieldLabel}>Your Score (0–100)</Text>
+            <TextInput
+              style={styles.input}
+              value={reviewScoreDraft}
+              onChangeText={setReviewScoreDraft}
+              keyboardType="number-pad"
+              placeholder="e.g. 92"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+            />
+            <Text style={styles.fieldLabel}>Price Paid (optional)</Text>
+            <View style={styles.reviewPriceRow}>
+              <Text style={styles.reviewPriceCurrency}>{formatCurrency(0, wine.purchase_price_currency ?? 'GBP', { decimals: 0 }).replace(/[\d.,\s]/g, '') || (wine.purchase_price_currency ?? 'GBP')}</Text>
+              <TextInput
+                style={styles.reviewPriceInput}
+                value={purchasePriceDraft}
+                onChangeText={(t) => setPurchasePriceDraft(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+                placeholder="0"
+                placeholderTextColor={colors.textMuted}
+              />
             </View>
+            <Text style={styles.autoSaveHint}>{savingReview ? 'Saving…' : 'Tap "Your Review" above to save and close.'}</Text>
           </>
         ) : (
           <>
-            {/* Render the user's saved review prose when present and
-                the form is collapsed — so the body of the review is
-                visible at a glance alongside the quick stats. */}
             {wine.review_note ? (
               <Text style={styles.reviewNoteBody}>“{wine.review_note}”</Text>
             ) : null}
@@ -1193,13 +1193,12 @@ export default function CellarWineDetail() {
 
       {!isWishlist && (
       <View style={styles.reviewSubsection}>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.reviewSubTitle}>Personal Notes</Text>
-          {!editingNote && (
-            <TouchableOpacity onPress={() => setEditingNote(true)}>
-              <Text style={styles.editLink}>{wine.user_notes ? 'Edit Note' : 'Add Note'}</Text>
-            </TouchableOpacity>
-          )}
+        {/* Personal Notes — same chevron + auto-save-on-collapse pattern. */}
+        <View style={styles.vinsterHeaderRow}>
+          <TouchableOpacity onPress={toggleNote} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+            <Text style={styles.vinsterReviewTitle}>Personal Notes</Text>
+            <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+          </TouchableOpacity>
         </View>
         {editingNote ? (
           <>
@@ -1218,14 +1217,7 @@ export default function CellarWineDetail() {
               textAlignVertical="top"
               autoFocus
             />
-            <View style={styles.noteActions}>
-              <TouchableOpacity onPress={() => { setEditingNote(false); setNoteText(wine.user_notes ?? ''); }}>
-                <Text style={styles.cancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.saveBtn, savingNote && styles.buttonDisabled]} onPress={handleSaveNote} disabled={savingNote}>
-                <Text style={styles.saveBtnText}>{savingNote ? 'Saving…' : 'Save Note'}</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.autoSaveHint}>{savingNote ? 'Saving…' : 'Tap "Personal Notes" above to save and close.'}</Text>
           </>
         ) : wine.user_notes ? (
           <Text style={styles.noteText}>{wine.user_notes}</Text>
@@ -1517,6 +1509,10 @@ const styles = StyleSheet.create({
   // Reviews group — one header over Vinster's / Your Review / Personal Notes,
   // each a borderless subsection so they read as one consistent block.
   reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, marginBottom: spacing.xs },
+  reviewPriceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
+  reviewPriceCurrency: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, marginRight: 4 },
+  reviewPriceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
+  autoSaveHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
