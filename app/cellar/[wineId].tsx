@@ -1153,7 +1153,11 @@ export default function CellarWineDetail() {
                 placeholderTextColor={colors.textMuted}
               />
             </View>
-            <Text style={styles.autoSaveHint}>{savingReview ? 'Saving…' : 'Tap "Your Review" above to save and close.'}</Text>
+            <View style={styles.noteActions}>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveReview} disabled={savingReview}>
+                <Text style={styles.saveBtnText}>{savingReview ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
           </>
         ) : (
           <>
@@ -1217,7 +1221,11 @@ export default function CellarWineDetail() {
               textAlignVertical="top"
               autoFocus
             />
-            <Text style={styles.autoSaveHint}>{savingNote ? 'Saving…' : 'Tap "Personal Notes" above to save and close.'}</Text>
+            <View style={styles.noteActions}>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveNote} disabled={savingNote}>
+                <Text style={styles.saveBtnText}>{savingNote ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
           </>
         ) : wine.user_notes ? (
           <Text style={styles.noteText}>{wine.user_notes}</Text>
@@ -1517,7 +1525,7 @@ const styles = StyleSheet.create({
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
   vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
-  vinsterReviewTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.gold },
+  vinsterReviewTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: '#FFFFFF' },
   // Full-width separator between card sections.
   cardDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // Field label + dictation mic on one row.
@@ -1628,7 +1636,7 @@ const styles = StyleSheet.create({
   valueCancel: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   // Cormorant — save button text
   valueSave: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
-  scoreNoteBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  scoreNoteBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   // Inter — note label
   scoreNoteLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 },
   // Inter — note body
