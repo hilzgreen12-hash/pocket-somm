@@ -646,9 +646,16 @@ export default function RackGridScreen() {
             {/* "Rack Bottle List" — the rack's wine list, hidden behind this
                 gold prompt. Expand it, tap a wine, and it closes + highlights
                 that bottle's placement in the grid. */}
-            <TouchableOpacity onPress={() => setBottleListOpen((v) => !v)} activeOpacity={0.7}>
-              <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
-            </TouchableOpacity>
+            <View style={styles.bottleListHeaderRow}>
+              <TouchableOpacity onPress={() => setBottleListOpen((v) => !v)} activeOpacity={0.7}>
+                <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
+              </TouchableOpacity>
+              {highlightedWineId && (
+                <TouchableOpacity onPress={() => setHighlightedWineId(null)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  <Text style={styles.unselectLink}>Unselect</Text>
+                </TouchableOpacity>
+              )}
+            </View>
 
             {bottleListOpen && (
               <View style={styles.bottleList}>
@@ -1012,6 +1019,9 @@ const styles = StyleSheet.create({
   // before they reach for the grid.
   // "Rack Bottle List" gold prompt + the list it reveals.
   bottleListLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  bottleListHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // "Unselect" — clears the highlighted bottle, shown only while one is selected.
+  unselectLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   bottleList: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   swipeBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: spacing.sm },
   swipeSide: { flex: 1, paddingVertical: 4 },
