@@ -26,6 +26,7 @@ import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { MicButton, appendDictation } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
@@ -148,6 +149,7 @@ export default function CellarWineDetail() {
   const [savingPrice, setSavingPrice] = useState(false);
   const [refreshingValue, setRefreshingValue] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
 
   const [reviewExpanded, setReviewExpanded] = useState(false);
   const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
@@ -848,7 +850,12 @@ export default function CellarWineDetail() {
             automatically; here the user can add one to a manual wine or
             replace it. */}
         <View style={styles.photoRow}>
-          <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.detailThumb} />
+          <TouchableOpacity
+            onPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : handleAddPhoto())}
+            activeOpacity={0.85}
+          >
+            <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.detailThumb} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={handleAddPhoto} disabled={uploadingPhoto} style={styles.photoBtn} activeOpacity={0.7}>
             <Text style={styles.photoBtnText}>
               {uploadingPhoto ? 'Saving photo…' : wine.label_image_path ? 'Change photo' : '+ Add a photo'}
@@ -856,6 +863,13 @@ export default function CellarWineDetail() {
           </TouchableOpacity>
         </View>
       </View>
+
+      <LabelPhotoViewer
+        visible={photoViewerOpen}
+        path={wine.label_image_path}
+        fallbackText={wine.wine_name}
+        onClose={() => setPhotoViewerOpen(false)}
+      />
 
       {/* Compact stats grid — score / window / bottle counts only. The
           Purchase and Estimated values are pulled out into full-width rows
@@ -1163,7 +1177,6 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           )}
         </View>
-        <Text style={styles.personalNotesHint}>Private — not shared with the community or with friends.</Text>
         {editingNote ? (
           <>
             <View style={styles.dictateRow}>
