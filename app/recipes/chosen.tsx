@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useChosenRecipes } from '../../src/hooks/useChosenRecipes';
@@ -208,6 +209,7 @@ export default function ChosenRecipesScreen() {
 
       {/* New folder modal */}
       <Modal visible={newFolderOpen} transparent animationType="fade" onRequestClose={() => setNewFolderOpen(false)}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setNewFolderOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>New folder</Text>
@@ -230,10 +232,12 @@ export default function ChosenRecipesScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Manage folder (rename / delete) */}
       <Modal visible={manageFolder !== null} transparent animationType="fade" onRequestClose={() => setManageFolder(null)}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setManageFolder(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>Manage folder</Text>
@@ -256,6 +260,7 @@ export default function ChosenRecipesScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Assign-to-folder modal */}

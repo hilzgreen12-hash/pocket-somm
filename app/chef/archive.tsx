@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { useChefArchiveCollections } from '../../src/hooks/useChefArchiveCollections';
@@ -371,6 +372,7 @@ export default function ChefArchiveScreen() {
         animationType="fade"
         onRequestClose={() => { setNewFolderOpen(false); setPendingAssignAfterCreate(null); }}
       >
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity
           style={styles.modalOverlay}
           activeOpacity={1}
@@ -403,10 +405,12 @@ export default function ChefArchiveScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Manage folder modal (rename / delete) */}
       <Modal visible={!!manageFolder} transparent animationType="fade" onRequestClose={() => setManageFolder(null)}>
+        <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setManageFolder(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>Manage folder</Text>
@@ -428,6 +432,7 @@ export default function ChefArchiveScreen() {
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Add to folder modal */}

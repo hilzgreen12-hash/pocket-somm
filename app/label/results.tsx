@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -816,7 +816,7 @@ export default function LabelResultsScreen() {
       </Modal>
 
       <Modal visible={addingToCellar} transparent animationType="slide">
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Add to Cellar</Text>
             <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
@@ -941,7 +941,7 @@ export default function LabelResultsScreen() {
               <Text style={styles.cancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       <Modal visible={openField !== null} transparent animationType="fade" onRequestClose={() => setOpenField(null)}>
