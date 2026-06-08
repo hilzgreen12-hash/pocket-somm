@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard, Animated } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
@@ -152,20 +152,29 @@ export default function RackGridScreen() {
   // — far more controlled than scaling the small inline card. RN Animated on
   // the JS thread via runOnJS (no Reanimated worklet plugin), matching
   // swipeGesture above. zBase = value committed at gesture start; zCur = live.
-  const openZoomGesture = useMemo(
-    () => Gesture.Pinch().runOnJS(true).onStart(() => setZoomOpen(true)),
-    [],
-  );
   const zScale = useRef(new Animated.Value(1)).current;
   const zTx = useRef(new Animated.Value(0)).current;
   const zTy = useRef(new Animated.Value(0)).current;
   const zBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
   const zCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  // Open the full-screen viewer with a quick "grow-in" so it reads as the
+  // rack expanding out to fill the screen, not just appearing.
+  function openZoom() {
+    zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
+    zTx.setValue(0); zTy.setValue(0);
+    zScale.setValue(0.65);
+    setZoomOpen(true);
+    Animated.timing(zScale, { toValue: 1, duration: 220, useNativeDriver: false }).start();
+  }
   function closeZoom() {
     zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
     zScale.setValue(1); zTx.setValue(0); zTy.setValue(0);
     setZoomOpen(false);
   }
+  const openZoomGesture = useMemo(
+    () => Gesture.Pinch().runOnJS(true).onStart(() => openZoom()),
+    [],
+  );
   const zoomViewerGesture = useMemo(() => {
     const pinch = Gesture.Pinch()
       .runOnJS(true)
@@ -690,8 +699,8 @@ export default function RackGridScreen() {
             "boxing" is a clipped viewport the grid scales/pans inside; each
             filled slot shows the wine's label as a framed thumbnail. Swipe
             between racks stays active at rest (see swipeGesture / isZoomed). */}
-        <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.7}>
-          <Text style={styles.zoomHint}>Tap or pinch the rack to zoom ⤢</Text>
+        <TouchableOpacity onPress={openZoom} activeOpacity={0.7}>
+          <Text style={styles.zoomHint}>Tap here, or pinch the rack, to zoom ⤢</Text>
         </TouchableOpacity>
         <View style={styles.rackViewport}>
           <GestureDetector gesture={openZoomGesture}>
@@ -822,6 +831,11 @@ export default function RackGridScreen() {
           stays on the inline rack). Tighter framing than the inline card. */}
       <Modal visible={zoomOpen} transparent animationType="fade" onRequestClose={closeZoom}>
         {zoomOpen && (
+          // A Modal renders in its OWN native hierarchy, outside the app-root
+          // GestureHandlerRootView — so gestures inside it are dead unless we
+          // give the modal its own gesture root. This is what makes the
+          // pinch/pan respond.
+          <GestureHandlerRootView style={{ flex: 1 }}>
           <View style={styles.zoomBackdrop}>
             <GestureDetector gesture={zoomViewerGesture}>
               <Animated.View
@@ -854,6 +868,7 @@ export default function RackGridScreen() {
             </TouchableOpacity>
             <Text style={styles.zoomViewerHint}>Pinch to zoom · drag to move</Text>
           </View>
+          </GestureHandlerRootView>
         )}
       </Modal>
 
