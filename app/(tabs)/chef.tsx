@@ -12,9 +12,7 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
-const CHEF_HELP = `Chef works both ways.
-
-Scan a wine and Vinster cooks up three original, chef-inspired recipes to match it — or tell Vinster what you're making and it'll pour you the perfect wine, from your own cellar or out in the wild.
+const CHEF_HELP = `Scan a wine and Vinster cooks up three original, chef-inspired recipes to match it — or tell Vinster what you're making and it'll pour you the perfect wine, from your own cellar or out in the wild.
 
 Every recipe is dreamed up fresh and shaped around your dietary needs, the food you love, and the bottle you're pairing — and the more Vinster learns your tastes, the more personal it gets.
 
