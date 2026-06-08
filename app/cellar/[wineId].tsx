@@ -219,6 +219,31 @@ export default function CellarWineDetail() {
     });
   }
 
+  // Long-press on the thumbnail → change or remove the label photo.
+  function handlePhotoMenu() {
+    showAlert({
+      title: 'Label photo',
+      body: 'Change or remove this label photo.',
+      buttons: [
+        { text: 'Change photo', onPress: () => void handleAddPhoto() },
+        { text: 'Delete photo', style: 'destructive', onPress: () => void handleDeletePhoto() },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  async function handleDeletePhoto() {
+    if (!wine) return;
+    try {
+      await updateWine.mutateAsync({ id: wine.id, updates: { label_image_path: null } });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+    } catch (err) {
+      showAlert({ title: 'Could not remove photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   // Brief "Wine removed from your records" toast — shown for ~1.4s after
   // a permanent delete, then the auto-dismiss timer navigates back. The
   // user just confirmed deletion, so the underlying wine row is gone and
@@ -829,39 +854,37 @@ export default function CellarWineDetail() {
       </View>
 
       <View style={styles.header}>
-        <Text style={styles.headerLine}>
-          {(() => {
-            const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-            const parts = sameName
-              ? [wine.producer, wine.region, wine.vintage]
-              : [wine.producer, wine.wine_name, wine.region, wine.vintage];
-            return parts.filter(Boolean).join(' · ');
-          })()}
-        </Text>
-        {(() => {
-          const added = wine.date_received ?? wine.created_at;
-          const addedLabel = added
-            ? `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`
-            : null;
-          const sub = [wine.grape_variety || null, addedLabel].filter(Boolean).join(' · ');
-          return sub ? <Text style={styles.grape}>{sub}</Text> : null;
-        })()}
-        {/* Framed label photo + add/change control. The scan flow fills this
-            automatically; here the user can add one to a manual wine or
-            replace it. */}
-        <View style={styles.photoRow}>
+        <View style={styles.headerRow}>
+          {/* Thumbnail to the left of the name. Tap to view; long-press an
+              existing photo to change or delete it (no separate button). */}
           <TouchableOpacity
             onPress={() => (wine.label_image_path ? setPhotoViewerOpen(true) : handleAddPhoto())}
+            onLongPress={() => (wine.label_image_path ? handlePhotoMenu() : handleAddPhoto())}
+            delayLongPress={350}
             activeOpacity={0.85}
           >
             <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.detailThumb} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleAddPhoto} disabled={uploadingPhoto} style={styles.photoBtn} activeOpacity={0.7}>
-            <Text style={styles.photoBtnText}>
-              {uploadingPhoto ? 'Saving photo…' : wine.label_image_path ? 'Change photo' : '+ Add a photo'}
+          <View style={styles.headerTextCol}>
+            <Text style={styles.headerLine}>
+              {(() => {
+                const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+                const parts = sameName
+                  ? [wine.producer, wine.region, wine.vintage]
+                  : [wine.producer, wine.wine_name, wine.region, wine.vintage];
+                return parts.filter(Boolean).join(' · ');
+              })()}
             </Text>
-          </TouchableOpacity>
+            {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
+            {(() => {
+              const added = wine.date_received ?? wine.created_at;
+              return added ? (
+                <Text style={styles.addedDate}>Added {new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
+              ) : null;
+            })()}
+          </View>
         </View>
+        {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
       </View>
 
       <LabelPhotoViewer
@@ -1471,10 +1494,11 @@ const styles = StyleSheet.create({
   favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
   favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  photoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.md },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  headerTextCol: { flex: 1 },
+  addedDate: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  photoSaving: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
   detailThumb: { width: 60, height: 76 },
-  photoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
-  photoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   // Inter — wine card name (card content, not a page header)
   headerLine: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 28 },
   // Inter — region caption
