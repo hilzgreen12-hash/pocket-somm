@@ -41,15 +41,20 @@ export default function PersonalityScreen() {
 
   // Gate the auto-generate behind a minimum-activity bar so first-time users
   // don't get a personality sketch invented from nothing.
-  // Wine: ≥2 wine list scans OR ≥5 bottles in the cellar.
+  // Wine: 6+ distinct cellar wines OR three separate List searches where a
+  // bottle was picked — enough real engagement for a personal sketch.
   // Foodie: ≥2 total signals across rated/noted restaurants + saved recipes
   // (chef sessions) + chef pairings. Anything with content from the user
   // counts as one signal.
   const hasEnoughData = (() => {
     if (cat === 'wine') {
-      const totalBottles = (wines ?? []).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-      const wineListScanCount = archive?.length ?? 0;
-      return wineListScanCount >= 2 || totalBottles >= 5;
+      const distinctCellarWines = (wines ?? []).length;
+      const listPickSessions = new Set(
+        (chosenWines ?? [])
+          .filter((cw) => cw.source !== 'other' && cw.scan_session_id)
+          .map((cw) => cw.scan_session_id)
+      ).size;
+      return distinctCellarWines >= 6 || listPickSessions >= 3;
     }
     const restaurantSignals = (archive ?? []).filter((a) =>
       (a.restaurantName && a.restaurantName.trim()) ||
