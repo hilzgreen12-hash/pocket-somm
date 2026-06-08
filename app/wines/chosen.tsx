@@ -563,14 +563,19 @@ export default function ChosenWinesScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
-        <View style={{ width: 44 }} />
+        <TouchableOpacity
+          onPress={() => setChooserOpen(true)}
+          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+        >
+          <Text style={styles.addLink}>+ Add</Text>
+        </TouchableOpacity>
       </View>
 
       {isLoading ? null : !hasAnything ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>
-            When you review a wine from a Vinster recommendation, it's saved here. You can also dictate, photograph a label, or hand-write a review using the icons above — and the reviews you write on your cellar wines appear here too.
+            When you review a wine from a Vinster recommendation, it's saved here — or tap + Add at the top to enter one by scan, photo, or by hand. The reviews you write on your cellar wines appear here too.
           </Text>
         </View>
       ) : (
@@ -591,19 +596,6 @@ export default function ChosenWinesScreen() {
               })()}
             </Text>
           </View>
-          {/* Quick add — dictate, photograph a label, or type a review by hand. */}
-          <View style={styles.addIconsRow}>
-            <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseManual} activeOpacity={0.7} accessibilityLabel="Dictate a review">
-              <MicMotif />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseScan} activeOpacity={0.7} accessibilityLabel="Add a wine by label photo">
-              <CameraMotif />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseManual} activeOpacity={0.7} accessibilityLabel="Add a review by hand">
-              <PencilMotif />
-            </TouchableOpacity>
-          </View>
-          <View style={styles.iconsSeparator} />
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
