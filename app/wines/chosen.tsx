@@ -57,6 +57,18 @@ const motifStyles = StyleSheet.create({
   cameraLens: { width: 11, height: 11, borderWidth: 1, borderColor: colors.gold, borderRadius: 5.5 },
 });
 
+// A chosen wine counts as "reviewed" once it carries any review content —
+// a tasting note, personal notes, or a score. Bare bottle picks (added via
+// List → "Add to Bottle Picks") have none of these and live only in You ·
+// Your Restaurants until the user reviews them.
+function chosenHasReview(wine: ChosenWine): boolean {
+  return !!(
+    (wine.tasting_note && wine.tasting_note.trim()) ||
+    (wine.other_observations && wine.other_observations.trim()) ||
+    wine.user_score != null
+  );
+}
+
 function locationLine(wine: ChosenWine): string {
   // City normalised on read so legacy rows saved as "Greater London"
   // (UK reverse-geocode subregion) render as "London" without needing
@@ -190,10 +202,11 @@ export default function ChosenWinesScreen() {
     if (typeFilter === 'wishlist') {
       if (!isWishlist(it)) return false;
     } else if (typeFilter === 'all') {
-      // Restaurant bottle picks live in You · Your Restaurants now — they're
-      // excluded from the default review list. (Wish-listed ones are still
-      // reachable via the Wish List portfolio slice above.)
-      if (it.source === 'restaurant') return false;
+      // Bare restaurant bottle picks (no written review) live only in You ·
+      // Your Restaurants. A pick that's since been reviewed — or a wine
+      // reviewed straight from List → Review Wine — still belongs here.
+      // (Wish-listed picks stay reachable via the Wish List slice above.)
+      if (it.source === 'restaurant' && !chosenHasReview(it.wine as ChosenWine)) return false;
     } else if (it.source !== typeFilter) {
       return false;
     }
