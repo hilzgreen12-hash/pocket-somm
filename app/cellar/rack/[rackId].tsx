@@ -39,6 +39,7 @@ export default function RackGridScreen() {
   const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode } = useRackStore();
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [bottleListOpen, setBottleListOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [moving, setMoving] = useState<{ row: number; col: number; wineId: string; wineName: string } | null>(null);
   const [movingMsg, setMovingMsg] = useState<string | null>(null);
@@ -616,47 +617,72 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Inter-rack swipe indicator + tap-targets. Only renders when the
-          user has more than one rack/fridge — otherwise there's nothing
-          to swipe to. Arrows are disabled (greyed) at the edges of the
-          list rather than hidden so the affordance stays stable. */}
-      {racks.length > 1 && (
-        <View style={styles.swipeBar}>
-          <TouchableOpacity
-            style={styles.swipeSide}
-            onPress={() => prevRack && router.replace(`/cellar/rack/${prevRack.id}` as any)}
-            disabled={!prevRack}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[styles.swipeArrow, !prevRack && styles.swipeArrowDisabled]} numberOfLines={1}>
-              ← {prevRack?.name ?? ''}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.swipeCount}>
-            {currentIndex + 1} of {racks.length}
-          </Text>
-          <TouchableOpacity
-            style={[styles.swipeSide, { alignItems: 'flex-end' }]}
-            onPress={() => nextRack && router.replace(`/cellar/rack/${nextRack.id}` as any)}
-            disabled={!nextRack}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Text style={[styles.swipeArrow, !nextRack && styles.swipeArrowDisabled]} numberOfLines={1}>
-              {nextRack?.name ?? ''} →
-            </Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24}>
-        {/* Short hint pointing at the search box below the grid. The
-            full "tap slot to add / tap wine to highlight" instructions
-            now live on a per-mount modal that the user can dismiss
-            permanently via "Don't show me this again". */}
+        {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
-          Search your bottle's placement using the list & search function below the rack grid.
+          Pinch to zoom · Select a thumbnail to view wine intel, delete, or move a bottle · Swipe between your racks
         </Text>
+
+        {winesInRack.length > 0 && (
+          <>
+            <View style={styles.searchRow}>
+              <TextInput
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder="Search wines…"
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
+                  <Text style={styles.searchClearText}>✕</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* "Rack Bottle List" — the rack's wine list, hidden behind this
+                gold prompt. Expand it, tap a wine, and it closes + highlights
+                that bottle's placement in the grid. */}
+            <TouchableOpacity onPress={() => setBottleListOpen((v) => !v)} activeOpacity={0.7}>
+              <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
+            </TouchableOpacity>
+
+            {bottleListOpen && (
+              <View style={styles.bottleList}>
+                {filteredWines.length === 0 ? (
+                  <Text style={styles.searchNoResults}>No wines match "{searchQuery}"</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 280 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                    {filteredWines.map(({ wine, count }) => {
+                      const active = highlightedWineId === wine.id;
+                      return (
+                        <TouchableOpacity
+                          key={wine.id}
+                          style={[styles.wineRow, active && styles.wineRowActive]}
+                          onPress={() => { setHighlightedWineId(wine.id); setBottleListOpen(false); }}
+                          onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name, wine.quantity ?? 1)}
+                          delayLongPress={400}
+                        >
+                          <View style={styles.wineRowMain}>
+                            <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>
+                              {wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}
+                            </Text>
+                          </View>
+                          <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
+                            {count} {count === 1 ? 'bottle' : 'bottles'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+              </View>
+            )}
+          </>
+        )}
 
         {moving && movingMsg && (
           <View style={styles.movingBanner}>
@@ -699,9 +725,6 @@ export default function RackGridScreen() {
             "boxing" is a clipped viewport the grid scales/pans inside; each
             filled slot shows the wine's label as a framed thumbnail. Swipe
             between racks stays active at rest (see swipeGesture / isZoomed). */}
-        <TouchableOpacity onPress={openZoom} activeOpacity={0.7}>
-          <Text style={styles.zoomHint}>Tap here, or pinch the rack, to zoom ⤢</Text>
-        </TouchableOpacity>
         <View style={styles.rackViewport}>
           <GestureDetector gesture={openZoomGesture}>
             <View style={styles.rackCanvas}>
@@ -763,55 +786,6 @@ export default function RackGridScreen() {
             </View>
           </GestureDetector>
         </View>
-
-        {/* Wine list */}
-        {winesInRack.length > 0 && (
-          <View style={styles.wineList}>
-            <View style={styles.searchRow}>
-              <TextInput
-                style={styles.searchInput}
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search wines…"
-                placeholderTextColor={colors.textMuted}
-                returnKeyType="search"
-                clearButtonMode="while-editing"
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} style={styles.searchClear}>
-                  <Text style={styles.searchClearText}>✕</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {filteredWines.length === 0 && (
-              <Text style={styles.searchNoResults}>No wines match "{searchQuery}"</Text>
-            )}
-
-            {filteredWines.map(({ wine, count }) => {
-              const active = highlightedWineId === wine.id;
-              return (
-                <TouchableOpacity
-                  key={wine.id}
-                  style={[styles.wineRow, active && styles.wineRowActive]}
-                  onPress={() => toggleHighlight(wine.id)}
-                  onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name, wine.quantity ?? 1)}
-                  delayLongPress={400}
-                >
-                  <View style={styles.wineRowMain}>
-                    <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>
-                      {wineHeaderLine(wine.producer, wine.wine_name, wine.vintage)}
-                    </Text>
-                    {wine.region ? <Text style={styles.wineRowDetail}>{wine.region}</Text> : null}
-                  </View>
-                  <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
-                    {count} {count === 1 ? 'bottle' : 'bottles'}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
 
         {/* Edit bubble — opens the rack-management modal (wipe / rename /
             delete). Sits at the bottom of the page so destructive actions
@@ -1082,6 +1056,9 @@ const styles = StyleSheet.create({
   // Inter-rack swipe bar — small gold arrows + count, sits directly
   // below the rack-name header so the user sees the swipe affordance
   // before they reach for the grid.
+  // "Rack Bottle List" gold prompt + the list it reveals.
+  bottleListLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  bottleList: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   swipeBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: spacing.sm },
   swipeSide: { flex: 1, paddingVertical: 4 },
   // Cormorant — inline swipe arrow link reads as a button
