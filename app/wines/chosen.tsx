@@ -1,7 +1,6 @@
 import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import { router } from 'expo-router';
-import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
@@ -24,6 +23,38 @@ import type { ChosenWine, CellarWine } from '../../src/types/wine';
 function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
+
+// Mic + Camera marks drawn in the same hand-drawn gold-outline style as the
+// home-screen tile motifs (List / Chef / Cellar / Community) — bordered Views,
+// no image assets.
+function MicMotif() {
+  return (
+    <View style={motifStyles.micStack}>
+      <View style={motifStyles.micHead} />
+      <View style={motifStyles.micStem} />
+      <View style={motifStyles.micBase} />
+    </View>
+  );
+}
+
+function CameraMotif() {
+  return (
+    <View style={motifStyles.cameraBody}>
+      <View style={motifStyles.cameraBump} />
+      <View style={motifStyles.cameraLens} />
+    </View>
+  );
+}
+
+const motifStyles = StyleSheet.create({
+  micStack: { alignItems: 'center' },
+  micHead: { width: 13, height: 19, borderWidth: 1, borderColor: colors.gold, borderRadius: 6.5 },
+  micStem: { width: 1.5, height: 5, backgroundColor: colors.gold },
+  micBase: { width: 14, height: 1.5, backgroundColor: colors.gold, borderRadius: 1 },
+  cameraBody: { width: 30, height: 22, borderWidth: 1, borderColor: colors.gold, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
+  cameraBump: { position: 'absolute', top: -4, alignSelf: 'center', width: 10, height: 4, borderWidth: 1, borderColor: colors.gold, borderBottomWidth: 0, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
+  cameraLens: { width: 11, height: 11, borderWidth: 1, borderColor: colors.gold, borderRadius: 5.5 },
+});
 
 function locationLine(wine: ChosenWine): string {
   // City normalised on read so legacy rows saved as "Greater London"
@@ -519,10 +550,10 @@ export default function ChosenWinesScreen() {
           {/* Quick "Add" prompts — dictate a review, or photograph a label. */}
           <View style={styles.addIconsRow}>
             <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseManual} activeOpacity={0.7} accessibilityLabel="Dictate a review">
-              <Ionicons name="mic-outline" size={22} color={colors.gold} />
+              <MicMotif />
             </TouchableOpacity>
             <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseScan} activeOpacity={0.7} accessibilityLabel="Add a wine by label photo">
-              <Ionicons name="camera-outline" size={22} color={colors.gold} />
+              <CameraMotif />
             </TouchableOpacity>
           </View>
           <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
@@ -728,7 +759,7 @@ const styles = StyleSheet.create({
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   // Mic + Camera "Add" prompts above the filters.
   addIconsRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
-  addIconBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  addIconBtn: { width: 52, height: 52, borderRadius: 12, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
