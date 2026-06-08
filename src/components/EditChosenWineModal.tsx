@@ -4,6 +4,7 @@ import {
   StyleSheet, Keyboard, Share,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
@@ -17,6 +18,7 @@ import { getWineIntelligence } from '../api/label';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
+import { useLabelStore } from '../stores/labelStore';
 import { MicButton, appendDictation } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -33,6 +35,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const { update, remove } = useChosenWines();
   const { session } = useAuth();
   const qc = useQueryClient();
+  const { setWineDetails } = useLabelStore();
 
   const [userScore, setUserScore] = useState<number | null>(null);
   const [tastingNote, setTastingNote] = useState('');      // Your Review
@@ -191,6 +194,24 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     } catch (err) {
       showAlert({ title: 'Could not add to cellar', body: err instanceof Error ? err.message : 'Please try again.' });
     }
+  }
+
+  // Walk the wine through the full Add to Cellar flow (Wine Intel card →
+  // Add to Cellar form) without re-scanning — we already know the bottle
+  // from the review, so pre-fill the label store and drop the user on the
+  // Confirm screen, which flows straight to the Wine Intel card.
+  function handleAddToCellarFlow() {
+    if (!wine) return;
+    setWineDetails({
+      producer: wine.producer,
+      region: wine.region,
+      wineName: wine.wine_name,
+      vintage: wine.vintage != null ? String(wine.vintage) : null,
+      style: null,
+      bottleSizeMl: null,
+    });
+    onClose();
+    router.push('/label/confirm');
   }
 
   // ---- Sharing ------------------------------------------------------------
@@ -434,6 +455,12 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             {/* Add to / In Wish List */}
             <TouchableOpacity style={styles.wishlistBtn} onPress={handleWishlistButton} activeOpacity={0.8}>
               <Text style={styles.wishlistBtnText}>{wishlist ? 'In Your Wish List — Remove' : 'Add to Wish List'}</Text>
+            </TouchableOpacity>
+
+            {/* Add to Cellar — runs the wine through the Wine Intel card and
+                the Add to Cellar form, skipping the label scan. */}
+            <TouchableOpacity style={styles.wishlistBtn} onPress={handleAddToCellarFlow} activeOpacity={0.8}>
+              <Text style={styles.wishlistBtnText}>Add to Cellar</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving || update.isPending}>
