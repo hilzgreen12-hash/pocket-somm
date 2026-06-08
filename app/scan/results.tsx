@@ -1039,7 +1039,7 @@ const styles = StyleSheet.create({
   },
   detailActionBtn: {
     flex: 1,
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: '#FFFFFF',
     borderRadius: 10,
     paddingVertical: spacing.sm,
@@ -1052,7 +1052,8 @@ const styles = StyleSheet.create({
   detailActionBtnText: {
     color: '#FFFFFF',
     fontFamily: fonts.headingSemibold,
-    fontSize: 14,
+    fontSize: 15,
+    letterSpacing: 0.4,
   },
   detailActionBtnTextDone: {
     color: colors.gold,
