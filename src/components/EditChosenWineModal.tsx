@@ -19,7 +19,7 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
 import { useLabelStore } from '../stores/labelStore';
-import { MicButton, appendDictation } from './MicButton';
+import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -388,7 +388,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             {/* Your Review */}
             <View style={styles.dictateRow}>
               <Text style={styles.sectionTitle}>Your Review</Text>
-              <MicButton onResult={(t) => setTastingNote((prev) => appendDictation(prev, t))} />
+              <MicButton value={tastingNote} onChangeText={setTastingNote} onClear={() => setTastingNote('')} />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
@@ -411,7 +411,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             {/* Personal Notes — no divider above (per spec). */}
             <View style={styles.dictateRow}>
               <Text style={styles.sectionTitle}>Personal Notes</Text>
-              <MicButton onResult={(t) => setPersonalNotes((prev) => appendDictation(prev, t))} />
+              <MicButton value={personalNotes} onChangeText={setPersonalNotes} onClear={() => setPersonalNotes('')} />
             </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
