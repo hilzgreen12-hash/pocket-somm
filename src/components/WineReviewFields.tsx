@@ -63,6 +63,30 @@ export function WineReviewFields({
 
   return (
     <>
+      {/* Discovered at — top of the card. */}
+      <Text style={styles.fieldLabel}>Discovered at</Text>
+      <TextInput
+        style={styles.input}
+        value={discoveredAt}
+        onChangeText={onDiscoveredAt}
+        placeholder="Restaurant, home, friend's place…"
+        placeholderTextColor={colors.textMuted}
+      />
+
+      {/* Your Review */}
+      <View style={styles.dictateRow}>
+        <Text style={styles.sectionTitle}>Your Review</Text>
+        <MicButton value={review} onChangeText={onReview} onClear={() => onReview('')} />
+      </View>
+      <TextInput
+        style={[styles.input, styles.noteInput]}
+        value={review}
+        onChangeText={onReview}
+        placeholder="What you thought of the wine — taste, occasion, anything worth sharing."
+        placeholderTextColor={colors.textMuted}
+        multiline numberOfLines={4} textAlignVertical="top"
+      />
+
       {/* Your Score */}
       <Text style={styles.fieldLabel}>Your Score</Text>
       <TextInput
@@ -83,7 +107,7 @@ export function WineReviewFields({
       {/* Price Paid | Estimated Value */}
       <View style={styles.pairRow}>
         <View style={styles.pairCell}>
-          <Text style={styles.fieldLabel}>Price Paid</Text>
+          <Text style={styles.fieldLabel}>Price Paid (optional)</Text>
           <View style={styles.priceRow}>
             <Text style={styles.priceCurrency}>{currencySymbol}</Text>
             <TextInput
@@ -124,21 +148,7 @@ export function WineReviewFields({
         </View>
       </View>
 
-      {/* Your Review */}
-      <View style={styles.dictateRow}>
-        <Text style={styles.sectionTitle}>Your Review</Text>
-        <MicButton value={review} onChangeText={onReview} onClear={() => onReview('')} />
-      </View>
-      <TextInput
-        style={[styles.input, styles.noteInput]}
-        value={review}
-        onChangeText={onReview}
-        placeholder="What you thought of the wine — taste, occasion, anything worth sharing."
-        placeholderTextColor={colors.textMuted}
-        multiline numberOfLines={4} textAlignVertical="top"
-      />
-
-      {/* Personal Notes */}
+      {/* Personal Notes — separate, below the review details. */}
       <View style={styles.dictateRow}>
         <Text style={styles.sectionTitle}>Personal Notes</Text>
         <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} />
@@ -150,16 +160,6 @@ export function WineReviewFields({
         placeholder="Just for you — anything you'd rather keep private."
         placeholderTextColor={colors.textMuted}
         multiline numberOfLines={4} textAlignVertical="top"
-      />
-
-      {/* Discovered at */}
-      <Text style={styles.fieldLabel}>Discovered at</Text>
-      <TextInput
-        style={styles.input}
-        value={discoveredAt}
-        onChangeText={onDiscoveredAt}
-        placeholder="Restaurant, home, friend's place…"
-        placeholderTextColor={colors.textMuted}
       />
 
       {/* Drinking Window — the user's own call. */}
