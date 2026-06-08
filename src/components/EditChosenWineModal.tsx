@@ -17,6 +17,7 @@ import { getWineIntelligence } from '../api/label';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
+import { MicButton, appendDictation } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -364,7 +365,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             </View>
 
             {/* Your Review */}
-            <Text style={styles.sectionTitle}>Your Review</Text>
+            <View style={styles.dictateRow}>
+              <Text style={styles.sectionTitle}>Your Review</Text>
+              <MicButton onResult={(t) => setTastingNote((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={tastingNote}
@@ -384,8 +388,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             </View>
 
             {/* Personal Notes — no divider above (per spec). */}
-            <Text style={styles.sectionTitle}>Personal Notes</Text>
-            <Text style={styles.personalNotesHint}>Private — not shared with the community or with friends.</Text>
+            <View style={styles.dictateRow}>
+              <Text style={styles.sectionTitle}>Personal Notes</Text>
+              <MicButton onResult={(t) => setPersonalNotes((prev) => appendDictation(prev, t))} />
+            </View>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={personalNotes}
@@ -506,6 +512,8 @@ const styles = StyleSheet.create({
   priceCurrency: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, marginRight: 4 },
   priceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.xs },
   sectionTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.sm },
+  // Section title + dictation mic on one line.
+  dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   personalNotesHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginBottom: spacing.sm, marginTop: -spacing.xs },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
   noteInput: { minHeight: 90 },
