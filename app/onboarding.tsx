@@ -64,11 +64,10 @@ export default function OnboardingScreen() {
     ...(preferences?.allergyRisks ?? []),
   ]);
   const [concerns, setConcerns] = useState(preferences?.specificConcerns ?? '');
-  const [notifyWindow, setNotifyWindow] = useState<boolean>(
-    session?.user.user_metadata?.notify_drinking_window ?? false,
-  );
-  const [notifyDecline, setNotifyDecline] = useState<boolean>(
-    session?.user.user_metadata?.notify_decline ?? false,
+  // Single opt-out for general Vinster emails (updates + offers). Defaults
+  // ON — the user un-toggles to opt out.
+  const [notifyUpdates, setNotifyUpdates] = useState<boolean>(
+    session?.user.user_metadata?.notify_updates ?? true,
   );
 
   const [regionalOpen, setRegionalOpen] = useState(false);
@@ -105,8 +104,7 @@ export default function OnboardingScreen() {
       const { error: authErr } = await supabase.auth.updateUser({
         data: {
           display_name: trimmedUsername,
-          notify_drinking_window: notifyWindow,
-          notify_decline: notifyDecline,
+          notify_updates: notifyUpdates,
         },
       });
       if (authErr) throw new Error(authErr.message);
@@ -225,19 +223,10 @@ export default function OnboardingScreen() {
 
         <Text style={styles.subheading}>Email Preferences</Text>
         <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>When wines approach their drinking window</Text>
+          <Text style={styles.toggleLabel}>Vinster will email you from time to time regarding app updates and offers.</Text>
           <Switch
-            value={notifyWindow}
-            onValueChange={setNotifyWindow}
-            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>When wines are approaching decline</Text>
-          <Switch
-            value={notifyDecline}
-            onValueChange={setNotifyDecline}
+            value={notifyUpdates}
+            onValueChange={setNotifyUpdates}
             trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
             thumbColor="#FFFFFF"
           />
@@ -292,28 +281,28 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: spacing.md },
   cornerIcon: { width: 42, height: 42, alignSelf: 'flex-start', marginBottom: spacing.sm },
   intro: { alignItems: 'center', marginBottom: spacing.lg, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  brand: { fontFamily: fonts.headingBold, fontSize: 32, color: '#FFFFFF', letterSpacing: 1, marginBottom: spacing.xs, textAlign: 'center' },
-  introBody: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.md },
+  brand: { fontFamily: fonts.headingBold, fontSize: 26, color: '#FFFFFF', letterSpacing: 1, marginBottom: spacing.xs, textAlign: 'center' },
+  introBody: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, marginBottom: spacing.md },
   thanks: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.gold, textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.sm },
   section: { marginBottom: spacing.md },
   sectionLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   // Clean underline inputs (no boxed fill) for the username + currency.
-  input: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm, fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.text },
+  input: { borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
   currencyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, marginBottom: spacing.md },
   currencyPick: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, marginLeft: spacing.md },
   currencyValue: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.gold, flexShrink: 1, textAlign: 'right' },
   selectChevron: { fontSize: 14, color: colors.gold },
-  subheading: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, letterSpacing: 0.3, marginTop: spacing.md, marginBottom: 2 },
+  subheading: { fontFamily: fonts.headingBold, fontSize: 16, color: colors.text, letterSpacing: 0.3, marginTop: spacing.md, marginBottom: 2 },
   subheadingHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
-  hardRulesTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.xs },
+  hardRulesTitle: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.xs },
   hardRulesBody: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 20, textAlign: 'center', marginBottom: spacing.sm },
   // Accordion chrome mirrors app/profile/wine.tsx so the look carries
   // across the profile/onboarding surfaces.
   accordionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: 4 },
   accordionLeft: { flex: 1, alignItems: 'center' },
   chevron: { fontSize: 16, color: '#FFFFFF', marginLeft: spacing.sm },
-  question: { fontFamily: fonts.bodySemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
-  selectionSummary: { fontFamily: fonts.bodyMedium, fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  question: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
+  selectionSummary: { fontFamily: fonts.bodyMedium, fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
   pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
   pickerHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginBottom: spacing.sm },
   concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },

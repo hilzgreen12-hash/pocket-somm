@@ -30,11 +30,8 @@ export default function YouScreen() {
   const [emailDraft, setEmailDraft] = useState(currentEmail);
   const [savingIdentity, setSavingIdentity] = useState(false);
 
-  const [notifyWindow, setNotifyWindow] = useState<boolean>(
-    session?.user.user_metadata?.notify_drinking_window ?? false
-  );
-  const [notifyDecline, setNotifyDecline] = useState<boolean>(
-    session?.user.user_metadata?.notify_decline ?? false
+  const [notifyUpdates, setNotifyUpdates] = useState<boolean>(
+    session?.user.user_metadata?.notify_updates ?? true
   );
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
@@ -270,19 +267,10 @@ export default function YouScreen() {
       <View style={styles.block}>
         <Text style={styles.blockHeading}>Email preferences</Text>
         <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>When wines approach their drinking window</Text>
+          <Text style={styles.toggleLabel}>Vinster will email you from time to time regarding app updates and offers.</Text>
           <Switch
-            value={notifyWindow}
-            onValueChange={(v) => { setNotifyWindow(v); updateNotifySetting('notify_drinking_window', v, setNotifyWindow); }}
-            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>When wines are approaching decline</Text>
-          <Switch
-            value={notifyDecline}
-            onValueChange={(v) => { setNotifyDecline(v); updateNotifySetting('notify_decline', v, setNotifyDecline); }}
+            value={notifyUpdates}
+            onValueChange={(v) => { setNotifyUpdates(v); updateNotifySetting('notify_updates', v, setNotifyUpdates); }}
             trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
             thumbColor="#FFFFFF"
           />
