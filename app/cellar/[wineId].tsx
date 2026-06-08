@@ -150,6 +150,11 @@ export default function CellarWineDetail() {
   const [refreshingValue, setRefreshingValue] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [photoViewerOpen, setPhotoViewerOpen] = useState(false);
+  const [titleEditOpen, setTitleEditOpen] = useState(false);
+  const [producerDraft, setProducerDraft] = useState('');
+  const [wineNameDraft, setWineNameDraft] = useState('');
+  const [grapeDraft, setGrapeDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
 
   const [reviewExpanded, setReviewExpanded] = useState(false);
   const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
@@ -241,6 +246,36 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
     } catch (err) {
       showAlert({ title: 'Could not remove photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Edit the wine's title identity — name + grape variety (not the date).
+  function openTitleEdit() {
+    if (!wine) return;
+    setProducerDraft(wine.producer ?? '');
+    setWineNameDraft(wine.wine_name ?? '');
+    setGrapeDraft(wine.grape_variety ?? '');
+    setTitleEditOpen(true);
+  }
+
+  async function handleSaveTitle() {
+    if (!wine) return;
+    Keyboard.dismiss();
+    setSavingTitle(true);
+    try {
+      await updateWine.mutateAsync({
+        id: wine.id,
+        updates: {
+          producer: producerDraft.trim() || null,
+          wine_name: wineNameDraft.trim() || wine.wine_name,
+          grape_variety: grapeDraft.trim() || null,
+        },
+      });
+      setTitleEditOpen(false);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingTitle(false);
     }
   }
 
@@ -895,9 +930,15 @@ export default function CellarWineDetail() {
             {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
             {(() => {
               const added = wine.date_received ?? wine.created_at;
-              return added ? (
-                <Text style={styles.addedDate}>Added {new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</Text>
-              ) : null;
+              const addedLabel = added ? `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}` : null;
+              return (
+                <View style={styles.dateRow}>
+                  {addedLabel ? <Text style={styles.addedDate}>{addedLabel}</Text> : <View />}
+                  <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                    <Text style={styles.editTitleLink}>Edit</Text>
+                  </TouchableOpacity>
+                </View>
+              );
             })()}
           </View>
         </View>
@@ -910,6 +951,29 @@ export default function CellarWineDetail() {
         fallbackText={wine.wine_name}
         onClose={() => setPhotoViewerOpen(false)}
       />
+
+      {/* Edit the title — name + grape variety. */}
+      <Modal visible={titleEditOpen} transparent animationType="fade" onRequestClose={() => setTitleEditOpen(false)}>
+        <View style={styles.titleEditOverlay}>
+          <View style={styles.titleEditSheet}>
+            <Text style={styles.titleEditHeading}>Edit wine</Text>
+            <Text style={styles.fieldLabel}>Producer</Text>
+            <TextInput style={styles.input} value={producerDraft} onChangeText={setProducerDraft} placeholder="Producer" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.fieldLabel}>Wine name</Text>
+            <TextInput style={styles.input} value={wineNameDraft} onChangeText={setWineNameDraft} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.fieldLabel}>Grape variety</Text>
+            <TextInput style={styles.input} value={grapeDraft} onChangeText={setGrapeDraft} placeholder="Grape variety" placeholderTextColor={colors.textMuted} />
+            <View style={styles.noteActions}>
+              <TouchableOpacity onPress={() => setTitleEditOpen(false)}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveTitle} disabled={savingTitle}>
+                <Text style={styles.saveBtnText}>{savingTitle ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* Compact stats grid — score / window / bottle counts only. The
           Purchase and Estimated values are pulled out into full-width rows
@@ -1497,6 +1561,12 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   headerTextCol: { flex: 1 },
   addedDate: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
+  // Subtle gold "Edit" link on the date line — opens the title editor.
+  editTitleLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline' },
+  titleEditOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  titleEditSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  titleEditHeading: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   photoSaving: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
   detailThumb: { width: 60, height: 76 },
   // Inter — wine card name (card content, not a page header)
