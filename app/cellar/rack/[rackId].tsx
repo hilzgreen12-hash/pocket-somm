@@ -570,11 +570,12 @@ export default function RackGridScreen() {
     );
   }, [winesInRack, searchQuery]);
 
-  // Auto-highlight when search narrows to a single result; clear when search is cleared
+  // Auto-highlight when a search narrows to a single result. Do NOT clear on
+  // an empty search — that would wipe a highlight set by the ?highlight= param
+  // (a wine card's "In {rack} →" link) or by tapping the Rack Bottle List.
+  // A stale highlight clears when switching racks (the rackId effect above).
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setHighlightedWineId(null);
-    } else if (filteredWines.length === 1) {
+    if (searchQuery.trim() && filteredWines.length === 1) {
       setHighlightedWineId(filteredWines[0].wine.id);
     }
   }, [filteredWines, searchQuery]);
