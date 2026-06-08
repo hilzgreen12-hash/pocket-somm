@@ -27,7 +27,7 @@ const LIST_HELP = `Point your camera at any wine list — or upload a screenshot
 
 It weighs each one against your preferences — wine type, style, what you're eating, your budget — and against its own criteria of critic score, value compared to market, vintage quality, and readiness for drinking, before handing you its top three.
 
-Tap "Review Wine" on the one you ordered and it lands in Your Wine Reviews, quietly helping Vinster know you better next time. You can review the restaurants you've visited too, kept in Your Restaurants and ready to share with the community.`;
+Record and/or review the bottle you ordered, as well as the restaurant you enjoyed it in, which all quietly helps Vinster know you better. Share results with friends and the community.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
