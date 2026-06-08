@@ -47,6 +47,15 @@ function CameraMotif() {
   );
 }
 
+function PencilMotif() {
+  return (
+    <View style={motifStyles.pencilStack}>
+      <View style={motifStyles.pencilBody} />
+      <View style={motifStyles.pencilTip} />
+    </View>
+  );
+}
+
 const motifStyles = StyleSheet.create({
   micStack: { alignItems: 'center' },
   micHead: { width: 13, height: 19, borderWidth: 1, borderColor: colors.gold, borderRadius: 6.5 },
@@ -55,6 +64,9 @@ const motifStyles = StyleSheet.create({
   cameraBody: { width: 30, height: 22, borderWidth: 1, borderColor: colors.gold, borderRadius: 4, alignItems: 'center', justifyContent: 'center' },
   cameraBump: { position: 'absolute', top: -4, alignSelf: 'center', width: 10, height: 4, borderWidth: 1, borderColor: colors.gold, borderBottomWidth: 0, borderTopLeftRadius: 2, borderTopRightRadius: 2 },
   cameraLens: { width: 11, height: 11, borderWidth: 1, borderColor: colors.gold, borderRadius: 5.5 },
+  pencilStack: { alignItems: 'center' },
+  pencilBody: { width: 9, height: 15, borderWidth: 1, borderColor: colors.gold, borderTopLeftRadius: 2, borderTopRightRadius: 2, borderBottomWidth: 0 },
+  pencilTip: { width: 0, height: 0, borderLeftWidth: 4.5, borderRightWidth: 4.5, borderTopWidth: 6, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.gold },
 });
 
 // A chosen wine counts as "reviewed" once it carries any review content —
@@ -551,12 +563,7 @@ export default function ChosenWinesScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
-        <TouchableOpacity
-          onPress={() => setChooserOpen(true)}
-          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-        >
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={{ width: 44 }} />
       </View>
 
       {isLoading ? null : !hasAnything ? (
@@ -574,10 +581,17 @@ export default function ChosenWinesScreen() {
               Type (cellar vs restaurant) / Favourites / Location. */}
           <View style={styles.summaryRow}>
             <Text style={styles.summaryText}>
-              {filtered.length} {filtered.length === 1 ? 'review' : 'reviews'}
+              {(() => {
+                const wineKeys = new Set(filtered.map((it) => {
+                  const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
+                  return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
+                }));
+                const r = filtered.length, n = wineKeys.size;
+                return `${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`;
+              })()}
             </Text>
           </View>
-          {/* Quick "Add" prompts — dictate a review, or photograph a label. */}
+          {/* Quick add — dictate, photograph a label, or type a review by hand. */}
           <View style={styles.addIconsRow}>
             <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseManual} activeOpacity={0.7} accessibilityLabel="Dictate a review">
               <MicMotif />
@@ -585,7 +599,11 @@ export default function ChosenWinesScreen() {
             <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseScan} activeOpacity={0.7} accessibilityLabel="Add a wine by label photo">
               <CameraMotif />
             </TouchableOpacity>
+            <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseManual} activeOpacity={0.7} accessibilityLabel="Add a review by hand">
+              <PencilMotif />
+            </TouchableOpacity>
           </View>
+          <View style={styles.iconsSeparator} />
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
@@ -789,7 +807,8 @@ const styles = StyleSheet.create({
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   // Mic + Camera "Add" prompts above the filters.
-  addIconsRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  addIconsRow: { flexDirection: 'row', gap: spacing.xl, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  iconsSeparator: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
   addIconBtn: { width: 52, height: 52, borderRadius: 12, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },

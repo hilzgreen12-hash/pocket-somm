@@ -107,7 +107,7 @@ export default function ChefTab() {
       {/* Recipe → Wine (flow unchanged) */}
       <View style={[styles.section, { marginTop: spacing.lg }]}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/find-pairing')}>
-          <Text style={styles.buttonText}>I've got a recipe, find me a wine</Text>
+          <Text style={styles.buttonText}>I know what I'm cooking, find me a wine</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={handleViewLastPairing}>
           <Text style={styles.lastResultLink}>View last result</Text>
