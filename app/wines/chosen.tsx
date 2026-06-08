@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
@@ -515,6 +516,15 @@ export default function ChosenWinesScreen() {
               {filtered.length} {filtered.length === 1 ? 'review' : 'reviews'}
             </Text>
           </View>
+          {/* Quick "Add" prompts — dictate a review, or photograph a label. */}
+          <View style={styles.addIconsRow}>
+            <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseManual} activeOpacity={0.7} accessibilityLabel="Dictate a review">
+              <Ionicons name="mic-outline" size={22} color={colors.gold} />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.addIconBtn} onPress={handleChooseScan} activeOpacity={0.7} accessibilityLabel="Add a wine by label photo">
+              <Ionicons name="camera-outline" size={22} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
           <Text style={styles.filterHint}>Listed by {sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
@@ -716,6 +726,9 @@ const styles = StyleSheet.create({
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
+  // Mic + Camera "Add" prompts above the filters.
+  addIconsRow: { flexDirection: 'row', gap: spacing.md, paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  addIconBtn: { width: 44, height: 44, borderRadius: 22, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
