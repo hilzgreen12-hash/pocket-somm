@@ -127,13 +127,35 @@ export default function RackGridScreen() {
     // sideways navigation.
   }, [rackId, highlight]);
 
-  // Pinch-zoom state — when the rack is zoomed in, the swipe-between-racks
-  // gesture is disabled so one-finger drags pan the grid instead of
-  // navigating away.
-  const [zoomOpen, setZoomOpen] = useState(false);
+  // ---- In-place pinch zoom ----
+  // The inline rack grid pinch-zooms and pans within its clipped viewport,
+  // like a photo in the phone gallery — no separate window. While zoomed, the
+  // swipe-between-racks gesture AND the page scroll are disabled so a
+  // one-finger drag pans the grid in any direction. RN Animated on the JS
+  // thread via runOnJS (no Reanimated). zBase = committed at gesture start;
+  // zCur = live.
+  const [isZoomed, setIsZoomed] = useState(false);
+  const zScale = useRef(new Animated.Value(1)).current;
+  const zTx = useRef(new Animated.Value(0)).current;
+  const zTy = useRef(new Animated.Value(0)).current;
+  const zBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  const zCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+
+  function resetZoom() {
+    zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
+    Animated.parallel([
+      Animated.timing(zScale, { toValue: 1, duration: 180, useNativeDriver: false }),
+      Animated.timing(zTx, { toValue: 0, duration: 180, useNativeDriver: false }),
+      Animated.timing(zTy, { toValue: 0, duration: 180, useNativeDriver: false }),
+    ]).start();
+    setIsZoomed(false);
+  }
+
+  // Swipe between racks — only at rest; disabled while zoomed.
   const swipeGesture = useMemo(
     () =>
       Gesture.Pan()
+        .enabled(!isZoomed)
         .activeOffsetX([-30, 30])
         .failOffsetY([-30, 30])
         .runOnJS(true)
@@ -144,39 +166,11 @@ export default function RackGridScreen() {
             router.replace(`/cellar/rack/${prevRack.id}` as any);
           }
         }),
-    [prevRack?.id, nextRack?.id],
+    [prevRack?.id, nextRack?.id, isZoomed],
   );
 
-  // ---- Full-screen rack zoom ----
-  // Pinching the inline rack (or tapping the zoom hint) opens a full-screen
-  // viewer where the grid pinch-zooms + pans freely against the whole screen
-  // — far more controlled than scaling the small inline card. RN Animated on
-  // the JS thread via runOnJS (no Reanimated worklet plugin), matching
-  // swipeGesture above. zBase = value committed at gesture start; zCur = live.
-  const zScale = useRef(new Animated.Value(1)).current;
-  const zTx = useRef(new Animated.Value(0)).current;
-  const zTy = useRef(new Animated.Value(0)).current;
-  const zBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
-  const zCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
-  // Open the full-screen viewer with a quick "grow-in" so it reads as the
-  // rack expanding out to fill the screen, not just appearing.
-  function openZoom() {
-    zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
-    zTx.setValue(0); zTy.setValue(0);
-    zScale.setValue(0.65);
-    setZoomOpen(true);
-    Animated.timing(zScale, { toValue: 1, duration: 220, useNativeDriver: false }).start();
-  }
-  function closeZoom() {
-    zBase.scale = 1; zCur.scale = 1; zBase.tx = 0; zBase.ty = 0; zCur.tx = 0; zCur.ty = 0;
-    zScale.setValue(1); zTx.setValue(0); zTy.setValue(0);
-    setZoomOpen(false);
-  }
-  const openZoomGesture = useMemo(
-    () => Gesture.Pinch().runOnJS(true).onStart(() => openZoom()),
-    [],
-  );
-  const zoomViewerGesture = useMemo(() => {
+  // Inline grid zoom: pinch (any time) + one-finger pan (only when zoomed).
+  const inlineZoomGesture = useMemo(() => {
     const pinch = Gesture.Pinch()
       .runOnJS(true)
       .onUpdate((e) => {
@@ -186,8 +180,13 @@ export default function RackGridScreen() {
         zCur.scale = s;
         zScale.setValue(s);
       })
-      .onEnd(() => { zBase.scale = zCur.scale; });
+      .onEnd(() => {
+        zBase.scale = zCur.scale;
+        if (zCur.scale <= 1.02) resetZoom();
+        else if (!isZoomed) setIsZoomed(true);
+      });
     const pan = Gesture.Pan()
+      .enabled(isZoomed)
       .runOnJS(true)
       .minDistance(2)
       .onUpdate((e) => {
@@ -198,7 +197,7 @@ export default function RackGridScreen() {
       })
       .onEnd(() => { zBase.tx = zCur.tx; zBase.ty = zCur.ty; });
     return Gesture.Simultaneous(pinch, pan);
-  }, []);
+  }, [isZoomed]);
 
   // Back navigation. A rack can be reached two ways:
   //   1. Cellar → Racks → Rack (or via the Camera → Detect scanner flow),
@@ -619,7 +618,7 @@ export default function RackGridScreen() {
       </View>
 
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
           Pinch to zoom · Select a thumbnail to view wine intel, delete, or move a bottle · Swipe between your racks
@@ -727,8 +726,8 @@ export default function RackGridScreen() {
             filled slot shows the wine's label as a framed thumbnail. Swipe
             between racks stays active at rest (see swipeGesture / isZoomed). */}
         <View style={styles.rackViewport}>
-          <GestureDetector gesture={openZoomGesture}>
-            <View style={styles.rackCanvas}>
+          <GestureDetector gesture={inlineZoomGesture}>
+            <Animated.View style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}>
             {gridRows.map((rowDef) => {
               const isLargeFormat = rowDef.rowIndex === -1;
               // Scale the no-photo "blank label" text to the slot size.
@@ -784,7 +783,7 @@ export default function RackGridScreen() {
                 </View>
               );
             })}
-            </View>
+            </Animated.View>
           </GestureDetector>
         </View>
 
@@ -800,52 +799,6 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </KeyboardAwareScrollView>
 
-      {/* Full-screen rack zoom viewer — the rack breaks out of its inline card
-          to fill the screen on a dark backdrop so the labels pop. Pinch to
-          zoom (1–5×) and drag to move; tap ✕ to close. View-only (placement
-          stays on the inline rack). Tighter framing than the inline card. */}
-      <Modal visible={zoomOpen} transparent animationType="fade" onRequestClose={closeZoom}>
-        {zoomOpen && (
-          // A Modal renders in its OWN native hierarchy, outside the app-root
-          // GestureHandlerRootView — so gestures inside it are dead unless we
-          // give the modal its own gesture root. This is what makes the
-          // pinch/pan respond.
-          <GestureHandlerRootView style={{ flex: 1 }}>
-          <View style={styles.zoomBackdrop}>
-            <GestureDetector gesture={zoomViewerGesture}>
-              <Animated.View
-                style={[styles.zoomCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
-              >
-                {gridRows.map((rowDef) => {
-                  const fallbackFont = Math.max(7, Math.min(13, Math.round(rowDef.slotWidth / 6)));
-                  return (
-                    <View key={rowDef.rowIndex} style={[styles.gridRow, { gap: 2, marginBottom: rowDef.rowIndex === -1 ? 6 : 2 }]}>
-                      {Array.from({ length: rowDef.cols }, (_, col) => {
-                        const slot = slotMap[`${rowDef.rowIndex},${col}`];
-                        const wine = slot?.wine as CellarWine | null | undefined;
-                        return (
-                          <View key={col} style={[styles.zoomSlot, { width: rowDef.slotWidth, height: rowDef.slotWidth }]}>
-                            {wine ? (
-                              <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.slotThumb} radius={2} frame={1} fallbackFontSize={fallbackFont} />
-                            ) : (
-                              <View style={styles.zoomSlotEmpty} />
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  );
-                })}
-              </Animated.View>
-            </GestureDetector>
-            <TouchableOpacity style={styles.zoomClose} onPress={closeZoom} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
-              <Text style={styles.zoomCloseText}>✕</Text>
-            </TouchableOpacity>
-            <Text style={styles.zoomViewerHint}>Pinch to zoom · drag to move</Text>
-          </View>
-          </GestureHandlerRootView>
-        )}
-      </Modal>
 
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation
