@@ -11,6 +11,7 @@ import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { LabelThumb } from '../../src/components/LabelThumb';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineRack, CellarWine } from '../../src/types/wine';
@@ -213,15 +214,18 @@ export default function RacksScreen() {
                     onPress={() => router.push(`/cellar/${w.id}`)}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.recentName} numberOfLines={1}>
-                      {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
-                    </Text>
-                    <View style={styles.recentMetaRow}>
-                      <Text style={styles.recentMeta}>{formatCreatedDate(w.created_at)}</Text>
-                      <Text style={styles.recentMetaDot}>·</Text>
-                      <Text style={styles.recentMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
-                      <Text style={styles.recentMetaDot}>·</Text>
-                      <Text style={styles.recentMeta} numberOfLines={1}>{rackNameByWineId[w.id] ?? 'Not in a rack'}</Text>
+                    <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.recentThumb} />
+                    <View style={styles.recentMain}>
+                      <Text style={styles.recentName} numberOfLines={1}>
+                        {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
+                      </Text>
+                      <View style={styles.recentMetaRow}>
+                        <Text style={styles.recentMeta}>{formatCreatedDate(w.created_at)}</Text>
+                        <Text style={styles.recentMetaDot}>·</Text>
+                        <Text style={styles.recentMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
+                        <Text style={styles.recentMetaDot}>·</Text>
+                        <Text style={styles.recentMeta} numberOfLines={1}>{rackNameByWineId[w.id] ?? 'Not in a rack'}</Text>
+                      </View>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -302,7 +306,9 @@ const styles = StyleSheet.create({
   fullListButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   // Inter — meta label
   recentLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.xs },
-  recentRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  recentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  recentThumb: { width: 34, height: 44 },
+  recentMain: { flex: 1 },
   // Inter — wine card name
   recentName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   // Inter — wine detail caption
