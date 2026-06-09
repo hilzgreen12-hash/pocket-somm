@@ -110,6 +110,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
           userScore,
           isFavourite,
           reviewDate: reviewDate.trim() || null,
+          // A hand-entered "Add a Review" is a standalone review, not a
+          // restaurant scan pick — tag it 'other' so it lands in Your Wine
+          // Reviews but never shows under You · Your Restaurants · Bottle
+          // Picks (which lists scan-flow picks, source !== 'other').
+          source: 'other',
         });
       } else {
         const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
