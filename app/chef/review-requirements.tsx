@@ -239,10 +239,15 @@ export default function ReviewRequirementsScreen() {
 
   return (
     <KeyboardAwareScrollView style={styles.container} contentContainerStyle={styles.content} bottomOffset={24}>
-      <TouchableOpacity onPress={() => router.back()} style={styles.backTop} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-        <Text style={styles.backTopText}>Back</Text>
-      </TouchableOpacity>
-      <Text style={styles.heading}>Recipe Requirements</Text>
+      {/* Standard header bar (matches Find a Wine Pairing): Back / 20pt
+          centred title / spacer, with the blurb beneath at 16pt italic. */}
+      <View style={styles.headerBar}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Text style={styles.backTopText}>Back</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Recipe Requirements</Text>
+        <View style={{ width: 44 }} />
+      </View>
       <Text style={styles.subheading}>
         Vinster will use your profile preferences to guide its recipe recommendations. Input any dietary restrictions or allergies to consider for this particular recipe below.
       </Text>
@@ -411,21 +416,23 @@ export default function ReviewRequirementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: 60 },
+  content: { paddingTop: 80, paddingHorizontal: spacing.xl, paddingBottom: 60 },
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
-  subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
+  subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: spacing.xs, textTransform: 'uppercase', letterSpacing: 0.5 },
   // Lower-case parenthetical beside the Dietary/Allergies labels.
   labelHint: { textTransform: 'none', fontFamily: fonts.bodyItalic, fontSize: 11, letterSpacing: 0, color: colors.textMuted },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top', marginBottom: spacing.lg },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 72, textAlignVertical: 'top', marginBottom: spacing.lg },
   // Free-text box shown when "Other" is picked in the Dietary/Allergies dropdowns.
-  customInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginTop: -spacing.sm, marginBottom: spacing.lg },
-  select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, backgroundColor: colors.surface, marginBottom: spacing.lg },
-  selectValue: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, flex: 1 },
+  customInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginTop: -spacing.sm, marginBottom: spacing.lg },
+  select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  selectValue: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flex: 1 },
   selectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
-  continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
-  continueButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  continueButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   back: { alignItems: 'center', paddingVertical: spacing.lg },
   backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   // Top-left Back, matching the rest of the app.
