@@ -771,6 +771,13 @@ export default function ResultsScreen() {
           exists (e.g. View Last Result), blank for a fresh review. */}
       {reviewSessionId ? (() => {
         const item = archive.find((a) => a.id === reviewSessionId) ?? null;
+        // Only the wines the user actually picked belong under "Your Bottle
+        // Picks" — not every wine Vinster recommended. Keep the original
+        // recommendation index alongside each pick so "Review this wine →"
+        // still opens the right wine.
+        const pickedWines = recommendation.wines
+          .map((w, i) => ({ w, i }))
+          .filter(({ i }) => chosenIndexes.has(i));
         return (
           <RestaurantReviewModal
             visible={restaurantReviewOpen}
@@ -781,8 +788,8 @@ export default function ResultsScreen() {
             initialFavourite={item?.isFavourite ?? false}
             city={stampCity}
             date={stampDate}
-            wines={recommendation.wines.map((w) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
-            onReviewWine={(i) => { setRestaurantReviewOpen(false); setChosenModalWine(recommendation.wines[i]); }}
+            wines={pickedWines.map(({ w }) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
+            onReviewWine={(idx) => { setRestaurantReviewOpen(false); setChosenModalWine(pickedWines[idx]?.w ?? null); }}
             onClose={() => setRestaurantReviewOpen(false)}
             onSaved={(details) => {
               setRestaurantReviewOpen(false);
