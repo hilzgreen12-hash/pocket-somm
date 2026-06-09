@@ -178,8 +178,12 @@ export default function FindPairingScreen() {
 
       {/* Budget? Baller — inline header via the slider's label prop, mirroring List. */}
       <View style={styles.budgetBlock}>
-        <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" />
+        <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" compact />
       </View>
+
+      {/* Rule between the budget slider and the From My Cellar / Suggest a
+          Style / Find Pairing buttons. */}
+      <View style={styles.divider} />
 
       <View style={styles.toggleRow}>
         <TouchableOpacity
@@ -248,13 +252,13 @@ const styles = StyleSheet.create({
   loadingBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   loadingStay: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textAlign: 'center', opacity: 0.8 },
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl, paddingTop: 56, paddingBottom: 60 },
+  content: { padding: spacing.xl, paddingTop: 80, paddingBottom: 60 },
   backRow: { alignSelf: 'flex-start', marginBottom: spacing.xl },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   // Cellar-style header bar.
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, textAlign: 'center', marginBottom: spacing.md },
+  blurb: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.md },
   // Inline preferences link — inherits the blurb's font/size, gold + underline.
   blurbLink: { color: colors.gold, textDecorationLine: 'underline' },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
@@ -267,11 +271,11 @@ const styles = StyleSheet.create({
   styleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.lg },
   rowLabel: { marginBottom: 0, flexShrink: 1 },
   // Wine Style row — mirrors the Recipe Requirements accordion input rows.
-  styleAccordion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.lg },
+  styleAccordion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, marginTop: spacing.sm, marginBottom: spacing.lg },
   styleAccordionLeft: { flex: 1, alignItems: 'center' },
-  styleQuestion: { fontFamily: fonts.bodySemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
-  styleAccordionSummary: { fontFamily: fonts.bodyMedium, fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
-  styleAccordionChevron: { fontSize: 16, color: '#FFFFFF', marginLeft: spacing.sm },
+  styleQuestion: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
+  styleAccordionSummary: { fontFamily: fonts.bodyMedium, fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  styleAccordionChevron: { fontSize: 14, color: '#FFFFFF', marginLeft: spacing.sm },
   heading: { fontSize: 30, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
   profileNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
@@ -308,19 +312,19 @@ const styles = StyleSheet.create({
   difficultyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted },
   difficultyBtnTextActive: { color: colors.gold },
   toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.xl, width: '100%' },
-  toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
+  toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
   // Thin vertical rule between the From My Cellar / Suggest a Style buttons.
   toggleDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
   toggleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.08)' },
-  toggleText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.textMuted },
+  toggleText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.textMuted },
   toggleTextActive: { color: colors.gold },
-  toggleSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  toggleSub: { fontSize: 11, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   toggleSubActive: { color: colors.gold },
   styleGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.xl, width: '100%', justifyContent: 'center' },
   styleBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 20, paddingVertical: spacing.xs, paddingHorizontal: spacing.md },
   styleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   styleBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.textMuted },
   styleBtnTextActive: { color: colors.gold },
-  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', width: '100%' },
-  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 17 },
+  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
+  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
 });
