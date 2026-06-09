@@ -409,13 +409,17 @@ export default function FullCellarListScreen() {
           </View>
           <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('maturity')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Maturity</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
-        </TouchableOpacity>
+        {/* Maturity (drinking readiness) is irrelevant once bottles are
+            archived, so the Archive view hides this chip. */}
+        {!isArchiveView && (
+          <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('maturity')}>
+            <View style={styles.filterChipHeadingRow}>
+              <Text style={styles.filterChipLabel}>Maturity</Text>
+              <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
+            </View>
+            <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
+          </TouchableOpacity>
+        )}
         {/* Archived view — a dropdown like the other filters. Swaps the list
             between live and archived wines (Hide / Include / Only Archived).
             Hidden entirely in the dedicated archive view so the user can't
