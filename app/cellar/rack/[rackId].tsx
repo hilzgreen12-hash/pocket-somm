@@ -24,6 +24,16 @@ function truncate(str: string, max: number) {
   return str.length > max ? str.slice(0, max - 1) + '…' : str;
 }
 
+// Lets the rack search match a wine's drinking-window status as well as its
+// producer / name / region / vintage. Each status maps to the words a user
+// might type for it.
+const STATUS_SEARCH: { status: string; terms: string[] }[] = [
+  { status: 'too_young', terms: ['too young', 'young', 'hold'] },
+  { status: 'approaching', terms: ['approaching', 'approach'] },
+  { status: 'peak', terms: ['peak', 'drinking now', 'drink now', 'ready', 'drinking'] },
+  { status: 'declining', terms: ['declining', 'decline', 'fading', 'past peak'] },
+];
+
 export default function RackGridScreen() {
   const { rackId, highlight } = useLocalSearchParams<{ rackId: string; highlight?: string }>();
   const navigation = useNavigation();
@@ -578,25 +588,30 @@ export default function RackGridScreen() {
   }
 
   const filteredWines = useMemo(() => {
-    if (!searchQuery.trim()) return winesInRack;
-    const q = searchQuery.toLowerCase();
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return winesInRack;
+    // Match drinking-window status too ("drinking now", "declining", "too
+    // young", "approaching"), alongside producer / name / region / vintage.
+    const statuses = q.length >= 3
+      ? STATUS_SEARCH.filter(({ terms }) => terms.some((t) => t.includes(q) || q.includes(t))).map((s) => s.status)
+      : [];
     return winesInRack.filter(({ wine }) =>
       wine.wine_name.toLowerCase().includes(q) ||
       (wine.producer ?? '').toLowerCase().includes(q) ||
       (wine.region ?? '').toLowerCase().includes(q) ||
-      (wine.vintage ?? '').toString().includes(q)
+      (wine.grape_variety ?? '').toLowerCase().includes(q) ||
+      (wine.vintage ?? '').toString().includes(q) ||
+      statuses.includes(wine.drinking_window_status)
     );
   }, [winesInRack, searchQuery]);
 
-  // Auto-highlight when a search narrows to a single result. Do NOT clear on
-  // an empty search — that would wipe a highlight set by the ?highlight= param
-  // (a wine card's "In {rack} →" link) or by tapping the Rack Bottle List.
-  // A stale highlight clears when switching racks (the rackId effect above).
-  useEffect(() => {
-    if (searchQuery.trim() && filteredWines.length === 1) {
-      setHighlightedWineId(filteredWines[0].wine.id);
-    }
-  }, [filteredWines, searchQuery]);
+  // Bottles to highlight on the grid: every search match while searching,
+  // otherwise the single bottle picked from the list / a deep link. Searching
+  // a producer (or status) now lights up ALL matching bottles, not just one.
+  const highlightedIds = useMemo(() => {
+    if (searchQuery.trim()) return new Set(filteredWines.map(({ wine }) => wine.id));
+    return highlightedWineId ? new Set([highlightedWineId]) : new Set<string>();
+  }, [searchQuery, filteredWines, highlightedWineId]);
 
   if (isLoading || !rack) {
     return (
@@ -650,7 +665,7 @@ export default function RackGridScreen() {
                 style={styles.searchInput}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                placeholder="Search wines…"
+                placeholder="Search wines by name, readiness, vintage, variety, country…"
                 placeholderTextColor={colors.textMuted}
                 returnKeyType="search"
                 clearButtonMode="while-editing"
@@ -669,8 +684,8 @@ export default function RackGridScreen() {
               <TouchableOpacity onPress={() => setBottleListOpen((v) => !v)} activeOpacity={0.7}>
                 <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
               </TouchableOpacity>
-              {highlightedWineId && (
-                <TouchableOpacity onPress={() => setHighlightedWineId(null)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              {(highlightedWineId || searchQuery.trim().length > 0) && (
+                <TouchableOpacity onPress={() => { setHighlightedWineId(null); setSearchQuery(''); }} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Text style={styles.unselectLink}>Unselect</Text>
                 </TouchableOpacity>
               )}
@@ -778,8 +793,8 @@ export default function RackGridScreen() {
                   {Array.from({ length: rowDef.cols }, (_, col) => {
                     const slot = slotMap[`${rowDef.rowIndex},${col}`];
                     const wine = slot?.wine as CellarWine | null | undefined;
-                    const isHighlighted = !!highlightedWineId && wine?.id === highlightedWineId;
-                    const isDimmed = !!highlightedWineId && !!wine && wine.id !== highlightedWineId;
+                    const isHighlighted = !!wine && highlightedIds.has(wine.id);
+                    const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
                     const isMovingSource = !!moving && moving.row === rowDef.rowIndex && moving.col === col;
                     return (
                       <TouchableOpacity
@@ -1152,7 +1167,7 @@ const styles = StyleSheet.create({
   rackHintOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Cormorant — button text
   rackHintOkBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
   searchClear: { paddingLeft: spacing.sm, paddingVertical: spacing.sm },
