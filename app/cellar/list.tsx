@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
@@ -130,7 +130,12 @@ export default function FullCellarListScreen() {
   const [maturityFilter, setMaturityFilter] = useState<string>('All');   // 'All' | 'too_young' | 'approaching' | 'peak' | 'declining'
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
-  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>('hide');
+  // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
+  // to archived wines only and hides the Archived filter chip so nothing
+  // outside the archive can ever show.
+  const { archived } = useLocalSearchParams<{ archived?: string }>();
+  const isArchiveView = archived === '1';
+  const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
   // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
@@ -328,7 +333,7 @@ export default function FullCellarListScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Full Cellar List</Text>
+        <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
         <TouchableOpacity
           onPress={() => setAddWineOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
@@ -412,20 +417,24 @@ export default function FullCellarListScreen() {
           <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
         </TouchableOpacity>
         {/* Archived view — a dropdown like the other filters. Swaps the list
-            between live and archived wines (Hide / Include / Only Archived). */}
-        <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('archived')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Archived</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'archived' ? '▴' : '▾'}</Text>
-          </View>
-          <Text
-            style={[styles.filterChipValue, archivedFilter !== 'hide' && { color: colors.gold }]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {archivedLabel}
-          </Text>
-        </TouchableOpacity>
+            between live and archived wines (Hide / Include / Only Archived).
+            Hidden entirely in the dedicated archive view so the user can't
+            switch away from their archive. */}
+        {!isArchiveView && (
+          <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('archived')}>
+            <View style={styles.filterChipHeadingRow}>
+              <Text style={styles.filterChipLabel}>Archived</Text>
+              <Text style={styles.filterChipChevron}>{openDropdown === 'archived' ? '▴' : '▾'}</Text>
+            </View>
+            <Text
+              style={[styles.filterChipValue, archivedFilter !== 'hide' && { color: colors.gold }]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {archivedLabel}
+            </Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
 
       {/* Search sits below the filter chips and narrows whatever the chips
