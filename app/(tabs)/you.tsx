@@ -208,6 +208,8 @@ export default function YouScreen() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.divider} />
+
       {/* Account details — moved below the preference buttons. */}
       <View style={styles.block}>
         <View style={styles.row}>
