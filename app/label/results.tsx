@@ -15,7 +15,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
-import { assignSlots, getRackSlots } from '../../src/api/racks';
+import { assignSlots, getRackSlots, getSlotAssignments } from '../../src/api/racks';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -96,6 +96,31 @@ export default function LabelResultsScreen() {
     queryFn: () => getRackSlots(pendingSlot!.rackId),
     enabled: !!pendingSlot,
   });
+
+  // Across-all-racks placement map, so the duplicate prompt can tell the user
+  // *where* their existing bottles already sit (e.g. "in your Kitchen rack").
+  const allRackIds = racks.map((r) => r.id);
+  const { data: allSlotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', allRackIds],
+    queryFn: () => getSlotAssignments(allRackIds),
+    enabled: allRackIds.length > 0,
+  });
+
+  // Human-readable description of where a cellar wine's bottles are placed.
+  // Returns "in your X rack", "across your X and Y racks", or "unplaced".
+  function existingLocationText(cellarWineId: string): string {
+    const rackNames = Array.from(
+      new Set(
+        allSlotAssignments
+          .filter((s) => s.cellar_wine_id === cellarWineId)
+          .map((s) => racks.find((r) => r.id === s.rack_id)?.name)
+          .filter((n): n is string => !!n),
+      ),
+    );
+    if (rackNames.length === 0) return 'currently unplaced';
+    if (rackNames.length === 1) return `in your ${rackNames[0]} rack`;
+    return `across your ${rackNames.slice(0, -1).join(', ')} and ${rackNames[rackNames.length - 1]} racks`;
+  }
 
   if (!wineDetailsConfirmed || !intelligence) {
     return (
@@ -542,14 +567,18 @@ export default function LabelResultsScreen() {
   async function handleAddToCellar() {
     if (!session?.user.id) return;
     if (matchingExisting) {
+      // Exact match (producer + wine name + vintage). We never create a
+      // second Full Cellar List line for the same bottle — that would
+      // fragment the count. Instead we tell the user where their existing
+      // bottles are and fold this one into that listing's total.
       const existingQty = matchingExisting.quantity;
       const wineLabel = `${matchingExisting.wine_name}${matchingExisting.vintage ? ` ${matchingExisting.vintage}` : ''}`;
+      const where = existingLocationText(matchingExisting.id);
       showAlert({
         title: 'Already in your cellar',
-        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel}. Add this bottle to that listing?`,
+        body: `You have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel} ${where}. Vinster won't create a duplicate listing — this bottle is added to that total.`,
         buttons: [
-          { text: 'Yes', onPress: () => performMerge() },
-          { text: 'No, create a new line', onPress: performNewEntry },
+          { text: 'Add to my bottles', onPress: () => performMerge() },
           { text: 'Cancel', style: 'cancel' },
         ],
       });
