@@ -81,6 +81,13 @@ export default function CellarStatsScreen() {
 
   const winesWithEstimate = wines.filter((w) => w.estimated_value != null);
   const winesNeedingEstimate = wines.filter((w) => w.estimated_value == null);
+  // Split the unvalued wines: "not yet valued" (never attempted) vs
+  // "unvaluable" (Vinster tried — estimated_value_at is stamped — but had no
+  // market data, so the value came back null). Without this split, wines
+  // Vinster can't value keep showing as "added since your last valuation"
+  // even after an update, which reads like the update did nothing.
+  const winesNotYetValued = winesNeedingEstimate.filter((w) => !w.estimated_value_at);
+  const winesUnvaluable = winesNeedingEstimate.filter((w) => !!w.estimated_value_at);
   const lastEstimateAt = useMemo(() => {
     let latest: string | null = null;
     for (const w of wines) {
@@ -260,32 +267,40 @@ export default function CellarStatsScreen() {
               </Text>
             </View>
 
-            {wines.length === 0 ? null : winesWithEstimate.length === 0 ? (
-              <TouchableOpacity style={styles.calcBtn} onPress={handleCalculate} activeOpacity={0.8}>
-                <Text style={styles.calcBtnText}>Calculate</Text>
-              </TouchableOpacity>
-            ) : winesNeedingEstimate.length > 0 ? (
+            {wines.length === 0 ? null : (
               <View style={styles.estimateMetaStack}>
-                {lastEstimateDate ? (
+                {lastEstimateDate && winesWithEstimate.length > 0 ? (
                   <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
                 ) : null}
-                <Text style={styles.estimateUpdateNote}>
-                  You've added {winesNeedingEstimate.length} wine{winesNeedingEstimate.length === 1 ? '' : 's'} since your last valuation
-                </Text>
-                <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                  <Text style={styles.recalcLink}>
-                    Add {winesNeedingEstimate.length} wine{winesNeedingEstimate.length === 1 ? '' : 's'} to total cellar value
+
+                {winesWithEstimate.length === 0 && winesNotYetValued.length > 0 ? (
+                  <TouchableOpacity style={styles.calcBtn} onPress={handleCalculate} activeOpacity={0.8}>
+                    <Text style={styles.calcBtnText}>Calculate</Text>
+                  </TouchableOpacity>
+                ) : winesNotYetValued.length > 0 ? (
+                  <>
+                    <Text style={styles.estimateUpdateNote}>
+                      You've added {winesNotYetValued.length} wine{winesNotYetValued.length === 1 ? '' : 's'} since your last valuation
+                    </Text>
+                    <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
+                      <Text style={styles.recalcLink}>
+                        Add {winesNotYetValued.length} wine{winesNotYetValued.length === 1 ? '' : 's'} to total cellar value
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : winesWithEstimate.length > 0 ? (
+                  <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
+                    <Text style={styles.recalcLink}>Recalculate</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* Make it explicit when wines were valued but came back blank
+                    so the count doesn't read as a failed update. */}
+                {winesUnvaluable.length > 0 ? (
+                  <Text style={styles.unvaluableNote}>
+                    {winesUnvaluable.length} wine{winesUnvaluable.length === 1 ? '' : 's'} couldn't be valued — Vinster doesn't have enough market data for {winesUnvaluable.length === 1 ? 'it' : 'them'} yet.
                   </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.estimateMeta}>
-                {lastEstimateDate ? (
-                  <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
                 ) : null}
-                <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                  <Text style={styles.recalcLink}>Recalculate</Text>
-                </TouchableOpacity>
               </View>
             )}
           </View>
@@ -402,6 +417,7 @@ const styles = StyleSheet.create({
   lastEstimate: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   // Cormorant — inline action link reads as a button
   recalcLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
+  unvaluableNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, marginTop: spacing.xs },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   // Inter — list rank
   breakdownRank: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold, width: 24 },
