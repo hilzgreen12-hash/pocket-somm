@@ -618,7 +618,7 @@ export default function RackGridScreen() {
       </View>
 
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
           Pinch to zoom · Select a thumbnail to view wine intel, delete, or move a bottle · Swipe between your racks
