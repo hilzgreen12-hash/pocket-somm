@@ -219,6 +219,11 @@ export default function ChosenWinesScreen() {
       // reviewed straight from List → Review Wine — still belongs here.
       // (Wish-listed picks stay reachable via the Wish List slice above.)
       if (it.source === 'restaurant' && !chosenHasReview(it.wine as ChosenWine)) return false;
+    } else if (typeFilter === 'restaurant') {
+      // Restaurant Wines slice — restaurant-source reviews only, and only
+      // those actually reviewed (bare picks stay in Your Restaurants).
+      if (it.source !== 'restaurant') return false;
+      if (!chosenHasReview(it.wine as ChosenWine)) return false;
     } else if (it.source !== typeFilter) {
       return false;
     }
@@ -263,8 +268,10 @@ export default function ChosenWinesScreen() {
   const PORTFOLIO_OPTIONS: { value: TypeFilter; label: string }[] = [
     { value: 'all',        label: 'All Reviews' },
     { value: 'cellar',     label: 'Cellar Wines' },
-    // Restaurant bottle picks now live in You · Your Restaurants, so the
-    // 'restaurant' slice is gone from here.
+    // Restaurant Wines = wines reviewed at a restaurant (source 'restaurant')
+    // that carry an actual review. Bare bottle picks with no review still
+    // live only in You · Your Restaurants and are filtered out below.
+    { value: 'restaurant', label: 'Restaurant Wines' },
     { value: 'wishlist',   label: 'Wish List Wines' },
     // 'Other' captures reviews saved via the "Review without adding"
     // path on the Cellar add-wine flow (migration 042 column).
@@ -278,7 +285,7 @@ export default function ChosenWinesScreen() {
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'sort') return { title: 'Your Score', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
-    if (field === 'type') return { title: 'Portfolio', options: PORTFOLIO_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
+    if (field === 'type') return { title: 'Collection', options: PORTFOLIO_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
     if (field === 'location') {
       return {
         title: 'Filter by location',
@@ -612,7 +619,7 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Portfolio</Text>
+                <Text style={styles.filterChipLabel}>Collection</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
               </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{portfolioLabel}</Text>
