@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { Session } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api/supabase';
 
 interface AuthContextValue {
@@ -28,6 +29,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUserId = next?.user.id ?? null;
       if (prevUserId.current !== undefined && prevUserId.current !== nextUserId) {
         qc.clear();
+        // Also wipe the non-user-scoped local caches (recent scans for "View
+        // Last Result", and city autocomplete history) — they live in global
+        // AsyncStorage so qc.clear() alone leaves them readable by the next
+        // account. Keys mirror useScanHistory + useCityHistory.
+        AsyncStorage.multiRemove(['vinster_scan_history', 'vinster_city_history']).catch(() => {});
       }
       prevUserId.current = nextUserId;
       setSession(next);
