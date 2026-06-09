@@ -100,11 +100,9 @@ export function RestaurantReviewModal({
     setSaving(true);
     try {
       await persist();
-      try {
-        await publishRestaurantSessionToCommunity(communityPayload());
-      } catch (err) {
-        console.warn('[community] publishRestaurantSessionToCommunity failed (non-fatal):', err);
-      }
+      // Saving a restaurant review no longer auto-publishes it. Community
+      // sharing happens only via the explicit "Share to Community" button
+      // (handleShareToCommunity) so nothing reaches the public feed silently.
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
       onSaved({ name: restaurantName.trim() || null, city: cityValue.trim() || null });

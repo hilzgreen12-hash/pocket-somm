@@ -1,7 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { getCellarWines, getWishListWines, addCellarWine, updateCellarWine, deleteCellarWine, archiveCellarWine, getArchivedWines, shareCellar, getCellarShares, removeCellarShare } from '../api/cellar';
-import { publishCellarWineReviewToCommunity } from '../services/communityPublish';
 import type { CellarWine } from '../types/wine';
 
 // Review fields that should trigger a community-feed publish when they
@@ -38,13 +37,9 @@ export function useCellar() {
   const updateWine = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: Partial<CellarWine> }) => {
       await updateCellarWine(id, updates);
-      if (touchesReview(updates)) {
-        const existing = (qc.getQueryData<CellarWine[]>(['cellar', userId]) ?? []).find((w) => w.id === id);
-        if (existing) {
-          const merged = { ...existing, ...updates } as CellarWine;
-          try { await publishCellarWineReviewToCommunity(merged); } catch (err) { console.warn('[community] publishCellarWineReviewToCommunity failed (non-fatal):', err); }
-        }
-      }
+      // Community sharing is opt-in only — reviewing a cellar wine no longer
+      // auto-publishes it. The "Share to Community" button on the wine card
+      // (and review modal) is the single, explicit publish path.
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['cellar', userId] });

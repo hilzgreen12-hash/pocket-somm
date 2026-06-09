@@ -2,7 +2,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
 import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
 import { syncReviewToCellar } from '../services/reviewSync';
-import { publishChosenWineToCommunity } from '../services/communityPublish';
 import type { ChosenWine } from '../types/wine';
 
 export function useChosenWines() {
@@ -18,14 +17,15 @@ export function useChosenWines() {
 
   const save = useMutation({
     mutationFn: async (input: SaveChosenWineInput) => {
-      const row = await saveChosenWine(userId!, input);
+      await saveChosenWine(userId!, input);
       await syncReviewToCellar(
         userId!,
         { producer: input.wine.producer, wineName: input.wine.name, vintage: input.wine.vintage },
         { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
         { setReviewDate: true },
       );
-      try { await publishChosenWineToCommunity(row); } catch (err) { console.warn('[community] publishChosenWineToCommunity failed (non-fatal):', err); }
+      // Community sharing is opt-in only — it happens when the user taps
+      // "Share to Community" on a review, never automatically on save.
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
@@ -43,18 +43,8 @@ export function useChosenWines() {
         { producer: input.producer, wineName: input.wineName, vintage: input.vintage },
         { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
       );
-      const existing = (qc.getQueryData<ChosenWine[]>(['chosen-wines', userId]) ?? []).find((w) => w.id === id);
-      if (existing) {
-        const merged: ChosenWine = {
-          ...existing,
-          restaurant_name: input.restaurantName || null,
-          city: input.city || null,
-          tasting_note: input.tastingNote || null,
-          other_observations: input.otherObservations || null,
-          user_score: input.userScore,
-        };
-        try { await publishChosenWineToCommunity(merged); } catch (err) { console.warn('[community] publishChosenWineToCommunity (update) failed (non-fatal):', err); }
-      }
+      // Community sharing stays opt-in (see save above) — editing a review
+      // no longer republishes it automatically.
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
@@ -66,7 +56,7 @@ export function useChosenWines() {
 
   const saveManual = useMutation({
     mutationFn: async (input: ManualSaveChosenWineInput) => {
-      const row = await saveManualChosenWine(userId!, input);
+      await saveManualChosenWine(userId!, input);
       // Sync to a matching cellar/wishlist row when one exists, same as
       // the scan-driven save path.
       await syncReviewToCellar(
@@ -75,7 +65,7 @@ export function useChosenWines() {
         { tastingNote: input.tastingNote, restaurantName: input.restaurantName, city: input.city, userScore: input.userScore },
         { setReviewDate: true },
       );
-      try { await publishChosenWineToCommunity(row); } catch (err) { console.warn('[community] publishChosenWineToCommunity (manual) failed (non-fatal):', err); }
+      // Community sharing stays opt-in (see save above).
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
