@@ -11,6 +11,7 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useCellar } from '../../../src/hooks/useCellar';
+import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks } from '../../../src/api/racks';
 import { supabase } from '../../../src/api/supabase';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
@@ -47,8 +48,17 @@ export default function RackGridScreen() {
   const qc = useQueryClient();
 
   const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode } = useRackStore();
+  const { customFilters, create: createFilter, remove: removeFilter } = useCustomFilters();
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  // Custom filters (named collections of wines) — the dropdown opposite the
+  // Rack Bottle List, plus the create flow.
+  const [customFiltersOpen, setCustomFiltersOpen] = useState(false);
+  const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
+  const [createFilterOpen, setCreateFilterOpen] = useState(false);
+  const [filterNameDraft, setFilterNameDraft] = useState('');
+  const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
+  const [savingFilter, setSavingFilter] = useState(false);
   const [bottleListOpen, setBottleListOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
   const [moving, setMoving] = useState<{ row: number; col: number; wineId: string; wineName: string } | null>(null);
@@ -128,6 +138,8 @@ export default function RackGridScreen() {
   // they don't carry over a stale query from the previous one.
   useEffect(() => {
     setSearchQuery('');
+    setActiveCustomFilterId(null);
+    setCustomFiltersOpen(false);
     // Highlight the bottle the user came in to find (e.g. from a wine card's
     // "In {rack} →" link), otherwise clear any carried-over highlight when
     // swiping to another rack.
@@ -610,8 +622,60 @@ export default function RackGridScreen() {
   // a producer (or status) now lights up ALL matching bottles, not just one.
   const highlightedIds = useMemo(() => {
     if (searchQuery.trim()) return new Set(filteredWines.map(({ wine }) => wine.id));
+    if (activeCustomFilterId) {
+      const f = customFilters.find((cf) => cf.id === activeCustomFilterId);
+      return new Set(f?.wineIds ?? []);
+    }
     return highlightedWineId ? new Set([highlightedWineId]) : new Set<string>();
-  }, [searchQuery, filteredWines, highlightedWineId]);
+  }, [searchQuery, filteredWines, highlightedWineId, activeCustomFilterId, customFilters]);
+
+  // Apply a saved filter → highlight its bottles (those present in this rack).
+  function applyCustomFilter(id: string) {
+    setActiveCustomFilterId(id);
+    setHighlightedWineId(null);
+    setSearchQuery('');
+    setCustomFiltersOpen(false);
+  }
+  function openCreateFilter() {
+    setFilterNameDraft('');
+    setSelectedWineIds(new Set());
+    setCreateFilterOpen(true);
+  }
+  function toggleWineInSelection(id: string) {
+    setSelectedWineIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+  async function saveCustomFilter() {
+    const name = filterNameDraft.trim();
+    if (!name) { setSavedMsg('Name your filter first'); return; }
+    if (selectedWineIds.size === 0) { setSavedMsg('Pick at least one wine'); return; }
+    setSavingFilter(true);
+    try {
+      await createFilter.mutateAsync({ name, wineIds: Array.from(selectedWineIds) });
+      setCreateFilterOpen(false);
+      setSavedMsg(`"${name}" filter created`);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
+    }
+  }
+  function confirmDeleteFilter(id: string, name: string) {
+    showAlert({
+      title: 'Delete filter?',
+      body: `Remove "${name}"? Your wines stay in the cellar — only the filter is deleted.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => {
+            if (activeCustomFilterId === id) setActiveCustomFilterId(null);
+            removeFilter.mutate(id);
+          } },
+      ],
+    });
+  }
 
   if (isLoading || !rack) {
     return (
@@ -664,7 +728,7 @@ export default function RackGridScreen() {
               <TextInput
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(t) => { setSearchQuery(t); setActiveCustomFilterId(null); }}
                 placeholder="Search wines by name, readiness, vintage, variety, country…"
                 placeholderTextColor={colors.textMuted}
                 returnKeyType="search"
@@ -681,15 +745,19 @@ export default function RackGridScreen() {
                 gold prompt. Expand it, tap a wine, and it closes + highlights
                 that bottle's placement in the grid. */}
             <View style={styles.bottleListHeaderRow}>
-              <TouchableOpacity onPress={() => setBottleListOpen((v) => !v)} activeOpacity={0.7}>
+              <TouchableOpacity onPress={() => { setBottleListOpen((v) => !v); setCustomFiltersOpen(false); }} activeOpacity={0.7}>
                 <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
               </TouchableOpacity>
-              {(highlightedWineId || searchQuery.trim().length > 0) && (
-                <TouchableOpacity onPress={() => { setHighlightedWineId(null); setSearchQuery(''); }} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Text style={styles.unselectLink}>Unselect</Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity onPress={() => { setCustomFiltersOpen((v) => !v); setBottleListOpen(false); }} activeOpacity={0.7}>
+                <Text style={styles.bottleListLink}>Custom Filters {customFiltersOpen ? '▴' : '▾'}</Text>
+              </TouchableOpacity>
             </View>
+
+            {(highlightedWineId || searchQuery.trim().length > 0 || activeCustomFilterId) && (
+              <TouchableOpacity style={styles.unselectRow} onPress={() => { setHighlightedWineId(null); setSearchQuery(''); setActiveCustomFilterId(null); }} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.unselectLink}>Unselect</Text>
+              </TouchableOpacity>
+            )}
 
             {bottleListOpen && (
               <View style={styles.bottleList}>
@@ -703,7 +771,7 @@ export default function RackGridScreen() {
                         <TouchableOpacity
                           key={wine.id}
                           style={[styles.wineRow, active && styles.wineRowActive]}
-                          onPress={() => { setHighlightedWineId(wine.id); setBottleListOpen(false); }}
+                          onPress={() => { setHighlightedWineId(wine.id); setActiveCustomFilterId(null); setSearchQuery(''); setBottleListOpen(false); }}
                           onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name, wine.quantity ?? 1)}
                           delayLongPress={400}
                         >
@@ -714,6 +782,40 @@ export default function RackGridScreen() {
                           </View>
                           <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
                             {count} {count === 1 ? 'bottle' : 'bottles'}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                )}
+              </View>
+            )}
+
+            {customFiltersOpen && (
+              <View style={styles.bottleList}>
+                <TouchableOpacity onPress={openCreateFilter} style={styles.createFilterRow} activeOpacity={0.7}>
+                  <Text style={styles.createFilterLink}>+ Create a custom filter</Text>
+                </TouchableOpacity>
+                {customFilters.length === 0 ? (
+                  <Text style={styles.searchNoResults}>No custom filters yet — create one to group wines (e.g. Christmas Wines).</Text>
+                ) : (
+                  <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+                    {customFilters.map((f) => {
+                      const active = activeCustomFilterId === f.id;
+                      const inThisRack = winesInRack.filter(({ wine }) => f.wineIds.includes(wine.id)).length;
+                      return (
+                        <TouchableOpacity
+                          key={f.id}
+                          style={[styles.wineRow, active && styles.wineRowActive]}
+                          onPress={() => applyCustomFilter(f.id)}
+                          onLongPress={() => confirmDeleteFilter(f.id, f.name)}
+                          delayLongPress={400}
+                        >
+                          <View style={styles.wineRowMain}>
+                            <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>{f.name}</Text>
+                          </View>
+                          <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
+                            {inThisRack}/{f.wineIds.length} here
                           </Text>
                         </TouchableOpacity>
                       );
@@ -1038,6 +1140,44 @@ export default function RackGridScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Create a custom filter — name it, then tick the wines it holds. */}
+      <Modal visible={createFilterOpen} transparent animationType="fade" onRequestClose={() => setCreateFilterOpen(false)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.filterModalOverlay}>
+          <View style={styles.filterModalSheet}>
+            <Text style={styles.filterModalTitle}>New custom filter</Text>
+            <TextInput
+              style={styles.filterNameInput}
+              value={filterNameDraft}
+              onChangeText={setFilterNameDraft}
+              placeholder="Filter name (e.g. Christmas Wines)"
+              placeholderTextColor={colors.textMuted}
+            />
+            <Text style={styles.filterPickHint}>Choose the wines for this filter — {selectedWineIds.size} selected</Text>
+            <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
+              {wines.length === 0 ? (
+                <Text style={styles.searchNoResults}>Your cellar is empty.</Text>
+              ) : wines.map((w) => {
+                const checked = selectedWineIds.has(w.id);
+                return (
+                  <TouchableOpacity key={w.id} style={styles.filterPickRow} onPress={() => toggleWineInSelection(w.id)} activeOpacity={0.7}>
+                    <Text style={[styles.filterCheckbox, checked && styles.filterCheckboxOn]}>{checked ? '☑' : '☐'}</Text>
+                    <Text style={styles.filterPickName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <View style={styles.filterModalActions}>
+              <TouchableOpacity onPress={() => setCreateFilterOpen(false)}>
+                <Text style={styles.filterCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.filterSaveBtn, savingFilter && { opacity: 0.5 }]} onPress={saveCustomFilter} disabled={savingFilter}>
+                <Text style={styles.filterSaveBtnText}>{savingFilter ? 'Saving…' : 'Save Filter'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
     </View>
     </GestureDetector>
   );
@@ -1062,7 +1202,24 @@ const styles = StyleSheet.create({
   bottleListHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // "Unselect" — clears the highlighted bottle, shown only while one is selected.
   unselectLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
+  unselectRow: { alignItems: 'center', paddingTop: 2 },
   bottleList: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  createFilterRow: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  createFilterLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Create-custom-filter modal.
+  filterModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  filterModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  filterModalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  filterNameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
+  filterPickHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginBottom: spacing.xs },
+  filterPickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  filterCheckbox: { fontSize: 20, color: colors.textMuted },
+  filterCheckboxOn: { color: colors.gold },
+  filterPickName: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
+  filterModalActions: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.md },
+  filterCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
+  filterSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  filterSaveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   swipeBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs, gap: spacing.sm },
   swipeSide: { flex: 1, paddingVertical: 4 },
   // Cormorant — inline swipe arrow link reads as a button
