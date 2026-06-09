@@ -1114,36 +1114,6 @@ export default function CellarWineDetail() {
       <View style={styles.cardDivider} />
       <Text style={styles.reviewsHeader}>Reviews</Text>
 
-      {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
-          chevron toggle that mirrors the List results "Sommelier Note".
-          The "(what's this)" link surfaces a short explainer. Hidden for
-          wishlist wines: their stored note is the user's own, and
-          Vinster's AI review only exists once the wine is in the cellar. */}
-      {!isWishlist && wine.tasting_notes ? (
-        <View style={styles.reviewSubsection}>
-          <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity
-              onPress={() => setVinstersNoteOpen((v) => !v)}
-              activeOpacity={0.7}
-              style={styles.vinsterReviewToggle}
-            >
-              <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
-              <Ionicons
-                name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
-                size={16}
-                color={colors.gold}
-              />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setWhatsThisOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.whatsThisLink}>what's this</Text>
-            </TouchableOpacity>
-          </View>
-          {vinstersNoteOpen ? (
-            <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
       <View style={styles.reviewSubsection}>
         {/* Your Review — a chevron header (like Vinster's Review). Expand to
             edit; tap the header again to auto-save and collapse. */}
@@ -1304,6 +1274,36 @@ export default function CellarWineDetail() {
         ) : null}
       </View>
       )}
+
+      {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
+          chevron toggle. Sits last of the three review blocks (after Your
+          Review and Personal Notes). The "(what's this)" link surfaces a
+          short explainer. Hidden for wishlist wines: their stored note is
+          the user's own, and Vinster's AI review only exists in the cellar. */}
+      {!isWishlist && wine.tasting_notes ? (
+        <View style={styles.reviewSubsection}>
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity
+              onPress={() => setVinstersNoteOpen((v) => !v)}
+              activeOpacity={0.7}
+              style={styles.vinsterReviewToggle}
+            >
+              <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
+              <Ionicons
+                name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
+                size={16}
+                color={colors.gold}
+              />
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setWhatsThisOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.whatsThisLink}>what's this</Text>
+            </TouchableOpacity>
+          </View>
+          {vinstersNoteOpen ? (
+            <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+          ) : null}
+        </View>
+      ) : null}
 
       {!isWishlist && <View style={styles.cardDivider} />}
 
