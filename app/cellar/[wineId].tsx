@@ -1086,6 +1086,11 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>+ Add bottles</Text>
             </TouchableOpacity>
           )}
+          {!isArchived && !isWishlist && wine.quantity > 0 && (
+            <TouchableOpacity onPress={() => setArchiveModalOpen(true)}>
+              <Text style={styles.statAction}>- Remove bottles</Text>
+            </TouchableOpacity>
+          )}
           {!isArchived && !isWishlist && !wineRack && (
             <TouchableOpacity onPress={handleAddToRack}>
               <Text style={styles.statAction}>+ Add to Fridge/Rack</Text>
