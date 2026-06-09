@@ -1,7 +1,7 @@
 import { useMemo, useRef } from 'react';
 import { Modal, View, Image, Text, TouchableOpacity, StyleSheet, Animated, useWindowDimensions } from 'react-native';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import { labelPublicUrl } from '../api/labelPhotos';
+import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -19,7 +19,8 @@ interface Props {
 // GestureHandlerRootView or the gestures are dead.
 export function LabelPhotoViewer({ visible, path, fallbackText, onClose }: Props) {
   const { width } = useWindowDimensions();
-  const url = labelPublicUrl(path);
+  const url = useLabelImageUrl(path);
+  const loading = !!path && !url;
 
   const scale = useRef(new Animated.Value(1)).current;
   const tx = useRef(new Animated.Value(0)).current;
@@ -82,6 +83,8 @@ export function LabelPhotoViewer({ visible, path, fallbackText, onClose }: Props
                 <View style={[styles.frame, { width: frameW, height: frameH }]}>
                   {url ? (
                     <Image source={{ uri: url }} style={styles.img} resizeMode="cover" />
+                  ) : loading ? (
+                    <View style={styles.fallback} />
                   ) : (
                     <View style={styles.fallback}>
                       <Text style={styles.fallbackText} numberOfLines={4}>{fallbackText?.trim() || 'No photo'}</Text>

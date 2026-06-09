@@ -63,11 +63,16 @@ export async function uploadLabelImage(userId: string, localUri: string, wineId:
   return path;
 }
 
-// Public URL for a stored label path. The bucket is public-read for now
-// (to be hardened to signed URLs pre-launch). A cache-buster keyed on the
-// path keeps a re-uploaded photo from showing the stale cached image.
-export function labelPublicUrl(path: string | null | undefined): string | null {
+// Time-limited signed URL for a stored label path. Generated per-view with
+// a short expiry so a user's label photos aren't reachable via a permanent
+// public link. createSignedUrl works whether the bucket is public or
+// private, so this is safe to ship ahead of flipping the bucket to private
+// (which is the final step that actually closes public access). Each call
+// mints a fresh token, so a re-uploaded photo never shows a stale image.
+// Returns null on error so callers fall back to the blank-label card.
+export async function labelSignedUrl(path: string | null | undefined, expiresIn = 3600): Promise<string | null> {
   if (!path) return null;
-  const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-  return data?.publicUrl ?? null;
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, expiresIn);
+  if (error) return null;
+  return data?.signedUrl ?? null;
 }

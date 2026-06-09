@@ -1,5 +1,5 @@
 import { View, Image, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { labelPublicUrl } from '../api/labelPhotos';
+import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -20,7 +20,10 @@ interface Props {
 // A wine label presented as a framed picture: the photo sits inside a cream
 // mat so a grid of them reads as a cohesive gallery against any background.
 export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, fallbackFontSize = 11 }: Props) {
-  const url = labelPublicUrl(path);
+  const url = useLabelImageUrl(path);
+  // A real path whose signed URL hasn't resolved yet is "loading" — show a
+  // plain framed tile rather than the "No photo" card so we don't flash it.
+  const loading = !!path && !url;
   return (
     <View style={[styles.frame, { padding: frame, borderRadius: radius + frame }, style]}>
       {url ? (
@@ -29,6 +32,8 @@ export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, f
           style={[styles.img, { borderRadius: radius }]}
           resizeMode="cover"
         />
+      ) : loading ? (
+        <View style={[styles.fallback, { borderRadius: radius }]} />
       ) : (
         <View style={[styles.fallback, { borderRadius: radius }]}>
           <Text style={[styles.fallbackText, { fontSize: fallbackFontSize }]} numberOfLines={3}>
