@@ -667,7 +667,7 @@ export default function RackGridScreen() {
                 that bottle's placement in the grid. */}
             <View style={styles.bottleListHeaderRow}>
               <TouchableOpacity onPress={() => setBottleListOpen((v) => !v)} activeOpacity={0.7}>
-                <Text style={styles.bottleListLink}>Rack List Bottle Finder {bottleListOpen ? '▴' : '▾'}</Text>
+                <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
               </TouchableOpacity>
               {highlightedWineId && (
                 <TouchableOpacity onPress={() => setHighlightedWineId(null)} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
