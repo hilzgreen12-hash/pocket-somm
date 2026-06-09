@@ -109,18 +109,15 @@ export default function CellarTab() {
 
       <View style={styles.divider} />
 
-      {/* Archive a Night — Wine Reviews + Label Library now live in You. */}
+      {/* Your Archive — Wine Reviews + Label Library now live in You.
+          NOTE: "Archive a Night" (photograph-a-lineup → vision match → bulk
+          archive) and "View Lineups" are hidden until that feature is built
+          out (next milestone). The archive itself works: bottles reach it via
+          the wine card's "Remove bottles" flow, and View Your Archive lists
+          them. Re-enable the two buttons below once the lineup flow ships. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}>
-          <Text style={styles.buttonText}>Archive a Night</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1'))}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1'))}>
           <Text style={styles.buttonText}>View Your Archive</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/lineups'))}>
-          <Text style={styles.buttonText}>View Lineups</Text>
         </TouchableOpacity>
       </View>
 
