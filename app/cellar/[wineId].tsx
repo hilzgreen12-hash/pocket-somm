@@ -354,7 +354,6 @@ export default function CellarWineDetail() {
       });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       setEditingNote(false);
-      showAlert({ title: 'Note Saved' });
     } catch {
       showAlert({ title: 'Error', body: 'Could not save note.' });
     } finally {
@@ -954,7 +953,7 @@ export default function CellarWineDetail() {
 
       {/* Edit the title — name + grape variety. */}
       <Modal visible={titleEditOpen} transparent animationType="fade" onRequestClose={() => setTitleEditOpen(false)}>
-        <View style={styles.titleEditOverlay}>
+        <KeyboardAvoidingView behavior="padding" style={styles.titleEditOverlay}>
           <View style={styles.titleEditSheet}>
             <Text style={styles.titleEditHeading}>Edit wine</Text>
             <Text style={styles.fieldLabel}>Producer</Text>
@@ -972,7 +971,7 @@ export default function CellarWineDetail() {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Compact stats grid — score / window / bottle counts only. The
@@ -1586,7 +1585,7 @@ const styles = StyleSheet.create({
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Reviews group — one header over Vinster's / Your Review / Personal Notes,
   // each a borderless subsection so they read as one consistent block.
-  reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, marginBottom: spacing.xs },
+  reviewsHeader: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, marginBottom: spacing.xs },
   reviewPriceRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
   reviewPriceCurrency: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, marginRight: 4 },
   reviewPriceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
