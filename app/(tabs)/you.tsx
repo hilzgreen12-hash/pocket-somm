@@ -166,6 +166,48 @@ export default function YouScreen() {
 
       <View style={styles.divider} />
 
+      {/* Collections — moved out of the Cellar tab. */}
+      <View style={styles.block}>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Restaurants</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Wine Reviews</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/labels')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Label Library</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
+        <View style={styles.sketchHeaderRow}>
+          <Text style={styles.sketchHeader}>Your Personality Sketch</Text>
+          <TouchableOpacity onPress={() => setSketchInfoOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.whatsThis}>what's this?</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=wine')} activeOpacity={0.7}>
+          <Text style={styles.personalityButtonText}>Your Wine Personality</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=recipe')} activeOpacity={0.7}>
+          <Text style={styles.personalityButtonText}>Your Foodie Personality</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      <View style={styles.block}>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/wine')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Wine Preferences</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Account details — moved below the preference buttons. */}
       <View style={styles.block}>
         <View style={styles.row}>
           <Text style={styles.rowLabel}>Date joined</Text>
@@ -224,42 +266,6 @@ export default function YouScreen() {
             </View>
           </View>
         )}
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.block}>
-        <View style={styles.sketchHeaderRow}>
-          <Text style={styles.sketchHeader}>Your Personality Sketch</Text>
-          <TouchableOpacity onPress={() => setSketchInfoOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.whatsThis}>what's this?</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=wine')} activeOpacity={0.7}>
-          <Text style={styles.personalityButtonText}>Your Wine Personality</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=recipe')} activeOpacity={0.7}>
-          <Text style={styles.personalityButtonText}>Your Foodie Personality</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.block}>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Restaurants</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      <View style={styles.block}>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/wine')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Wine Preferences</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
