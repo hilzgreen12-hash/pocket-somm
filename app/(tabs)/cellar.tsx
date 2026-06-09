@@ -109,13 +109,18 @@ export default function CellarTab() {
 
       <View style={styles.divider} />
 
+      {/* Archive a Night — Wine Reviews + Label Library now live in You. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/wines/chosen'))}>
-          <Text style={styles.buttonText}>Your Wine Reviews</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}>
+          <Text style={styles.buttonText}>Archive a Night</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/labels'))}>
-          <Text style={styles.buttonText}>Your Label Library</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1'))}>
+          <Text style={styles.buttonText}>View Your Archive</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/lineups'))}>
+          <Text style={styles.buttonText}>View Lineups</Text>
         </TouchableOpacity>
       </View>
 
