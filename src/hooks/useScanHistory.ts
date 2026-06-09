@@ -9,6 +9,16 @@ import { normaliseCity } from '../utils/city';
 const STORAGE_KEY = 'vinster_scan_history';
 const MAX_LOCAL = 3;
 
+// Per-user storage key for the "View Last Result" cache. Scoping by user id
+// means a user's last results PERSIST across signing out and back in and
+// across app updates (AsyncStorage survives both), while still keeping one
+// account's results from showing under another on a shared device. The
+// account-switch cleanup in useAuth only wipes the legacy base key, so these
+// scoped keys are left intact. Signed-out scans fall back to the base key.
+export function scanHistoryKey(userId: string | null | undefined): string {
+  return userId ? `${STORAGE_KEY}_${userId}` : STORAGE_KEY;
+}
+
 export interface ScanHistoryItem {
   id: string;
   savedAt: string;
@@ -36,23 +46,23 @@ export interface ScanArchiveItem {
   isFavourite: boolean;
 }
 
-async function readLocal(): Promise<ScanHistoryItem[]> {
+async function readLocal(userId: string | null | undefined): Promise<ScanHistoryItem[]> {
   try {
-    const raw = await AsyncStorage.getItem(STORAGE_KEY);
+    const raw = await AsyncStorage.getItem(scanHistoryKey(userId));
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
   }
 }
 
-async function writeLocal(items: ScanHistoryItem[]) {
-  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+async function writeLocal(userId: string | null | undefined, items: ScanHistoryItem[]) {
+  await AsyncStorage.setItem(scanHistoryKey(userId), JSON.stringify(items));
 }
 
 // Caches a fresh scan to local AsyncStorage only (no Supabase, no GPS).
 // Fires on result render so View Last Result always works inside the
 // session, regardless of whether the user has tapped Save to Archive.
-export async function cacheScanLocally(input: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantName?: string | null; city?: string | null }) {
+export async function cacheScanLocally(userId: string | null | undefined, input: { extractedWines: ExtractedWine[]; recommendation: RecommendationResponse; restaurantName?: string | null; city?: string | null }) {
   const newItem: ScanHistoryItem = {
     id: Date.now().toString(),
     savedAt: new Date().toISOString(),
@@ -62,9 +72,9 @@ export async function cacheScanLocally(input: { extractedWines: ExtractedWine[];
     city: input.city ?? null,
     restaurantName: input.restaurantName ?? null,
   };
-  const existing = await readLocal();
+  const existing = await readLocal(userId);
   const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
-  await writeLocal(updated);
+  await writeLocal(userId, updated);
 }
 
 export function useScanHistory() {
@@ -72,8 +82,8 @@ export function useScanHistory() {
   const qc = useQueryClient();
 
   const { data: history = [] } = useQuery<ScanHistoryItem[]>({
-    queryKey: ['scan-history'],
-    queryFn: readLocal,
+    queryKey: ['scan-history', session?.user.id ?? null],
+    queryFn: () => readLocal(session?.user.id ?? null),
   });
 
   const { data: archive = [], isLoading: archiveLoading, error: archiveError } = useQuery<ScanArchiveItem[]>({
@@ -214,9 +224,9 @@ export function useScanHistory() {
         restaurantName,
         sessionId,
       };
-      const existing = await readLocal();
+      const existing = await readLocal(session.user.id);
       const updated = [newItem, ...existing].slice(0, MAX_LOCAL);
-      await writeLocal(updated);
+      await writeLocal(session.user.id, updated);
       return updated;
     },
     onSuccess: () => {

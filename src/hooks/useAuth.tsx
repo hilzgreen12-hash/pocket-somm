@@ -29,10 +29,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUserId = next?.user.id ?? null;
       if (prevUserId.current !== undefined && prevUserId.current !== nextUserId) {
         qc.clear();
-        // Also wipe the non-user-scoped local caches (recent scans for "View
-        // Last Result", and city autocomplete history) — they live in global
-        // AsyncStorage so qc.clear() alone leaves them readable by the next
-        // account. Keys mirror useScanHistory + useCityHistory.
+        // Clear the city autocomplete history (global key) and the LEGACY
+        // base scan-history key on account switch. Scan history is now stored
+        // per-user (vinster_scan_history_<userId>, see useScanHistory) so a
+        // user's "View Last Result" persists across sign-out/in and app
+        // updates; those scoped keys are intentionally NOT removed here, and
+        // wiping the old base key just cleans up pre-scoping data.
         AsyncStorage.multiRemove(['vinster_scan_history', 'vinster_city_history']).catch(() => {});
       }
       prevUserId.current = nextUserId;

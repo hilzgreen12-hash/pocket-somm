@@ -20,6 +20,7 @@ import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { useAuth } from '../../src/hooks/useAuth';
+import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -87,7 +88,7 @@ export default function ScanTab() {
   const lastSyncedBudgetRef = useRef<number | null | undefined>(undefined);
 
   useFocusEffect(useCallback(() => {
-    AsyncStorage.getItem('vinster_scan_history').then((raw) => {
+    AsyncStorage.getItem(scanHistoryKey(session?.user.id)).then((raw) => {
       try { setHasLastSearch(!!(raw && JSON.parse(raw).length)); } catch { /* ignore */ }
     });
     // Show the welcome popup every time the tab gains focus, until the
@@ -97,7 +98,7 @@ export default function ScanTab() {
     AsyncStorage.getItem('vinster_list_intro_dismissed').then((value) => {
       if (value !== 'true') setIntroVisible(true);
     });
-  }, []));
+  }, [session?.user.id]));
 
   function dismissIntro() {
     setIntroVisible(false);
@@ -180,7 +181,7 @@ export default function ScanTab() {
 
   async function handleViewLastSearch() {
     try {
-      const raw = await AsyncStorage.getItem('vinster_scan_history');
+      const raw = await AsyncStorage.getItem(scanHistoryKey(session?.user.id));
       const items = raw ? JSON.parse(raw) : [];
       if (!items.length) {
         showAlert({

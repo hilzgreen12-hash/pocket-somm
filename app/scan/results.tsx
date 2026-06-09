@@ -143,7 +143,7 @@ export default function ResultsScreen() {
   useEffect(() => {
     if (isFromHistory) return;
     if (!recommendation || !extractedWines) return;
-    cacheScanLocally({ extractedWines, recommendation, restaurantName: restaurantName || null });
+    cacheScanLocally(session?.user.id ?? null, { extractedWines, recommendation, restaurantName: restaurantName || null });
   }, []);
 
   // Keep the "Add to Bottle Picks" buttons in their saved state across
