@@ -35,6 +35,15 @@ const STATUS_SEARCH: { status: string; terms: string[] }[] = [
   { status: 'declining', terms: ['declining', 'decline', 'fading', 'past peak'] },
 ];
 
+// Readiness-for-drinking options for the Maturity filter chip.
+const MATURITY_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All' },
+  { value: 'too_young', label: 'Too Young' },
+  { value: 'approaching', label: 'Approaching' },
+  { value: 'peak', label: 'Peak' },
+  { value: 'declining', label: 'Declining' },
+];
+
 export default function RackGridScreen() {
   const { rackId, highlight } = useLocalSearchParams<{ rackId: string; highlight?: string }>();
   const navigation = useNavigation();
@@ -51,11 +60,13 @@ export default function RackGridScreen() {
   const { customFilters, create: createFilter, remove: removeFilter } = useCustomFilters();
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
-  // Custom filters (named collections of wines) — the dropdown opposite the
-  // Rack Bottle List, plus the create flow.
-  const [customFiltersOpen, setCustomFiltersOpen] = useState(false);
+  // Custom filters (named collections of wines) — now surfaced as chips in the
+  // filter carousel, plus the create flow.
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
   const [createFilterOpen, setCreateFilterOpen] = useState(false);
+  // Maturity (readiness-for-drinking) filter chip + its dropdown.
+  const [maturityHighlight, setMaturityHighlight] = useState<string>('');
+  const [maturityOpen, setMaturityOpen] = useState(false);
   const [filterNameDraft, setFilterNameDraft] = useState('');
   const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
   const [savingFilter, setSavingFilter] = useState(false);
@@ -139,7 +150,9 @@ export default function RackGridScreen() {
   useEffect(() => {
     setSearchQuery('');
     setActiveCustomFilterId(null);
-    setCustomFiltersOpen(false);
+    setMaturityHighlight('');
+    setMaturityOpen(false);
+    setBottleListOpen(false);
     // Highlight the bottle the user came in to find (e.g. from a wine card's
     // "In {rack} →" link), otherwise clear any carried-over highlight when
     // swiping to another rack.
@@ -622,19 +635,43 @@ export default function RackGridScreen() {
   // a producer (or status) now lights up ALL matching bottles, not just one.
   const highlightedIds = useMemo(() => {
     if (searchQuery.trim()) return new Set(filteredWines.map(({ wine }) => wine.id));
+    if (maturityHighlight) {
+      return new Set(
+        winesInRack.filter(({ wine }) => wine.drinking_window_status === maturityHighlight).map(({ wine }) => wine.id)
+      );
+    }
     if (activeCustomFilterId) {
       const f = customFilters.find((cf) => cf.id === activeCustomFilterId);
       return new Set(f?.wineIds ?? []);
     }
     return highlightedWineId ? new Set([highlightedWineId]) : new Set<string>();
-  }, [searchQuery, filteredWines, highlightedWineId, activeCustomFilterId, customFilters]);
+  }, [searchQuery, filteredWines, highlightedWineId, activeCustomFilterId, customFilters, maturityHighlight, winesInRack]);
+
+  // Whether any highlight/filter is active (drives the Unselect link).
+  const anyFilterActive = !!(highlightedWineId || searchQuery.trim() || activeCustomFilterId || maturityHighlight);
+  function clearAllFilters() {
+    setHighlightedWineId(null);
+    setSearchQuery('');
+    setActiveCustomFilterId(null);
+    setMaturityHighlight('');
+  }
+
+  // Pick a readiness option from the Maturity chip → highlight those bottles.
+  function selectMaturity(value: string) {
+    setMaturityHighlight(value);
+    setHighlightedWineId(null);
+    setSearchQuery('');
+    setActiveCustomFilterId(null);
+    setMaturityOpen(false);
+  }
 
   // Apply a saved filter → highlight its bottles (those present in this rack).
   function applyCustomFilter(id: string) {
-    setActiveCustomFilterId(id);
+    setActiveCustomFilterId((prev) => (prev === id ? null : id));
     setHighlightedWineId(null);
     setSearchQuery('');
-    setCustomFiltersOpen(false);
+    setMaturityHighlight('');
+    setMaturityOpen(false);
   }
   function openCreateFilter() {
     setFilterNameDraft('');
@@ -724,12 +761,76 @@ export default function RackGridScreen() {
 
         {winesInRack.length > 0 && (
           <>
+            {/* Filter carousel — mirrors the Full Cellar List chips. List opens
+                the rack's bottle list, Maturity highlights by drinking readiness,
+                each saved custom filter is its own chip, and + Add creates one. */}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.filterScroll}
+              contentContainerStyle={styles.filterRow}
+              keyboardShouldPersistTaps="handled"
+            >
+              <TouchableOpacity
+                style={[styles.filterChip, bottleListOpen && styles.filterChipActive]}
+                onPress={() => { setBottleListOpen((v) => !v); setMaturityOpen(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterChipText, bottleListOpen && styles.filterChipTextActive]}>List {bottleListOpen ? '▴' : '▾'}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.filterChip, maturityHighlight ? styles.filterChipActive : null]}
+                onPress={() => { setMaturityOpen((v) => !v); setBottleListOpen(false); }}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.filterChipText, maturityHighlight ? styles.filterChipTextActive : null]}>
+                  {maturityHighlight ? (MATURITY_OPTIONS.find((o) => o.value === maturityHighlight)?.label ?? 'Maturity') : 'Maturity'} ▾
+                </Text>
+              </TouchableOpacity>
+
+              {customFilters.map((f) => {
+                const active = activeCustomFilterId === f.id;
+                return (
+                  <TouchableOpacity
+                    key={f.id}
+                    style={[styles.filterChip, active && styles.filterChipActive]}
+                    onPress={() => applyCustomFilter(f.id)}
+                    onLongPress={() => confirmDeleteFilter(f.id, f.name)}
+                    delayLongPress={400}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1}>{f.name}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+
+              <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+                <Text style={styles.filterChipAddText}>+ Add</Text>
+              </TouchableOpacity>
+            </ScrollView>
+
+            {/* Maturity dropdown — readiness options highlight matching bottles. */}
+            {maturityOpen && (
+              <View style={styles.maturityDropdown}>
+                {MATURITY_OPTIONS.map((o) => {
+                  const active = maturityHighlight === o.value;
+                  return (
+                    <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => selectMaturity(o.value)} activeOpacity={0.7}>
+                      <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            )}
+
+            {/* Search bar — subtle (background-toned), sits below the carousel. */}
             <View style={styles.searchRow}>
               <TextInput
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={(t) => { setSearchQuery(t); setActiveCustomFilterId(null); }}
-                placeholder="Search wines by name, readiness, vintage, variety, country…"
+                onChangeText={(t) => { setSearchQuery(t); setActiveCustomFilterId(null); setMaturityHighlight(''); }}
+                placeholder="Search producer, wine, region, vintage…"
                 placeholderTextColor={colors.textMuted}
                 returnKeyType="search"
                 clearButtonMode="while-editing"
@@ -741,20 +842,8 @@ export default function RackGridScreen() {
               )}
             </View>
 
-            {/* "Rack Bottle List" — the rack's wine list, hidden behind this
-                gold prompt. Expand it, tap a wine, and it closes + highlights
-                that bottle's placement in the grid. */}
-            <View style={styles.bottleListHeaderRow}>
-              <TouchableOpacity onPress={() => { setBottleListOpen((v) => !v); setCustomFiltersOpen(false); }} activeOpacity={0.7}>
-                <Text style={styles.bottleListLink}>Rack Bottle List {bottleListOpen ? '▴' : '▾'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => { setCustomFiltersOpen((v) => !v); setBottleListOpen(false); }} activeOpacity={0.7}>
-                <Text style={styles.bottleListLink}>Custom Filters {customFiltersOpen ? '▴' : '▾'}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {(highlightedWineId || searchQuery.trim().length > 0 || activeCustomFilterId) && (
-              <TouchableOpacity style={styles.unselectRow} onPress={() => { setHighlightedWineId(null); setSearchQuery(''); setActiveCustomFilterId(null); }} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            {anyFilterActive && (
+              <TouchableOpacity style={styles.unselectRow} onPress={clearAllFilters} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                 <Text style={styles.unselectLink}>Unselect</Text>
               </TouchableOpacity>
             )}
@@ -771,7 +860,7 @@ export default function RackGridScreen() {
                         <TouchableOpacity
                           key={wine.id}
                           style={[styles.wineRow, active && styles.wineRowActive]}
-                          onPress={() => { setHighlightedWineId(wine.id); setActiveCustomFilterId(null); setSearchQuery(''); setBottleListOpen(false); }}
+                          onPress={() => { setHighlightedWineId(wine.id); setActiveCustomFilterId(null); setSearchQuery(''); setMaturityHighlight(''); setBottleListOpen(false); }}
                           onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name, wine.quantity ?? 1)}
                           delayLongPress={400}
                         >
@@ -791,39 +880,6 @@ export default function RackGridScreen() {
               </View>
             )}
 
-            {customFiltersOpen && (
-              <View style={styles.bottleList}>
-                <TouchableOpacity onPress={openCreateFilter} style={styles.createFilterRow} activeOpacity={0.7}>
-                  <Text style={styles.createFilterLink}>+ Create a custom filter</Text>
-                </TouchableOpacity>
-                {customFilters.length === 0 ? (
-                  <Text style={styles.searchNoResults}>No custom filters yet — create one to group wines (e.g. Christmas Wines).</Text>
-                ) : (
-                  <ScrollView style={{ maxHeight: 240 }} keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-                    {customFilters.map((f) => {
-                      const active = activeCustomFilterId === f.id;
-                      const inThisRack = winesInRack.filter(({ wine }) => f.wineIds.includes(wine.id)).length;
-                      return (
-                        <TouchableOpacity
-                          key={f.id}
-                          style={[styles.wineRow, active && styles.wineRowActive]}
-                          onPress={() => applyCustomFilter(f.id)}
-                          onLongPress={() => confirmDeleteFilter(f.id, f.name)}
-                          delayLongPress={400}
-                        >
-                          <View style={styles.wineRowMain}>
-                            <Text style={[styles.wineRowName, active && styles.wineRowNameActive]} numberOfLines={2}>{f.name}</Text>
-                          </View>
-                          <Text style={[styles.wineRowCount, active && styles.wineRowCountActive]}>
-                            {inThisRack}/{f.wineIds.length} here
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
-                  </ScrollView>
-                )}
-              </View>
-            )}
           </>
         )}
 
@@ -1200,6 +1256,21 @@ const styles = StyleSheet.create({
   // "Rack Bottle List" gold prompt + the list it reveals.
   bottleListLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   bottleListHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Filter carousel chips (List / Maturity / custom filters / + Add).
+  filterScroll: { flexGrow: 0, marginBottom: spacing.sm },
+  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.md, gap: spacing.sm },
+  filterChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md, backgroundColor: colors.surface, maxWidth: 170 },
+  filterChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
+  filterChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  filterChipTextActive: { color: colors.gold },
+  filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
+  filterChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
+  // Maturity (readiness) dropdown panel.
+  maturityDropdown: { marginHorizontal: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
+  maturityOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
+  maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
+  maturityOptionTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
   // "Unselect" — clears the highlighted bottle, shown only while one is selected.
   unselectLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   unselectRow: { alignItems: 'center', paddingTop: 2 },
@@ -1324,7 +1395,7 @@ const styles = StyleSheet.create({
   rackHintOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Cormorant — button text
   rackHintOkBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, paddingHorizontal: spacing.md },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
   searchClear: { paddingLeft: spacing.sm, paddingVertical: spacing.sm },
