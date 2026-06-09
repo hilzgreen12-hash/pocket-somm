@@ -543,7 +543,11 @@ export default function CellarWineDetail() {
         const identity = { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage };
         const fields = { userScore: parsedScore, restaurantName, city, reviewDate: dateTrim || undefined };
         try {
-          await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: true, region: wine.region });
+          // Update a matching chosen_wines review if one exists, but DON'T
+          // create one: a cellar wine's review already surfaces in Your Wine
+          // Reviews as a 'cellar' item, so spawning a chosen_wines row here
+          // produced a duplicate (a score-only twin of the real review).
+          await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: false, region: wine.region });
           await syncReviewToCellar(session.user.id, identity, fields, { excludeCellarWineId: wine.id });
           qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
           qc.invalidateQueries({ queryKey: ['wishlist', session.user.id] });
