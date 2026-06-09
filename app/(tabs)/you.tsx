@@ -6,6 +6,7 @@ import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import * as Linking from 'expo-linking';
+import * as Application from 'expo-application';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -297,6 +298,13 @@ export default function YouScreen() {
         <Text style={styles.deleteText}>Delete Account</Text>
       </TouchableOpacity>
 
+      {/* Build identifier — lets testers report exactly which build they're
+          running (the version name 1.0.0 is shared by every build). */}
+      <Text style={styles.versionText}>
+        Vinster {Application.nativeApplicationVersion ?? '1.0.0'}
+        {Application.nativeBuildVersion ? ` (build ${Application.nativeBuildVersion})` : ''}
+      </Text>
+
       <Modal visible={signOutConfirmOpen} transparent animationType="fade" onRequestClose={() => setSignOutConfirmOpen(false)}>
         <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setSignOutConfirmOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
@@ -430,6 +438,7 @@ const styles = StyleSheet.create({
   toggleLabel: { flex: 1, fontSize: 15, fontFamily: fonts.bodyItalic, color: '#FFFFFF', lineHeight: 20 },
   signOutButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginTop: spacing.xs, marginBottom: 6 },
   signOutText: { color: colors.gold, fontSize: 15, fontFamily: fonts.headingSemibold },
+  versionText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: spacing.lg, marginBottom: spacing.sm, opacity: 0.7 },
   deleteButton: { alignItems: 'center', paddingVertical: 4 },
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
