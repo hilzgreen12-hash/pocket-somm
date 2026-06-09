@@ -151,6 +151,20 @@ export default function RackGridScreen() {
     setIsZoomed(false);
   }
 
+  // Cream-box (viewport) + grid (content) sizes, captured on layout. Used to
+  // clamp the pan so the grid can never be dragged past its own edges and
+  // out of the clipped box (which left only the cream surround visible).
+  const vpSize = useRef({ w: 0, h: 0 });
+  const contentSize = useRef({ w: 0, h: 0 });
+  function clampPan(tx: number, ty: number, scale: number) {
+    const maxX = Math.max(0, (contentSize.current.w * scale - vpSize.current.w) / 2);
+    const maxY = Math.max(0, (contentSize.current.h * scale - vpSize.current.h) / 2);
+    return {
+      tx: Math.min(maxX, Math.max(-maxX, tx)),
+      ty: Math.min(maxY, Math.max(-maxY, ty)),
+    };
+  }
+
   // Swipe between racks — only at rest; disabled while zoomed.
   const swipeGesture = useMemo(
     () =>
@@ -179,9 +193,14 @@ export default function RackGridScreen() {
         if (s > 5) s = 5;
         zCur.scale = s;
         zScale.setValue(s);
+        // Keep the pan within the new scale's bounds (zooming out shrinks them).
+        const c = clampPan(zCur.tx, zCur.ty, s);
+        zCur.tx = c.tx; zCur.ty = c.ty;
+        zTx.setValue(c.tx); zTy.setValue(c.ty);
       })
       .onEnd(() => {
         zBase.scale = zCur.scale;
+        zBase.tx = zCur.tx; zBase.ty = zCur.ty;
         if (zCur.scale <= 1.02) resetZoom();
         else if (!isZoomed) setIsZoomed(true);
       });
@@ -190,10 +209,10 @@ export default function RackGridScreen() {
       .runOnJS(true)
       .minDistance(2)
       .onUpdate((e) => {
-        zCur.tx = zBase.tx + e.translationX;
-        zCur.ty = zBase.ty + e.translationY;
-        zTx.setValue(zCur.tx);
-        zTy.setValue(zCur.ty);
+        const c = clampPan(zBase.tx + e.translationX, zBase.ty + e.translationY, zCur.scale);
+        zCur.tx = c.tx; zCur.ty = c.ty;
+        zTx.setValue(c.tx);
+        zTy.setValue(c.ty);
       })
       .onEnd(() => { zBase.tx = zCur.tx; zBase.ty = zCur.ty; });
     return Gesture.Simultaneous(pinch, pan);
@@ -732,9 +751,15 @@ export default function RackGridScreen() {
             "boxing" is a clipped viewport the grid scales/pans inside; each
             filled slot shows the wine's label as a framed thumbnail. Swipe
             between racks stays active at rest (see swipeGesture / isZoomed). */}
-        <View style={styles.rackViewport}>
+        <View
+          style={styles.rackViewport}
+          onLayout={(e) => { vpSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
+        >
           <GestureDetector gesture={inlineZoomGesture}>
-            <Animated.View style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}>
+            <Animated.View
+              style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
+              onLayout={(e) => { contentSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
+            >
             {gridRows.map((rowDef) => {
               const isLargeFormat = rowDef.rowIndex === -1;
               // Scale the no-photo "blank label" text to the slot size.
