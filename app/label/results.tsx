@@ -9,6 +9,8 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
+import type { ChosenWine } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -50,7 +52,7 @@ export default function LabelResultsScreen() {
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
-  const { saveManual } = useChosenWines();
+  const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
   const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
@@ -432,6 +434,32 @@ export default function LabelResultsScreen() {
 
   async function handleSaveReview() {
     if (!session?.user.id) return;
+    // If this wine already has a review, prompt to update / add a dated
+    // tasting / create new — same guard the List + manual-add flows use,
+    // so scanning or uploading a label for a wine you've reviewed before
+    // never silently creates a duplicate review.
+    const parsedVintage = parseInt(wine.vintage, 10);
+    const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;
+    const wineNameValue = wine.wineName ?? wine.producer;
+    const existing = findExistingReview(chosenWines, { producer: wine.producer, wineName: wineNameValue, vintage: validVintage });
+    if (existing) {
+      showAlert({
+        title: "You've reviewed this wine before",
+        body: `You already have a review for ${wineNameValue}. Update it, add a new dated tasting to it, or start a fresh review?`,
+        buttons: [
+          { text: 'Update review', onPress: () => { void doSaveReview('update', existing); } },
+          { text: 'Add to review', onPress: () => { void doSaveReview('append', existing); } },
+          { text: 'Create new', onPress: () => { void doSaveReview('create', null); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await doSaveReview('create', null);
+  }
+
+  async function doSaveReview(mode: 'create' | 'update' | 'append', existing: ChosenWine | null) {
+    if (!session?.user.id) return;
     setSaving(true);
     try {
       const parsedScore = parseInt(reviewScore, 10);
@@ -440,27 +468,54 @@ export default function LabelResultsScreen() {
       const validPrice = !Number.isNaN(parsedPrice) && parsedPrice > 0 ? parsedPrice : null;
       const parsedVintage = parseInt(wine.vintage, 10);
       const validVintage = !Number.isNaN(parsedVintage) ? parsedVintage : null;
-      await saveManual.mutateAsync({
-        wineName: wine.wineName ?? wine.producer,
-        producer: wine.producer,
-        region: wine.region,
-        vintage: validVintage,
-        restaurantName: reviewRestaurant,
-        city: reviewCity,
-        listPrice: validPrice,
-        currency: userCurrency,
-        tastingNote: reviewNote,
-        otherObservations: '',
-        userScore: validScore,
-        isFavourite: false,
-        // The "Review without adding" path on the Cellar add-wine
-        // flow isn't a restaurant scan and isn't a cellar wine — it's
-        // a standalone review. Mark it 'other' so the Your Wine
-        // Reviews Type filter can split it out from the Restaurant
-        // bucket. Manual-entry-via-Reviews-tab continues to fall back
-        // to the DB default 'restaurant'.
-        source: 'other',
-      });
+      if (mode === 'create' || !existing) {
+        await saveManual.mutateAsync({
+          wineName: wine.wineName ?? wine.producer,
+          producer: wine.producer,
+          region: wine.region,
+          vintage: validVintage,
+          restaurantName: reviewRestaurant,
+          city: reviewCity,
+          listPrice: validPrice,
+          currency: userCurrency,
+          tastingNote: reviewNote,
+          otherObservations: '',
+          userScore: validScore,
+          isFavourite: false,
+          // The "Review without adding" path on the Cellar add-wine
+          // flow isn't a restaurant scan and isn't a cellar wine — it's
+          // a standalone review. Mark it 'other' so the Your Wine
+          // Reviews Type filter can split it out from the Restaurant
+          // bucket. Manual-entry-via-Reviews-tab continues to fall back
+          // to the DB default 'restaurant'.
+          source: 'other',
+        });
+      } else {
+        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
+        if (mode === 'update') {
+          await updateChosen.mutateAsync({
+            id: existing.id,
+            input: { restaurantName: reviewRestaurant, city: reviewCity, tastingNote: reviewNote, otherObservations: existing.other_observations ?? '', userScore: validScore, listPrice: validPrice, isFavourite: existing.is_favourite, ...identity },
+          });
+        } else {
+          // Append a dated tasting onto the existing review, keeping its
+          // original where/when/price/score intact.
+          const label = todayLabel();
+          await updateChosen.mutateAsync({
+            id: existing.id,
+            input: {
+              restaurantName: existing.restaurant_name ?? '',
+              city: existing.city ?? '',
+              tastingNote: appendDatedEntry(existing.tasting_note, reviewNote, label),
+              otherObservations: existing.other_observations ?? '',
+              userScore: validScore != null ? validScore : existing.user_score,
+              listPrice: existing.menu_price,
+              isFavourite: existing.is_favourite,
+              ...identity,
+            },
+          });
+        }
+      }
       setAddingReview(false);
       if (isReviewsFlow) {
         // Entered from Your Wine Reviews — go straight back there so the
