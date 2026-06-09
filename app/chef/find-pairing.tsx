@@ -24,6 +24,7 @@ export default function FindPairingScreen() {
   const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget } = useFoodPairingStore();
 
   const [dish, setDishLocal] = useState('');
+  const [regionPreference, setRegionPreference] = useState('');
   const [stylePreference, setStylePreference] = useState<string | null>(null);
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
@@ -74,6 +75,12 @@ export default function FindPairingScreen() {
     // style preference and budget travel as structured params so the results
     // heading stays tidy and the cellar re-query can reuse them.
     const cleanDish = dish.trim();
+    // Fold the optional regional preference into the brief the AI sees, but
+    // keep the displayed/stored dish clean so the results heading stays tidy.
+    const regionNote = regionPreference.trim();
+    const aiDish = regionNote
+      ? `${cleanDish}\n\nPreferred wine region or style: ${regionNote}.`
+      : cleanDish;
     setDish(cleanDish);
     setMode(mode);
     storeStyle(stylePreference);
@@ -93,7 +100,7 @@ export default function FindPairingScreen() {
       }));
 
       const result = await findFoodWinePairing(
-        cleanDish,
+        aiDish,
         mode,
         mode === 'cellar' ? cellarSummary : undefined,
         undefined,
@@ -148,11 +155,11 @@ export default function FindPairingScreen() {
 
       <View style={styles.divider} />
 
-      {/* What are you cooking — caps label with the mic + bin on the same line,
-          then the input. The "strong flavours" guidance now lives inside the
-          input's placeholder rather than as a separate helper line. */}
-      <View style={styles.cookingHeaderRow}>
-        <Text style={[styles.fieldLabelCaps, styles.cookingLabel]}>What are you cooking?</Text>
+      {/* What are you cooking — centred label with the mic + bin centred
+          beneath it, then the input. The "strong flavours" guidance lives in
+          the input's placeholder rather than as a separate helper line. */}
+      <Text style={[styles.fieldLabel, styles.centredLabel]}>What are you cooking?</Text>
+      <View style={styles.micRowCentred}>
         <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} />
       </View>
       <TextInput
@@ -164,6 +171,16 @@ export default function FindPairingScreen() {
         multiline
         numberOfLines={3}
         textAlignVertical="top"
+      />
+
+      {/* Regional Preference (optional) — centred label + centred input. */}
+      <Text style={[styles.fieldLabel, styles.centredLabel]}>Regional Preference (optional)</Text>
+      <TextInput
+        style={styles.regionInput}
+        value={regionPreference}
+        onChangeText={setRegionPreference}
+        placeholder="e.g. Rhône, Tuscany, Rioja, Burgundy…"
+        placeholderTextColor={colors.textMuted}
       />
 
       {/* Wine style — formatted like the Recipe Requirements input rows: a
@@ -263,6 +280,12 @@ const styles = StyleSheet.create({
   blurbLink: { color: colors.gold, textDecorationLine: 'underline' },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   fieldLabelCaps: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
+  // Mixed-case form label (no caps) + centred variant for the cooking /
+  // regional inputs, matching the rest of the app's input labels.
+  fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
+  centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
+  micRowCentred: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
+  regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
   // "What are you cooking?" caps label with the mic + bin on the same line.
