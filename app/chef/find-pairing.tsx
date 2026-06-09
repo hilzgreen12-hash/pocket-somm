@@ -148,32 +148,33 @@ export default function FindPairingScreen() {
 
       <View style={styles.divider} />
 
-      {/* What are you cooking — caps label, helper, then the mic + bin on the
-          right, then the input. */}
-      <Text style={styles.fieldLabelCaps}>What are you cooking?</Text>
-      <Text style={styles.helper}>Include any strong flavours or ingredients that will help guide your pairing.</Text>
-      <View style={styles.micRow}>
+      {/* What are you cooking — caps label with the mic + bin on the same line,
+          then the input. The "strong flavours" guidance now lives inside the
+          input's placeholder rather than as a separate helper line. */}
+      <View style={styles.cookingHeaderRow}>
+        <Text style={[styles.fieldLabelCaps, styles.cookingLabel]}>What are you cooking?</Text>
         <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} />
       </View>
       <TextInput
         style={styles.inputLeft}
         value={dish}
         onChangeText={setDishLocal}
-        placeholder="e.g. Roast leg of lamb with rosemary and garlic"
+        placeholder="e.g. Roast leg of lamb with sweet potato. Include any strong flavours or ingredients that will help guide your pairing."
         placeholderTextColor={colors.textMuted}
         multiline
         numberOfLines={3}
         textAlignVertical="top"
       />
 
-      {/* Wine style — label left, dropdown to its right. */}
-      <View style={styles.styleRow}>
-        <Text style={[styles.fieldLabelCaps, styles.rowLabel]}>Wine Style Preference?</Text>
-        <TouchableOpacity style={styles.dropdownChip} onPress={() => setStyleDropdownOpen(true)} activeOpacity={0.7}>
-          <Text style={styles.dropdownChipText}>{stylePreference ?? 'Any'}</Text>
-          <Text style={styles.dropdownChevron}>▾</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Wine style — formatted like the Recipe Requirements input rows: a
+          full-width bordered box with the value + chevron, opening the picker. */}
+      <TouchableOpacity style={styles.styleAccordion} onPress={() => setStyleDropdownOpen(true)} activeOpacity={0.7}>
+        <View style={styles.styleAccordionLeft}>
+          <Text style={styles.styleQuestion}>Wine Style Preference</Text>
+          <Text style={styles.styleAccordionSummary}>{stylePreference ?? 'Any'}</Text>
+        </View>
+        <Text style={styles.styleAccordionChevron}>▾</Text>
+      </TouchableOpacity>
 
       {/* Budget? Baller — inline header via the slider's label prop, mirroring List. */}
       <View style={styles.budgetBlock}>
@@ -188,6 +189,8 @@ export default function FindPairingScreen() {
           <Text style={[styles.toggleText, mode === 'cellar' && styles.toggleTextActive]}>From My Cellar</Text>
           <Text style={[styles.toggleSub, mode === 'cellar' && styles.toggleSubActive]}>{wines.length} {wines.length === 1 ? 'bottle' : 'bottles'}</Text>
         </TouchableOpacity>
+
+        <View style={styles.toggleDivider} />
 
         <TouchableOpacity
           style={[styles.toggleBtn, mode === 'general' && styles.toggleBtnActive]}
@@ -258,8 +261,17 @@ const styles = StyleSheet.create({
   fieldLabelCaps: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
+  // "What are you cooking?" caps label with the mic + bin on the same line.
+  cookingHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  cookingLabel: { marginBottom: 0, flexShrink: 1 },
   styleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.lg },
   rowLabel: { marginBottom: 0, flexShrink: 1 },
+  // Wine Style row — mirrors the Recipe Requirements accordion input rows.
+  styleAccordion: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.lg },
+  styleAccordionLeft: { flex: 1, alignItems: 'center' },
+  styleQuestion: { fontFamily: fonts.bodySemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
+  styleAccordionSummary: { fontFamily: fonts.bodyMedium, fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  styleAccordionChevron: { fontSize: 16, color: '#FFFFFF', marginLeft: spacing.sm },
   heading: { fontSize: 30, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
   profileNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
@@ -274,7 +286,7 @@ const styles = StyleSheet.create({
   leftLabel: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.text, alignSelf: 'flex-start', marginBottom: spacing.xs },
   fieldHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%' },
   helperLeft: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'left', alignSelf: 'flex-start', lineHeight: 19, marginBottom: spacing.sm },
-  inputLeft: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 17, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'left' },
+  inputLeft: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 90, marginBottom: spacing.xl, width: '100%', textAlign: 'left' },
   dropdownChip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'flex-start', minWidth: 160, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.xl },
   dropdownChipText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   dropdownChevron: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginLeft: spacing.md },
@@ -295,8 +307,10 @@ const styles = StyleSheet.create({
   difficultyBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   difficultyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted },
   difficultyBtnTextActive: { color: colors.gold },
-  toggleRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.xl, width: '100%' },
+  toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.xl, width: '100%' },
   toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, alignItems: 'center' },
+  // Thin vertical rule between the From My Cellar / Suggest a Style buttons.
+  toggleDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
   toggleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.08)' },
   toggleText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.textMuted },
   toggleTextActive: { color: colors.gold },
