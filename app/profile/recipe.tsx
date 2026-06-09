@@ -102,12 +102,17 @@ export default function RecipeProfileScreen() {
         keyboardDismissMode="interactive"
         bottomOffset={24}
       >
-        <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-          <Text style={styles.back}>Back</Text>
-        </TouchableOpacity>
+        {/* Header bar matches Find a Wine Pairing: Back / centred 20pt title /
+            spacer, with the blurb beneath at the same size + italic style. */}
+        <View style={styles.headerBar}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.back}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Recipe Requirements</Text>
+          <View style={{ width: 44 }} />
+        </View>
 
         <View style={styles.profileIntro}>
-          <Text style={styles.profileHeading}>Recipe Requirements</Text>
           <Text style={styles.profileBody}>Tell Vinster about any dietary needs, allergens or specific requirements — these are hard rules it will always respect when generating recipes and pairings.</Text>
           <Text style={styles.autosaveHint}>Your changes save as you make them.</Text>
         </View>
@@ -204,9 +209,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, paddingHorizontal: spacing.md },
   backRow: { paddingTop: 70, paddingBottom: spacing.md },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // Standard header bar (matches Find a Wine Pairing).
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 80, marginBottom: spacing.md },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   profileIntro: { marginBottom: spacing.sm, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
-  profileHeading: { fontFamily: fonts.headingSemibold, fontSize: 32, color: colors.text, letterSpacing: 1.5, marginBottom: spacing.xs, textAlign: 'center' },
-  profileBody: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
+  profileBody: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
   autosaveHint: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, opacity: 0.85 },
   section: { marginBottom: spacing.sm },
   // Matches app/(tabs)/scan.tsx and app/profile/wine.tsx for cross-screen
@@ -214,15 +221,15 @@ const styles = StyleSheet.create({
   accordionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)', borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, marginBottom: 4 },
   accordionLeft: { flex: 1, alignItems: 'center' },
   chevron: { fontSize: 16, color: '#FFFFFF', marginLeft: spacing.sm },
-  question: { fontFamily: fonts.bodySemibold, fontSize: 17, color: '#FFFFFF', textAlign: 'center' },
-  selectionSummary: { fontFamily: fonts.bodyMedium, fontSize: 16, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  question: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
+  selectionSummary: { fontFamily: fonts.bodyMedium, fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
   pickerWrap: { marginTop: spacing.sm, paddingHorizontal: spacing.xs },
   pickerHint: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginBottom: spacing.sm },
-  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  saveButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
+  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   skipLink: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.lg },
   skipLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
-  concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 80, textAlignVertical: 'top' },
+  concernsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 72, textAlignVertical: 'top' },
   concernsSaveBtn: { alignSelf: 'flex-end', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: 6, paddingHorizontal: spacing.lg, marginTop: spacing.sm },
   concernsSaveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
 });

@@ -40,9 +40,12 @@ interface Props {
   // Optional prefix shown before the value on the same line, e.g. "Budget?"
   // so the header reads "Budget? £200." / "Budget? Baller."
   label?: string;
+  // Tighter type + track for screens that need a smaller footprint
+  // (e.g. Find a Wine Pairing). Default keeps the full-size layout.
+  compact?: boolean;
 }
 
-export function BudgetSlider({ value, onChange, currency, label }: Props) {
+export function BudgetSlider({ value, onChange, currency, label, compact }: Props) {
   // Track index locally during drag so the slider doesn't fight the
   // controlled `value` prop (each parent update would otherwise force the
   // thumb back and break the gesture). Commit upstream on release.
@@ -61,13 +64,14 @@ export function BudgetSlider({ value, onChange, currency, label }: Props) {
 
   return (
     <View style={{ width: '100%' }}>
-      <Text style={styles.value}>
+      <Text style={[styles.value, compact && styles.valueCompact]}>
         {label ? `${label}  ` : ''}
         <Text style={touched ? styles.valueConfirmed : undefined}>
           {atMax ? 'Baller' : `${sym}${current}`}.
         </Text>
       </Text>
       <Slider
+        style={compact ? styles.sliderCompact : undefined}
         minimumValue={0}
         maximumValue={MAX_INDEX}
         step={1}
@@ -79,8 +83,8 @@ export function BudgetSlider({ value, onChange, currency, label }: Props) {
         thumbTintColor="#FFFFFF"
       />
       <View style={styles.labels}>
-        <Text style={styles.label}>{sym}20</Text>
-        <Text style={styles.label}>Baller</Text>
+        <Text style={[styles.label, compact && styles.labelCompact]}>{sym}20</Text>
+        <Text style={[styles.label, compact && styles.labelCompact]}>Baller</Text>
       </View>
     </View>
   );
@@ -97,6 +101,14 @@ const styles = StyleSheet.create({
   valueConfirmed: {
     color: colors.gold,
   },
+  // Compact variant — smaller value text + shorter native track.
+  valueCompact: {
+    fontSize: 14,
+    marginBottom: spacing.xs,
+  },
+  sliderCompact: {
+    height: 28,
+  },
   labels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -106,5 +118,8 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemibold,
     fontSize: 14,
     color: '#FFFFFF',
+  },
+  labelCompact: {
+    fontSize: 12,
   },
 });
