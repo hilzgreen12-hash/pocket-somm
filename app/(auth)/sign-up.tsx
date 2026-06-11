@@ -18,15 +18,20 @@ export default function SignUp() {
 
   async function handleSignUp() {
     setError('');
+    // Trim passwords — keyboards/autofill can inject a leading or trailing
+    // space. Sign-in and reset trim identically so a stray space can never
+    // lock a user out or cause a false "passwords do not match".
+    const trimmedPassword = password.trim();
+    const trimmedConfirm = confirmPassword.trim();
     if (!displayName.trim()) { setError('Please enter your name.'); return; }
     if (!email.trim()) { setError('Please enter your email.'); return; }
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
-    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+    if (trimmedPassword.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (trimmedPassword !== trimmedConfirm) { setError('Passwords do not match.'); return; }
 
     setLoading(true);
     const { error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
-      password,
+      password: trimmedPassword,
       options: {
         data: { display_name: displayName.trim() },
         // Where Supabase sends the user after they tap the confirmation
@@ -86,6 +91,11 @@ export default function SignUp() {
         value={password}
         onChangeText={setPassword}
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="password-new"
+        textContentType="newPassword"
       />
       <TextInput
         style={styles.input}
@@ -94,6 +104,11 @@ export default function SignUp() {
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="password-new"
+        textContentType="newPassword"
       />
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}

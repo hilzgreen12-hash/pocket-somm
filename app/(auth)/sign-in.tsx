@@ -15,12 +15,17 @@ export default function SignIn() {
 
   async function handleSignIn() {
     setError('');
-    if (!email.trim() || !password) {
+    const trimmedEmail = email.trim();
+    // Trim the password too — keyboards/autofill sometimes inject a leading or
+    // trailing space. Sign-up and reset trim the same way, so a stray space can
+    // never cause a mismatch between what's set and what's entered here.
+    const trimmedPassword = password.trim();
+    if (!trimmedEmail || !trimmedPassword) {
       setError('Please enter your email and password.');
       return;
     }
     setLoading(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password: trimmedPassword });
     setLoading(false);
     if (signInError) {
       if (signInError.message.toLowerCase().includes('email not confirmed')) {
@@ -57,6 +62,11 @@ export default function SignIn() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="password"
+          textContentType="password"
         />
         <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword((v) => !v)}>
           <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>

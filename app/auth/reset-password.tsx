@@ -47,10 +47,16 @@ export default function ResetPasswordScreen() {
 
   async function handleUpdate() {
     setError('');
-    if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
-    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+    // Trim passwords — keyboards/autofill can inject a leading or trailing
+    // space (a stray leading space here was a real "passwords do not match"
+    // false negative). Sign-in/sign-up trim identically so the set password
+    // always matches what's entered at sign-in.
+    const trimmedPassword = password.trim();
+    const trimmedConfirm = confirmPassword.trim();
+    if (trimmedPassword.length < 8) { setError('Password must be at least 8 characters.'); return; }
+    if (trimmedPassword !== trimmedConfirm) { setError('Passwords do not match.'); return; }
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password });
+    const { error: updateError } = await supabase.auth.updateUser({ password: trimmedPassword });
     setLoading(false);
     if (updateError) {
       setError(updateError.message);
@@ -104,6 +110,11 @@ export default function ResetPasswordScreen() {
           value={password}
           onChangeText={setPassword}
           secureTextEntry={!showPassword}
+          autoCapitalize="none"
+          autoCorrect={false}
+          spellCheck={false}
+          autoComplete="password-new"
+          textContentType="newPassword"
         />
         <TouchableOpacity style={styles.eyeButton} onPress={() => setShowPassword((v) => !v)}>
           <Text style={styles.eyeText}>{showPassword ? 'Hide' : 'Show'}</Text>
@@ -116,6 +127,11 @@ export default function ResetPasswordScreen() {
         value={confirmPassword}
         onChangeText={setConfirmPassword}
         secureTextEntry={!showPassword}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="password-new"
+        textContentType="newPassword"
       />
 
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
