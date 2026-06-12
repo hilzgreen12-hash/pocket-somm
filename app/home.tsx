@@ -193,7 +193,7 @@ export default function HomeScreen() {
                 <View style={styles.tileMotif}>
                   <Motif />
                 </View>
-                <Text style={styles.tileTitle}>{tile.label}</Text>
+                <Text style={styles.tileTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tile.label}</Text>
                 <View style={styles.tileDivider} />
                 <Text style={styles.tileDesc}>{tile.desc}</Text>
                 <Text style={styles.tileArrow}>→</Text>
