@@ -57,13 +57,16 @@ export default function RackGridScreen() {
   const qc = useQueryClient();
 
   const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode } = useRackStore();
-  const { customFilters, create: createFilter, remove: removeFilter } = useCustomFilters();
+  const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(rackId);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   // Custom filters (named collections of wines) — now surfaced as chips in the
   // filter carousel, plus the create flow.
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
   const [createFilterOpen, setCreateFilterOpen] = useState(false);
+  // Non-null when the create/edit modal is editing an existing filter rather
+  // than creating a new one — drives the save branch + modal title/button.
+  const [editingFilterId, setEditingFilterId] = useState<string | null>(null);
   // Maturity (readiness-for-drinking) filter chip + its dropdown.
   const [maturityHighlight, setMaturityHighlight] = useState<string>('');
   const [maturityOpen, setMaturityOpen] = useState(false);
@@ -674,9 +677,21 @@ export default function RackGridScreen() {
     setMaturityOpen(false);
   }
   function openCreateFilter() {
+    setEditingFilterId(null);
     setFilterNameDraft('');
     setSelectedWineIds(new Set());
     setCreateFilterOpen(true);
+  }
+  // Open the same modal pre-filled to edit an existing filter's name + wines.
+  function openEditFilter(filter: { id: string; name: string; wineIds: string[] }) {
+    setEditingFilterId(filter.id);
+    setFilterNameDraft(filter.name);
+    setSelectedWineIds(new Set(filter.wineIds));
+    setCreateFilterOpen(true);
+  }
+  function closeFilterModal() {
+    setCreateFilterOpen(false);
+    setEditingFilterId(null);
   }
   function toggleWineInSelection(id: string) {
     setSelectedWineIds((prev) => {
@@ -691,25 +706,34 @@ export default function RackGridScreen() {
     if (selectedWineIds.size === 0) { setSavedMsg('Pick at least one wine'); return; }
     setSavingFilter(true);
     try {
-      await createFilter.mutateAsync({ name, wineIds: Array.from(selectedWineIds) });
-      setCreateFilterOpen(false);
-      setSavedMsg(`"${name}" filter created`);
+      if (editingFilterId) {
+        await renameFilter.mutateAsync({ filterId: editingFilterId, name });
+        await setFilterWines.mutateAsync({ filterId: editingFilterId, wineIds: Array.from(selectedWineIds) });
+        closeFilterModal();
+        setSavedMsg(`"${name}" filter updated`);
+      } else {
+        await createFilter.mutateAsync({ name, wineIds: Array.from(selectedWineIds) });
+        closeFilterModal();
+        setSavedMsg(`"${name}" filter created`);
+      }
     } catch (err) {
       showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingFilter(false);
     }
   }
-  function confirmDeleteFilter(id: string, name: string) {
+  // Long-press menu on a filter chip: edit it, delete it, or cancel.
+  function openFilterOptions(filter: { id: string; name: string; wineIds: string[] }) {
     showAlert({
-      title: 'Delete filter?',
-      body: `Remove "${name}"? Your wines stay in the cellar — only the filter is deleted.`,
+      title: filter.name,
+      body: 'Edit this filter’s name and wines, or delete it. Your wines stay in the cellar either way.',
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Edit', onPress: () => openEditFilter(filter) },
         { text: 'Delete', style: 'destructive', onPress: () => {
-            if (activeCustomFilterId === id) setActiveCustomFilterId(null);
-            removeFilter.mutate(id);
+            if (activeCustomFilterId === filter.id) setActiveCustomFilterId(null);
+            removeFilter.mutate(filter.id);
           } },
+        { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
@@ -796,7 +820,7 @@ export default function RackGridScreen() {
                     key={f.id}
                     style={[styles.filterChip, active && styles.filterChipActive]}
                     onPress={() => applyCustomFilter(f.id)}
-                    onLongPress={() => confirmDeleteFilter(f.id, f.name)}
+                    onLongPress={() => openFilterOptions(f)}
                     delayLongPress={400}
                     activeOpacity={0.7}
                   >
@@ -1199,10 +1223,10 @@ export default function RackGridScreen() {
       </Modal>
 
       {/* Create a custom filter — name it, then tick the wines it holds. */}
-      <Modal visible={createFilterOpen} transparent animationType="fade" onRequestClose={() => setCreateFilterOpen(false)}>
+      <Modal visible={createFilterOpen} transparent animationType="fade" onRequestClose={closeFilterModal}>
         <KeyboardAvoidingView behavior="padding" style={styles.filterModalOverlay}>
           <View style={styles.filterModalSheet}>
-            <Text style={styles.filterModalTitle}>New custom filter</Text>
+            <Text style={styles.filterModalTitle}>{editingFilterId ? 'Edit custom filter' : 'New custom filter'}</Text>
             <TextInput
               style={styles.filterNameInput}
               value={filterNameDraft}
@@ -1225,11 +1249,11 @@ export default function RackGridScreen() {
               })}
             </ScrollView>
             <View style={styles.filterModalActions}>
-              <TouchableOpacity onPress={() => setCreateFilterOpen(false)}>
+              <TouchableOpacity onPress={closeFilterModal}>
                 <Text style={styles.filterCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.filterSaveBtn, savingFilter && { opacity: 0.5 }]} onPress={saveCustomFilter} disabled={savingFilter}>
-                <Text style={styles.filterSaveBtnText}>{savingFilter ? 'Saving…' : 'Save Filter'}</Text>
+                <Text style={styles.filterSaveBtnText}>{savingFilter ? 'Saving…' : editingFilterId ? 'Save Changes' : 'Save Filter'}</Text>
               </TouchableOpacity>
             </View>
           </View>
