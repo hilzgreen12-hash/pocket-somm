@@ -207,6 +207,10 @@ export default function CellarWineDetail() {
         qc.invalidateQueries({ queryKey: ['cellar'] });
         qc.invalidateQueries({ queryKey: ['cellar-archive'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        // Bust the cached signed URL for this path so a replaced photo shows
+        // immediately rather than the previous image (the path is reused per
+        // wine id, so without this the cached URL/bitmap would persist).
+        qc.invalidateQueries({ queryKey: ['label-url', path] });
       } catch (err) {
         showAlert({ title: 'Could not save photo', body: err instanceof Error ? err.message : 'Please try again.' });
       } finally {
@@ -1404,6 +1408,7 @@ export default function CellarWineDetail() {
               keyboardType="number-pad"
               placeholder="1"
               placeholderTextColor={colors.textMuted}
+              selectTextOnFocus
             />
 
             <TouchableOpacity
