@@ -6,13 +6,16 @@ export interface CustomFilter {
   wineIds: string[];
 }
 
-// All of the user's custom filters with the cellar-wine ids that belong to
-// each. Two cheap selects + an in-memory join (filter counts are small).
-export async function fetchCustomFilters(userId: string): Promise<CustomFilter[]> {
+// The user's custom filters for a SINGLE rack, with the cellar-wine ids that
+// belong to each. Filters are scoped per-rack (see migration 051), so a filter
+// created on one rack no longer shows on the others. Two cheap selects + an
+// in-memory join (filter counts are small).
+export async function fetchCustomFilters(userId: string, rackId: string): Promise<CustomFilter[]> {
   const { data: filters, error } = await supabase
     .from('custom_filters')
     .select('id, name')
     .eq('user_id', userId)
+    .eq('rack_id', rackId)
     .order('created_at', { ascending: true });
   if (error) throw new Error(error.message);
   const ids = (filters ?? []).map((f) => f.id);
@@ -33,10 +36,10 @@ export async function fetchCustomFilters(userId: string): Promise<CustomFilter[]
   return (filters ?? []).map((f) => ({ id: f.id, name: f.name, wineIds: byFilter.get(f.id) ?? [] }));
 }
 
-export async function createCustomFilter(userId: string, name: string, wineIds: string[]): Promise<void> {
+export async function createCustomFilter(userId: string, name: string, wineIds: string[], rackId: string): Promise<void> {
   const { data, error } = await supabase
     .from('custom_filters')
-    .insert({ user_id: userId, name: name.trim() })
+    .insert({ user_id: userId, name: name.trim(), rack_id: rackId })
     .select('id')
     .single();
   if (error) throw new Error(error.message);
