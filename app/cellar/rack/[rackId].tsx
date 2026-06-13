@@ -1024,6 +1024,7 @@ export default function RackGridScreen() {
               placeholderTextColor={colors.textMuted}
               maxLength={3}
               autoFocus
+              selectTextOnFocus
             />
 
             {(parseInt(placeCount, 10) || 1) > 1 && (
