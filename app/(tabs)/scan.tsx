@@ -263,7 +263,7 @@ export default function ScanTab() {
         <View style={styles.titleRow}>
           <Text style={styles.appName}>List</Text>
         </View>
-        <Text style={styles.subtitle}>Input a wine list with your preferences to generate recommendations based on critic scores, value, rarity, and readiness for drinking. Save wines and restaurants for records and reviews.</Text>
+        <Text style={styles.subtitle}>Input a wine list alongside your preferences to generate three recommendations.</Text>
         <HelpButton label="More About List" title="How List works" body={LIST_HELP} />
       </View>
 
