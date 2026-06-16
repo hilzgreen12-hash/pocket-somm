@@ -1362,7 +1362,11 @@ export default function RackGridScreen() {
           rack. Fills the screen so the grid + thumbnails can expand to the
           edges; pinch back in (or tap ✕) to drop back to the inline rack. */}
       <Modal visible={fullScreen} animationType="fade" onRequestClose={closeFullScreen}>
-        <View style={styles.fsContainer}>
+        {/* GestureHandlerRootView is REQUIRED here: react-native-gesture-handler
+            gestures do not fire inside a RN <Modal> (it renders in a separate
+            native hierarchy the app-root provider doesn't cover). Without it the
+            full-screen rack froze — no pan, no further zoom, no pinch-to-close. */}
+        <GestureHandlerRootView style={styles.fsContainer}>
           <GestureDetector gesture={fsZoomGesture}>
             <View style={styles.fsGestureArea}>
               <Animated.View
@@ -1377,7 +1381,7 @@ export default function RackGridScreen() {
             <Text style={styles.fsCloseText}>✕</Text>
           </TouchableOpacity>
           <Text style={styles.fsHint}>Pinch in to close</Text>
-        </View>
+        </GestureHandlerRootView>
       </Modal>
     </View>
     </GestureDetector>
