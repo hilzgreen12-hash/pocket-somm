@@ -7,10 +7,11 @@ import type { PricingData } from '../types/wine';
  */
 export async function fetchWinePrice(
   wineName: string,
-  vintage: number | null
+  vintage: number | null,
+  currency?: string
 ): Promise<PricingData> {
   const { data, error } = await supabase.functions.invoke('wine-searcher-proxy', {
-    body: { wineName, vintage },
+    body: { wineName, vintage, currency },
   });
   if (error) throw new Error(`Wine-Searcher proxy error: ${error.message}`);
   return data as PricingData;

@@ -3,16 +3,18 @@ import type { PricingData } from '../types/wine';
 
 export async function fetchPricing(
   wineName: string,
-  vintage: number | null
+  vintage: number | null,
+  currency?: string
 ): Promise<PricingData> {
   try {
-    return await fetchWinePrice(wineName, vintage);
+    return await fetchWinePrice(wineName, vintage, currency);
   } catch {
     return {
+      matched: false,
       averageMarketPrice: null,
       minPrice: null,
       maxPrice: null,
-      currency: 'GBP',
+      currency: currency ?? 'GBP',
       criticScore: null,
       source: 'unavailable',
     };
