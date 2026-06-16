@@ -591,9 +591,10 @@ export default function CellarWineDetail() {
   function toggleReview() {
     setReviewExpanded((v) => !v);
   }
+  // Personal Notes is display-only on the card now — the chevron just
+  // expands/collapses. Editing happens in the canonical review form.
   function toggleNote() {
-    if (editingNote) void handleSaveNote();
-    else setEditingNote(true);
+    setEditingNote((v) => !v);
   }
 
   async function handleRemoveWine() {
@@ -1212,32 +1213,20 @@ export default function CellarWineDetail() {
             <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
           </TouchableOpacity>
         </View>
-        {editingNote ? (
-          <>
-            <View style={styles.dictateRow}>
-              <Text style={styles.fieldLabel}>Note</Text>
-              <MicButton value={noteText} onChangeText={setNoteText} onClear={() => setNoteText('')} />
-            </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={noteText}
-              onChangeText={setNoteText}
-              placeholder="Add a personal note about this wine…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-              autoFocus
-            />
-            <View style={styles.noteActions}>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveNote} disabled={savingNote}>
-                <Text style={styles.saveBtnText}>{savingNote ? 'Saving…' : 'Save'}</Text>
+        {wine.user_notes ? (
+          editingNote ? (
+            <>
+              <Text style={styles.noteText}>{wine.user_notes}</Text>
+              <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+                <Text style={styles.editReviewLink}>Edit Personal Note</Text>
               </TouchableOpacity>
-            </View>
-          </>
-        ) : wine.user_notes ? (
-          <Text style={styles.noteText}>{wine.user_notes}</Text>
-        ) : null}
+            </>
+          ) : null
+        ) : (
+          <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.addReviewLink}>+ Add Personal Note</Text>
+          </TouchableOpacity>
+        )}
       </View>
       )}
 
