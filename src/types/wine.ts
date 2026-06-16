@@ -310,10 +310,17 @@ export interface ChosenWine {
 }
 
 export interface PricingData {
+  // True only when Wine-Searcher actually matched the wine (return-code 0).
+  // false on an explicit miss or any proxy error — callers should fall back
+  // to the Claude estimate in that case.
+  matched?: boolean;
   averageMarketPrice: number | null;
   minPrice: number | null;
   maxPrice: number | null;
   currency: string;
   criticScore: number | null;
+  region?: string | null;
+  grape?: string | null;
+  wsWineId?: string | null;
   source: 'wine-searcher' | 'unavailable';
 }

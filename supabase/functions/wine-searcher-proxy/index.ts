@@ -1,24 +1,81 @@
-const WINE_SEARCHER_API_KEY = Deno.env.get('WINE_SEARCHER_API_KEY')!;
-const CACHE_TTL_DAYS = 7;
+// Wine-Searcher price/score proxy.
+//
+// Holds the secret API key server-side (never in the mobile bundle), calls
+// Wine-Searcher, parses its XML response, and caches the result in
+// `pricing_cache` so repeat lookups for the same wine are instant and don't
+// burn API calls. Falls back to a clearly-flagged "unavailable" payload on any
+// error so the client can quietly drop back to the Claude estimate.
+//
+// Real response shape (flat XML), confirmed from a live sample:
+//   <return-code>0</return-code>          0 = hit, non-zero = no match
+//   <wine-name-id>10</wine-name-id>        stable Wine-Searcher wine id
+//   <price-average>3754.06</price-average>
+//   <price-min>2889.29</price-min>
+//   <price-max>4888.33</price-max>
+//   <list-currency-code>USD</list-currency-code>
+//   <ws-score>94</ws-score>                aggregated critic score 0–100
+//   <region>Pomerol</region>
+//   <grape>Merlot</grape>
 
-// Supabase client for caching
 import { createClient } from 'npm:@supabase/supabase-js';
+
+const WINE_SEARCHER_API_KEY = Deno.env.get('WINE_SEARCHER_API_KEY')!;
+// Full request URL template, overridable via secret so the exact endpoint can
+// be corrected without a redeploy. {KEY} {NAME} {VINTAGE} {CURRENCY} are
+// substituted (already URL-encoded where needed). The default matches the
+// documented Wine-Searcher price API; confirm against your test link.
+const WINE_SEARCHER_URL =
+  Deno.env.get('WINE_SEARCHER_URL') ??
+  'https://api.wine-searcher.com/api/v1/wine?api_key={KEY}&winename={NAME}&vintage={VINTAGE}&currencycode={CURRENCY}&format=xml';
+const CACHE_TTL_DAYS = 30;
+
 const supabase = createClient(
   Deno.env.get('SUPABASE_URL')!,
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 );
 
+// Pull the text content of the first <tag>…</tag>. Returns null when absent
+// or empty so callers can distinguish "missing" from "0".
+function tag(xml: string, name: string): string | null {
+  const m = xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`, 'i'));
+  const v = m?.[1]?.trim();
+  return v ? v : null;
+}
+function num(xml: string, name: string): number | null {
+  const v = tag(xml, name);
+  if (v === null) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+const UNAVAILABLE = {
+  matched: false,
+  source: 'unavailable' as const,
+  averageMarketPrice: null,
+  minPrice: null,
+  maxPrice: null,
+  criticScore: null,
+  currency: 'GBP',
+  region: null,
+  grape: null,
+  wsWineId: null,
+};
+
 Deno.serve(async (req) => {
   try {
-    const { wineName, vintage } = await req.json();
+    const { wineName, vintage, currency } = await req.json();
 
     if (!wineName) {
       return new Response(JSON.stringify({ error: 'wineName required' }), { status: 400 });
     }
 
-    const wineKey = `${wineName}_${vintage ?? 'NV'}`;
+    const cur = (currency ?? 'GBP').toString().toUpperCase();
+    const vintageParam = vintage ?? 'NV';
+    // Currency is part of the key: prices are returned in the requested
+    // currency, so a GBP and a USD lookup of the same wine must not collide.
+    const wineKey = `${wineName}_${vintageParam}_${cur}`;
 
-    // Check cache first
+    // 1) Cache hit within TTL → serve immediately.
     const { data: cached } = await supabase
       .from('pricing_cache')
       .select('*')
@@ -26,11 +83,11 @@ Deno.serve(async (req) => {
       .single();
 
     if (cached) {
-      const age = Date.now() - new Date(cached.fetched_at).getTime();
-      const ageDays = age / (1000 * 60 * 60 * 24);
+      const ageDays = (Date.now() - new Date(cached.fetched_at).getTime()) / 86_400_000;
       if (ageDays < CACHE_TTL_DAYS) {
         return new Response(
           JSON.stringify({
+            matched: cached.market_price_avg != null || cached.critic_score != null,
             averageMarketPrice: cached.market_price_avg,
             minPrice: cached.market_price_min,
             maxPrice: cached.market_price_max,
@@ -43,30 +100,42 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Call Wine-Searcher API
-    const vintageParam = vintage ?? 'NV';
-    const url = `https://www.wine-searcher.com/api/wine-check?api_key=${WINE_SEARCHER_API_KEY}&winename=${encodeURIComponent(wineName)}&vintage=${vintageParam}&format=json`;
+    // 2) Call Wine-Searcher.
+    const url = WINE_SEARCHER_URL
+      .replace('{KEY}', WINE_SEARCHER_API_KEY)
+      .replace('{NAME}', encodeURIComponent(wineName))
+      .replace('{VINTAGE}', encodeURIComponent(String(vintageParam)))
+      .replace('{CURRENCY}', encodeURIComponent(cur));
 
     const wsResponse = await fetch(url);
     if (!wsResponse.ok) {
       throw new Error(`Wine-Searcher returned ${wsResponse.status}`);
     }
+    const xml = await wsResponse.text();
 
-    const wsData = await wsResponse.json();
+    // return-code 0 = hit. Anything else (or missing) = no match → fall back.
+    const returnCode = tag(xml, 'return-code');
+    if (returnCode !== '0') {
+      return new Response(JSON.stringify(UNAVAILABLE), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    // Normalise response (structure may vary — adjust once you have API access)
     const pricing = {
-      averageMarketPrice: wsData.price_avg ?? null,
-      minPrice: wsData.price_min ?? null,
-      maxPrice: wsData.price_max ?? null,
-      criticScore: wsData.critic_score ?? null,
-      currency: wsData.currency ?? 'GBP',
+      matched: true,
       source: 'wine-searcher' as const,
+      averageMarketPrice: num(xml, 'price-average'),
+      minPrice: num(xml, 'price-min'),
+      maxPrice: num(xml, 'price-max'),
+      criticScore: num(xml, 'ws-score'),
+      currency: tag(xml, 'list-currency-code') ?? cur,
+      region: tag(xml, 'region'),
+      grape: tag(xml, 'grape'),
+      wsWineId: tag(xml, 'wine-name-id'),
     };
 
-    // Write to cache — surface upsert errors so a misconfigured RLS or
-    // unique-key collision doesn't silently cause every subsequent call to
-    // re-hit the upstream Wine-Searcher API.
+    // 3) Cache. Surface upsert errors so a misconfigured RLS / key collision
+    // doesn't silently force every call to re-hit the upstream API.
     const { error: cacheErr } = await supabase.from('pricing_cache').upsert({
       wine_key: wineKey,
       market_price_avg: pricing.averageMarketPrice,
@@ -85,9 +154,11 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     console.error('Wine-Searcher proxy error:', err);
-    return new Response(
-      JSON.stringify({ source: 'unavailable', averageMarketPrice: null, minPrice: null, maxPrice: null, criticScore: null, currency: 'GBP' }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    // 200 with an "unavailable" payload (not 5xx) so the client treats it as a
+    // clean miss and falls back to the Claude estimate without surfacing an error.
+    return new Response(JSON.stringify(UNAVAILABLE), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 });
