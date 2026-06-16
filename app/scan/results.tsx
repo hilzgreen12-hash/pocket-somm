@@ -219,28 +219,24 @@ export default function ResultsScreen() {
   // right here on the results screen. Used by both the tappable location
   // line and the foot-of-page CTA — the form opens in place rather than
   // bouncing the user to the Your Restaurants list.
-  async function openRestaurantReview() {
-    // Fast path: a scan_sessions row already exists (autoSave landed, or we
-    // came in with a sessionId). Open the form IMMEDIATELY and push the
-    // restaurant-name update in the background — the user shouldn't wait on a
-    // network round-trip just to start typing their review.
+  function openRestaurantReview() {
+    // Open the form INSTANTLY — never block on the network. The review modal
+    // only needs the scan_sessions id at *save* time, not to render, so we
+    // resolve the id in the background and slot it in when ready (the Save
+    // button stays disabled until it lands — usually well under a second).
+    setRestaurantReviewOpen(true);
     if (effectiveSessionId) {
       setReviewSessionId(effectiveSessionId);
-      setRestaurantReviewOpen(true);
+      // Persist any restaurant-name edit in the background.
       void handleSaveRestaurant();
       return;
     }
-    // No row yet — we must create one to get an id to attach the review to,
-    // so this path still awaits. Use the id RETURNED by the save (autoSave.data
-    // is stale until the next render — that lag is what made the first tap
-    // prompt "add a restaurant first" even after a successful save).
-    const id = (await handleSaveRestaurant()) ?? sessionId ?? null;
-    if (!id) {
-      showAlert({ title: 'Add a restaurant first', body: 'Add the restaurant name above, then you can review it.' });
-      return;
-    }
-    setReviewSessionId(id);
-    setRestaurantReviewOpen(true);
+    // No row yet — create one in the background to get an id to attach the
+    // review to. The user can start typing immediately while this resolves.
+    setReviewSessionId(null);
+    void handleSaveRestaurant().then((id) => {
+      if (id) setReviewSessionId(id);
+    });
   }
 
   // The List Archive is gone — autoSave still fires from
@@ -785,8 +781,8 @@ export default function ResultsScreen() {
       {/* Restaurant review form — opened from the location line or the
           foot-of-page CTA. Pre-filled from the saved scan_session when one
           exists (e.g. View Last Result), blank for a fresh review. */}
-      {reviewSessionId ? (() => {
-        const item = archive.find((a) => a.id === reviewSessionId) ?? null;
+      {restaurantReviewOpen ? (() => {
+        const item = reviewSessionId ? (archive.find((a) => a.id === reviewSessionId) ?? null) : null;
         // Only the wines the user actually picked belong under "Your Bottle
         // Picks" — not every wine Vinster recommended. Keep the original
         // recommendation index alongside each pick so "Review this wine →"
@@ -797,7 +793,7 @@ export default function ResultsScreen() {
         return (
           <RestaurantReviewModal
             visible={restaurantReviewOpen}
-            sessionId={reviewSessionId}
+            sessionId={reviewSessionId ?? ''}
             initialName={restaurantName || item?.restaurantName || null}
             initialNote={item?.restaurantNote ?? null}
             initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall, value: item.ratingValue } : null}

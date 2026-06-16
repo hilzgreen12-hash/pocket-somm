@@ -280,9 +280,9 @@ export function RestaurantReviewModal({
             {/* Share — community + native share, side by side. */}
             <View style={styles.shareRow}>
               <TouchableOpacity
-                style={[styles.shareBtn, posting && styles.btnDisabled]}
+                style={[styles.shareBtn, (posting || !sessionId) && styles.btnDisabled]}
                 onPress={handleShareToCommunity}
-                disabled={posting}
+                disabled={posting || !sessionId}
                 activeOpacity={0.8}
               >
                 <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
@@ -297,8 +297,8 @@ export function RestaurantReviewModal({
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity style={styles.saveButton} onPress={handleSave} disabled={saving}>
-              <Text style={styles.saveButtonText}>{saving ? 'Saving…' : 'Save Review'}</Text>
+            <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
+              <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save Review'}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
