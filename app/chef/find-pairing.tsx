@@ -156,7 +156,7 @@ export default function FindPairingScreen() {
       </View>
 
       <Text style={styles.blurb}>
-        Tell us what you're cooking and we'll find the perfect wine. Vinster will use your settings under{' '}
+        Vinster will use your settings under{' '}
         <Text style={styles.blurbLink} onPress={handleOpenPreferences}>About You - Your Wine Preferences</Text>
         {' '}to guide its results.
       </Text>
