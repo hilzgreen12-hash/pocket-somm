@@ -514,28 +514,7 @@ export default function ChosenWinesScreen() {
         onSaved={() => setAddOpen(false)}
       />
 
-      <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
-        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
-            <Text style={styles.chooserTitle}>Add a review</Text>
-            <Text style={styles.chooserBody}>How would you like to log this wine?</Text>
-            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseScan} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>Scan a label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseUpload} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>Upload A Wine Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseManual} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>Manual input</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setChooserOpen(false)} style={styles.chooserCancel}>
-              <Text style={styles.chooserCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      {/* Fullscreen overlay while the chosen photo is being read. Sits
+{/* Fullscreen overlay while the chosen photo is being read. Sits
           above the screen so the user can't tap "+ Add" again mid-scan. */}
       {uploading ? (
         <View style={styles.uploadingOverlay} pointerEvents="auto">
@@ -571,7 +550,7 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
         <TouchableOpacity
-          onPress={() => setChooserOpen(true)}
+          onPress={() => setAddOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Text style={styles.addLink}>+ Add</Text>
@@ -582,7 +561,7 @@ export default function ChosenWinesScreen() {
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>
-            When you review a wine from a Vinster recommendation, it's saved here — or tap + Add at the top to enter one by scan, photo, or by hand. The reviews you write on your cellar wines appear here too.
+            When you review a wine from a Vinster recommendation, it's saved here — or tap + Add at the top to enter one by hand. The reviews you write on your cellar wines appear here too.
           </Text>
         </View>
       ) : (
