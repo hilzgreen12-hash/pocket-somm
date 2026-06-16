@@ -56,7 +56,7 @@ export default function RackGridScreen() {
   const { width, height } = useWindowDimensions();
   const qc = useQueryClient();
 
-  const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode } = useRackStore();
+  const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
   const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(rackId);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,8 +75,9 @@ export default function RackGridScreen() {
   const [savingFilter, setSavingFilter] = useState(false);
   const [bottleListOpen, setBottleListOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
-  const [moving, setMoving] = useState<{ row: number; col: number; wineId: string; wineName: string } | null>(null);
-  const [movingMsg, setMovingMsg] = useState<string | null>(null);
+  // The in-progress move lives in the rack store (see rackStore) so it
+  // survives navigating to another rack — pick up on rack A, drop on rack B.
+  const moving = pendingMove;
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
   // Placement modal — shown when the user taps an empty slot with a
   // pending wine. Asks how many bottles and (when > 1) orientation.
@@ -406,10 +407,9 @@ export default function RackGridScreen() {
   function openSlot(row: number, col: number) {
     // If we're in the middle of a move, treat this tap as the drop target.
     if (moving) {
-      // Tapping the source slot itself cancels the move.
-      if (moving.row === row && moving.col === col) {
-        setMoving(null);
-        setMovingMsg(null);
+      // Tapping the source slot (on its own rack) cancels the move.
+      if (moving.sourceRackId === rackId && moving.row === row && moving.col === col) {
+        setPendingMove(null);
         return;
       }
       handleDrop(row, col);
@@ -566,10 +566,9 @@ export default function RackGridScreen() {
     // removing a wine directly from the rack grid.
     const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = [
       {
-        text: 'Move to another slot',
+        text: 'Move to another slot or rack',
         onPress: () => {
-          setMoving({ row, col, wineId, wineName: wine.wine_name });
-          setMovingMsg(`Moving ${wine.wine_name} — tap a slot to place, or tap the source slot to cancel`);
+          setPendingMove({ sourceRackId: rackId, row, col, wineId, wineName: wine.wine_name });
         },
       },
     ];
@@ -664,22 +663,28 @@ export default function RackGridScreen() {
   async function handleDrop(toRow: number, toCol: number) {
     if (!moving) return;
     const sourceWine = moving.wineId;
+    const sourceRackId = moving.sourceRackId;
+    const srcRow = moving.row;
+    const srcCol = moving.col;
     const destSlot = slotMap[`${toRow},${toCol}`];
     const destWine = destSlot?.cellar_wine_id ?? null;
-    setMoving(null);
-    setMovingMsg(null);
+    setPendingMove(null);
     try {
+      // Source slot lives on sourceRackId (which may differ from this rack);
+      // the drop target is the rack we're viewing now.
       if (destWine) {
-        // Swap: source <- dest's wine, dest <- source's wine
-        await assignSlot(rackId, moving.row, moving.col, destWine);
+        // Swap: source slot <- dest's wine, dest slot <- source's wine.
+        await assignSlot(sourceRackId, srcRow, srcCol, destWine);
         await assignSlot(rackId, toRow, toCol, sourceWine);
       } else {
-        // Move into empty slot: clear source, assign dest
+        // Move into empty slot: assign the dest, clear the source.
         await assignSlot(rackId, toRow, toCol, sourceWine);
-        await clearSlot(rackId, moving.row, moving.col);
+        await clearSlot(sourceRackId, srcRow, srcCol);
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      if (sourceRackId !== rackId) qc.invalidateQueries({ queryKey: ['rack-slots', sourceRackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      setSavedMsg(sourceRackId !== rackId ? 'Moved to this rack' : 'Bottle moved');
     } catch {
       showAlert({ title: 'Move failed', body: 'Could not move the wine. Please try again.' });
     }
@@ -836,7 +841,7 @@ export default function RackGridScreen() {
             const wine = slot?.wine as CellarWine | null | undefined;
             const isHighlighted = !!wine && highlightedIds.has(wine.id);
             const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
-            const isMovingSource = !!moving && moving.row === rowDef.rowIndex && moving.col === col;
+            const isMovingSource = !!moving && moving.sourceRackId === rackId && moving.row === rowDef.rowIndex && moving.col === col;
             return (
               <TouchableOpacity
                 key={col}
@@ -1052,10 +1057,12 @@ export default function RackGridScreen() {
           </>
         )}
 
-        {moving && movingMsg && (
+        {moving && (
           <View style={styles.movingBanner}>
-            <Text style={styles.movingBannerText} numberOfLines={2}>{movingMsg}</Text>
-            <TouchableOpacity onPress={() => { setMoving(null); setMovingMsg(null); }}>
+            <Text style={styles.movingBannerText} numberOfLines={2}>
+              {`Moving ${moving.wineName} — tap a slot to place${moving.sourceRackId === rackId ? ', or tap its slot to cancel' : ' (you can switch racks with the ‹ › arrows)'}`}
+            </Text>
+            <TouchableOpacity onPress={() => setPendingMove(null)}>
               <Text style={styles.movingCancelLink}>Cancel</Text>
             </TouchableOpacity>
           </View>
