@@ -1,6 +1,7 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../constants/theme';
+import { currencySymbol } from '../constants/currency';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 import type { WineRecommendation } from '../types/wine';
 
@@ -18,6 +19,7 @@ interface Props {
   date: string | null;
   restaurant: string | null;
   city: string | null;
+  currency?: string | null;
 }
 
 const RANK_LABELS = ['TOP PICK', 'SECOND CHOICE', 'THIRD CHOICE'];
@@ -32,7 +34,7 @@ function detailLine(w: WineRecommendation): string {
   return parts.join(' · ');
 }
 
-export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaurant, city }, ref) => {
+export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaurant, city, currency }, ref) => {
   const stampLocation = [restaurant, city].filter(Boolean).join(' · ');
 
   return (
@@ -64,7 +66,7 @@ export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaur
                     <Text style={styles.scoreText}>{w.criticScore} <Text style={styles.scoreUnit}>pts</Text></Text>
                   ) : null}
                   {w.menuPrice != null ? (
-                    <Text style={styles.priceText}>£{w.menuPrice}</Text>
+                    <Text style={styles.priceText}>{currencySymbol(currency)}{w.menuPrice}</Text>
                   ) : null}
                 </View>
               </View>

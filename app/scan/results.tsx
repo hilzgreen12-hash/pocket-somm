@@ -16,6 +16,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { normaliseCity } from '../../src/utils/city';
+import { currencySymbol } from '../../src/constants/currency';
 import { recommendWines } from '../../src/services/recommender';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
@@ -623,7 +624,7 @@ export default function ResultsScreen() {
                 {(wine.menuPrice != null || wine.criticScore > 0) && (
                   <View style={styles.priceScoreRow}>
                     {wine.menuPrice != null && (
-                      <Text style={styles.priceScoreText}>£{wine.menuPrice}</Text>
+                      <Text style={styles.priceScoreText}>{currencySymbol(userPrefs?.defaultCurrency)}{wine.menuPrice}</Text>
                     )}
                     {wine.menuPrice != null && wine.criticScore > 0 && (
                       <Text style={styles.priceScoreDot}> · </Text>
@@ -817,6 +818,7 @@ export default function ResultsScreen() {
           date={stampDate}
           restaurant={stampRestaurant}
           city={stampCity}
+          currency={userPrefs?.defaultCurrency}
         />
       </View>
 
