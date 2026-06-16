@@ -1154,12 +1154,6 @@ export default function CellarWineDetail() {
               </Text>
             </View>
             <View style={styles.reviewQuickCell}>
-              <Text style={styles.reviewQuickLabel}>Price Paid</Text>
-              <Text style={[styles.reviewQuickValue, wine.purchase_price == null && styles.reviewQuickValueMuted]} numberOfLines={1}>
-                {wine.purchase_price != null ? formatCurrency(wine.purchase_price, wine.purchase_price_currency, { decimals: 0 }) : '—'}
-              </Text>
-            </View>
-            <View style={styles.reviewQuickCell}>
               <Text style={styles.reviewQuickLabel}>Drinking Window</Text>
               <Text style={[styles.reviewQuickValue, !wine.user_drinking_window && styles.reviewQuickValueMuted]} numberOfLines={1}>
                 {wine.user_drinking_window || '—'}
