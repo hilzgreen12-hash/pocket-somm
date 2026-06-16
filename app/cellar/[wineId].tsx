@@ -27,6 +27,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
+import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
@@ -157,6 +158,9 @@ export default function CellarWineDetail() {
   const [savingTitle, setSavingTitle] = useState(false);
 
   const [reviewExpanded, setReviewExpanded] = useState(false);
+  // The review is now edited only through the canonical EditCellarReviewModal,
+  // never inline on the card. This opens it.
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
   const [reviewLocationDraft, setReviewLocationDraft] = useState(wine?.review_location ?? '');
   // "When did you drink it?" defaults to today if the wine hasn't been
@@ -580,11 +584,12 @@ export default function CellarWineDetail() {
     }
   }
 
-  // Tapping the "Your Review" / "Personal Notes" header expands the inputs;
-  // tapping it again auto-saves and collapses (no Save/Cancel buttons).
+  // The Your Review chevron just expands/collapses the read-only note now —
+  // editing happens in EditCellarReviewModal, so there's no save-on-collapse
+  // (which previously saved date-stamp-only reviews). Personal Notes still
+  // uses the inline auto-save pattern below.
   function toggleReview() {
-    if (reviewExpanded) void handleSaveReview();
-    else setReviewExpanded(true);
+    setReviewExpanded((v) => !v);
   }
   function toggleNote() {
     if (editingNote) void handleSaveNote();
@@ -1140,7 +1145,7 @@ export default function CellarWineDetail() {
           </TouchableOpacity>
         </View>
 
-        {!reviewExpanded && (wine.review_score != null || wine.review_location || wine.review_date) ? (
+        {(wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
           <View style={styles.reviewQuickStats}>
             <View style={styles.reviewQuickCell}>
               <Text style={styles.reviewQuickLabel}>Score</Text>
@@ -1149,84 +1154,32 @@ export default function CellarWineDetail() {
               </Text>
             </View>
             <View style={styles.reviewQuickCell}>
-              <Text style={styles.reviewQuickLabel}>Discovered at</Text>
-              <Text style={[styles.reviewQuickValue, !wine.review_location && styles.reviewQuickValueMuted]} numberOfLines={1}>
-                {wine.review_location || '—'}
+              <Text style={styles.reviewQuickLabel}>Price Paid</Text>
+              <Text style={[styles.reviewQuickValue, wine.purchase_price == null && styles.reviewQuickValueMuted]} numberOfLines={1}>
+                {wine.purchase_price != null ? formatCurrency(wine.purchase_price, wine.purchase_price_currency, { decimals: 0 }) : '—'}
               </Text>
             </View>
             <View style={styles.reviewQuickCell}>
-              <Text style={styles.reviewQuickLabel}>When</Text>
-              <Text style={[styles.reviewQuickValue, !wine.review_date && styles.reviewQuickValueMuted]} numberOfLines={1}>
-                {wine.review_date || '—'}
+              <Text style={styles.reviewQuickLabel}>Drinking Window</Text>
+              <Text style={[styles.reviewQuickValue, !wine.user_drinking_window && styles.reviewQuickValueMuted]} numberOfLines={1}>
+                {wine.user_drinking_window || '—'}
               </Text>
             </View>
           </View>
-        ) : null}
-
-        {reviewExpanded ? (
-          <>
-            {/* Discovered at → Your Review → Your Score → Price Paid, matching
-                the shared review input. Auto-saves when collapsed. */}
-            <Text style={styles.fieldLabel}>Discovered at</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewLocationDraft}
-              onChangeText={setReviewLocationDraft}
-              placeholder="Restaurant, home, friend's place…"
-              placeholderTextColor={colors.textMuted}
-            />
-            <View style={styles.dictateRow}>
-              <Text style={styles.fieldLabel}>Your review</Text>
-              <MicButton value={reviewNoteDraft} onChangeText={setReviewNoteDraft} onClear={() => setReviewNoteDraft('')} />
-            </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={reviewNoteDraft}
-              onChangeText={setReviewNoteDraft}
-              placeholder="What you thought of the wine — taste, occasion, anything that's worth sharing."
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={4}
-              textAlignVertical="top"
-            />
-            <Text style={styles.fieldLabel}>Your Score (0–100)</Text>
-            <TextInput
-              style={styles.input}
-              value={reviewScoreDraft}
-              onChangeText={setReviewScoreDraft}
-              keyboardType="number-pad"
-              placeholder="e.g. 92"
-              placeholderTextColor={colors.textMuted}
-              maxLength={3}
-            />
-            <Text style={styles.fieldLabel}>Price Paid (optional)</Text>
-            <View style={styles.reviewPriceRow}>
-              <Text style={styles.reviewPriceCurrency}>{formatCurrency(0, wine.purchase_price_currency ?? 'GBP', { decimals: 0 }).replace(/[\d.,\s]/g, '') || (wine.purchase_price_currency ?? 'GBP')}</Text>
-              <TextInput
-                style={styles.reviewPriceInput}
-                value={purchasePriceDraft}
-                onChangeText={(t) => setPurchasePriceDraft(t.replace(/[^0-9.]/g, ''))}
-                keyboardType="decimal-pad"
-                placeholder="0"
-                placeholderTextColor={colors.textMuted}
-              />
-            </View>
-            <View style={styles.noteActions}>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleSaveReview} disabled={savingReview}>
-                <Text style={styles.saveBtnText}>{savingReview ? 'Saving…' : 'Save'}</Text>
-              </TouchableOpacity>
-            </View>
-          </>
         ) : (
+          <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.addReviewLink}>+ Add Review</Text>
+          </TouchableOpacity>
+        )}
+
+        {reviewExpanded && (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
           <>
             {wine.review_note ? (
               <Text style={styles.reviewNoteBody}>“{wine.review_note}”</Text>
             ) : null}
 
-            {/* Share-to-community + share-outside-the-app actions sit
-                under the review so the user can post or send their
-                review without leaving the card. Disabled until a
-                review has been written. */}
+            {/* Share-to-community + share-outside-the-app — disabled until a
+                written review exists. Editing opens the canonical review form. */}
             <View style={styles.reviewShareRow}>
               <TouchableOpacity
                 style={[styles.reviewShareBtn, (postingReview || reviewPosted || !wine.review_note) && styles.buttonDisabled]}
@@ -1249,8 +1202,11 @@ export default function CellarWineDetail() {
                 </Text>
               </TouchableOpacity>
             </View>
+            <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.editReviewLink}>Edit Review</Text>
+            </TouchableOpacity>
           </>
-        )}
+        ) : null}
       </View>
 
       {!isWishlist && (
@@ -1554,6 +1510,16 @@ export default function CellarWineDetail() {
           </View>
         </View>
       </Modal>
+
+      {/* Canonical review form — the single place a cellar wine's review is
+          edited (same component Your Wine Reviews opens). Reached via 'Add
+          Review' / 'Edit Review' on the card. */}
+      <EditCellarReviewModal
+        wine={wine}
+        visible={reviewModalOpen}
+        onClose={() => setReviewModalOpen(false)}
+        onSaved={() => qc.invalidateQueries({ queryKey: ['cellar'] })}
+      />
     </KeyboardAwareScrollView>
   );
 }
@@ -1864,6 +1830,9 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontFamily: fonts.bodyItalic,
   },
+  // Gold "+ Add Review" link (no review yet) + "Edit Review" link (review exists).
+  addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
+  editReviewLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm, textAlign: 'center' },
   // Inter — user written review body
   reviewNoteBody: {
     fontFamily: fonts.bodyItalic,
