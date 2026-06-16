@@ -189,6 +189,9 @@ export interface CellarWine {
   estimated_value: number | null;
   estimated_value_currency: string | null;
   estimated_value_at: string | null;
+  // Where Estimated Value came from (migration 053): 'wine-searcher' = real
+  // market data, 'vinster' = Claude estimate. Null on legacy/untouched rows.
+  estimated_value_source: string | null;
   review_score: number | null;
   review_location: string | null;
   review_date: string | null;
@@ -296,6 +299,7 @@ export interface ChosenWine {
   estimated_value: number | null;
   estimated_value_currency: string | null;
   estimated_value_at: string | null;
+  estimated_value_source: string | null;
   // Source discriminator (migration 042). 'restaurant' = came from a
   // List scan or manual entry on Your Wine Reviews. 'other' = reviewed
   // via the "Review without adding" path on /label/results (Cellar

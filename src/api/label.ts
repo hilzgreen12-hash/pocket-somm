@@ -30,7 +30,13 @@ export async function scanLabel(base64Image: string): Promise<WineDetails> {
   return data;
 }
 
-export async function getWineIntelligence(wine: WineDetailsComplete, currency: string = 'GBP'): Promise<WineIntelligence> {
+export async function getWineIntelligence(
+  wine: WineDetailsComplete,
+  currency: string = 'GBP',
+  // Optional Wine-Searcher aggregated score. When supplied it anchors the
+  // Vinster criticScore (the "north star" model) instead of a from-scratch estimate.
+  wsScore?: number | null,
+): Promise<WineIntelligence> {
   const data = await invokeFunction('wine-intelligence', {
     producer: wine.producer,
     region: wine.region,
@@ -38,6 +44,7 @@ export async function getWineIntelligence(wine: WineDetailsComplete, currency: s
     vintage: wine.vintage,
     style: wine.style ?? null,
     currency,
+    wsScore: wsScore ?? null,
   }) as WineIntelligence;
   return data;
 }

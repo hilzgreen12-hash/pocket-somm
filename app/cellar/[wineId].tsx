@@ -17,7 +17,8 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
-import { generatePairings, getWineIntelligence } from '../../src/api/label';
+import { generatePairings } from '../../src/api/label';
+import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
@@ -644,7 +645,11 @@ export default function CellarWineDetail() {
     setRefreshingValue(true);
     const currency = preferences?.defaultCurrency ?? 'GBP';
     try {
-      const intel = await getWineIntelligence({
+      // valueWine() tries Wine-Searcher first (real market price + ws-score as
+      // the critic-score anchor), falling back to the Claude estimate when
+      // there's no match. The critic score is always a Vinster score, anchored
+      // to Wine-Searcher's when available.
+      const v = await valueWine({
         producer: wine.producer ?? '',
         region: wine.region ?? '',
         wineName: wine.wine_name || null,
@@ -653,9 +658,13 @@ export default function CellarWineDetail() {
       await updateWine.mutateAsync({
         id: wine.id,
         updates: {
-          estimated_value: intel.estimatedValue,
-          estimated_value_currency: currency,
+          estimated_value: v.estimatedValue,
+          estimated_value_currency: v.currency,
           estimated_value_at: new Date().toISOString(),
+          estimated_value_source: v.valueSource,
+          // Keep the (WS-anchored) critic score fresh on refresh too.
+          critic_score: v.criticScore,
+          critic_score_note: v.criticScoreNote,
         },
       });
     } catch {
@@ -1071,7 +1080,10 @@ export default function CellarWineDetail() {
                 <Text style={styles.estimateUpdateLink}> (update)</Text>
               </Text>
               {wine.estimated_value_at ? (
-                <Text style={styles.statSub}>{new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                <Text style={styles.statSub}>
+                  {wine.estimated_value_source === 'wine-searcher' ? 'Wine-Searcher · ' : ''}
+                  {new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                </Text>
               ) : null}
             </>
           ) : (

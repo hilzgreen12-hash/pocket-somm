@@ -4,7 +4,12 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 Deno.serve(async (req) => {
   try {
-    const { producer, region, wineName, vintage, style, colour, currency } = await req.json();
+    const { producer, region, wineName, vintage, style, colour, currency, wsScore } = await req.json();
+    // Optional Wine-Searcher aggregated critic score (0–100). When present it
+    // becomes the "north star" anchor for criticScore — the Vinster score is
+    // grounded in real market data but Claude may nudge it with good reason.
+    const wsScoreNum: number | null =
+      typeof wsScore === 'number' && Number.isFinite(wsScore) ? Math.round(wsScore) : null;
     // Accept either `style` (new) or `colour` (legacy clients still in flight)
     const styleValue: string | null = (typeof style === 'string' && style.trim())
       ? style.trim()
@@ -13,15 +18,23 @@ Deno.serve(async (req) => {
     const vintageStr = vintage === 'NV' ? 'Non-Vintage' : vintage;
     const wineNameStr = wineName ? `\n- Wine Name: ${wineName}` : '';
     const styleStr = styleValue ? `\n- Style: ${styleValue} (confirmed by user — use this to disambiguate if producer makes multiple wines of this name)` : '';
+    const wsScoreStr = wsScoreNum != null ? `\n- Wine-Searcher aggregated critic score: ${wsScoreNum}/100` : '';
     const currentYear = new Date().getFullYear();
     const cur = (currency ?? 'GBP').toString().toUpperCase();
+
+    // When Wine-Searcher gives us a real aggregated score, anchor the Vinster
+    // criticScore to it (the user's "north star" model) rather than letting
+    // Claude estimate from scratch.
+    const scoreGuidance = wsScoreNum != null
+      ? `\n\nIMPORTANT — criticScore anchoring: Wine-Searcher's aggregated critic score for this exact wine is ${wsScoreNum}/100. Use this as your PRIMARY anchor ("north star") for the "criticScore" field. Default to returning ${wsScoreNum} unchanged. Only adjust it when you have a specific, well-founded reason (e.g. you confidently recall major published critic scores that materially shift the consensus), and even then keep it within a few points of ${wsScoreNum} and reflect that reasoning in criticScores. The result is a Vinster score grounded in real market data. Never set criticScore to null when this anchor is provided.`
+      : '';
 
     const prompt = `You are a wine expert with encyclopaedic knowledge of wines, producers, vintages, and critic scores.
 
 Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}
+- Vintage: ${vintageStr}${styleStr}${wsScoreStr}
 
 Return ONLY a valid JSON object with exactly this structure:
 {
@@ -41,7 +54,7 @@ Return ONLY a valid JSON object with exactly this structure:
 
 Always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown". Base the status on the current year ${currentYear} relative to the from/to years.
 
-Be conservative and honest with valuation: it is better to return null for estimatedValue (and valueConfidence) than to publish a confident-looking but wrong price. Only mark "high" confidence for wines you genuinely know trade actively at an established price.
+Be conservative and honest with valuation: it is better to return null for estimatedValue (and valueConfidence) than to publish a confident-looking but wrong price. Only mark "high" confidence for wines you genuinely know trade actively at an established price.${scoreGuidance}
 
 Return only the raw JSON — no markdown, no explanation.`;
 
