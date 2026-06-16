@@ -526,19 +526,27 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
-      setSavedMsg(freeSlots.length === 1 ? 'Wine saved to rack' : `${freeSlots.length} bottles saved to rack`);
       setPendingWineId(null);
       setPlacingAt(null);
 
-      // "+ Add bottles" routes the user here from the wine card. After
-      // they confirm placement, drop them back to the screen they were on
-      // BEFORE the wine card (Full Cellar List, or whichever rack), not
-      // the wine card itself — feels like a finished task.
+      const placed = freeSlots.length;
       if (pendingAddMode) {
+        // "+ Add bottles" flow: confirm with a popup, then on OK drop the user
+        // back to the screen they were on BEFORE the wine card (Full Cellar
+        // List or a rack) — feels like a finished task.
         setPendingAddMode(false);
-        if (router.canGoBack()) {
-          try { router.dismiss(2); } catch { router.back(); }
-        }
+        showAlert({
+          title: 'Your bottle has been added',
+          body: placed === 1
+            ? `Added to ${rack?.name ?? 'your rack'}.`
+            : `${placed} bottles added to ${rack?.name ?? 'your rack'}.`,
+          buttons: [{
+            text: 'OK',
+            onPress: () => { if (router.canGoBack()) { try { router.dismiss(2); } catch { router.back(); } } },
+          }],
+        });
+      } else {
+        setSavedMsg(placed === 1 ? 'Wine saved to rack' : `${placed} bottles saved to rack`);
       }
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
