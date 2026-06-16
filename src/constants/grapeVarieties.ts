@@ -31,5 +31,4 @@ export const GRAPE_VARIETIES = [
   'Roussanne',
   'Verdejo',
   'Moscato',
-  'Other',
 ] as const;
