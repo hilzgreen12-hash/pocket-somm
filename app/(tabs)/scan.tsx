@@ -274,7 +274,7 @@ export default function ScanTab() {
           <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
               <Text style={styles.question}>What wine style would you like?</Text>
-              {!wineTypeOpen && <Text style={[styles.selectionSummary, wineTypes.length > 0 && styles.selectionSummaryActive]}>{wineTypeLabel}</Text>}
+              {!wineTypeOpen && <Text style={[styles.selectionSummary, styles.selectionSummaryActive]}>{wineTypeLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
@@ -289,7 +289,7 @@ export default function ScanTab() {
           <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
               <Text style={styles.question}>Let's refine that further</Text>
-              {!styleOpen && <Text style={[styles.selectionSummary, styleProfiles.length > 0 && styles.selectionSummaryActive]}>{styleLabel}</Text>}
+              {!styleOpen && <Text style={[styles.selectionSummary, styles.selectionSummaryActive]}>{styleLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
           </TouchableOpacity>
