@@ -34,6 +34,9 @@ export default function FindPairingScreen() {
   // True when the user picked 'Other' in the region dropdown — reveals a free
   // text input so they can type a region not in the list.
   const [regionIsOther, setRegionIsOther] = useState(false);
+  // Shows the free text input while the user types a custom region; hidden
+  // once they confirm, leaving the typed value in the gold summary.
+  const [regionInputOpen, setRegionInputOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Jump to the wine-preferences editor and back. Pushed (not replaced) so the
@@ -183,19 +186,33 @@ export default function FindPairingScreen() {
       <TouchableOpacity style={styles.styleAccordion} onPress={() => setRegionDropdownOpen(true)} activeOpacity={0.7}>
         <View style={styles.styleAccordionLeft}>
           <Text style={styles.styleQuestion}>Regional Preference</Text>
-          <Text style={styles.styleAccordionSummary}>{regionIsOther ? (regionPreference || 'Other') : (regionPreference || 'Any')}</Text>
+          <Text style={[styles.styleAccordionSummary, regionPreference ? styles.styleAccordionSummaryActive : null]}>
+            {regionIsOther ? (regionPreference || 'Other') : (regionPreference || 'Any')}
+          </Text>
         </View>
         <Text style={styles.styleAccordionChevron}>▾</Text>
       </TouchableOpacity>
-      {regionIsOther ? (
-        <TextInput
-          style={styles.regionInput}
-          value={regionPreference}
-          onChangeText={setRegionPreference}
-          placeholder="Type a region…"
-          placeholderTextColor={colors.textMuted}
-          autoFocus
-        />
+      {regionIsOther && regionInputOpen ? (
+        <View style={styles.regionOtherRow}>
+          <TextInput
+            style={styles.regionOtherInput}
+            value={regionPreference}
+            onChangeText={setRegionPreference}
+            placeholder="Type a region…"
+            placeholderTextColor={colors.textMuted}
+            autoFocus
+            returnKeyType="done"
+            onSubmitEditing={() => { if (regionPreference.trim()) setRegionInputOpen(false); }}
+          />
+          <TouchableOpacity
+            style={[styles.regionOtherConfirm, !regionPreference.trim() && { opacity: 0.5 }]}
+            onPress={() => { if (regionPreference.trim()) setRegionInputOpen(false); }}
+            disabled={!regionPreference.trim()}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.regionOtherConfirmText}>Confirm</Text>
+          </TouchableOpacity>
+        </View>
       ) : null}
 
       {/* Wine style — formatted like the Recipe Requirements input rows: a
@@ -282,9 +299,9 @@ export default function FindPairingScreen() {
                     key={r}
                     style={[styles.dropdownOption, active && styles.dropdownOptionActive]}
                     onPress={() => {
-                      if (isAnyOpt) { setRegionPreference(''); setRegionIsOther(false); }
-                      else if (isOtherOpt) { setRegionPreference(''); setRegionIsOther(true); }
-                      else { setRegionPreference(r); setRegionIsOther(false); }
+                      if (isAnyOpt) { setRegionPreference(''); setRegionIsOther(false); setRegionInputOpen(false); }
+                      else if (isOtherOpt) { setRegionPreference(''); setRegionIsOther(true); setRegionInputOpen(true); }
+                      else { setRegionPreference(r); setRegionIsOther(false); setRegionInputOpen(false); }
                       setRegionDropdownOpen(false);
                     }}
                     activeOpacity={0.7}
@@ -348,6 +365,13 @@ const styles = StyleSheet.create({
   styleAccordionLeft: { flex: 1, alignItems: 'center' },
   styleQuestion: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
   styleAccordionSummary: { fontFamily: fonts.bodyMedium, fontSize: 14, color: '#FFFFFF', marginTop: 2, textAlign: 'center' },
+  // Gold once a region (named or confirmed custom) is chosen.
+  styleAccordionSummaryActive: { color: colors.gold },
+  // 'Other' custom-region input row + Confirm button (input hides on confirm).
+  regionOtherRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xl },
+  regionOtherInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  regionOtherConfirm: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md },
+  regionOtherConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   styleAccordionChevron: { fontSize: 14, color: '#FFFFFF', marginLeft: spacing.sm },
   heading: { fontSize: 30, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm, textAlign: 'center' },
   subheading: { fontSize: 17, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl, textAlign: 'center' },
