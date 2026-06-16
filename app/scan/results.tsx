@@ -220,9 +220,20 @@ export default function ResultsScreen() {
   // line and the foot-of-page CTA — the form opens in place rather than
   // bouncing the user to the Your Restaurants list.
   async function openRestaurantReview() {
-    // Use the id RETURNED by the save, not autoSave.data (stale until the next
-    // render) — that lag is what made the first tap prompt "add a restaurant
-    // first" even after a successful save.
+    // Fast path: a scan_sessions row already exists (autoSave landed, or we
+    // came in with a sessionId). Open the form IMMEDIATELY and push the
+    // restaurant-name update in the background — the user shouldn't wait on a
+    // network round-trip just to start typing their review.
+    if (effectiveSessionId) {
+      setReviewSessionId(effectiveSessionId);
+      setRestaurantReviewOpen(true);
+      void handleSaveRestaurant();
+      return;
+    }
+    // No row yet — we must create one to get an id to attach the review to,
+    // so this path still awaits. Use the id RETURNED by the save (autoSave.data
+    // is stale until the next render — that lag is what made the first tap
+    // prompt "add a restaurant first" even after a successful save).
     const id = (await handleSaveRestaurant()) ?? sessionId ?? null;
     if (!id) {
       showAlert({ title: 'Add a restaurant first', body: 'Add the restaurant name above, then you can review it.' });
