@@ -271,7 +271,7 @@ export default function ChosenWinesScreen() {
     // Restaurant Wines = wines reviewed at a restaurant (source 'restaurant')
     // that carry an actual review. Bare bottle picks with no review still
     // live only in You · Your Restaurants and are filtered out below.
-    { value: 'restaurant', label: 'Restaurant Wines' },
+    { value: 'restaurant', label: 'Bottle Picks' },
     { value: 'wishlist',   label: 'Wish List Wines' },
     // 'Other' captures reviews saved via the "Review without adding"
     // path on the Cellar add-wine flow (migration 042 column).
