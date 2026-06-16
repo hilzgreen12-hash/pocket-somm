@@ -413,7 +413,7 @@ export default function ReviewRequirementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: 60 },
+  content: { paddingTop: 112, paddingHorizontal: spacing.xl, paddingBottom: 60 },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },

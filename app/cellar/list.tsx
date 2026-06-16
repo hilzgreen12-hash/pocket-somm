@@ -334,12 +334,16 @@ export default function FullCellarListScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
-        <TouchableOpacity
-          onPress={() => setAddWineOpen(true)}
-          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-        >
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        {isArchiveView ? (
+          <View style={{ width: 44 }} />
+        ) : (
+          <TouchableOpacity
+            onPress={() => setAddWineOpen(true)}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+          >
+            <Text style={styles.addLink}>+ Add</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
       {!session ? (

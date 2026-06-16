@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
   loadingBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   loadingStay: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textAlign: 'center', opacity: 0.8 },
   container: { flex: 1, backgroundColor: colors.background },
-  content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 60 },
+  content: { padding: spacing.xl, paddingTop: 112, paddingBottom: 60 },
   backRow: { alignSelf: 'flex-start', marginBottom: spacing.xl },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   // Cellar-style header bar.
