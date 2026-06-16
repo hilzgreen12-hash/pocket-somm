@@ -87,6 +87,20 @@ export function WineReviewFields({
         multiline numberOfLines={4} textAlignVertical="top"
       />
 
+      {/* Personal Notes */}
+      <View style={styles.dictateRow}>
+        <Text style={styles.sectionTitle}>Personal Notes</Text>
+        <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} />
+      </View>
+      <TextInput
+        style={[styles.input, styles.noteInput]}
+        value={personalNotes}
+        onChangeText={onPersonalNotes}
+        placeholder="Just for you — anything you'd rather keep private."
+        placeholderTextColor={colors.textMuted}
+        multiline numberOfLines={4} textAlignVertical="top"
+      />
+
       {/* Your Score */}
       <Text style={styles.fieldLabel}>Your Score</Text>
       <TextInput
@@ -104,7 +118,17 @@ export function WineReviewFields({
         maxLength={3}
       />
 
-      {/* Price Paid | Estimated Value */}
+      {/* Drinking Window — the user's own call. */}
+      <Text style={styles.fieldLabel}>Drinking Window — your call (optional)</Text>
+      <TextInput
+        style={styles.input}
+        value={drinkingWindow}
+        onChangeText={onDrinkingWindow}
+        placeholder="e.g. drinking well now, or hold to 2030"
+        placeholderTextColor={colors.textMuted}
+      />
+
+      {/* Price Paid | Estimated Value — often already known, so kept low. */}
       <View style={styles.pairRow}>
         <View style={styles.pairCell}>
           <Text style={styles.fieldLabel}>Price Paid (optional)</Text>
@@ -148,29 +172,10 @@ export function WineReviewFields({
         </View>
       </View>
 
-      {/* Personal Notes — separate, below the review details. */}
-      <View style={styles.dictateRow}>
-        <Text style={styles.sectionTitle}>Personal Notes</Text>
-        <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} />
-      </View>
-      <TextInput
-        style={[styles.input, styles.noteInput]}
-        value={personalNotes}
-        onChangeText={onPersonalNotes}
-        placeholder="Just for you — anything you'd rather keep private."
-        placeholderTextColor={colors.textMuted}
-        multiline numberOfLines={4} textAlignVertical="top"
-      />
-
-      {/* Drinking Window — the user's own call. */}
-      <Text style={styles.fieldLabel}>Drinking Window — your call (optional)</Text>
-      <TextInput
-        style={styles.input}
-        value={drinkingWindow}
-        onChangeText={onDrinkingWindow}
-        placeholder="e.g. drinking well now, or hold to 2030"
-        placeholderTextColor={colors.textMuted}
-      />
+      {/* Save Review — primary action at the top of the button stack. */}
+      <TouchableOpacity style={styles.saveButton} onPress={onSave} disabled={saving} activeOpacity={0.85}>
+        <Text style={styles.saveButtonText}>{saving ? 'Saving…' : (saveLabel ?? 'Save Review')}</Text>
+      </TouchableOpacity>
 
       {/* Share */}
       {(onShareCommunity || onShare) ? (
@@ -188,26 +193,21 @@ export function WineReviewFields({
         </View>
       ) : null}
 
-      {/* Wish List · Add to Cellar (omitted on cellar reviews). */}
+      {/* Add to Cellar · Wish List (gold; omitted on cellar reviews). */}
       {(onWishlist || onAddToCellar) ? (
         <View style={styles.actionPairRow}>
-          {onWishlist ? (
-            <TouchableOpacity style={[styles.pairBtn, styles.goldBtn]} onPress={onWishlist} activeOpacity={0.8}>
-              <Text style={styles.goldBtnText}>{wishlistActive ? 'In Your Wish List — Remove' : 'Add to Wish List'}</Text>
-            </TouchableOpacity>
-          ) : null}
           {onAddToCellar ? (
             <TouchableOpacity style={[styles.pairBtn, styles.goldBtn]} onPress={onAddToCellar} activeOpacity={0.8}>
               <Text style={styles.goldBtnText}>Add to Cellar</Text>
             </TouchableOpacity>
           ) : null}
+          {onWishlist ? (
+            <TouchableOpacity style={[styles.pairBtn, styles.goldBtn]} onPress={onWishlist} activeOpacity={0.8}>
+              <Text style={styles.goldBtnText}>{wishlistActive ? 'In Your Wish List — Remove' : 'Add to Wish List'}</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       ) : null}
-
-      {/* Save Review */}
-      <TouchableOpacity style={styles.saveButton} onPress={onSave} disabled={saving} activeOpacity={0.85}>
-        <Text style={styles.saveButtonText}>{saving ? 'Saving…' : (saveLabel ?? 'Save Review')}</Text>
-      </TouchableOpacity>
 
       {onDelete ? (
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>
