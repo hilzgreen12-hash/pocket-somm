@@ -182,7 +182,7 @@ export default function FindPairingScreen() {
           an 'Other' option that reveals a free text input. */}
       <TouchableOpacity style={styles.styleAccordion} onPress={() => setRegionDropdownOpen(true)} activeOpacity={0.7}>
         <View style={styles.styleAccordionLeft}>
-          <Text style={styles.styleQuestion}>Regional Preference (optional)</Text>
+          <Text style={styles.styleQuestion}>Regional Preference</Text>
           <Text style={styles.styleAccordionSummary}>{regionIsOther ? (regionPreference || 'Other') : (regionPreference || 'Any')}</Text>
         </View>
         <Text style={styles.styleAccordionChevron}>▾</Text>
