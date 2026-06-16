@@ -321,19 +321,31 @@ export default function CellarWineDetail() {
   }
 
   function handleAddBottlesEntry() {
-    // When the wine is already placed in a rack, route the user through
-    // the rack grid so they can choose a starting slot + orientation and
-    // place the new bottles visually. When the wine has no rack yet, fall
-    // back to the simple inline modal (just bumps the quantity) — the
-    // user can place those bottles later by picking a rack first.
-    if (wineRack) {
-      setPendingWineId(wine!.id);
-      setPendingAddMode(true);
-      router.push(`/cellar/rack/${wineRack.id}` as any);
+    // "+ Add bottles" → choose which rack/fridge to add to, then place the
+    // bottles visually on that rack's grid (tap a slot, count, orientation),
+    // and confirm. With one rack we skip straight there; with none, send the
+    // user to create one first.
+    setPendingWineId(wine!.id);
+    setPendingAddMode(true);
+    if (racks.length === 0) {
+      router.push('/cellar/racks');
       return;
     }
-    setAddBottlesCount('1');
-    setAddBottlesOpen(true);
+    if (racks.length === 1) {
+      router.push(`/cellar/rack/${racks[0].id}` as any);
+      return;
+    }
+    showAlert({
+      title: 'Add to',
+      body: 'Which rack or fridge are you adding these bottles to?',
+      buttons: [
+        ...racks.map((r) => ({
+          text: r.name,
+          onPress: () => router.push(`/cellar/rack/${r.id}` as any),
+        })),
+        { text: 'Cancel', style: 'cancel' as const, onPress: () => { setPendingWineId(null); setPendingAddMode(false); } },
+      ],
+    });
   }
 
   // Place an as-yet-unracked wine into a fridge/rack. Stash it as the
