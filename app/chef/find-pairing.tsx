@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { MicButton } from '../../src/components/MicButton';
@@ -13,6 +13,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useAuth } from '../../src/hooks/useAuth';
 import { findFoodWinePairing } from '../../src/api/label';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
+import { WINE_REGIONS } from '../../src/constants/wineRegions';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -29,6 +30,10 @@ export default function FindPairingScreen() {
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [styleDropdownOpen, setStyleDropdownOpen] = useState(false);
+  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
+  // True when the user picked 'Other' in the region dropdown — reveals a free
+  // text input so they can type a region not in the list.
+  const [regionIsOther, setRegionIsOther] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Jump to the wine-preferences editor and back. Pushed (not replaced) so the
@@ -173,15 +178,25 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
-      {/* Regional Preference (optional) — centred label + centred input. */}
-      <Text style={[styles.fieldLabel, styles.centredLabel]}>Regional Preference (optional)</Text>
-      <TextInput
-        style={styles.regionInput}
-        value={regionPreference}
-        onChangeText={setRegionPreference}
-        placeholder="e.g. Rhône, Tuscany, Rioja, Burgundy…"
-        placeholderTextColor={colors.textMuted}
-      />
+      {/* Regional Preference (optional) — dropdown matching Wine Style, with
+          an 'Other' option that reveals a free text input. */}
+      <TouchableOpacity style={styles.styleAccordion} onPress={() => setRegionDropdownOpen(true)} activeOpacity={0.7}>
+        <View style={styles.styleAccordionLeft}>
+          <Text style={styles.styleQuestion}>Regional Preference (optional)</Text>
+          <Text style={styles.styleAccordionSummary}>{regionIsOther ? (regionPreference || 'Other') : (regionPreference || 'Any')}</Text>
+        </View>
+        <Text style={styles.styleAccordionChevron}>▾</Text>
+      </TouchableOpacity>
+      {regionIsOther ? (
+        <TextInput
+          style={styles.regionInput}
+          value={regionPreference}
+          onChangeText={setRegionPreference}
+          placeholder="Type a region…"
+          placeholderTextColor={colors.textMuted}
+          autoFocus
+        />
+      ) : null}
 
       {/* Wine style — formatted like the Recipe Requirements input rows: a
           full-width bordered box with the value + chevron, opening the picker. */}
@@ -245,6 +260,41 @@ export default function FindPairingScreen() {
                 </TouchableOpacity>
               );
             })}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={regionDropdownOpen} transparent animationType="fade" onRequestClose={() => setRegionDropdownOpen(false)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setRegionDropdownOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
+            <Text style={styles.dropdownTitle}>Regional preference</Text>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {['Any', ...WINE_REGIONS, 'Other'].map((r) => {
+                const isOtherOpt = r === 'Other';
+                const isAnyOpt = r === 'Any';
+                const active = isOtherOpt
+                  ? regionIsOther
+                  : isAnyOpt
+                    ? (!regionIsOther && !regionPreference)
+                    : (!regionIsOther && regionPreference === r);
+                return (
+                  <TouchableOpacity
+                    key={r}
+                    style={[styles.dropdownOption, active && styles.dropdownOptionActive]}
+                    onPress={() => {
+                      if (isAnyOpt) { setRegionPreference(''); setRegionIsOther(false); }
+                      else if (isOtherOpt) { setRegionPreference(''); setRegionIsOther(true); }
+                      else { setRegionPreference(r); setRegionIsOther(false); }
+                      setRegionDropdownOpen(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}>{r}</Text>
+                    {active && <Text style={styles.dropdownCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>

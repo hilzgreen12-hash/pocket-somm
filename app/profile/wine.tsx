@@ -75,6 +75,7 @@ export default function WineProfileScreen() {
                 selected={disRegions}
                 onChange={(v) => updatePreferences({ dislikedRegions: v })}
                 max={5}
+                allowCustom
               />
             </View>
           )}
@@ -98,6 +99,7 @@ export default function WineProfileScreen() {
                 selected={disGrapes}
                 onChange={(v) => updatePreferences({ dislikedGrapes: v })}
                 max={5}
+                allowCustom
               />
             </View>
           )}
