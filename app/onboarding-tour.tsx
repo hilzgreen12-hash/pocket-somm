@@ -70,7 +70,7 @@ export default function OnboardingTour() {
   return (
     <View style={styles.container}>
       <View style={styles.topBar}>
-        <Image source={require('../assets/vinster-logo.png')} style={styles.brandLogo} resizeMode="contain" />
+        <Image source={require('../assets/vinster-logo-a3.png')} style={styles.brandLogo} resizeMode="contain" />
       </View>
 
       <ScrollView
