@@ -22,11 +22,12 @@ import { createClient } from 'npm:@supabase/supabase-js';
 const WINE_SEARCHER_API_KEY = Deno.env.get('WINE_SEARCHER_API_KEY')!;
 // Full request URL template, overridable via secret so the exact endpoint can
 // be corrected without a redeploy. {KEY} {NAME} {VINTAGE} {CURRENCY} are
-// substituted (already URL-encoded where needed). The default matches the
-// documented Wine-Searcher price API; confirm against your test link.
+// substituted (already URL-encoded where needed). Default matches the live
+// test endpoint. NOTE: this endpoint takes no currency param — the response's
+// <list-currency-code> reports the currency the account returns prices in.
 const WINE_SEARCHER_URL =
   Deno.env.get('WINE_SEARCHER_URL') ??
-  'https://api.wine-searcher.com/api/v1/wine?api_key={KEY}&winename={NAME}&vintage={VINTAGE}&currencycode={CURRENCY}&format=xml';
+  'https://api.wine-searcher.com/x?api_key={KEY}&winename={NAME}&vintage={VINTAGE}';
 const CACHE_TTL_DAYS = 30;
 
 const supabase = createClient(
@@ -71,9 +72,9 @@ Deno.serve(async (req) => {
 
     const cur = (currency ?? 'GBP').toString().toUpperCase();
     const vintageParam = vintage ?? 'NV';
-    // Currency is part of the key: prices are returned in the requested
-    // currency, so a GBP and a USD lookup of the same wine must not collide.
-    const wineKey = `${wineName}_${vintageParam}_${cur}`;
+    // This endpoint returns one fixed currency per account (no currency
+    // param), so the same wine+vintage is a single cache entry.
+    const wineKey = `${wineName}_${vintageParam}`;
 
     // 1) Cache hit within TTL → serve immediately.
     const { data: cached } = await supabase
