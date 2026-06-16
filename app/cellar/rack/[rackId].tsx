@@ -53,7 +53,7 @@ export default function RackGridScreen() {
   // useCellar gives us access to updateWine so we can bump the wine's
   // quantity when the user places multiple bottles from this screen.
   const { wines, updateWine } = useCellar();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const qc = useQueryClient();
 
   const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode } = useRackStore();
@@ -761,7 +761,25 @@ export default function RackGridScreen() {
         <TouchableOpacity onPress={handleBack}>
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
+        <View style={styles.titleNav}>
+          <TouchableOpacity
+            onPress={() => prevRack && router.replace(`/cellar/rack/${prevRack.id}` as any)}
+            disabled={!prevRack}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 6 }}
+            accessibilityLabel="Previous rack"
+          >
+            <Text style={[styles.navArrow, !prevRack && styles.navArrowDisabled]}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
+          <TouchableOpacity
+            onPress={() => nextRack && router.replace(`/cellar/rack/${nextRack.id}` as any)}
+            disabled={!nextRack}
+            hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }}
+            accessibilityLabel="Next rack"
+          >
+            <Text style={[styles.navArrow, !nextRack && styles.navArrowDisabled]}>›</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           style={styles.rotateBtn}
           onPress={() => {
@@ -780,7 +798,7 @@ export default function RackGridScreen() {
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
-          Pinch to zoom · Select a thumbnail to view wine intel, delete, or move a bottle · Swipe between your racks
+          Pinch to zoom · Select a thumbnail to view wine intel, delete, or move a bottle · Tap the ‹ › arrows to move between racks
         </Text>
 
         {winesInRack.length > 0 && (
@@ -1271,7 +1289,11 @@ const styles = StyleSheet.create({
   // Inter — back/nav link
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 50 },
   // Cormorant — page header
-  title: { flex: 1, fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, textAlign: 'center', letterSpacing: 1 },
+  title: { flexShrink: 1, fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, textAlign: 'center', letterSpacing: 1 },
+  // Centred nav cluster: ‹ rack name › — gold arrows hop between racks/fridges.
+  titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
+  navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
   rotateBtn: { alignItems: 'flex-end', width: 80 },
   // Cormorant — button text
   rotateBtnText: { fontSize: 12, fontFamily: fonts.headingSemibold, color: colors.gold },
