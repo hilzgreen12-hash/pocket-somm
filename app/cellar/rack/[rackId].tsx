@@ -240,6 +240,9 @@ export default function RackGridScreen() {
         zBase.scale = zCur.scale;
         zBase.tx = zCur.tx; zBase.ty = zCur.ty;
         if (zCur.scale <= 1.02) resetZoom();
+        // A firm pinch (past ~1.5x) breaks the rack out into the full-screen
+        // overlay; a gentler pinch just zooms within the inline box.
+        else if (zCur.scale >= 1.5) openFullScreen(zCur.scale);
         else if (!isZoomed) setIsZoomed(true);
       });
     const pan = Gesture.Pan()
@@ -255,6 +258,69 @@ export default function RackGridScreen() {
       .onEnd(() => { zBase.tx = zCur.tx; zBase.ty = zCur.ty; });
     return Gesture.Simultaneous(pinch, pan);
   }, [isZoomed]);
+
+  // ---- Full-screen zoom ----
+  // A hard pinch on the inline rack (past the threshold in the inline onEnd)
+  // promotes into a full-screen overlay where the grid can zoom/pan to the
+  // screen edges — the inline box clips, this doesn't. Pinch back to ~1x to
+  // drop back to the inline rack. Separate animated values from the inline
+  // zoom so the two never interfere.
+  const [fullScreen, setFullScreen] = useState(false);
+  const fsScale = useRef(new Animated.Value(1)).current;
+  const fsTx = useRef(new Animated.Value(0)).current;
+  const fsTy = useRef(new Animated.Value(0)).current;
+  const fsBase = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  const fsCur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
+  const fsContent = useRef({ w: 0, h: 0 });
+
+  function clampPanFS(tx: number, ty: number, scale: number) {
+    const maxX = Math.max(0, (fsContent.current.w * scale - width) / 2);
+    const maxY = Math.max(0, (fsContent.current.h * scale - height) / 2);
+    return { tx: Math.min(maxX, Math.max(-maxX, tx)), ty: Math.min(maxY, Math.max(-maxY, ty)) };
+  }
+
+  function openFullScreen(startScale: number) {
+    const s = Math.min(5, Math.max(1.6, startScale));
+    fsBase.scale = s; fsCur.scale = s; fsBase.tx = 0; fsBase.ty = 0; fsCur.tx = 0; fsCur.ty = 0;
+    fsScale.setValue(s); fsTx.setValue(0); fsTy.setValue(0);
+    setFullScreen(true);
+    resetZoom(); // collapse the inline rack sitting behind the overlay
+  }
+
+  function closeFullScreen() {
+    fsBase.scale = 1; fsCur.scale = 1; fsBase.tx = 0; fsBase.ty = 0; fsCur.tx = 0; fsCur.ty = 0;
+    fsScale.setValue(1); fsTx.setValue(0); fsTy.setValue(0);
+    setFullScreen(false);
+  }
+
+  const fsZoomGesture = useMemo(() => {
+    const pinch = Gesture.Pinch()
+      .runOnJS(true)
+      .onUpdate((e) => {
+        let s = fsBase.scale * e.scale;
+        if (s < 1) s = 1;
+        if (s > 6) s = 6;
+        fsCur.scale = s;
+        fsScale.setValue(s);
+        const c = clampPanFS(fsCur.tx, fsCur.ty, s);
+        fsCur.tx = c.tx; fsCur.ty = c.ty;
+        fsTx.setValue(c.tx); fsTy.setValue(c.ty);
+      })
+      .onEnd(() => {
+        fsBase.scale = fsCur.scale; fsBase.tx = fsCur.tx; fsBase.ty = fsCur.ty;
+        if (fsCur.scale <= 1.05) closeFullScreen();
+      });
+    const pan = Gesture.Pan()
+      .runOnJS(true)
+      .minDistance(2)
+      .onUpdate((e) => {
+        const c = clampPanFS(fsBase.tx + e.translationX, fsBase.ty + e.translationY, fsCur.scale);
+        fsCur.tx = c.tx; fsCur.ty = c.ty;
+        fsTx.setValue(c.tx); fsTy.setValue(c.ty);
+      })
+      .onEnd(() => { fsBase.tx = fsCur.tx; fsBase.ty = fsCur.ty; });
+    return Gesture.Simultaneous(pinch, pan);
+  }, [width, height]);
 
   // Back navigation. A rack can be reached two ways:
   //   1. Cellar → Racks → Rack (or via the Camera → Detect scanner flow),
@@ -746,6 +812,59 @@ export default function RackGridScreen() {
     );
   }
 
+  // Grid rows — rendered in the inline viewport and (when zoomed) in the
+  // full-screen overlay. One function so the two never drift apart.
+  function renderRackRows() {
+    return gridRows.map((rowDef) => {
+      const isLargeFormat = rowDef.rowIndex === -1;
+      const fallbackFont = Math.max(7, Math.min(12, Math.round(rowDef.slotWidth / 7)));
+      return (
+        <View
+          key={rowDef.rowIndex}
+          style={[styles.gridRow, { gap: GAP, marginBottom: GAP }, isLargeFormat && { marginBottom: GAP * 2 }]}
+        >
+          {Array.from({ length: rowDef.cols }, (_, col) => {
+            const slot = slotMap[`${rowDef.rowIndex},${col}`];
+            const wine = slot?.wine as CellarWine | null | undefined;
+            const isHighlighted = !!wine && highlightedIds.has(wine.id);
+            const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
+            const isMovingSource = !!moving && moving.row === rowDef.rowIndex && moving.col === col;
+            return (
+              <TouchableOpacity
+                key={col}
+                style={[
+                  styles.slot,
+                  { width: rowDef.slotWidth, height: rowDef.slotWidth },
+                  wine ? styles.slotFilled : styles.slotEmpty,
+                  isHighlighted && styles.slotHighlightRing,
+                  isDimmed && styles.slotDimmed,
+                  isMovingSource && styles.slotMovingSource,
+                ]}
+                onPress={() => openSlot(rowDef.rowIndex, col)}
+                onLongPress={() => pickUpSlot(rowDef.rowIndex, col)}
+                delayLongPress={400}
+                activeOpacity={0.8}
+              >
+                {wine ? (
+                  <LabelThumb
+                    path={wine.label_image_path}
+                    fallbackText={wine.wine_name}
+                    style={styles.slotThumb}
+                    radius={2}
+                    frame={2}
+                    fallbackFontSize={fallbackFont}
+                  />
+                ) : (
+                  <Text style={styles.slotPlus}>+</Text>
+                )}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      );
+    });
+  }
+
   return (
     <GestureDetector gesture={swipeGesture}>
     <View style={styles.container}>
@@ -975,61 +1094,7 @@ export default function RackGridScreen() {
               style={[styles.rackCanvas, { transform: [{ translateX: zTx }, { translateY: zTy }, { scale: zScale }] }]}
               onLayout={(e) => { contentSize.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
             >
-            {gridRows.map((rowDef) => {
-              const isLargeFormat = rowDef.rowIndex === -1;
-              // Scale the no-photo "blank label" text to the slot size.
-              const fallbackFont = Math.max(7, Math.min(12, Math.round(rowDef.slotWidth / 7)));
-              return (
-                <View
-                  key={rowDef.rowIndex}
-                  style={[
-                    styles.gridRow,
-                    { gap: GAP, marginBottom: GAP },
-                    // Pull the large-format row away from the standard grid
-                    // a touch so it visually reads as a distinct shelf.
-                    isLargeFormat && { marginBottom: GAP * 2 },
-                  ]}
-                >
-                  {Array.from({ length: rowDef.cols }, (_, col) => {
-                    const slot = slotMap[`${rowDef.rowIndex},${col}`];
-                    const wine = slot?.wine as CellarWine | null | undefined;
-                    const isHighlighted = !!wine && highlightedIds.has(wine.id);
-                    const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
-                    const isMovingSource = !!moving && moving.row === rowDef.rowIndex && moving.col === col;
-                    return (
-                      <TouchableOpacity
-                        key={col}
-                        style={[
-                          styles.slot,
-                          { width: rowDef.slotWidth, height: rowDef.slotWidth },
-                          wine ? styles.slotFilled : styles.slotEmpty,
-                          isHighlighted && styles.slotHighlightRing,
-                          isDimmed && styles.slotDimmed,
-                          isMovingSource && styles.slotMovingSource,
-                        ]}
-                        onPress={() => openSlot(rowDef.rowIndex, col)}
-                        onLongPress={() => pickUpSlot(rowDef.rowIndex, col)}
-                        delayLongPress={400}
-                        activeOpacity={0.8}
-                      >
-                        {wine ? (
-                          <LabelThumb
-                            path={wine.label_image_path}
-                            fallbackText={wine.wine_name}
-                            style={styles.slotThumb}
-                            radius={2}
-                            frame={2}
-                            fallbackFontSize={fallbackFont}
-                          />
-                        ) : (
-                          <Text style={styles.slotPlus}>+</Text>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              );
-            })}
+            {!fullScreen && renderRackRows()}
             </Animated.View>
           </GestureDetector>
         </View>
@@ -1277,6 +1342,28 @@ export default function RackGridScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Full-screen rack zoom — promoted into from a firm pinch on the inline
+          rack. Fills the screen so the grid + thumbnails can expand to the
+          edges; pinch back in (or tap ✕) to drop back to the inline rack. */}
+      <Modal visible={fullScreen} animationType="fade" onRequestClose={closeFullScreen}>
+        <View style={styles.fsContainer}>
+          <GestureDetector gesture={fsZoomGesture}>
+            <View style={styles.fsGestureArea}>
+              <Animated.View
+                style={[styles.fsCanvas, { transform: [{ translateX: fsTx }, { translateY: fsTy }, { scale: fsScale }] }]}
+                onLayout={(e) => { fsContent.current = { w: e.nativeEvent.layout.width, h: e.nativeEvent.layout.height }; }}
+              >
+                {fullScreen && renderRackRows()}
+              </Animated.View>
+            </View>
+          </GestureDetector>
+          <TouchableOpacity style={styles.fsClose} onPress={closeFullScreen} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityLabel="Close full-screen rack">
+            <Text style={styles.fsCloseText}>✕</Text>
+          </TouchableOpacity>
+          <Text style={styles.fsHint}>Pinch in to close</Text>
+        </View>
+      </Modal>
     </View>
     </GestureDetector>
   );
@@ -1403,6 +1490,13 @@ const styles = StyleSheet.create({
   // a pan window once zoomed.
   rackViewport: { marginHorizontal: spacing.md, marginVertical: spacing.sm, padding: spacing.md, backgroundColor: colors.creamDim, borderRadius: 14, overflow: 'hidden', alignItems: 'center' },
   rackCanvas: { alignItems: 'center' },
+  // Full-screen zoom overlay.
+  fsContainer: { flex: 1, backgroundColor: colors.background },
+  fsGestureArea: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  fsCanvas: { alignItems: 'center' },
+  fsClose: { position: 'absolute', top: 48, right: 20, width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.25)' },
+  fsCloseText: { color: colors.gold, fontSize: 18, fontFamily: fonts.headingSemibold },
+  fsHint: { position: 'absolute', bottom: 40, left: 0, right: 0, textAlign: 'center', color: colors.textMuted, fontSize: 13, fontFamily: fonts.bodyRegular },
   zoomHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, textDecorationLine: 'underline' },
   // Full-screen zoom viewer — dark backdrop so the labels pop; tighter slots.
   zoomBackdrop: { flex: 1, backgroundColor: 'rgba(18,11,10,0.97)', alignItems: 'center', justifyContent: 'center' },
