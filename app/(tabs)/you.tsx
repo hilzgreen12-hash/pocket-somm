@@ -150,8 +150,21 @@ export default function YouScreen() {
         showAlert({ title: 'Error', body: 'Could not delete your account. Please try again or contact support.' });
         return;
       }
-      await supabase.auth.signOut();
-      router.replace('/(auth)/sign-in');
+      setDeleteConfirmOpen(false);
+      // Confirm before we sign out + leave. dismissable:false so the user has
+      // to tap OK, guaranteeing the sign-out + redirect actually runs.
+      showAlert({
+        title: 'Your account has been deleted',
+        body: 'Your account and all your data have been permanently removed. Thanks for trying Vinster.',
+        dismissable: false,
+        buttons: [{
+          text: 'OK',
+          onPress: async () => {
+            await supabase.auth.signOut();
+            router.replace('/(auth)/sign-in');
+          },
+        }],
+      });
     } finally {
       setDeleting(false);
       setDeleteConfirmOpen(false);
