@@ -89,6 +89,11 @@ export default function ChefTab() {
         <Text style={styles.topBlurb}>
           Tell Vinster what you're cooking and it'll offer you a wine. What you're drinking and it'll generate original, chef-inspired recipes tailored to your tastes. Keep, organise, and share your recipes in Your Cookbook.
         </Text>
+        <Text style={styles.prefsBlurb}>
+          Vinster will use your preferences in the{' '}
+          <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You tab</Text>
+          {' '}to guide its results.
+        </Text>
         <HelpButton label="More About Chef" title="How Chef works" body={CHEF_HELP} />
       </View>
 
@@ -152,6 +157,9 @@ const styles = StyleSheet.create({
   // tab title, kept Cormorant per user spec ("blurbs below the headers
   // on the tab screens"). Italics retained.
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
+  // One-line note pointing users to the You tab to tune their results.
+  prefsBlurb: { fontSize: 16, fontFamily: fonts.headingRegular, fontStyle: 'italic', color: '#FFFFFF', lineHeight: 22, marginBottom: spacing.sm, textAlign: 'center' },
+  prefsLink: { color: colors.gold, textDecorationLine: 'underline' },
   // "View last result" link — body / link, Inter.
   lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },

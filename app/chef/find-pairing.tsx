@@ -155,12 +155,6 @@ export default function FindPairingScreen() {
         <View style={{ width: 44 }} />
       </View>
 
-      <Text style={styles.blurb}>
-        Vinster will use your settings under{' '}
-        <Text style={styles.blurbLink} onPress={handleOpenPreferences}>About You - Your Wine Preferences</Text>
-        {' '}to guide its results.
-      </Text>
-
       <View style={styles.divider} />
 
       {/* What are you cooking — centred label with the mic + bin centred

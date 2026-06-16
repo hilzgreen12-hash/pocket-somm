@@ -248,9 +248,6 @@ export default function ReviewRequirementsScreen() {
         <Text style={styles.headerTitle}>Recipe Requirements</Text>
         <View style={{ width: 44 }} />
       </View>
-      <Text style={styles.subheading}>
-        Vinster will use your profile preferences to guide its recipe recommendations. Input any dietary restrictions or allergies to consider for this particular recipe below.
-      </Text>
 
       <Text style={styles.label}>Dietary Concerns <Text style={styles.labelHint}>(additional to your settings)</Text></Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('dietary')}>
