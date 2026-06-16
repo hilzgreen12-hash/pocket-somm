@@ -61,7 +61,7 @@ export default function ResultsScreen() {
   // rather than racing or skipping the wait. Without this, the CTA
   // could route to Your Restaurants before the scan_sessions row
   // landed, leaving the user staring at an empty list.
-  const inFlightSaveRef = useRef<Promise<void> | null>(null);
+  const inFlightSaveRef = useRef<Promise<string | null> | null>(null);
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   // Per-recommendation map: index → wishlist row id. Used to toggle
@@ -166,7 +166,12 @@ export default function ResultsScreen() {
     });
   }, [session, recommendation, chosenWines, effectiveSessionId]);
 
-  async function handleSaveRestaurant() {
+  // Returns the scan_sessions id the name was saved against (or null if there
+  // was nothing to save / it failed). Callers use the RETURNED id rather than
+  // autoSave.data, which only updates on the next render and is stale right
+  // after the await — the cause of the "add a restaurant first" prompt firing
+  // even though the save had just succeeded.
+  async function handleSaveRestaurant(): Promise<string | null> {
     setEditingRestaurant(false);
     const trimmed = restaurantName.trim();
     if (effectiveSessionId) {
@@ -183,30 +188,27 @@ export default function ResultsScreen() {
       } catch (err) {
         showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
       }
-      return;
+      return effectiveSessionId;
     }
     // No row yet — promote this scan to scan_sessions so the entry
     // lands in Your Restaurants. Skip if there's no name to save and no
     // recommendation to save against.
-    if (trimmed.length === 0 || !recommendation || !extractedWines) return;
-    // If an autoSave is already in flight (e.g. the input's onBlur
-    // started it and the Review CTA tap then re-enters this function),
-    // join the existing promise instead of skipping the wait. The
-    // previous "hasSaved" boolean returned immediately on the second
-    // caller, so the CTA could route to Your Restaurants before the
-    // row was actually inserted.
+    if (trimmed.length === 0 || !recommendation || !extractedWines) return null;
+    // If an autoSave is already in flight (e.g. the input's onBlur started it
+    // and the Review CTA tap then re-enters), join the same promise and return
+    // its resolved session id.
     if (inFlightSaveRef.current) {
-      try { await inFlightSaveRef.current; } catch { /* original caller already alerted */ }
-      return;
+      try { return await inFlightSaveRef.current; } catch { return null; }
     }
     const promise = autoSave
       .mutateAsync({ extractedWines, recommendation, restaurantNameOverride: trimmed })
-      .then(() => undefined);
+      .then((result: any) => (result?.[0]?.sessionId ?? null) as string | null);
     inFlightSaveRef.current = promise;
     try {
-      await promise;
+      return await promise;
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      return null;
     } finally {
       inFlightSaveRef.current = null;
     }
@@ -217,8 +219,10 @@ export default function ResultsScreen() {
   // line and the foot-of-page CTA — the form opens in place rather than
   // bouncing the user to the Your Restaurants list.
   async function openRestaurantReview() {
-    await handleSaveRestaurant();
-    const id = sessionId ?? autoSave.data?.[0]?.sessionId ?? null;
+    // Use the id RETURNED by the save, not autoSave.data (stale until the next
+    // render) — that lag is what made the first tap prompt "add a restaurant
+    // first" even after a successful save.
+    const id = (await handleSaveRestaurant()) ?? sessionId ?? null;
     if (!id) {
       showAlert({ title: 'Add a restaurant first', body: 'Add the restaurant name above, then you can review it.' });
       return;
