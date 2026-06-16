@@ -87,7 +87,7 @@ export default function CellarTab() {
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
-          <Text style={styles.buttonText}>Add Wine / Generate Wine Intel</Text>
+          <Text style={styles.buttonText}>Add Wine / Wine Intel</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
@@ -99,11 +99,11 @@ export default function CellarTab() {
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
-          <Text style={styles.buttonText}>Your Full Cellar List</Text>
+          <Text style={styles.buttonText}>Cellar List</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={styles.buttonText}>Your Wine Racks & Fridges</Text>
+          <Text style={styles.buttonText}>Racks & Fridges</Text>
         </TouchableOpacity>
       </View>
 
@@ -117,7 +117,7 @@ export default function CellarTab() {
           them. Re-enable the two buttons below once the lineup flow ships. */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1'))}>
-          <Text style={styles.buttonText}>View Your Archive</Text>
+          <Text style={styles.buttonText}>Cellar Archive</Text>
         </TouchableOpacity>
       </View>
 
