@@ -50,6 +50,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   const [pricePaid, setPricePaid] = useState('');
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -65,6 +66,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     setReviewLocation(wine.review_location ?? '');
     setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
     setDrinkingWindow(wine.user_drinking_window ?? '');
+    setSaved(false);
   }, [wine?.id, visible]);
 
   async function persist() {
@@ -126,9 +128,16 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     try {
       await persist();
       onSaved();
-      onClose();
-    } catch {
-      // persist() surfaces its own alert for an invalid score.
+      // Stay on the form and flip the button to a gold "Review Saved" rather
+      // than closing — the user gets clear confirmation. Back exits.
+      setSaved(true);
+    } catch (err) {
+      // Surface the failure instead of swallowing it — a silent catch here is
+      // what hid the missing-column 400 that broke saving entirely.
+      const msg = err instanceof Error ? err.message : 'Please try again.';
+      if (!msg.includes('invalid score')) {
+        showAlert({ title: 'Could not save review', body: msg });
+      }
     } finally {
       setSaving(false);
     }
@@ -244,25 +253,26 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
 
             <WineReviewFields
               score={parsedScore}
-              onScore={(n) => setScore(n != null ? String(n) : '')}
+              onScore={(n) => { setScore(n != null ? String(n) : ''); setSaved(false); }}
               pricePaid={pricePaid}
-              onPricePaid={setPricePaid}
+              onPricePaid={(v) => { setPricePaid(v); setSaved(false); }}
               currency={(wine.purchase_price_currency ?? 'GBP').toUpperCase()}
               estimatedValue={wine.estimated_value ?? null}
               estimatedValueAt={wine.estimated_value_at}
               review={reviewNote}
-              onReview={setReviewNote}
+              onReview={(v) => { setReviewNote(v); setSaved(false); }}
               personalNotes={personalNotes}
-              onPersonalNotes={setPersonalNotes}
+              onPersonalNotes={(v) => { setPersonalNotes(v); setSaved(false); }}
               discoveredAt={reviewLocation}
-              onDiscoveredAt={setReviewLocation}
+              onDiscoveredAt={(v) => { setReviewLocation(v); setSaved(false); }}
               drinkingWindow={drinkingWindow}
-              onDrinkingWindow={setDrinkingWindow}
+              onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
               onShareCommunity={handlePostToCommunity}
               onShare={handleShare}
               sharingCommunity={posting}
               sharing={sharing}
               saving={saving || updateWine.isPending}
+              saved={saved}
               onSave={handleSave}
               saveLabel="Save Review"
             />
