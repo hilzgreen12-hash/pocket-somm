@@ -262,7 +262,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
 
             <View style={styles.divider} />
 
-            <Text style={styles.sectionLabel}>Your tasting note</Text>
+            <Text style={styles.sectionLabel}>Your Review</Text>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={tastingNote}
@@ -274,7 +274,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
               textAlignVertical="top"
             />
 
-            <Text style={styles.sectionLabel}>Other observations</Text>
+            <Text style={styles.sectionLabel}>Personal Notes</Text>
             <TextInput
               style={[styles.input, styles.noteInput]}
               value={otherObservations}
