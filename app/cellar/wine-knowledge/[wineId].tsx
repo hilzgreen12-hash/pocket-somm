@@ -8,21 +8,35 @@ import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
 export default function WineKnowledgeScreen() {
-  const { wineId } = useLocalSearchParams<{ wineId: string }>();
+  // Opened either from a cellar wine card (wineId resolves a cellar row, which
+  // we can also cache onto) OR from a Your Wine Reviews review that isn't in the
+  // cellar — in which case the wine fields arrive as query params.
+  const params = useLocalSearchParams<{
+    wineId: string; producer?: string; region?: string; wineName?: string; vintage?: string; grape?: string;
+  }>();
   const { wines, updateWine } = useCellar();
   const { wines: wishlistWines } = useWishList();
-  const wine = wines.find((w) => w.id === wineId) ?? wishlistWines.find((w) => w.id === wineId);
+  const cellarWine = wines.find((w) => w.id === params.wineId) ?? wishlistWines.find((w) => w.id === params.wineId) ?? null;
 
-  const [knowledge, setKnowledge] = useState<WineKnowledgeData | null>(wine?.wine_knowledge ?? null);
+  const info = {
+    producer: cellarWine?.producer ?? params.producer ?? '',
+    region: cellarWine?.region ?? params.region ?? '',
+    wineName: cellarWine?.wine_name ?? params.wineName ?? null,
+    vintage: cellarWine?.vintage ?? params.vintage ?? null,
+    grape: cellarWine?.grape_variety ?? params.grape ?? null,
+  };
+  const hasWine = !!(cellarWine || params.producer || params.wineName);
+  const infoKey = cellarWine?.id ?? `${info.producer}|${info.wineName}|${info.vintage}`;
+
+  const [knowledge, setKnowledge] = useState<WineKnowledgeData | null>(cellarWine?.wine_knowledge ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!wine) return;
-    // Use the cached profiles when present; otherwise generate once and persist
-    // them onto the cellar row so reopening is instant and free.
-    if (wine.wine_knowledge) {
-      setKnowledge(wine.wine_knowledge);
+    if (!hasWine) return;
+    // Cached profiles on the cellar row → instant. Otherwise generate once.
+    if (cellarWine?.wine_knowledge) {
+      setKnowledge(cellarWine.wine_knowledge);
       return;
     }
     let cancelled = false;
@@ -31,21 +45,23 @@ export default function WineKnowledgeScreen() {
       setError(null);
       try {
         const data = await getWineKnowledge({
-          producer: wine.producer ?? '',
-          region: wine.region ?? '',
-          wineName: wine.wine_name || null,
-          vintage: wine.vintage || null,
-          grape: wine.grape_variety || null,
+          producer: info.producer,
+          region: info.region,
+          wineName: info.wineName,
+          vintage: info.vintage,
+          grape: info.grape,
         });
         if (cancelled) return;
         setKnowledge(data);
-        // Best-effort cache write — failure just means we regenerate next time.
-        try {
-          await updateWine.mutateAsync({
-            id: wine.id,
-            updates: { wine_knowledge: data, wine_knowledge_at: new Date().toISOString() },
-          });
-        } catch { /* non-fatal */ }
+        // Cache onto the cellar row when we have one (reviews aren't cached).
+        if (cellarWine) {
+          try {
+            await updateWine.mutateAsync({
+              id: cellarWine.id,
+              updates: { wine_knowledge: data, wine_knowledge_at: new Date().toISOString() },
+            });
+          } catch { /* non-fatal */ }
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : 'Could not load wine knowledge.');
       } finally {
@@ -53,21 +69,20 @@ export default function WineKnowledgeScreen() {
       }
     })();
     return () => { cancelled = true; };
-  }, [wine?.id]);
+  }, [infoKey]);
 
-  // Header line — an exact replica of the wine card's header (same producer ·
-  // name · region · vintage dedup, then grape underneath).
+  // Header line — an exact replica of the wine card's header (producer · name ·
+  // region · vintage dedup, then grape underneath).
   const headerLine = (() => {
-    if (!wine) return '';
-    const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+    const sameName = info.wineName?.trim().toLowerCase() === info.producer?.trim().toLowerCase();
     const parts = sameName
-      ? [wine.producer, wine.region, wine.vintage]
-      : [wine.producer, wine.wine_name, wine.region, wine.vintage];
+      ? [info.producer, info.region, info.vintage]
+      : [info.producer, info.wineName, info.region, info.vintage];
     return parts.filter(Boolean).join(' · ');
   })();
 
   // Short title used in the editorial body — name + vintage.
-  const wineTitle = wine ? (wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name) : '';
+  const wineTitle = info.vintage ? `${info.vintage} ${info.wineName ?? info.producer}` : (info.wineName ?? info.producer);
 
   return (
     <View style={styles.container}>
@@ -78,16 +93,16 @@ export default function WineKnowledgeScreen() {
         <View style={{ width: 44 }} />
       </View>
 
-      {!wine ? (
+      {!hasWine ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Wine not found</Text>
-          <Text style={styles.emptyBody}>Open this from the wine card to dive deeper.</Text>
+          <Text style={styles.emptyBody}>Open this from a wine card or review to dive deeper.</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={styles.content}>
           {/* Wine card header replica */}
           <Text style={styles.cardHeaderLine}>{headerLine}</Text>
-          {wine.grape_variety ? <Text style={styles.cardGrape}>{wine.grape_variety}</Text> : null}
+          {info.grape ? <Text style={styles.cardGrape}>{info.grape}</Text> : null}
 
           {/* Branded masthead — mirrors the recipe pairing page. */}
           <Text style={styles.brandHeading}>Wine Knowledge</Text>
