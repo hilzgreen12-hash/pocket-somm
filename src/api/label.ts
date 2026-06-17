@@ -101,6 +101,17 @@ export async function importCellarDocument(base64Image: string): Promise<{ wines
   return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
 }
 
+// "Archive a Night" — identify each bottle in a lineup photo.
+export interface DetectedBottle {
+  producer: string;
+  wineName: string;
+  vintage: string | null;
+  confident: boolean;
+}
+export async function detectLineup(base64Image: string): Promise<{ bottles: DetectedBottle[] }> {
+  return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
+}
+
 export async function generatePersonality(category: 'wine' | 'recipe' | 'restaurant', payload: {
   preferences?: Record<string, unknown> | null;
   wines?: Array<{ producer: string | null; wine_name: string; vintage: string | null; region: string | null }>;
