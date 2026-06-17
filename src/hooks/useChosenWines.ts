@@ -56,7 +56,7 @@ export function useChosenWines() {
 
   const saveManual = useMutation({
     mutationFn: async (input: ManualSaveChosenWineInput) => {
-      await saveManualChosenWine(userId!, input);
+      const row = await saveManualChosenWine(userId!, input);
       // Sync to a matching cellar/wishlist row when one exists, same as
       // the scan-driven save path.
       await syncReviewToCellar(
@@ -66,6 +66,7 @@ export function useChosenWines() {
         { setReviewDate: true },
       );
       // Community sharing stays opt-in (see save above).
+      return row;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });

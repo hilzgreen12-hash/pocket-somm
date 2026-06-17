@@ -42,6 +42,8 @@ export interface ManualSaveChosenWineInput {
   // Optional yyyy-mm-dd drinking date — overrides the chosen_at default of
   // now() so Your Wine Reviews carries the date the user actually drank it.
   reviewDate?: string | null;
+  // The user's own free-text drinking window opinion.
+  userDrinkingWindow?: string | null;
 }
 
 export async function saveManualChosenWine(userId: string, input: ManualSaveChosenWineInput): Promise<ChosenWine> {
@@ -67,6 +69,7 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
     other_observations: input.otherObservations.trim() || null,
     user_score: input.userScore,
     is_favourite: input.isFavourite,
+    user_drinking_window: input.userDrinkingWindow ?? null,
     // Only write source when the caller asked for a non-default value —
     // omitting the key lets the DB default ('restaurant') kick in for
     // every existing call site that hasn't been updated.
