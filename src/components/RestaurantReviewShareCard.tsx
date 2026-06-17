@@ -106,7 +106,6 @@ export const RestaurantReviewShareCard = forwardRef<View, Props>(
           <View style={styles.footer}>
             <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
             <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
-            <Text style={styles.footerUrl}>{VINSTER_INSTALL_URL.replace(/^https?:\/\//, '')}</Text>
           </View>
         </View>
       </View>

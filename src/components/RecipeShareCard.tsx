@@ -67,8 +67,7 @@ export const RecipeShareCard = forwardRef<View, Props>(({ pairing, wineHeader },
         <View style={styles.footer}>
           <View style={styles.footerCopy}>
             <Text style={styles.footerHeadline}>{VINSTER_GET_LABEL}</Text>
-            <Text style={styles.footerLine}>Scan the QR or visit</Text>
-            <Text style={styles.footerUrl}>{VINSTER_INSTALL_URL.replace(/^https?:\/\//, '')}</Text>
+            <Text style={styles.footerLine}>Scan the QR to download</Text>
             <Text style={styles.footerTagline}>{VINSTER_TAGLINE}</Text>
           </View>
           <View style={styles.qrWrap}>
