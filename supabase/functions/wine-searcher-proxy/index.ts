@@ -114,7 +114,8 @@ Deno.serve(async (req) => {
     }
     const xml = await wsResponse.text();
 
-    // return-code 0 = hit. Anything else (or missing) = no match → fall back.
+    // return-code 0 = hit. Anything else (e.g. 7 = "API Access Suspended", or a
+    // genuine no-match) → fall back to the Claude estimate.
     const returnCode = tag(xml, 'return-code');
     if (returnCode !== '0') {
       return new Response(JSON.stringify(UNAVAILABLE), {
