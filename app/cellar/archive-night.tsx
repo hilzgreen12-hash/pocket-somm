@@ -137,11 +137,11 @@ export default function ArchiveNightScreen() {
           <Text style={styles.hint}>
             {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive. The photo is saved in Your Lineup Library.
           </Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => router.replace('/cellar/list?archived=1')} activeOpacity={0.85}>
-            <Text style={styles.primaryBtnText}>View Cellar Archive</Text>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list?archived=1')} activeOpacity={0.85}>
+            <Text style={styles.doneBtnText}>View Cellar Archive</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.back()} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Done</Text>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()} activeOpacity={0.85}>
+            <Text style={styles.doneBtnText}>Done</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -231,6 +231,10 @@ const styles = StyleSheet.create({
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   secondaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
+  // Done-screen buttons — match the Cellar tab's Archive a Night / Cellar
+  // Archive buttons (full-width, white border, rounded 14).
+  doneBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   doneTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
