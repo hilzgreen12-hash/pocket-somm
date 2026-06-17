@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   },
   // Compact variant — smaller value text + shorter native track.
   valueCompact: {
-    fontSize: 14,
+    fontSize: 15,
     marginBottom: spacing.xs,
   },
   sliderCompact: {
