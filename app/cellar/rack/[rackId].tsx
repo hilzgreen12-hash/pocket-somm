@@ -1377,9 +1377,6 @@ export default function RackGridScreen() {
               </Animated.View>
             </View>
           </GestureDetector>
-          <TouchableOpacity style={styles.fsClose} onPress={closeFullScreen} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} accessibilityLabel="Close full-screen rack">
-            <Text style={styles.fsCloseText}>✕</Text>
-          </TouchableOpacity>
           <Text style={styles.fsHint}>Pinch in to close</Text>
         </GestureHandlerRootView>
       </Modal>
