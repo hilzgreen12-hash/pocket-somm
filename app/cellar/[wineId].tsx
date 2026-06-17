@@ -939,6 +939,15 @@ export default function CellarWineDetail() {
         )}
       </View>
 
+      {/* Date added — sits just below the 'Cellar Wine' chip, with a gap before
+          the wine name. Same muted style as before. */}
+      {(() => {
+        const added = wine.date_received ?? wine.created_at;
+        if (!added) return null;
+        const addedLabel = `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        return <Text style={styles.addedDateTop}>{addedLabel}</Text>;
+      })()}
+
       <View style={styles.header}>
         <View style={styles.headerRow}>
           {/* Thumbnail to the left of the name. Tap to view; long-press an
@@ -961,25 +970,12 @@ export default function CellarWineDetail() {
                 return parts.filter(Boolean).join(' · ');
               })()}
             </Text>
-            {(() => {
-              const added = wine.date_received ?? wine.created_at;
-              const addedLabel = added ? `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}` : null;
-              return (
-                <>
-                  {/* Grape variety (left) and Added date (right) share one line;
-                      the Edit link sits on its own line below, right-aligned. */}
-                  <View style={styles.grapeRow}>
-                    {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : <View />}
-                    {addedLabel ? <Text style={styles.addedDate}>{addedLabel}</Text> : null}
-                  </View>
-                  <View style={styles.editRow}>
-                    <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                      <Text style={styles.editTitleLink}>Edit</Text>
-                    </TouchableOpacity>
-                  </View>
-                </>
-              );
-            })()}
+            {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
+            <View style={styles.editRow}>
+              <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                <Text style={styles.editTitleLink}>Edit</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
         {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
@@ -1334,8 +1330,6 @@ export default function CellarWineDetail() {
         </TouchableOpacity>
       )}
 
-      {!isArchived && <View style={styles.cardDivider} />}
-
       {!isArchived && !isWishlist && (
         <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
           <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
@@ -1564,6 +1558,8 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   headerTextCol: { flex: 1 },
   addedDate: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // Date added, centred under the 'Cellar Wine' chip with a gap before the name.
+  addedDateTop: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.md },
   dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
   // Grape (left) + Added (right) on one line; Edit on its own line below.
   grapeRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 2 },
@@ -1681,7 +1677,7 @@ const styles = StyleSheet.create({
   // Cormorant — button text
   chefBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
-  archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, padding: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
+  archiveAccessBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.md },
   // Cormorant — button text
   archiveAccessBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   archiveModalSheet: { backgroundColor: colors.background, borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: spacing.xl, paddingBottom: 48, borderTopWidth: 1, borderColor: colors.border },
