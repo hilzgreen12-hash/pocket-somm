@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
+import { useLineupStore } from '../../../src/stores/lineupStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks } from '../../../src/api/racks';
@@ -825,6 +826,11 @@ export default function RackGridScreen() {
     );
   }
 
+  // "fridge" / "Fridge" vs "rack" / "Rack" so edit + delete copy matches the
+  // storage type the user actually built.
+  const storageNoun = rack.storage_type === 'fridge' ? 'fridge' : 'rack';
+  const StorageNoun = rack.storage_type === 'fridge' ? 'Fridge' : 'Rack';
+
   // Grid rows — rendered in the inline viewport and (when zoomed) in the
   // full-screen overlay. One function so the two never drift apart.
   function renderRackRows() {
@@ -930,7 +936,7 @@ export default function RackGridScreen() {
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
-          Select a thumbnail to Add a Wine or View Intel · Long hold to Edit · Pinch the rack to Zoom
+          Add multiple bottles at once with Add a Lineup · Select a thumbnail to Add a Wine or View Intel · Long hold to Edit · Pinch the rack to Zoom
         </Text>
 
         {winesInRack.length > 0 && (
@@ -1114,6 +1120,16 @@ export default function RackGridScreen() {
           </GestureDetector>
         </View>
 
+        {/* Add a lineup straight into this storage — photograph up to 10
+            bottles and onboard them via the same flow as Add a Wine. */}
+        <TouchableOpacity
+          style={styles.addLineupBtn}
+          onPress={() => { useLineupStore.getState().clear(); router.push('/cellar/scan-lineup'); }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.addLineupBtnText}>Add A Lineup (up to 10 bottles)</Text>
+        </TouchableOpacity>
+
         {/* Edit bubble — opens the rack-management modal (wipe / rename /
             delete). Sits at the bottom of the page so destructive actions
             stay out of the user's primary path. */}
@@ -1224,17 +1240,17 @@ export default function RackGridScreen() {
                   onPress={() => { setRenameDraft(rack.name); setRenaming(true); }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.editActionBtnText}>Rename Rack</Text>
+                  <Text style={styles.editActionBtnText}>Rename {StorageNoun}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.editActionBtn}
                   onPress={() => {
                     showAlert({
-                      title: 'Wipe rack contents?',
-                      body: 'This empties every slot in this rack. The wines stay in your cellar — they\'re just unassigned from this rack.',
+                      title: `Wipe ${storageNoun} contents?`,
+                      body: `This empties every slot in this ${storageNoun}. The wines stay in your cellar — they're just unassigned from this ${storageNoun}.`,
                       buttons: [
                         {
-                          text: 'Wipe rack',
+                          text: `Wipe ${storageNoun}`,
                           style: 'destructive',
                           onPress: () => {
                             wipeRackMutation.mutate(rackId, {
@@ -1249,17 +1265,17 @@ export default function RackGridScreen() {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.editActionBtnText}>Wipe Rack Contents</Text>
+                  <Text style={styles.editActionBtnText}>Wipe {StorageNoun} Contents</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.editActionBtn, styles.editActionBtnDanger]}
                   onPress={() => {
                     showAlert({
-                      title: 'Delete this rack?',
-                      body: `Permanently remove "${rack.name}". The wines stay in your cellar — they\'re just no longer mapped to a rack.`,
+                      title: `Delete this ${storageNoun}?`,
+                      body: `Permanently remove "${rack.name}". The wines stay in your cellar — they\'re just no longer mapped to a ${storageNoun}.`,
                       buttons: [
                         {
-                          text: 'Delete rack',
+                          text: `Delete ${storageNoun}`,
                           style: 'destructive',
                           onPress: () => {
                             removeRack.mutate(rackId, {
@@ -1274,7 +1290,7 @@ export default function RackGridScreen() {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.editActionBtnTextDanger}>Delete Rack</Text>
+                  <Text style={styles.editActionBtnTextDanger}>Delete {StorageNoun}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.placeCancel}>
                   <Text style={styles.placeCancelText}>Close</Text>
@@ -1472,6 +1488,9 @@ const styles = StyleSheet.create({
   placeCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   // Inter — cancel link (not a button)
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // Add-a-lineup CTA — gold to read as a primary action, above the Edit pill.
+  addLineupBtn: { alignSelf: 'center', marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 20, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  addLineupBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
   editRackBtn: { alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.lg, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   // Cormorant — button text
   editRackBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', letterSpacing: 1, textTransform: 'uppercase' },
