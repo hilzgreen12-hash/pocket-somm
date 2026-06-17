@@ -39,7 +39,7 @@ Provide intelligence on this wine:
 Return ONLY a valid JSON object with exactly this structure:
 {
   "criticScore": <integer 0-100 representing the AVERAGE / consensus critic score for this exact wine and vintage, or null if very obscure. When you list individual scores in criticScores below, this should be their rough average (convert any /20 scores to /100 first)>,
-  "criticScoreNote": <single short sentence — 20 words max — explaining why no critic score is available when criticScore is null. e.g. "No published reviews — this is a small-production producer rarely covered by mainstream critics." or "Vintage too young — no major critics have scored this release yet." Set to null when criticScore is provided>,
+  "criticScoreNote": <single short sentence — 20 words max — explaining why no critic score is available when criticScore is null. e.g. "No published reviews — this wine is rarely covered by mainstream critics." or "Vintage too young — no major critics have scored this release yet." Do NOT assert the producer's size/scale (e.g. "small producer") unless you are genuinely certain of it. Set to null when criticScore is provided>,
   "criticScores": <array of individual PUBLISHED critic scores for this EXACT wine and vintage that you genuinely recall as real. Each item: {"critic": <short abbreviation>, "score": <number on that critic's own scale>, "scale": <"100" for most critics; "20" for Jancis Robinson>}. Use these standard abbreviations only: "JS" (James Suckling), "JR" (Jancis Robinson, /20), "NM" (Neal Martin), "WK" (William Kelly), "AG" (Antonio Galloni), "WA" (Wine Advocate), "WS" (Wine Spectator), "WE" (Wine Enthusiast), "D" (Decanter), "V" (Vinous), "JD" (Jeb Dunnuck), "BH" (Burghound). CRITICAL: include ONLY scores you are genuinely confident were actually published for this precise wine+vintage — never invent, guess, or approximate a plausible-looking number. Return an empty array [] if you do not confidently recall any specific published scores. Maximum 6 entries>,
   "drinkingWindowFrom": <4-digit year when ready to drink, or null>,
   "drinkingWindowTo": <4-digit year by which it should ideally be drunk, or null>,
@@ -54,7 +54,9 @@ Return ONLY a valid JSON object with exactly this structure:
 
 Always estimate a drinking window (from/to years) and a status from the vintage, grape and region — never return "unknown". Base the status on the current year ${currentYear} relative to the from/to years.
 
-Be conservative and honest with valuation: it is better to return null for estimatedValue (and valueConfidence) than to publish a confident-looking but wrong price. Only mark "high" confidence for wines you genuinely know trade actively at an established price.${scoreGuidance}
+Be conservative and honest with valuation: it is better to return null for estimatedValue (and valueConfidence) than to publish a confident-looking but wrong price. Only mark "high" confidence for wines you genuinely know trade actively at an established price.
+
+PRODUCER-SCALE DISCIPLINE: in tastingNotes and criticScoreNote, only describe the producer's size or production scale (e.g. "small artisanal grower", "boutique estate", "large négociant") when you are genuinely certain it is accurate. Many well-known estates are mistaken for small producers — when unsure of scale, describe the wine's character, reputation or style WITHOUT making a size claim. Never guess production scale.${scoreGuidance}
 
 Return only the raw JSON — no markdown, no explanation.`;
 
