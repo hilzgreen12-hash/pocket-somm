@@ -1323,6 +1323,17 @@ export default function CellarWineDetail() {
         )
       )}
 
+      {/* Dive Deeper — opens the Vinster "Wine Knowledge" page (producer /
+          region / vintage / grape profiles). Available for wishlist wines too. */}
+      {!isArchived && (
+        <TouchableOpacity
+          style={[styles.chefBtn, { marginTop: spacing.md }]}
+          onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)}
+        >
+          <Text style={styles.chefBtnText}>Dive Deeper into this wine</Text>
+        </TouchableOpacity>
+      )}
+
       {!isArchived && <View style={styles.cardDivider} />}
 
       {!isArchived && !isWishlist && (

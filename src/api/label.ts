@@ -49,6 +49,28 @@ export async function getWineIntelligence(
   return data;
 }
 
+export interface WineKnowledge {
+  producerProfile: string;
+  regionProfile: string;
+  vintageProfile: string;
+  grapeProfile: string;
+}
+
+// "Dive Deeper" — four editorial profiles for a wine (producer, region,
+// vintage, grape). Generated once and cached on the cellar row by the caller.
+export async function getWineKnowledge(input: {
+  producer: string; region: string; wineName: string | null; vintage: string | null; grape: string | null;
+}): Promise<WineKnowledge> {
+  const data = await invokeFunction('wine-knowledge', {
+    producer: input.producer,
+    region: input.region,
+    wineName: input.wineName,
+    vintage: input.vintage,
+    grape: input.grape,
+  }) as WineKnowledge;
+  return data;
+}
+
 export async function generatePairings(
   wine: WineDetailsComplete,
   filters: DietaryFilters,

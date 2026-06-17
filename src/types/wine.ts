@@ -192,6 +192,10 @@ export interface CellarWine {
   // Where Estimated Value came from (migration 053): 'wine-searcher' = real
   // market data, 'vinster' = Claude estimate. Null on legacy/untouched rows.
   estimated_value_source: string | null;
+  // "Dive Deeper" editorial profiles (migration 054), generated lazily and
+  // cached. Shape: { producerProfile, regionProfile, vintageProfile, grapeProfile }.
+  wine_knowledge: WineKnowledgeData | null;
+  wine_knowledge_at: string | null;
   review_score: number | null;
   review_location: string | null;
   review_date: string | null;
@@ -311,6 +315,14 @@ export interface ChosenWine {
   reviewed_at: string | null;
   // The user's own drinking-window opinion (migration 048) — free text.
   user_drinking_window: string | null;
+}
+
+// Cached "Dive Deeper" editorial profiles stored on cellar_wines.wine_knowledge.
+export interface WineKnowledgeData {
+  producerProfile: string;
+  regionProfile: string;
+  vintageProfile: string;
+  grapeProfile: string;
 }
 
 export interface PricingData {
