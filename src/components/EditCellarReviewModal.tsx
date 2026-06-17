@@ -4,7 +4,6 @@ import {
   StyleSheet, Keyboard, Share,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
@@ -214,12 +213,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     });
   }
 
-  function openFullCard() {
-    if (!wine) return;
-    onClose();
-    router.push(`/cellar/${wine.id}?from=reviews` as any);
-  }
-
   if (!wine) return null;
 
   const headerLine = (() => {
@@ -273,10 +266,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
               onSave={handleSave}
               saveLabel="Save Review"
             />
-
-            <TouchableOpacity style={styles.wishlistBtn} onPress={openFullCard} activeOpacity={0.8}>
-              <Text style={styles.wishlistBtnText}>View full wine card</Text>
-            </TouchableOpacity>
 
             <TouchableOpacity style={styles.deleteButton} onPress={handleClearReview} disabled={updateWine.isPending}>
               <Text style={styles.deleteText}>Delete this review</Text>
