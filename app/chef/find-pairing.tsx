@@ -200,11 +200,10 @@ export default function FindPairingScreen() {
 
       <View style={styles.divider} />
 
-      {/* What are you cooking — centred label with the mic + bin centred
-          beneath it, then the input. The "strong flavours" guidance lives in
-          the input's placeholder rather than as a separate helper line. */}
-      <Text style={[styles.fieldLabel, styles.centredLabel]}>What are you cooking?</Text>
-      <View style={styles.micRowCentred}>
+      {/* What are you cooking — label with the mic + bin to its right,
+          bottom-aligned, the whole phrase centred as one row. */}
+      <View style={styles.cookingHeaderRow}>
+        <Text style={[styles.fieldLabel, { marginBottom: 0 }]}>What are you cooking?</Text>
         <MicButton value={dish} onChangeText={setDishLocal} onClear={() => setDishLocal('')} />
       </View>
       <TextInput
@@ -332,6 +331,8 @@ const styles = StyleSheet.create({
   // Mixed-case form label (no caps) + centred variant for the cooking /
   // regional inputs, matching the rest of the app's input labels.
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
+  // "What are you cooking?" + mic/bin on one centred, bottom-aligned row.
+  cookingHeaderRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
   // Label above each preference bubble group.
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
