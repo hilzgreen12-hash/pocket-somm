@@ -50,9 +50,6 @@ export function BudgetSlider({ value, onChange, currency, label, compact }: Prop
   // controlled `value` prop (each parent update would otherwise force the
   // thumb back and break the gesture). Commit upstream on release.
   const [localIndex, setLocalIndex] = useState(() => valueToIndex(value));
-  // Goes gold once the user actually sets a budget (drags the slider),
-  // confirming the choice the same way the other preference inputs do.
-  const [touched, setTouched] = useState(false);
 
   useEffect(() => {
     setLocalIndex(valueToIndex(value));
@@ -66,7 +63,9 @@ export function BudgetSlider({ value, onChange, currency, label, compact }: Prop
     <View style={{ width: '100%' }}>
       <Text style={[styles.value, compact && styles.valueCompact]}>
         {label ? `${label}  ` : ''}
-        <Text style={touched ? styles.valueConfirmed : undefined}>
+        {/* The budget value is always an active selection (Baller is the
+            default), so it reads gold from the start. */}
+        <Text style={styles.valueConfirmed}>
           {atMax ? 'Baller' : `${sym}${current}`}.
         </Text>
       </Text>
@@ -77,7 +76,7 @@ export function BudgetSlider({ value, onChange, currency, label, compact }: Prop
         step={1}
         value={localIndex}
         onValueChange={(i) => setLocalIndex(Math.round(i))}
-        onSlidingComplete={(i) => { setTouched(true); onChange(VALUES[Math.round(i)]); }}
+        onSlidingComplete={(i) => onChange(VALUES[Math.round(i)])}
         minimumTrackTintColor="rgba(255,255,255,0.80)"
         maximumTrackTintColor="rgba(255,255,255,0.20)"
         thumbTintColor="#FFFFFF"
