@@ -157,8 +157,9 @@ const styles = StyleSheet.create({
   // tab title, kept Cormorant per user spec ("blurbs below the headers
   // on the tab screens"). Italics retained.
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
-  // One-line note pointing users to the You tab to tune their results.
-  prefsBlurb: { fontSize: 16, fontFamily: fonts.headingRegular, fontStyle: 'italic', color: '#FFFFFF', lineHeight: 22, marginBottom: spacing.sm, textAlign: 'center' },
+  // One-line note pointing users to the You tab to tune their results —
+  // matches the topBlurb size/font exactly so the two read as one block.
+  prefsBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
   prefsLink: { color: colors.gold, textDecorationLine: 'underline' },
   // "View last result" link — body / link, Inter.
   lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
