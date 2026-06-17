@@ -122,6 +122,16 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
+      <View style={styles.divider} />
+
+      {/* Import an existing cellar from another app (Vivino, CellarTracker, a
+          spreadsheet…) by screenshot/photo. */}
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/import-cellar'))}>
+          <Text style={styles.buttonText}>Import Cellar Document</Text>
+        </TouchableOpacity>
+      </View>
+
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>

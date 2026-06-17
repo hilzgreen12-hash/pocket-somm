@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
             },
             {
               type: 'text',
-              text: `You are a wine cellar assistant. This image shows a cellar-related document — it could be a spreadsheet, a printed inventory list, handwritten notes, a wine merchant's receipt, an invoice from a wholesaler or retailer, or a screenshot of any of these. Be tolerant of formatting and ignore non-wine items (e.g. delivery fees, gift bags, taxes).
+              text: `You are a wine cellar assistant. This image shows a cellar-related document — most often a SCREENSHOT FROM ANOTHER WINE APP (a scrollable list of wines, each row showing the wine name, producer, vintage, region, and sometimes a quantity, rating or price), but it could also be a spreadsheet, a printed inventory list, handwritten notes, a wine merchant's receipt, or an invoice. In such a list each row is one wine — extract every visible row. Be tolerant of formatting and ignore non-wine UI (ratings out of 5, "in your cellar" labels, prices that are clearly market values rather than what was paid, navigation chrome, delivery fees, taxes).
 
 Extract every wine entry you can identify. For each wine, extract:
 - wine_name: the wine name (e.g. "Château Margaux", "Barolo", "Chablis Premier Cru")
