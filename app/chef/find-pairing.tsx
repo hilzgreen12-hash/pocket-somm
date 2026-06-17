@@ -222,9 +222,11 @@ export default function FindPairingScreen() {
           it. Once read, the button becomes the recipe's title. */}
       <TouchableOpacity style={styles.recipeUploadBtn} onPress={handleUploadRecipe} disabled={recipeLoading} activeOpacity={0.85}>
         <Text style={styles.recipeUploadBtnText} numberOfLines={1}>
-          {recipeLoading ? 'Reading recipe…' : (recipeTitle ?? 'Upload a Recipe')}
+          {recipeLoading ? 'Reading recipe…' : (recipeTitle ?? 'or upload a recipe')}
         </Text>
       </TouchableOpacity>
+
+      <View style={styles.divider} />
 
       {/* Regional + Style preference — collapsible accordions that mirror the
           You → Your Preferences "Regional/Varietal Dislikes" exactly: a header
