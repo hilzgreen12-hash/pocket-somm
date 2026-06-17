@@ -26,6 +26,11 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { WineRecommendation } from '../../src/types/wine';
 
+// Shown by the "(what's this)" link next to Vinster's Review — mirrors the
+// explainer on the wine card so the two surfaces read consistently.
+const VINSTER_REVIEW_EXPLAINER =
+  "Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in your own review of the wine.";
+
 if (Platform.OS === 'android') {
   UIManager.setLayoutAnimationEnabledExperimental?.(true);
 }
@@ -726,20 +731,29 @@ export default function ResultsScreen() {
                     rationale is the longest prose block on the card, so
                     hiding it behind a tap keeps the page scannable while
                     leaving the full sommelier reasoning a tap away. */}
-                <TouchableOpacity
-                  style={styles.sommNoteToggle}
-                  onPress={() => toggleWine(i)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.sommNoteToggleText}>
-                    Vinster's Sommelier Note
-                  </Text>
-                  <Ionicons
-                    name={sommOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
-                    size={16}
-                    color={colors.gold}
-                  />
-                </TouchableOpacity>
+                <View style={styles.sommHeaderRow}>
+                  <TouchableOpacity
+                    style={styles.sommNoteToggle}
+                    onPress={() => toggleWine(i)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.sommNoteToggleText}>
+                      Vinster's Review
+                    </Text>
+                    <Ionicons
+                      name={sommOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
+                      size={16}
+                      color={colors.gold}
+                    />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={() => showAlert({ title: "What is Vinster's Review?", body: VINSTER_REVIEW_EXPLAINER })}
+                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.whatsThisLink}>what's this</Text>
+                  </TouchableOpacity>
+                </View>
                 {sommOpen && (
                   <Text style={styles.sommNoteText}>{wine.rationale}</Text>
                 )}
@@ -1131,13 +1145,26 @@ const styles = StyleSheet.create({
     color: colors.gold,
   },
   // Sommelier note expand toggle — collapsed by default, label + chevron.
+  // Row holding the Vinster's Review toggle + the "(what's this)" link.
+  sommHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
   sommNoteToggle: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    marginTop: spacing.md,
     paddingVertical: 6,
+  },
+  whatsThisLink: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 12,
+    color: colors.textMuted,
+    textDecorationLine: 'underline',
   },
   sommNoteToggleText: {
     fontFamily: fonts.headingSemibold,
