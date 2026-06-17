@@ -106,6 +106,7 @@ export interface DetectedBottle {
   producer: string;
   wineName: string;
   vintage: string | null;
+  region?: string | null;
   confident: boolean;
 }
 export async function detectLineup(base64Image: string): Promise<{ bottles: DetectedBottle[] }> {

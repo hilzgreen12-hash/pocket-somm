@@ -140,6 +140,12 @@ export default function CellarTab() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
+              onPress={() => { setAddWineOpen(false); requireAuth(() => router.push('/cellar/scan-lineup')); }}
+            >
+              <Text style={styles.modalButtonText}>Scan a Lineup (up to 10)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, { marginTop: spacing.sm }]}
               onPress={() => {
                 setAddWineOpen(false);
                 // Clear any prior scan so Confirm Wine Details opens blank
