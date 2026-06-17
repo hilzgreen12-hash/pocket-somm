@@ -113,6 +113,12 @@ export async function detectLineup(base64Image: string): Promise<{ bottles: Dete
   return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
 }
 
+// Read a recipe image → dish name + pairing-relevant summary.
+export interface ScannedRecipe { dishName: string | null; summary: string | null }
+export async function scanRecipe(base64Image: string): Promise<ScannedRecipe> {
+  return invokeFunction('scan-recipe', { base64Image }) as Promise<ScannedRecipe>;
+}
+
 export async function generatePersonality(category: 'wine' | 'recipe' | 'restaurant', payload: {
   preferences?: Record<string, unknown> | null;
   wines?: Array<{ producer: string | null; wine_name: string; vintage: string | null; region: string | null }>;
