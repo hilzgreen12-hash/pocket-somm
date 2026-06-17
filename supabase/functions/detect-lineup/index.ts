@@ -25,12 +25,13 @@ For each bottle return:
 - producer: the producer / château / domaine (may equal wine_name if not separate)
 - wineName: the wine or cuvée name (e.g. "Barolo Albe", "Château Margaux")
 - vintage: the 4-digit year as a string if legible, else null
+- region: the region or appellation if you can read or confidently infer it (e.g. "Barolo", "Bordeaux"), else null
 - confident: true only if you can read the label clearly; false if it's a guess from a blurry/partial/angled label
 
 Return ONE object per physical bottle — if the same wine appears twice, return it twice. Do NOT invent bottles you cannot see, and do NOT pad the list. If a label is unreadable, still include the bottle with whatever you can read and confident:false.
 
 Return ONLY valid JSON:
-{ "bottles": [ { "producer": "...", "wineName": "...", "vintage": "2019", "confident": true } ] }
+{ "bottles": [ { "producer": "...", "wineName": "...", "vintage": "2019", "region": "Pomerol", "confident": true } ] }
 
 If you can't identify any bottles, return { "bottles": [] }. Raw JSON only — no markdown, no explanation.`,
             },
