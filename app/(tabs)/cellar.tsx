@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
@@ -140,7 +141,7 @@ export default function CellarTab() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); requireAuth(() => router.push('/cellar/scan-lineup')); }}
+              onPress={() => { setAddWineOpen(false); useLineupStore.getState().clear(); requireAuth(() => router.push('/cellar/scan-lineup')); }}
             >
               <Text style={styles.modalButtonText}>Scan a Lineup (up to 10)</Text>
             </TouchableOpacity>
