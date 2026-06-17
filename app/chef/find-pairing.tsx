@@ -6,6 +6,7 @@ import { MicButton } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
+import { ChipPicker } from '../../src/components/preferences/ChipPicker';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -25,18 +26,12 @@ export default function FindPairingScreen() {
   const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget } = useFoodPairingStore();
 
   const [dish, setDishLocal] = useState('');
-  const [regionPreference, setRegionPreference] = useState('');
-  const [stylePreference, setStylePreference] = useState<string | null>(null);
+  // Multi-select preference bubbles (mirror the You → Your Preferences page):
+  // pick none = any, or one+ regions / styles. Region allows custom entries.
+  const [regionPrefs, setRegionPrefs] = useState<string[]>([]);
+  const [stylePrefs, setStylePrefs] = useState<string[]>([]);
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
-  const [styleDropdownOpen, setStyleDropdownOpen] = useState(false);
-  const [regionDropdownOpen, setRegionDropdownOpen] = useState(false);
-  // True when the user picked 'Other' in the region dropdown — reveals a free
-  // text input so they can type a region not in the list.
-  const [regionIsOther, setRegionIsOther] = useState(false);
-  // Shows the free text input while the user types a custom region; hidden
-  // once they confirm, leaving the typed value in the gold summary.
-  const [regionInputOpen, setRegionInputOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
   // Jump to the wine-preferences editor and back. Pushed (not replaced) so the
@@ -46,7 +41,7 @@ export default function FindPairingScreen() {
     router.push('/profile/wine');
   }
 
-  const STYLE_OPTIONS = ['Any', 'White', 'Red', 'Rosé', 'Sparkling', 'Fortified'];
+  const STYLE_CHOICES = ['White', 'Red', 'Rosé', 'Sparkling', 'Fortified'];
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [signInPromptShown, setSignInPromptShown] = useState(false);
   const pendingFindRef = useRef(false);
@@ -85,13 +80,14 @@ export default function FindPairingScreen() {
     const cleanDish = dish.trim();
     // Fold the optional regional preference into the brief the AI sees, but
     // keep the displayed/stored dish clean so the results heading stays tidy.
-    const regionNote = regionPreference.trim();
+    const regionNote = regionPrefs.join(', ').trim();
+    const styleStr = stylePrefs.length ? stylePrefs.join(', ') : null;
     const aiDish = regionNote
       ? `${cleanDish}\n\nPreferred wine region or style: ${regionNote}.`
       : cleanDish;
     setDish(cleanDish);
     setMode(mode);
-    storeStyle(stylePreference);
+    storeStyle(styleStr);
     storeBudget(budget);
 
     try {
@@ -113,7 +109,7 @@ export default function FindPairingScreen() {
         mode === 'cellar' ? cellarSummary : undefined,
         undefined,
         savedPreferences ? (savedPreferences as unknown as Record<string, unknown>) : null,
-        stylePreference,
+        styleStr,
         budget,
       ) as any;
 
@@ -175,49 +171,14 @@ export default function FindPairingScreen() {
         textAlignVertical="top"
       />
 
-      {/* Regional Preference (optional) — dropdown matching Wine Style, with
-          an 'Other' option that reveals a free text input. */}
-      <TouchableOpacity style={styles.styleAccordion} onPress={() => setRegionDropdownOpen(true)} activeOpacity={0.7}>
-        <View style={styles.styleAccordionLeft}>
-          <Text style={styles.styleQuestion}>Regional Preference</Text>
-          <Text style={[styles.styleAccordionSummary, regionPreference ? styles.styleAccordionSummaryActive : null]}>
-            {regionIsOther ? (regionPreference || 'Other') : (regionPreference || 'Any')}
-          </Text>
-        </View>
-        <Text style={styles.styleAccordionChevron}>▾</Text>
-      </TouchableOpacity>
-      {regionIsOther && regionInputOpen ? (
-        <View style={styles.regionOtherRow}>
-          <TextInput
-            style={styles.regionOtherInput}
-            value={regionPreference}
-            onChangeText={setRegionPreference}
-            placeholder="Type a region…"
-            placeholderTextColor={colors.textMuted}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={() => { if (regionPreference.trim()) setRegionInputOpen(false); }}
-          />
-          <TouchableOpacity
-            style={[styles.regionOtherConfirm, !regionPreference.trim() && { opacity: 0.5 }]}
-            onPress={() => { if (regionPreference.trim()) setRegionInputOpen(false); }}
-            disabled={!regionPreference.trim()}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.regionOtherConfirmText}>Confirm</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
+      {/* Regional + Style preference — multi-select bubbles mirroring the
+          You → Your Preferences page. Pick none = any; pick one or more.
+          Region allows custom entries via "+ Add other". */}
+      <Text style={[styles.fieldLabel, styles.chipFieldLabel]}>Regional Preference</Text>
+      <ChipPicker options={WINE_REGIONS} selected={regionPrefs} onChange={setRegionPrefs} allowCustom />
 
-      {/* Wine style — formatted like the Recipe Requirements input rows: a
-          full-width bordered box with the value + chevron, opening the picker. */}
-      <TouchableOpacity style={styles.styleAccordion} onPress={() => setStyleDropdownOpen(true)} activeOpacity={0.7}>
-        <View style={styles.styleAccordionLeft}>
-          <Text style={styles.styleQuestion}>Wine Style Preference</Text>
-          <Text style={styles.styleAccordionSummary}>{stylePreference ?? 'Any'}</Text>
-        </View>
-        <Text style={styles.styleAccordionChevron}>▾</Text>
-      </TouchableOpacity>
+      <Text style={[styles.fieldLabel, styles.chipFieldLabel]}>Wine Style Preference</Text>
+      <ChipPicker options={STYLE_CHOICES} selected={stylePrefs} onChange={setStylePrefs} />
 
       {/* Budget? Baller — inline header via the slider's label prop, mirroring List. */}
       <View style={styles.budgetBlock}>
@@ -251,64 +212,6 @@ export default function FindPairingScreen() {
       <TouchableOpacity style={styles.button} onPress={() => handleFind()}>
         <Text style={styles.buttonText}>Find Pairing</Text>
       </TouchableOpacity>
-
-      <Modal visible={styleDropdownOpen} transparent animationType="fade" onRequestClose={() => setStyleDropdownOpen(false)}>
-        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setStyleDropdownOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
-            <Text style={styles.dropdownTitle}>Wine style</Text>
-            {STYLE_OPTIONS.map((s) => {
-              const val = s === 'Any' ? null : s;
-              const active = stylePreference === val;
-              return (
-                <TouchableOpacity
-                  key={s}
-                  style={[styles.dropdownOption, active && styles.dropdownOptionActive]}
-                  onPress={() => { setStylePreference(val); setStyleDropdownOpen(false); }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}>{s}</Text>
-                  {active && <Text style={styles.dropdownCheck}>✓</Text>}
-                </TouchableOpacity>
-              );
-            })}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-
-      <Modal visible={regionDropdownOpen} transparent animationType="fade" onRequestClose={() => setRegionDropdownOpen(false)}>
-        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setRegionDropdownOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
-            <Text style={styles.dropdownTitle}>Regional preference</Text>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {['Any', ...WINE_REGIONS, 'Other'].map((r) => {
-                const isOtherOpt = r === 'Other';
-                const isAnyOpt = r === 'Any';
-                const active = isOtherOpt
-                  ? regionIsOther
-                  : isAnyOpt
-                    ? (!regionIsOther && !regionPreference)
-                    : (!regionIsOther && regionPreference === r);
-                return (
-                  <TouchableOpacity
-                    key={r}
-                    style={[styles.dropdownOption, active && styles.dropdownOptionActive]}
-                    onPress={() => {
-                      if (isAnyOpt) { setRegionPreference(''); setRegionIsOther(false); setRegionInputOpen(false); }
-                      else if (isOtherOpt) { setRegionPreference(''); setRegionIsOther(true); setRegionInputOpen(true); }
-                      else { setRegionPreference(r); setRegionIsOther(false); setRegionInputOpen(false); }
-                      setRegionDropdownOpen(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}>{r}</Text>
-                    {active && <Text style={styles.dropdownCheck}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -345,6 +248,8 @@ const styles = StyleSheet.create({
   // regional inputs, matching the rest of the app's input labels.
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
   centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
+  // Label above each preference bubble group.
+  chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
   micRowCentred: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
   regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
