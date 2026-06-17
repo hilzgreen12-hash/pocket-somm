@@ -91,7 +91,7 @@ export default function ChefTab() {
         </Text>
         <Text style={styles.prefsBlurb}>
           Vinster will use your preferences in the{' '}
-          <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You tab</Text>
+          <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You</Text>
           {' '}to guide its results.
         </Text>
         <HelpButton label="More About Chef" title="How Chef works" body={CHEF_HELP} />
