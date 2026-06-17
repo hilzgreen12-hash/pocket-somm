@@ -119,10 +119,10 @@ export default function ImportCellarScreen() {
       {stage === 'capture' ? (
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.lead}>
-            Upload a screenshot — or multiple screenshots — of an existing cellar and Vinster will
-            read the wines and add them to your cellar.
+            Vinster can upload cellar lists from invoices, storage certificates, or wine apps, as
+            long as they are clear screenshots.
           </Text>
-          <Text style={styles.hint}>Pick several screenshots at once if your list spans more than one screen. A photo of a printed list works too.</Text>
+          <Text style={styles.hint}>Pick several screenshots at once if your list spans more than one screen.</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pick('library')} activeOpacity={0.85}>
             <Text style={styles.primaryBtnText}>Upload screenshot(s)</Text>
           </TouchableOpacity>
