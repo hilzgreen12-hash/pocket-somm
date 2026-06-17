@@ -339,6 +339,12 @@ export default function ResultsScreen() {
       showAlert({
         title: 'Added to You · Your Restaurants',
         body: "Saved to your Bottle Picks under You · Your Restaurants. Vinster will fold this into their understanding of your vinous amour.",
+        buttons: [
+          { text: 'Okay', style: 'cancel' },
+          // Review now → opens the review input for this just-added pick and
+          // saves the review onto it (no separate re-entry from the list card).
+          { text: 'Review Wine', onPress: () => setChosenModalWine(wine) },
+        ],
       });
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -711,17 +717,10 @@ export default function ResultsScreen() {
                   </TouchableOpacity>
                 )}
 
-                {session && (
-                  <View style={styles.detailActionsRow}>
-                    <TouchableOpacity
-                      style={styles.detailActionBtn}
-                      onPress={() => setChosenModalWine(wine)}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={styles.detailActionBtnText}>Review Wine</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                {/* "Review Wine" is no longer a standalone button here — after
+                    adding to Bottle Picks the success popup offers it, so a wine
+                    is reviewed either right after selecting or later from Your
+                    Restaurants → Bottle Picks (avoids the re-entry loop). */}
 
                 {/* Vinster's Sommelier Note — collapsed by default. The
                     rationale is the longest prose block on the card, so

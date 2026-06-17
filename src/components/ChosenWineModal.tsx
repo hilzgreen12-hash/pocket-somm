@@ -129,6 +129,19 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       vintage: wine.vintage,
     });
     if (existing) {
+      // A bottle pick added from the list starts as an empty row (no note,
+      // score or observations). Reviewing it right after adding should just
+      // fill that row in — not prompt "you've reviewed this before" (the loop
+      // the user hit). Only prompt when there's a real prior review.
+      const hasContent = !!(
+        (existing.tasting_note ?? '').trim() ||
+        existing.user_score != null ||
+        (existing.other_observations ?? '').trim()
+      );
+      if (!hasContent) {
+        await doSave('update', existing);
+        return;
+      }
       showAlert({
         title: "You've reviewed this wine before",
         body: `You already have a review for ${wineName}. Update it, add a new dated tasting to it, or start a fresh review?`,

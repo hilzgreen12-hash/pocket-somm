@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   shareBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
   btnDisabled: { opacity: 0.5 },
   actionPairRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  pairBtn: { flex: 1, borderRadius: 12, padding: spacing.md, alignItems: 'center' },
+  pairBtn: { flex: 1, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   goldBtn: { borderWidth: 1, borderColor: colors.gold },
   goldBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center' },
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
