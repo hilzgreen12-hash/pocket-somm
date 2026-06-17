@@ -345,8 +345,6 @@ const styles = StyleSheet.create({
   regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
-  // "What are you cooking?" caps label with the mic + bin on the same line.
-  cookingHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   cookingLabel: { marginBottom: 0, flexShrink: 1 },
   styleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.lg },
   rowLabel: { marginBottom: 0, flexShrink: 1 },
