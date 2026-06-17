@@ -135,15 +135,15 @@ export default function CellarTab() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); handleUpload(); }}
+              onPress={() => { setAddWineOpen(false); useLineupStore.getState().start(null); requireAuth(() => router.push('/cellar/scan-lineup')); }}
             >
-              <Text style={styles.modalButtonText}>Upload A Wine Label</Text>
+              <Text style={styles.modalButtonText}>Scan a Lineup (up to 10 bottles)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); useLineupStore.getState().start(null); requireAuth(() => router.push('/cellar/scan-lineup')); }}
+              onPress={() => { setAddWineOpen(false); handleUpload(); }}
             >
-              <Text style={styles.modalButtonText}>Scan a Lineup (up to 10)</Text>
+              <Text style={styles.modalButtonText}>Upload A Wine Label</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
