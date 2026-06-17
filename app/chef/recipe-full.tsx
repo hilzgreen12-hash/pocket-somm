@@ -162,7 +162,6 @@ export default function RecipeFullScreen() {
         <View style={styles.footerBlock}>
           <Text style={styles.footerHeadline}>{VINSTER_GET_LABEL}</Text>
           <Text style={styles.footerTagline}>{VINSTER_TAGLINE}</Text>
-          <Text style={styles.footerUrl}>{VINSTER_INSTALL_URL.replace(/^https?:\/\//, '')}</Text>
         </View>
 
         {(sharing || printing) && (
