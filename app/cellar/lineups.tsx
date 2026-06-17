@@ -4,6 +4,9 @@ import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { listLineupArchives, lineupSignedUrl, setLineupFavourite, type LineupArchive } from '../../src/api/lineups';
+import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
+import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -58,6 +61,13 @@ export default function LineupLibraryScreen() {
   const [monthFilter, setMonthFilter] = useState<string>('All');
   const [openDropdown, setOpenDropdown] = useState<'fav' | 'month' | null>(null);
 
+  // Bespoke user-created filters.
+  const { filters: customFilters, create, setItems, rename, remove } = useLibraryFilters('lineup');
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
+
   // Month options grow as the collection does — distinct months, newest first.
   const monthOptions = useMemo(() => {
     const seen: string[] = [];
@@ -69,8 +79,55 @@ export default function LineupLibraryScreen() {
     let list = lineups;
     if (favFilter === 'fav') list = list.filter((l) => l.is_favourite);
     if (monthFilter !== 'All') list = list.filter((l) => monthKey(l.archived_at) === monthFilter);
+    if (activeCustomId) {
+      const f = customFilters.find((cf) => cf.id === activeCustomId);
+      const ids = new Set(f?.itemIds ?? []);
+      list = list.filter((l) => ids.has(l.id));
+    }
     return list;
-  }, [lineups, favFilter, monthFilter]);
+  }, [lineups, favFilter, monthFilter, activeCustomId, customFilters]);
+
+  function applyCustom(id: string) {
+    setActiveCustomId((prev) => (prev === id ? null : id));
+  }
+  function openCreateFilter() {
+    setEditingFilter(null);
+    setFilterModalOpen(true);
+  }
+  function openFilterOptions(f: LibraryFilter) {
+    showAlert({
+      title: f.name,
+      body: 'Edit this filter’s name and lineups, or delete it. Your lineups stay in the library either way.',
+      buttons: [
+        { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
+        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); remove.mutate(f.id); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  async function saveFilter(name: string, ids: string[]) {
+    setSavingFilter(true);
+    try {
+      if (editingFilter) {
+        await rename.mutateAsync({ filterId: editingFilter.id, name });
+        await setItems.mutateAsync({ filterId: editingFilter.id, itemIds: ids });
+      } else {
+        await create.mutateAsync({ name, itemIds: ids });
+      }
+      setFilterModalOpen(false);
+      setEditingFilter(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
+    }
+  }
+  // Items offered in the create/edit sheet — every lineup, by date.
+  const filterItems = useMemo(() => lineups.map((l) => ({
+    id: l.id,
+    label: new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+    sublabel: l.bottle_count ? `${l.bottle_count} bottle${l.bottle_count === 1 ? '' : 's'}` : undefined,
+  })), [lineups]);
 
   async function toggleFav(item: LineupArchive) {
     try {
@@ -141,6 +198,21 @@ export default function LineupLibraryScreen() {
               </View>
               <Text style={[styles.filterChipValue, monthFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{monthLabel}</Text>
             </TouchableOpacity>
+            {customFilters.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
+                onPress={() => applyCustom(f.id)}
+                onLongPress={() => openFilterOptions(f)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+              <Text style={styles.customChipAddText}>+ Add</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {filtered.length === 0 ? (
@@ -189,6 +261,18 @@ export default function LineupLibraryScreen() {
           {viewerUrl ? <Image source={{ uri: viewerUrl }} style={styles.viewerImage} resizeMode="contain" /> : <ActivityIndicator color={colors.gold} />}
         </TouchableOpacity>
       </Modal>
+
+      <LibraryFilterModal
+        visible={filterModalOpen}
+        title={editingFilter ? 'Edit filter' : 'New filter'}
+        itemNoun="lineups"
+        items={filterItems}
+        initialName={editingFilter?.name}
+        initialSelected={editingFilter?.itemIds}
+        saving={savingFilter}
+        onSave={saveFilter}
+        onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
+      />
     </View>
   );
 }
@@ -210,6 +294,12 @@ const styles = StyleSheet.create({
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  // Bespoke custom-filter pills + the "+ Add" pill.
+  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 160 },
+  customChipActive: { borderColor: colors.gold },
+  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
+  customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.xl, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
   tileImageWrap: { borderRadius: 10, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
