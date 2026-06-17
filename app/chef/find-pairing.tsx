@@ -329,7 +329,7 @@ const styles = StyleSheet.create({
   fieldLabelCaps: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs },
   // Mixed-case form label (no caps) + centred variant for the cooking /
   // regional inputs, matching the rest of the app's input labels.
-  fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
+  fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
   centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
   // Label above each preference bubble group.
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
@@ -395,7 +395,7 @@ const styles = StyleSheet.create({
   difficultyBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   difficultyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted },
   difficultyBtnTextActive: { color: colors.gold },
-  toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.xl, width: '100%' },
+  toggleRow: { flexDirection: 'row', alignItems: 'stretch', gap: spacing.sm, marginBottom: spacing.sm, width: '100%' },
   toggleBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.sm, alignItems: 'center' },
   // Thin vertical rule between the From My Cellar / Suggest a Style buttons.
   toggleDivider: { width: 1, alignSelf: 'stretch', backgroundColor: colors.border },
