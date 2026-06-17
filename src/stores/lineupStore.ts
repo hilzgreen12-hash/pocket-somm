@@ -8,6 +8,11 @@ import type { DetectedBottle } from '../api/label';
 interface LineupState {
   wines: DetectedBottle[];
   imageUri: string | null;
+  // When a lineup is launched from a specific rack/fridge, finishing it returns
+  // there (rather than the Cellar tab). null when started from Add a Wine.
+  originRackId: string | null;
+  // Begin a fresh lineup session, recording where it was launched from.
+  start: (originRackId: string | null) => void;
   setLineup: (wines: DetectedBottle[], imageUri: string | null) => void;
   clear: () => void;
 }
@@ -15,6 +20,8 @@ interface LineupState {
 export const useLineupStore = create<LineupState>((set) => ({
   wines: [],
   imageUri: null,
+  originRackId: null,
+  start: (originRackId) => set({ wines: [], imageUri: null, originRackId }),
   setLineup: (wines, imageUri) => set({ wines, imageUri }),
-  clear: () => set({ wines: [], imageUri: null }),
+  clear: () => set({ wines: [], imageUri: null, originRackId: null }),
 }));

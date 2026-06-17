@@ -1124,7 +1124,7 @@ export default function RackGridScreen() {
             bottles and onboard them via the same flow as Add a Wine. */}
         <TouchableOpacity
           style={styles.addLineupBtn}
-          onPress={() => { useLineupStore.getState().clear(); router.push('/cellar/scan-lineup'); }}
+          onPress={() => { useLineupStore.getState().start(rackId); router.push('/cellar/scan-lineup'); }}
           activeOpacity={0.7}
         >
           <Text style={styles.addLineupBtnText}>Add A Lineup (up to 10 bottles)</Text>

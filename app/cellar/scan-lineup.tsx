@@ -16,7 +16,7 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
 export default function ScanLineupScreen() {
   const { wines: cellarWines } = useCellar();
-  const { wines: lineupWines, imageUri, setLineup } = useLineupStore();
+  const { wines: lineupWines, imageUri, originRackId, setLineup } = useLineupStore();
   const { setWineDetails } = useLabelStore();
 
   // If the store already holds a lineup (we've returned mid-flow after
@@ -116,8 +116,8 @@ export default function ScanLineupScreen() {
               <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list')} activeOpacity={0.85}>
                 <Text style={styles.doneBtnText}>View Cellar List</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/cellar')} activeOpacity={0.85}>
-                <Text style={styles.doneBtnText}>Done</Text>
+              <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace(originRackId ? `/cellar/rack/${originRackId}` as any : '/(tabs)/cellar')} activeOpacity={0.85}>
+                <Text style={styles.doneBtnText}>{originRackId ? 'Back to Rack' : 'Done'}</Text>
               </TouchableOpacity>
             </View>
           ) : lineupWines.length === 0 ? (
