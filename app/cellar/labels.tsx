@@ -5,6 +5,9 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { showAlert } from '../../src/components/AppAlert';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
+import type { LibraryFilter } from '../../src/api/libraryFilters';
 import type { CellarWine } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -43,13 +46,62 @@ export default function MyLabelsScreen() {
   const [favFilter, setFavFilter] = useState<FavFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
 
+  // Bespoke user-created filters.
+  const { filters: customFilters, create, setItems, rename, remove } = useLibraryFilters('label');
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
+
   // Most-recently-added first (useCellar already orders by created_at desc),
   // limited to wines that actually have a label photo.
   const labels = useMemo(() => {
     let list = wines.filter((w) => w.label_image_path);
     if (favFilter === 'fav') list = list.filter((w) => w.label_favourite);
+    if (activeCustomId) {
+      const f = customFilters.find((cf) => cf.id === activeCustomId);
+      const ids = new Set(f?.itemIds ?? []);
+      list = list.filter((w) => ids.has(w.id));
+    }
     return list;
-  }, [wines, favFilter]);
+  }, [wines, favFilter, activeCustomId, customFilters]);
+
+  function applyCustom(id: string) { setActiveCustomId((prev) => (prev === id ? null : id)); }
+  function openCreateFilter() { setEditingFilter(null); setFilterModalOpen(true); }
+  function openFilterOptions(f: LibraryFilter) {
+    showAlert({
+      title: f.name,
+      body: 'Edit this filter’s name and labels, or delete it. Your labels stay in the library either way.',
+      buttons: [
+        { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
+        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); remove.mutate(f.id); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  async function saveFilter(name: string, ids: string[]) {
+    setSavingFilter(true);
+    try {
+      if (editingFilter) {
+        await rename.mutateAsync({ filterId: editingFilter.id, name });
+        await setItems.mutateAsync({ filterId: editingFilter.id, itemIds: ids });
+      } else {
+        await create.mutateAsync({ name, itemIds: ids });
+      }
+      setFilterModalOpen(false);
+      setEditingFilter(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
+    }
+  }
+  // Items offered in the create/edit sheet — every wine that has a label photo.
+  const filterItems = useMemo(() => wines.filter((w) => w.label_image_path).map((w) => ({
+    id: w.id,
+    label: w.wine_name,
+    sublabel: [w.producer, w.vintage].filter(Boolean).join(' · ') || undefined,
+  })), [wines]);
 
   const cols = VIEW_COLS[viewMode];
   const gap = spacing.sm;
@@ -118,6 +170,21 @@ export default function MyLabelsScreen() {
                 <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, favFilter === 'fav' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favLabel}</Text>
+            </TouchableOpacity>
+            {customFilters.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
+                onPress={() => applyCustom(f.id)}
+                onLongPress={() => openFilterOptions(f)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+              <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -193,6 +260,18 @@ export default function MyLabelsScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      <LibraryFilterModal
+        visible={filterModalOpen}
+        title={editingFilter ? 'Edit filter' : 'New filter'}
+        itemNoun="labels"
+        items={filterItems}
+        initialName={editingFilter?.name}
+        initialSelected={editingFilter?.itemIds}
+        saving={savingFilter}
+        onSave={saveFilter}
+        onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
+      />
     </View>
   );
 }
@@ -213,6 +292,12 @@ const styles = StyleSheet.create({
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
+  // Bespoke custom-filter pills + the "+ Add" pill.
+  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 160 },
+  customChipActive: { borderColor: colors.gold },
+  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
+  customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   listScroll: { flex: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
