@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, ScrollView, StyleSheet, ActivityIndicator, Switch, Modal, Keyboard, useWindowDimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -15,12 +15,16 @@ import { CURRENCIES } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-function formatJoinedDate(iso: string | undefined): string {
-  if (!iso) return '—';
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+// Short "since" stamp for the identity line under the title — e.g. 17/06/26.
+function formatJoinedShort(iso: string | undefined): string {
+  if (!iso) return '';
+  return new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' });
 }
 
 export default function YouScreen() {
+  const { height } = useWindowDimensions();
+  // Match the other tabs' header placement exactly (same dynamic top inset).
+  const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { preferences, updatePreferences } = usePreferences();
   const currentUsername = session?.user.user_metadata?.display_name ?? '';
@@ -130,13 +134,17 @@ export default function YouScreen() {
   if (!session) {
     return (
       <TabSwipeView style={styles.container}>
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.content}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop }]}>
           <VinsterHeader />
-          <Text style={styles.heading}>You</Text>
-          <ArchiveSignInPrompt
-            title="Sign in to manage your account"
-            body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
-          />
+          <View style={styles.body}>
+            <View style={styles.titleRow}>
+              <Text style={styles.title}>You</Text>
+            </View>
+            <ArchiveSignInPrompt
+              title="Sign in to manage your account"
+              body="Sign in or create an account to see your profile, currency, notification preferences and account controls."
+            />
+          </View>
         </ScrollView>
       </TabSwipeView>
     );
@@ -173,10 +181,17 @@ export default function YouScreen() {
 
   return (
     <TabSwipeView style={styles.container}>
-    <KeyboardAwareScrollView style={{ flex: 1 }} contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
+    <KeyboardAwareScrollView style={{ flex: 1 }} contentContainerStyle={[styles.content, { paddingTop }]} keyboardShouldPersistTaps="always" bottomOffset={24}>
       <VinsterHeader />
 
-      <Text style={styles.heading}>You</Text>
+      <View style={styles.body}>
+
+      <View style={styles.titleRow}>
+        <Text style={styles.title}>You</Text>
+      </View>
+      <Text style={styles.identityLine}>
+        {currentUsername || currentEmail.split('@')[0]} · Vinster since {formatJoinedShort(session?.user.created_at)}
+      </Text>
 
       <View style={styles.divider} />
 
@@ -229,14 +244,6 @@ export default function YouScreen() {
       {/* Account details — moved below the preference buttons. */}
       <View style={styles.block}>
         <View style={styles.row}>
-          <Text style={styles.rowLabel}>Date joined</Text>
-          <Text style={styles.rowValue}>{formatJoinedDate(session?.user.created_at)}</Text>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Username</Text>
-          <Text style={styles.rowValue}>{currentUsername || '—'}</Text>
-        </View>
-        <View style={styles.row}>
           <Text style={styles.rowLabel}>Currency</Text>
           <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
             <Text style={styles.rowValueLink}>{currentCurrencyLabel} ▾</Text>
@@ -286,8 +293,6 @@ export default function YouScreen() {
           </View>
         )}
       </View>
-
-      <View style={styles.divider} />
 
       <View style={styles.block}>
         <Text style={styles.blockHeading}>Email preferences</Text>
@@ -410,6 +415,7 @@ export default function YouScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+      </View>
     </KeyboardAwareScrollView>
     </TabSwipeView>
   );
@@ -417,8 +423,16 @@ export default function YouScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 40 },
-  heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.lg },
+  // No horizontal padding here so the V mark sits flush-left like the other
+  // tabs; the rest of the page gets its inset from `body`. paddingTop is
+  // applied inline (dynamic, matching List/Cellar/Chef).
+  content: { paddingBottom: 40 },
+  body: { paddingHorizontal: spacing.xl },
+  // Page title — matches the other tabs (42px Cormorant SemiBold, centred).
+  title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  // "Hilary · Vinster since 17/06/26" line directly under the title.
+  identityLine: { fontSize: 14, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', marginBottom: spacing.sm },
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
   thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
