@@ -39,7 +39,14 @@ function base64ToBytes(base64: string): Uint8Array {
 }
 
 // Upload the lineup photo and create the archive record in one go. Returns the
-// inserted row. The photo path is {userId}/lineups/{id}.jpg.
+// inserted row. The photo path is {userId}/lineups/{key}.jpg.
+//
+// Upload-FIRST with a client-minted key, then a single insert that already
+// carries the real image_path. The previous insert('pending')->upload->update
+// dance relied on an UPDATE succeeding, but lineup_archives had no UPDATE RLS
+// policy (added in migration 059), so the update silently no-op'd and every row
+// was stranded at image_path='pending' — the Library showed no photo. A single
+// insert needs only the INSERT policy, so this path no longer depends on UPDATE.
 export async function saveLineupArchive(
   userId: string,
   localUri: string,
@@ -50,25 +57,23 @@ export async function saveLineupArchive(
   });
   if (!processed.base64) throw new Error('Image processing returned no data');
 
-  // One row per night; let the DB mint the id, then key the photo by it.
-  const { data: row, error: insErr } = await supabase
-    .from('lineup_archives')
-    .insert({ user_id: userId, image_path: 'pending', bottle_count: bottleCount })
-    .select()
-    .single();
-  if (insErr) throw insErr;
-
-  const path = `${userId}/lineups/${row.id}.jpg`;
+  // Client-minted, collision-resistant key (no uuid lib in the app bundle).
+  const key = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const path = `${userId}/lineups/${key}.jpg`;
   const bytes = base64ToBytes(processed.base64);
   const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
     contentType: 'image/jpeg', upsert: true,
   });
   if (upErr) throw upErr;
 
-  const { error: updErr } = await supabase.from('lineup_archives').update({ image_path: path }).eq('id', row.id);
-  if (updErr) throw updErr;
+  const { data: row, error: insErr } = await supabase
+    .from('lineup_archives')
+    .insert({ user_id: userId, image_path: path, bottle_count: bottleCount })
+    .select()
+    .single();
+  if (insErr) throw insErr;
 
-  return { ...(row as LineupArchive), image_path: path };
+  return row as LineupArchive;
 }
 
 export async function listLineupArchives(userId: string): Promise<LineupArchive[]> {
