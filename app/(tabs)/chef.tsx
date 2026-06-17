@@ -12,7 +12,9 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
-const CHEF_HELP = `Every recipe is dreamed up fresh and shaped around your dietary needs, the food you love, and the bottle you're pairing — and the more Vinster learns your tastes, the more personal it gets.
+const CHEF_HELP = `In finding a recipe to match your bottle, Vinster dives online to generate original, chef inspired recipes that are tailored to your search. These are shaped around your dietary needs which you can input in You - Your Recipe Requirements, or select per search in the input field.
+
+When finding a bottle to match a recipe, Vinster can search your cellar or find a wine in the wild, suited to your ingredients and budget.
 
 Keep your favourites in Your Cookbook, and share them with the Vinster community or friends beyond it.`;
 
