@@ -221,6 +221,25 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     router.push('/label/confirm');
   }
 
+  // Open the Vinster Wine Knowledge (Dive Deeper) page for this reviewed wine.
+  // The review may not be in the cellar, so pass the wine fields as params —
+  // the Wine Knowledge screen falls back to them when there's no cellar row.
+  function handleDiveDeeper() {
+    if (!wine) return;
+    onClose();
+    router.push({
+      pathname: '/cellar/wine-knowledge/[wineId]',
+      params: {
+        wineId: wine.id,
+        producer: wine.producer ?? '',
+        region: wine.region ?? '',
+        wineName: wine.wine_name ?? '',
+        vintage: wine.vintage != null ? String(wine.vintage) : '',
+        grape: wine.grape ?? '',
+      },
+    } as any);
+  }
+
   // ---- Sharing ------------------------------------------------------------
   async function handleShareToCommunity() {
     if (!wine || posting) return;
@@ -394,6 +413,12 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               deleteLabel={remove.isPending ? 'Deleting…' : 'Delete this review'}
             />
 
+            {/* Dive Deeper — a gold text link (not a button), mirroring the
+                "View Last Result" style. Opens the Vinster Wine Knowledge page. */}
+            <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7} style={styles.diveDeeperLink}>
+              <Text style={styles.diveDeeperLinkText}>Dive Deeper into this wine</Text>
+            </TouchableOpacity>
+
           </KeyboardAwareScrollView>
         </View>
       </View>
@@ -443,6 +468,9 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: 56, paddingBottom: 60 },
+  // Gold text link below the buttons (Dive Deeper → Wine Knowledge).
+  diveDeeperLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  diveDeeperLinkText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginBottom: spacing.md },
   header: { alignItems: 'center', marginBottom: spacing.sm },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
