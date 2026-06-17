@@ -69,7 +69,7 @@ export default function RacksScreen() {
       body: `Permanently remove this ${rack.storage_type === 'fridge' ? 'fridge' : 'rack'}? Wines stay in your cellar — they're just no longer mapped to it.`,
       buttons: [
         {
-          text: 'Delete rack',
+          text: `Delete ${rack.storage_type === 'fridge' ? 'fridge' : 'rack'}`,
           style: 'destructive',
           onPress: () => {
             removeRack.mutate(rack.id, {
