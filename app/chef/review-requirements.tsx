@@ -249,6 +249,8 @@ export default function ReviewRequirementsScreen() {
         <View style={{ width: 44 }} />
       </View>
 
+      <View style={styles.divider} />
+
       <Text style={styles.label}>Dietary Concerns <Text style={styles.labelHint}>(additional to your settings)</Text></Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('dietary')}>
         <Text style={styles.selectValue}>{dietary}</Text>
@@ -415,6 +417,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { paddingTop: 112, paddingHorizontal: spacing.xl, paddingBottom: 60 },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
   subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.sm },
