@@ -454,7 +454,7 @@ export default function RestaurantReviewsScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('review')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>To Review</Text>
+                <Text style={styles.filterChipLabel}>Review Status</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'review' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, reviewStatusFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{reviewChipLabel}</Text>
