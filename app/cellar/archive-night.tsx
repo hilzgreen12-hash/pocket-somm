@@ -26,6 +26,10 @@ export default function ArchiveNightScreen() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [unmatched, setUnmatched] = useState<DetectedBottle[]>([]);
   const [archivedCount, setArchivedCount] = useState(0);
+  // Whether the lineup photo made it into Your Lineup Library. Bottle archiving
+  // is the critical action and must not be blocked by a photo failure, but we
+  // shouldn't claim the photo saved when it didn't.
+  const [photoSaved, setPhotoSaved] = useState(true);
 
   async function pickFrom(source: 'camera' | 'library') {
     try {
@@ -79,10 +83,19 @@ export default function ArchiveNightScreen() {
         const n = counts[m.wine.id] ?? 0;
         if (n > 0) await archiveBottles(m.wine, n, today);
       }
-      // Save the lineup photo to Your Lineup Library (best-effort).
+      // Save the lineup photo to Your Lineup Library. Non-fatal: a photo
+      // failure must not lose the (already-committed) archiving, but we record
+      // the outcome so the done screen tells the truth.
+      let savedPhoto = false;
       if (imageUri) {
-        try { await saveLineupArchive(session.user.id, imageUri, totalToArchive); } catch { /* non-fatal */ }
+        try {
+          await saveLineupArchive(session.user.id, imageUri, totalToArchive);
+          savedPhoto = true;
+        } catch (e) {
+          console.warn('saveLineupArchive failed:', e);
+        }
       }
+      setPhotoSaved(savedPhoto);
       qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
       qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
@@ -135,7 +148,10 @@ export default function ArchiveNightScreen() {
         <View style={styles.centerBlock}>
           <Text style={styles.doneTitle}>Night archived</Text>
           <Text style={styles.hint}>
-            {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive. The photo is saved in Your Lineup Library.
+            {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive.{' '}
+            {photoSaved
+              ? 'The photo is saved in Your Lineup Library.'
+              : "The bottles were archived, but the lineup photo couldn't be saved to Your Lineup Library."}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list?archived=1')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>View Cellar Archive</Text>

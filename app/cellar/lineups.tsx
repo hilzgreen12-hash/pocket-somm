@@ -51,7 +51,7 @@ export default function LineupLibraryScreen() {
   const qc = useQueryClient();
   const userId = session?.user.id;
 
-  const { data: lineups = [], isLoading } = useQuery({
+  const { data: lineups = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['lineup-archives', userId],
     queryFn: () => listLineupArchives(userId!),
     enabled: !!userId,
@@ -175,6 +175,14 @@ export default function LineupLibraryScreen() {
 
       {isLoading ? (
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
+      ) : isError ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Couldn't load your lineups</Text>
+          <Text style={styles.emptyBody}>Something went wrong reaching your library. Check your connection and try again.</Text>
+          <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()} activeOpacity={0.85}>
+            <Text style={styles.retryBtnText}>Try again</Text>
+          </TouchableOpacity>
+        </View>
       ) : lineups.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No lineups yet</Text>
@@ -309,6 +317,8 @@ const styles = StyleSheet.create({
   favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
   favStarActive: { color: colors.gold },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
+  retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  retryBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
