@@ -20,6 +20,9 @@ export default function LabelConfirmScreen() {
   // Reached straight from Cellar → Add Wine → Manual Input: no scan
   // happened, so the form opens blank and there's nothing to "scan again".
   const isManual = manual === '1';
+  // Reached from Scan a Lineup — Back returns to the lineup list to continue
+  // onboarding the remaining bottles.
+  const isLineup = context === 'lineup';
   const { wineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
   const { preferences } = usePreferences();
 
@@ -141,7 +144,11 @@ export default function LabelConfirmScreen() {
         </Text>
       </TouchableOpacity>
 
-      {isManual ? (
+      {isLineup ? (
+        <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/cellar/scan-lineup')}>
+          <Text style={styles.backText}>Back to Lineup</Text>
+        </TouchableOpacity>
+      ) : isManual ? (
         <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
           <Text style={styles.backText}>Cancel</Text>
         </TouchableOpacity>

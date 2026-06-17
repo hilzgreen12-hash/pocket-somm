@@ -48,6 +48,9 @@ export default function LabelResultsScreen() {
   // a review, so the action area collapses to a single "Review this Wine"
   // and the back + post-save routing land on /wines/chosen.
   const isReviewsFlow = context === 'reviews';
+  // Entered from Scan a Lineup — after saving (placed or not) we return to the
+  // lineup list to onboard the next bottle, rather than the rack / wine card.
+  const isLineupFlow = context === 'lineup';
   const { wineDetailsConfirmed, intelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
@@ -377,7 +380,7 @@ export default function LabelResultsScreen() {
       setAddingToCellar(false);
       // Camera/confirm now use router.replace so the stack is short by the
       // time we land here. A clean router.replace keeps the back-stack tidy.
-      router.replace(`/cellar/rack/${pendingSlot.rackId}`);
+      router.replace(isLineupFlow ? '/cellar/scan-lineup' : `/cellar/rack/${pendingSlot.rackId}`);
       return;
     }
 
@@ -386,7 +389,7 @@ export default function LabelResultsScreen() {
       await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + 1 } });
     }
 
-    if (selectedRackId === '__new__') {
+    if (selectedRackId === '__new__' && !isLineupFlow) {
       setPendingWineId(savedWineId);
       setPendingStorageType('rack');
       setAddingToCellar(false);
@@ -394,7 +397,7 @@ export default function LabelResultsScreen() {
       return;
     }
 
-    if (selectedRackId) {
+    if (selectedRackId && !isLineupFlow) {
       setPendingWineId(savedWineId);
       setAddingToCellar(false);
       router.replace(`/cellar/rack/${selectedRackId}` as any);
@@ -408,7 +411,7 @@ export default function LabelResultsScreen() {
     // and the previous "Added to cellar — OK / View in cellar" alert
     // forced an extra tap before the user could actually use the wine.
     setAddingToCellar(false);
-    router.replace(`/cellar/${savedWineId}` as any);
+    router.replace(isLineupFlow ? '/cellar/scan-lineup' : `/cellar/${savedWineId}` as any);
   }
 
   async function performNewEntry() {
@@ -640,6 +643,7 @@ export default function LabelResultsScreen() {
         onPress={() => router.replace(
           isWishlistFlow ? '/cellar/wishlist'
           : isReviewsFlow ? '/wines/chosen'
+          : isLineupFlow ? '/cellar/scan-lineup'
           : '/(tabs)/cellar'
         )}
       >
