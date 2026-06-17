@@ -17,8 +17,12 @@ export default function PreviewScreen() {
   const cur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
   const [box, setBox] = useState({ w: 0, h: 0 });
 
+  // Guards against the retake handler and this safety-net effect BOTH firing
+  // router.replace when imageUri clears — the double navigation was surfacing
+  // an error instead of cleanly returning to the List tab.
+  const leaving = useRef(false);
   useEffect(() => {
-    if (!imageUri) router.replace('/(tabs)/scan');
+    if (!imageUri && !leaving.current) router.replace('/(tabs)/scan');
   }, [imageUri]);
 
   if (!imageUri) return null;
@@ -73,11 +77,13 @@ export default function PreviewScreen() {
   }, [box.w, box.h]);
 
   function handleRetake() {
+    leaving.current = true;
     reset();
     router.replace('/(tabs)/scan');
   }
 
   function handleConfirm() {
+    leaving.current = true;
     router.push('/scan/extracting');
   }
 
