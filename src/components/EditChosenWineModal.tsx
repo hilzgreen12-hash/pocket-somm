@@ -20,7 +20,7 @@ import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
 import { useLabelStore } from '../stores/labelStore';
 import { WineReviewFields } from './WineReviewFields';
-import { splitLocationString } from '../services/reviewSync';
+import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -281,7 +281,18 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete review', style: 'destructive', onPress: () => {
             remove.mutate(wine.id, {
-              onSuccess: () => { onSaved(); onClose(); },
+              onSuccess: async () => {
+                // Also clear the same review off the matching cellar wine card
+                // (the review is shared between the two surfaces).
+                if (session?.user.id) {
+                  try {
+                    await clearReviewOnCellar(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage });
+                    qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+                    qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+                  } catch { /* non-fatal — the review row is already gone */ }
+                }
+                onSaved(); onClose();
+              },
               onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
             });
           } },

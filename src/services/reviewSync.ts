@@ -98,6 +98,26 @@ export async function syncReviewToCellar(
   }
 }
 
+// Clear the review fields on any matching cellar_wines rows. Called when the
+// user deletes a review in Your Wine Reviews — the cellar wine card's "Your
+// Review" should empty out too (the review was the same thing). Leaves the
+// bottle itself, its price, AI tasting note and private Personal Notes intact.
+export async function clearReviewOnCellar(
+  userId: string,
+  identity: ReviewIdentity
+): Promise<void> {
+  const matches = await findMatchingCellarWines(userId, identity);
+  for (const w of matches) {
+    await updateCellarWine(w.id, {
+      review_score: null,
+      review_note: null,
+      review_location: null,
+      review_date: null,
+      user_drinking_window: null,
+    } as any);
+  }
+}
+
 // Push an edit made on a wishlist (or wine-detail review form) onto a
 // matching chosen_wines row. Patches only the fields the caller asked
 // about so the rest of the review (other_observations etc.) is
