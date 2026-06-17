@@ -961,17 +961,23 @@ export default function CellarWineDetail() {
                 return parts.filter(Boolean).join(' · ');
               })()}
             </Text>
-            {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
             {(() => {
               const added = wine.date_received ?? wine.created_at;
               const addedLabel = added ? `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}` : null;
               return (
-                <View style={styles.dateRow}>
-                  {addedLabel ? <Text style={styles.addedDate}>{addedLabel}</Text> : <View />}
-                  <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                    <Text style={styles.editTitleLink}>Edit</Text>
-                  </TouchableOpacity>
-                </View>
+                <>
+                  {/* Grape variety (left) and Added date (right) share one line;
+                      the Edit link sits on its own line below, right-aligned. */}
+                  <View style={styles.grapeRow}>
+                    {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : <View />}
+                    {addedLabel ? <Text style={styles.addedDate}>{addedLabel}</Text> : null}
+                  </View>
+                  <View style={styles.editRow}>
+                    <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                      <Text style={styles.editTitleLink}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
               );
             })()}
           </View>
@@ -1546,8 +1552,11 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   headerTextCol: { flex: 1 },
-  addedDate: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  addedDate: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 },
+  // Grape (left) + Added (right) on one line; Edit on its own line below.
+  grapeRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginTop: 2 },
+  editRow: { alignItems: 'flex-end', marginTop: 2 },
   // Subtle gold "Edit" link on the date line — opens the title editor.
   editTitleLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline' },
   titleEditOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
@@ -1560,7 +1569,7 @@ const styles = StyleSheet.create({
   // Inter — region caption
   region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
   // Inter — grape caption
-  grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2 },
+  grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold },
   tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — info label
@@ -1577,13 +1586,13 @@ const styles = StyleSheet.create({
   reviewPriceCurrency: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, marginRight: 4 },
   reviewPriceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
   autoSaveHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
-  reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
-  vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+  vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
   vinsterReviewTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: '#FFFFFF' },
   // Full-width separator between card sections.
-  cardDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  cardDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.md },
   // Field label + dictation mic on one row.
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: 6 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
