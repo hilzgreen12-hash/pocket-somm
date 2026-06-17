@@ -38,8 +38,12 @@ interface Props {
   onAddToCellar?: () => void;
   // Save (+ optional delete).
   saving?: boolean;
+  // When true the save button reads "Review Saved" in gold — set by the parent
+  // after a successful save, cleared when the user edits a field again.
+  saved?: boolean;
   onSave: () => void;
   saveLabel?: string;
+  savedLabel?: string;
   onDelete?: () => void;
   deleteLabel?: string;
 }
@@ -57,7 +61,7 @@ export function WineReviewFields({
   discoveredAt, onDiscoveredAt, drinkingWindow, onDrinkingWindow,
   onShareCommunity, onShare, sharingCommunity, sharing,
   wishlistActive, onWishlist, onAddToCellar,
-  saving, onSave, saveLabel, onDelete, deleteLabel,
+  saving, saved, onSave, saveLabel, savedLabel, onDelete, deleteLabel,
 }: Props) {
   const currencySymbol = formatCurrency(0, currency, { decimals: 0 }).replace(/[\d.,\s]/g, '') || currency;
 
@@ -173,8 +177,10 @@ export function WineReviewFields({
       </View>
 
       {/* Save Review — primary action at the top of the button stack. */}
-      <TouchableOpacity style={styles.saveButton} onPress={onSave} disabled={saving} activeOpacity={0.85}>
-        <Text style={styles.saveButtonText}>{saving ? 'Saving…' : (saveLabel ?? 'Save Review')}</Text>
+      <TouchableOpacity style={[styles.saveButton, saved && styles.saveButtonSaved]} onPress={onSave} disabled={saving} activeOpacity={0.85}>
+        <Text style={[styles.saveButtonText, saved && styles.saveButtonTextSaved]}>
+          {saving ? 'Saving…' : saved ? (savedLabel ?? 'Review Saved') : (saveLabel ?? 'Save Review')}
+        </Text>
       </TouchableOpacity>
 
       {/* Share */}
@@ -243,8 +249,11 @@ const styles = StyleSheet.create({
   pairBtn: { flex: 1, borderRadius: 12, padding: spacing.md, alignItems: 'center' },
   goldBtn: { borderWidth: 1, borderColor: colors.gold },
   goldBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center' },
-  saveButton: { borderWidth: 1.5, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 17, color: '#FFFFFF', letterSpacing: 0.4 },
+  saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
+  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.4 },
+  // After a successful save the button turns gold and reads "Review Saved".
+  saveButtonSaved: { borderColor: colors.gold },
+  saveButtonTextSaved: { color: colors.gold },
   deleteButton: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   deleteText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 });
