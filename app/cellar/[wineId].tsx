@@ -673,6 +673,9 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['cellar-archive'] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      // The FK cascade drops the wine from every location's membership; refresh
+      // the Location lists so those counts update without a manual reload.
+      qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
       setRemoveStep('idle');
       // Flip the just-deleted flag BEFORE the cellar refetch can land — the
       // dedicated render block at the top of the component renders the
