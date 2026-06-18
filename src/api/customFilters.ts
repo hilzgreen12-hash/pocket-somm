@@ -36,6 +36,46 @@ export async function fetchCustomFilters(userId: string, rackId: string): Promis
   return (filters ?? []).map((f) => ({ id: f.id, name: f.name, wineIds: byFilter.get(f.id) ?? [] }));
 }
 
+// Cellar-level "Location" filters — the same custom_filters table but with
+// rack_id NULL, so they live on the Cellar List rather than a single rack.
+// These let a user tag wines with a place (e.g. "Eton Park", "LCB") without
+// having to physically place them in a rack grid.
+export async function fetchCellarLocations(userId: string): Promise<CustomFilter[]> {
+  const { data: filters, error } = await supabase
+    .from('custom_filters')
+    .select('id, name')
+    .eq('user_id', userId)
+    .is('rack_id', null)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  const ids = (filters ?? []).map((f) => f.id);
+  if (ids.length === 0) return [];
+
+  const { data: links, error: linkErr } = await supabase
+    .from('custom_filter_wines')
+    .select('filter_id, cellar_wine_id')
+    .in('filter_id', ids);
+  if (linkErr) throw new Error(linkErr.message);
+
+  const byFilter = new Map<string, string[]>();
+  for (const l of links ?? []) {
+    const arr = byFilter.get(l.filter_id) ?? [];
+    arr.push(l.cellar_wine_id);
+    byFilter.set(l.filter_id, arr);
+  }
+  return (filters ?? []).map((f) => ({ id: f.id, name: f.name, wineIds: byFilter.get(f.id) ?? [] }));
+}
+
+export async function createCellarLocation(userId: string, name: string, wineIds: string[]): Promise<void> {
+  const { data, error } = await supabase
+    .from('custom_filters')
+    .insert({ user_id: userId, name: name.trim(), rack_id: null })
+    .select('id')
+    .single();
+  if (error) throw new Error(error.message);
+  await setCustomFilterWines(data.id, wineIds);
+}
+
 export async function createCustomFilter(userId: string, name: string, wineIds: string[], rackId: string): Promise<void> {
   const { data, error } = await supabase
     .from('custom_filters')
