@@ -164,7 +164,7 @@ export default function ScanLineupScreen() {
                       <Text style={styles.addedTag}>Added ✓</Text>
                     ) : (
                       <TouchableOpacity onPress={() => onboard(b)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                        <Text style={styles.editAddLink}>edit / add</Text>
+                        <Text style={styles.editAddLink}>add / edit</Text>
                       </TouchableOpacity>
                     )}
                   </View>
