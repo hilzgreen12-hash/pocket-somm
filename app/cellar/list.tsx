@@ -17,7 +17,7 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
 import { inferCountry } from '../../src/utils/wineCountry';
 import { formatCurrency } from '../../src/constants/currency';
-import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
+import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
@@ -486,13 +486,9 @@ export default function FullCellarListScreen() {
         >
           {sorted.map((w) => {
             const headerLine = wineHeaderLine(w.producer, w.wine_name, w.vintage);
-            // Bottle size appended to the region line only when it's
-            // non-standard — 750ml is the default, mentioning it on every
-            // row is noise. A magnum stands out by being labelled.
+            // Bottle size now rides on the quantity line as "qty x format"
+            // (e.g. 1x150), so it no longer needs appending to the region line.
             const subParts = [w.region, w.grape_variety].filter(Boolean);
-            if (w.bottle_size_ml && w.bottle_size_ml !== 750) {
-              subParts.push(bottleSizeLabel(w.bottle_size_ml));
-            }
             const valueText = w.estimated_value != null
               ? formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })
               : null;
@@ -516,7 +512,7 @@ export default function FullCellarListScreen() {
                 <View style={styles.rowRight}>
                   {w.critic_score != null && <Text style={styles.rowScore}>{w.critic_score} pts</Text>}
                   {valueText && <Text style={styles.rowValue}>{valueText}</Text>}
-                  <Text style={styles.rowQty}>{w.quantity} btl</Text>
+                  <Text style={styles.rowQty}>{w.quantity}x{bottleSizeCl(w.bottle_size_ml ?? 750)}</Text>
                 </View>
               </TouchableOpacity>
             );

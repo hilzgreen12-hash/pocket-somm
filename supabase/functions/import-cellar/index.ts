@@ -27,6 +27,7 @@ Extract every wine entry you can identify. For each wine, extract:
 - region: the region or appellation (e.g. "Bordeaux", "Burgundy", "Barossa Valley")
 - vintage: the year as a string (e.g. "2018"), or null if not shown
 - quantity: number of bottles as an integer (default 1 if not specified — typical for receipts where quantity is listed in a column)
+- bottle_size_ml: the bottle FORMAT in millilitres if the row indicates a non-standard size, otherwise 750. Map common formats: half/375ml = 375, standard/75cl/750ml = 750, magnum/1.5L/150cl = 1500, double magnum/3L/Jeroboam = 3000, Rehoboam/4.5L = 4500, Imperial/Methuselah/6L = 6000, Salmanazar/9L = 9000, Balthazar/12L = 12000, Nebuchadnezzar/15L = 15000. Watch for words like "Magnum", "Mag", "Jeroboam", "1.5L", "150cl", "300cl", "37.5cl", "half bottle". If nothing indicates a size, use 750.
 - purchase_price: per-bottle price as a number if shown on the document (receipts and invoices usually show this), or null. If the document shows a line-total (price × quantity), divide to get the per-bottle price. Strip currency symbols.
 - currency: ISO 4217 code if you can determine it from the document (£→GBP, $→USD, €→EUR, etc.), or null.
 
@@ -39,6 +40,7 @@ Return ONLY valid JSON with this structure:
       "region": "...",
       "vintage": "...",
       "quantity": 1,
+      "bottle_size_ml": 750,
       "purchase_price": 45.00,
       "currency": "GBP"
     }
