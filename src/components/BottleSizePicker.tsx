@@ -21,6 +21,13 @@ export function bottleSizeLabel(ml: number): string {
   return `${(ml / 10).toFixed(ml % 10 === 0 ? 0 : 1)}cl`;
 }
 
+// Bare centilitre number (no unit) for the compact "quantity x format" tag
+// used on the cellar list and import review — e.g. 750 -> "75", 1500 -> "150",
+// 375 -> "37.5". Renders as "2x150" alongside the quantity.
+export function bottleSizeCl(ml: number): string {
+  return (ml / 10).toFixed(ml % 10 === 0 ? 0 : 1);
+}
+
 // Standard rack slots are 750ml by convention — that's what a normal wine
 // rack is built to hold. The large-format row (row_index = -1 in our
 // schema) carries its own configured size on the rack record.

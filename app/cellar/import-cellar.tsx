@@ -7,6 +7,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
 import { addCellarWine, getCellarWines } from '../../src/api/cellar';
+import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -141,7 +142,9 @@ export default function ImportCellarScreen() {
           estimated_value_at: null,
           purchase_price: w.purchase_price ?? null,
           purchase_price_currency: w.purchase_price != null ? (w.currency ?? defaultCurrency) : null,
-          bottle_size_ml: 750,
+          // Use the detected format (magnum/half/etc.) when the document showed
+          // one; default to standard 750ml otherwise.
+          bottle_size_ml: w.bottle_size_ml ?? 750,
         } as any);
         succeeded.push(i);
         bottlesAdded += qty;
@@ -206,7 +209,7 @@ export default function ImportCellarScreen() {
         <View style={styles.centerBlock}>
           <Text style={styles.doneTitle}>Cellar imported</Text>
           <Text style={styles.hint}>
-            {addedCount} bottle{addedCount === 1 ? '' : 's'} added. Open any wine to place it in a rack or generate its details.
+            {addedCount} bottle{addedCount === 1 ? '' : 's'} added. Open each wine in your Cellar List to place the wines, or add them to a Location filter.
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>View Cellar List</Text>
@@ -233,6 +236,8 @@ export default function ImportCellarScreen() {
                 const flag = dupFlags[i];
                 const qty = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
                 const label = [w.vintage, w.producer, w.wine_name].filter(Boolean).join(' ');
+                // quantity x format, matching the cellar list (e.g. 1x75, 2x150).
+                const qtyFormat = `${qty}x${bottleSizeCl(w.bottle_size_ml ?? 750)}`;
                 return (
                   <TouchableOpacity
                     key={i}
@@ -242,7 +247,7 @@ export default function ImportCellarScreen() {
                   >
                     <Text style={[styles.checkbox, on && styles.checkboxOn]}>{on ? '☑' : '☐'}</Text>
                     <View style={styles.rowText}>
-                      <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}{qty > 1 ? `  ×${qty}` : ''}</Text>
+                      <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}  <Text style={styles.qtyFormat}>{qtyFormat}</Text></Text>
                       <View style={styles.rowMetaRow}>
                         {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
                         {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? 'Already in cellar' : 'Repeated above'}</Text> : null}
@@ -298,6 +303,8 @@ const styles = StyleSheet.create({
   checkboxOn: { color: colors.gold },
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
+  // quantity x format token after the wine name (e.g. 2x150).
+  qtyFormat: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   rowMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 2 },
   rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
   // Small pill explaining why a row was pre-unticked (dup of cellar / import).

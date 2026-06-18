@@ -93,6 +93,9 @@ export interface ImportedCellarWine {
   region: string;
   vintage: string | null;
   quantity: number;
+  // Bottle format in millilitres (750 = standard). The edge function maps
+  // magnum / half / Jeroboam etc. when the document indicates one.
+  bottle_size_ml?: number | null;
   purchase_price?: number | null;
   currency?: string | null;
 }

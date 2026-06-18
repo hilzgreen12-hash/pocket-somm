@@ -27,6 +27,7 @@ import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
@@ -971,6 +972,12 @@ export default function CellarWineDetail() {
               })()}
             </Text>
             {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
+            {/* Bottle format shown only when non-standard (750ml is the default
+                and mentioning it everywhere is noise) — e.g. a magnum reads
+                "150cl" so the format is recorded on the card, not just the list. */}
+            {wine.bottle_size_ml && wine.bottle_size_ml !== 750 ? (
+              <Text style={styles.bottleFormat}>{bottleSizeLabel(wine.bottle_size_ml)} bottle</Text>
+            ) : null}
             <View style={styles.editRow}>
               <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
                 <Text style={styles.editTitleLink}>Edit</Text>
@@ -1577,6 +1584,8 @@ const styles = StyleSheet.create({
   region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
   // Inter — grape caption
   grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold },
+  // Non-standard bottle format line under the grape (e.g. "150cl bottle").
+  bottleFormat: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 2 },
   tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   infoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — info label
