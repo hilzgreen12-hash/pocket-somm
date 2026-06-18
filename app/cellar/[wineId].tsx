@@ -1106,7 +1106,7 @@ export default function CellarWineDetail() {
       <View style={styles.statsGrid}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
-          <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
+          <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
           {wineRack && !cameFromRack && (
             <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}?highlight=${wine.id}`)}>
               <Text style={styles.statAction}>In {wineRack.name} →</Text>
