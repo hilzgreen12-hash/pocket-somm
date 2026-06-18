@@ -719,6 +719,16 @@ export default function CellarWineDetail() {
           // Keep the (WS-anchored) critic score fresh on refresh too.
           critic_score: v.criticScore,
           critic_score_note: v.criticScoreNote,
+          // valueWine() also returns Vinster's tasting note + drinking window
+          // (+ grape). Persist them so imported/bare wines gain a Vinster's
+          // Review and drinking window from the same Generate action — these
+          // were previously discarded, leaving the note permanently blank.
+          tasting_notes: v.tastingNotes ?? wine.tasting_notes ?? null,
+          drinking_window_from: v.drinkingWindowFrom ?? wine.drinking_window_from ?? null,
+          drinking_window_to: v.drinkingWindowTo ?? wine.drinking_window_to ?? null,
+          drinking_window_status: v.drinkingWindowStatus ?? wine.drinking_window_status ?? 'unknown',
+          // Only fill grape if we don't already have one (don't clobber a user edit).
+          grape_variety: wine.grape_variety ?? v.grapeVariety ?? null,
         },
       });
     } catch {
@@ -1077,7 +1087,15 @@ export default function CellarWineDetail() {
       <View style={styles.statsGrid}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Avg Critic Score</Text>
-          <Text style={styles.statValue}>{wine.critic_score != null ? wine.critic_score : '—'}</Text>
+          {wine.critic_score != null ? (
+            <Text style={styles.statValue}>{wine.critic_score}</Text>
+          ) : refreshingValue ? (
+            <Text style={[styles.statValue, styles.statValueMuted]}>Generating…</Text>
+          ) : (
+            <TouchableOpacity onPress={handleRefreshEstimate} disabled={refreshingValue} activeOpacity={0.7}>
+              <Text style={styles.statAction}>+ Generate</Text>
+            </TouchableOpacity>
+          )}
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Drinking Window</Text>
@@ -1304,7 +1322,7 @@ export default function CellarWineDetail() {
           Review and Personal Notes). The "(what's this)" link surfaces a
           short explainer. Hidden for wishlist wines: their stored note is
           the user's own, and Vinster's AI review only exists in the cellar. */}
-      {!isWishlist && wine.tasting_notes ? (
+      {!isWishlist ? (
         <View style={styles.reviewSubsection}>
           <View style={styles.vinsterHeaderRow}>
             <TouchableOpacity
@@ -1324,7 +1342,16 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           </View>
           {vinstersNoteOpen ? (
-            <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+            wine.tasting_notes ? (
+              <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+            ) : refreshingValue ? (
+              <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
+            ) : (
+              // No AI note yet (e.g. an imported wine) — offer to generate it.
+              <TouchableOpacity style={styles.generateNoteBtn} onPress={handleRefreshEstimate} activeOpacity={0.7}>
+                <Text style={styles.generateNoteBtnText}>Generate</Text>
+              </TouchableOpacity>
+            )
           ) : null}
         </View>
       ) : null}
@@ -1674,6 +1701,9 @@ const styles = StyleSheet.create({
   editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — tasting notes body
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
+  // "Generate" button shown inside Vinster's Review when there's no note yet.
+  generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
+  generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   // Vinster's Review toggle — mirrors the List results "Sommelier Note":
   // gold uppercase label + chevron, centred, with the "(what's this)"
   // explainer link beside it.
