@@ -28,6 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
+import { fetchCellarLocations, setCustomFilterWines } from '../../src/api/customFilters';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
@@ -123,6 +124,17 @@ export default function CellarWineDetail() {
   });
   const wineSlot = slotAssignments.find((s) => s.cellar_wine_id === wineId);
   const wineRack = wineSlot ? racks.find((r) => r.id === wineSlot.rack_id) ?? null : null;
+
+  // Cellar-wide Location filters — offered as add destinations and as the
+  // "remove from which location?" choices.
+  const { data: locations = [] } = useQuery({
+    queryKey: ['cellar-locations', session?.user.id],
+    queryFn: () => fetchCellarLocations(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+  // The location whose membership a pending add/remove applies to.
+  const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
+  const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
 
   const [editingNote, setEditingNote] = useState(false);
   const [noteText, setNoteText] = useState(wine?.user_notes ?? '');
@@ -326,32 +338,64 @@ export default function CellarWineDetail() {
     );
   }
 
-  function handleAddBottlesEntry() {
-    // "+ Add bottles" → choose which rack/fridge to add to, then place the
-    // bottles visually on that rack's grid (tap a slot, count, orientation),
-    // and confirm. With one rack we skip straight there; with none, send the
-    // user to create one first.
+  // Send the wine to a rack grid for visual placement (existing flow).
+  function placeInRack(rackId: string) {
     setPendingWineId(wine!.id);
     setPendingAddMode(true);
-    if (racks.length === 0) {
-      router.push('/cellar/racks');
+    router.push(`/cellar/rack/${rackId}` as any);
+  }
+  // Add to a custom location — no grid; just tag membership + ask a count.
+  function startAddToLocation(locationId: string) {
+    setPendingLocationId(locationId);
+    setAddBottlesCount('1');
+    setAddBottlesOpen(true);
+  }
+
+  function handleAddBottlesEntry() {
+    // "+ Add bottles" → choose a destination first (rack/fridge for visual
+    // placement, or a Location to file it under), then place/enter the count.
+    const dests: { text: string; onPress: () => void }[] = [
+      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id) })),
+      ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => startAddToLocation(l.id) })),
+    ];
+    if (dests.length === 0) {
+      // No racks or locations yet — just bump the bottle count.
+      setPendingLocationId(null);
+      setAddBottlesCount('1');
+      setAddBottlesOpen(true);
       return;
     }
-    if (racks.length === 1) {
-      router.push(`/cellar/rack/${racks[0].id}` as any);
+    if (dests.length === 1) {
+      dests[0].onPress();
       return;
     }
     showAlert({
       title: 'Add to',
-      body: 'Which rack or fridge are you adding these bottles to?',
+      body: 'Where are these bottles going?',
       buttons: [
-        ...racks.map((r) => ({
-          text: r.name,
-          onPress: () => router.push(`/cellar/rack/${r.id}` as any),
-        })),
-        { text: 'Cancel', style: 'cancel' as const, onPress: () => { setPendingWineId(null); setPendingAddMode(false); } },
+        ...dests,
+        { text: 'Cancel', style: 'cancel' as const, onPress: () => { setPendingWineId(null); setPendingAddMode(false); setPendingLocationId(null); } },
       ],
     });
+  }
+
+  // "- Remove bottles" → if the wine is filed under more than one location, ask
+  // which one first; then the existing Archive/Delete popup runs.
+  function handleRemoveBottlesEntry() {
+    const inLocs = locations.filter((l) => l.wineIds.includes(wine!.id));
+    if (inLocs.length > 1) {
+      showAlert({
+        title: 'Remove from which location?',
+        body: 'This wine is filed under more than one location.',
+        buttons: [
+          ...inLocs.map((l) => ({ text: l.name, onPress: () => { setRemoveLocationId(l.id); setArchiveModalOpen(true); } })),
+          { text: 'Cancel', style: 'cancel' as const },
+        ],
+      });
+    } else {
+      setRemoveLocationId(inLocs[0]?.id ?? null);
+      setArchiveModalOpen(true);
+    }
   }
 
   async function handleSaveNote() {
@@ -455,6 +499,15 @@ export default function CellarWineDetail() {
         }
         setRemoveCount('1');
       }
+      // Removal was scoped to a location → untag the wine from it.
+      if (removeLocationId) {
+        const loc = locations.find((l) => l.id === removeLocationId);
+        if (loc) {
+          await setCustomFilterWines(removeLocationId, loc.wineIds.filter((id) => id !== wine!.id));
+          qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
+        }
+        setRemoveLocationId(null);
+      }
     } catch {
       showAlert({ title: 'Error', body: 'Could not record removal. Please try again.' });
     } finally {
@@ -474,8 +527,17 @@ export default function CellarWineDetail() {
         id: wine!.id,
         updates: { quantity: wine!.quantity + count },
       });
+      // If the user picked a Location for this add, file the wine under it.
+      if (pendingLocationId) {
+        const loc = locations.find((l) => l.id === pendingLocationId);
+        if (loc && !loc.wineIds.includes(wine!.id)) {
+          await setCustomFilterWines(pendingLocationId, [...loc.wineIds, wine!.id]);
+          qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
+        }
+      }
       setAddBottlesOpen(false);
       setAddBottlesCount('1');
+      setPendingLocationId(null);
     } catch {
       showAlert({ title: 'Error', body: 'Could not add bottles. Please try again.' });
     } finally {
@@ -1118,7 +1180,7 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           )}
           {!isArchived && !isWishlist && wine.quantity > 0 && (
-            <TouchableOpacity onPress={() => setArchiveModalOpen(true)}>
+            <TouchableOpacity onPress={handleRemoveBottlesEntry}>
               <Text style={styles.statAction}>- Remove bottles</Text>
             </TouchableOpacity>
           )}
@@ -1363,6 +1425,9 @@ export default function CellarWineDetail() {
           <View style={styles.archiveModalSheet}>
             <Text style={styles.archiveModalTitle}>Add bottles</Text>
             <Text style={styles.archiveModalWine}>{wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''}</Text>
+            {pendingLocationId ? (
+              <Text style={styles.addToLocationNote}>Filing under {locations.find((l) => l.id === pendingLocationId)?.name ?? 'location'}</Text>
+            ) : null}
 
             <Text style={styles.fieldLabel}>How many bottles to add?</Text>
             <TextInput
@@ -1385,7 +1450,7 @@ export default function CellarWineDetail() {
               </Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => setAddBottlesOpen(false)} style={styles.archiveModalCancel} disabled={addingBottles}>
+            <TouchableOpacity onPress={() => { setAddBottlesOpen(false); setPendingLocationId(null); }} style={styles.archiveModalCancel} disabled={addingBottles}>
               <Text style={styles.archiveModalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -1677,6 +1742,7 @@ const styles = StyleSheet.create({
   archiveModalTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: 2 },
   // Inter — wine sub-line in modal
   archiveModalWine: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.lg },
+  addToLocationNote: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: -spacing.sm, marginBottom: spacing.lg },
   archiveModalCancel: { alignItems: 'center', marginTop: spacing.md },
   // Inter — cancel link (not a button)
   archiveModalCancelText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14 },
