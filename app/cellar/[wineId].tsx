@@ -354,18 +354,6 @@ export default function CellarWineDetail() {
     });
   }
 
-  // Place an as-yet-unracked wine into a fridge/rack. Stash it as the
-  // pending wine, then send the user to a rack grid (straight there if they
-  // have just one) to tap a slot — or to the racks list to pick/create one.
-  function handleAddToRack() {
-    setPendingWineId(wine!.id);
-    if (racks.length === 1) {
-      router.push(`/cellar/rack/${racks[0].id}` as any);
-    } else {
-      router.push('/cellar/racks');
-    }
-  }
-
   async function handleSaveNote() {
     Keyboard.dismiss();
     setSavingNote(true);
@@ -1132,11 +1120,6 @@ export default function CellarWineDetail() {
           {!isArchived && !isWishlist && wine.quantity > 0 && (
             <TouchableOpacity onPress={() => setArchiveModalOpen(true)}>
               <Text style={styles.statAction}>- Remove bottles</Text>
-            </TouchableOpacity>
-          )}
-          {!isArchived && !isWishlist && !wineRack && (
-            <TouchableOpacity onPress={handleAddToRack}>
-              <Text style={styles.statAction}>+ Add to Fridge/Rack</Text>
             </TouchableOpacity>
           )}
         </View>
