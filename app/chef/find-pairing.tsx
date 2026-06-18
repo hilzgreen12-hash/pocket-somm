@@ -12,8 +12,7 @@ import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useAuth } from '../../src/hooks/useAuth';
-import { findFoodWinePairing, scanRecipe, prepareImageBase64 } from '../../src/api/label';
-import * as ImagePicker from 'expo-image-picker';
+import { findFoodWinePairing } from '../../src/api/label';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
 import { WINE_REGIONS } from '../../src/constants/wineRegions';
 import { colors, spacing } from '../../src/constants/theme';
@@ -37,46 +36,6 @@ export default function FindPairingScreen() {
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
-  // Uploaded recipe — when set, the button shows the title and the summary
-  // folds into the brief Vinster pairs against.
-  const [recipeTitle, setRecipeTitle] = useState<string | null>(null);
-  const [recipeBrief, setRecipeBrief] = useState<string | null>(null);
-  const [recipeLoading, setRecipeLoading] = useState(false);
-
-  function handleUploadRecipe() {
-    showAlert({
-      title: 'Upload a Recipe',
-      body: 'Scan a recipe or upload a screenshot, and Vinster will base its wine on the dish.',
-      buttons: [
-        { text: 'Scan a Recipe', onPress: () => pickRecipe('camera') },
-        { text: 'Upload a Screenshot', onPress: () => pickRecipe('library') },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
-  }
-  async function pickRecipe(source: 'camera' | 'library') {
-    try {
-      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
-      const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
-      if (result.canceled || !result.assets.length) return;
-      setRecipeLoading(true);
-      const base64 = await prepareImageBase64(result.assets[0].uri);
-      const recipe = await scanRecipe(base64);
-      if (!recipe.dishName) {
-        showAlert({ title: 'No recipe found', body: "Vinster couldn't read a recipe from that image. Try a clearer screenshot or photo." });
-        return;
-      }
-      setRecipeTitle(recipe.dishName);
-      setRecipeBrief(recipe.summary ?? null);
-      setDishLocal(recipe.dishName);
-    } catch (err) {
-      showAlert({ title: 'Could not read the recipe', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setRecipeLoading(false);
-    }
-  }
 
   // Jump to the wine-preferences editor and back. Pushed (not replaced) so the
   // editor's Back returns here with this form's state intact.
@@ -126,12 +85,9 @@ export default function FindPairingScreen() {
     // keep the displayed/stored dish clean so the results heading stays tidy.
     const regionNote = regionPrefs.join(', ').trim();
     const styleStr = stylePrefs.length ? stylePrefs.join(', ') : null;
-    // Fold an uploaded recipe's summary into the brief so Vinster pairs to the
-    // actual dish, not just its name.
-    const recipeNote = recipeBrief?.trim() ? `\n\nFrom the uploaded recipe: ${recipeBrief.trim()}` : '';
-    const aiDish = (regionNote
+    const aiDish = regionNote
       ? `${cleanDish}\n\nPreferred wine region or style: ${regionNote}.`
-      : cleanDish) + recipeNote;
+      : cleanDish;
     setDish(cleanDish);
     setMode(mode);
     storeStyle(styleStr);
@@ -216,14 +172,6 @@ export default function FindPairingScreen() {
         numberOfLines={3}
         textAlignVertical="top"
       />
-
-      {/* Upload a Recipe — scan/photo/screenshot a recipe and Vinster pairs to
-          it. Once read, the button becomes the recipe's title. */}
-      <TouchableOpacity style={styles.recipeUploadBtn} onPress={handleUploadRecipe} disabled={recipeLoading} activeOpacity={0.85}>
-        <Text style={styles.recipeUploadBtnText} numberOfLines={1}>
-          {recipeLoading ? 'Reading recipe…' : (recipeTitle ?? 'or upload a recipe')}
-        </Text>
-      </TouchableOpacity>
 
       <View style={styles.divider} />
 
@@ -338,9 +286,6 @@ const styles = StyleSheet.create({
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
   // Expanded accordion body holding the bubbles.
   pickerWrap: { marginTop: spacing.xs, marginBottom: spacing.lg, paddingHorizontal: spacing.xs },
-  // Upload a Recipe — mirrors the Chef tab buttonFull (white border, rounded 14).
-  recipeUploadBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.md },
-  recipeUploadBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   micRowCentred: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
   regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
