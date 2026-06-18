@@ -7,6 +7,7 @@ import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { archiveCellarWine, deleteCellarWine } from '../../src/api/cellar';
@@ -796,6 +797,12 @@ export default function FullCellarListScreen() {
               onPress={() => { setAddWineOpen(false); router.push('/label/camera'); }}
             >
               <Text style={styles.addBtnText}>Scan Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBtn, { marginTop: spacing.sm }]}
+              onPress={() => { setAddWineOpen(false); useLineupStore.getState().start(null); router.push('/cellar/scan-lineup'); }}
+            >
+              <Text style={styles.addBtnText}>Scan a Lineup (up to 10 bottles)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
