@@ -9,7 +9,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { supabase } from '../../src/api/supabase';
+import { archiveCellarWine, deleteCellarWine } from '../../src/api/cellar';
+import { fetchCellarLocations, createCellarLocation, setCustomFilterWines, type CustomFilter } from '../../src/api/customFilters';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -62,7 +63,7 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'Declining' },
 ];
 
-type FilterField = 'rack' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | 'archived' | null;
+type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | 'archived' | null;
 
 type FavouriteFilter = 'all' | 'favourites';
 const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
@@ -87,31 +88,142 @@ export default function FullCellarListScreen() {
   const { racks } = useRacks();
   const qc = useQueryClient();
 
-  function handleLongPressWine(wine: CellarWine) {
+  const userId = session?.user.id;
+
+  // Cellar-wide "Location" filters (custom_filters with rack_id NULL).
+  const { data: locations = [] } = useQuery({
+    queryKey: ['cellar-locations', userId],
+    queryFn: () => fetchCellarLocations(userId!),
+    enabled: !!userId,
+  });
+  function refetchLocations() { qc.invalidateQueries({ queryKey: ['cellar-locations', userId] }); }
+
+  // ---- Multi-select mode (long-press) ----
+  // Long-pressing a wine tints it gold and enters selection mode, where the
+  // user picks any number of wines and acts on them in bulk (archive, delete,
+  // add to a Location filter) — replacing the old single-wine delete popup.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+
+  function enterSelect(wineId: string) {
+    setSelectMode(true);
+    setSelectedIds(new Set([wineId]));
+  }
+  function toggleSelected(wineId: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      next.has(wineId) ? next.delete(wineId) : next.add(wineId);
+      return next;
+    });
+  }
+  function exitSelect() {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }
+
+  function invalidateCellar() {
+    qc.invalidateQueries({ queryKey: ['cellar'] });
+    qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    qc.invalidateQueries({ queryKey: ['rack-slots'] });
+    qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
+  }
+
+  function confirmArchiveSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
     showAlert({
-      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
-      body: 'Permanently remove this wine from your records? This can\'t be undone.',
+      title: `Archive ${ids.length} wine${ids.length === 1 ? '' : 's'}?`,
+      body: 'They move to Your Archive and leave any racks they were placed in. Your reviews and history stay.',
       buttons: [
+        { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete wine',
-          style: 'destructive',
+          text: 'Archive Wines',
           onPress: async () => {
+            setBusy(true);
             try {
-              await clearWineFromRacks(wine.id);
-              const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
-              if (error) throw error;
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-              qc.invalidateQueries({ queryKey: ['cellar-archive'] });
-              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-              qc.invalidateQueries({ queryKey: ['rack-slots'] });
+              for (const id of ids) { await clearWineFromRacks(id); await archiveCellarWine(id); }
+              invalidateCellar();
+              exitSelect();
             } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
-            }
+              showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+            } finally { setBusy(false); }
           },
         },
-        { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  function confirmDeleteSelected() {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    showAlert({
+      title: `Delete ${ids.length} wine${ids.length === 1 ? '' : 's'}?`,
+      body: "Permanently remove them from your records. This can't be undone.",
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete (permanent)',
+          style: 'destructive',
+          onPress: async () => {
+            setBusy(true);
+            try {
+              for (const id of ids) { await clearWineFromRacks(id); await deleteCellarWine(id); }
+              invalidateCellar();
+              exitSelect();
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            } finally { setBusy(false); }
+          },
+        },
+      ],
+    });
+  }
+
+  // ---- Location create / add-to modal ----
+  // stage 'choose' = pick an existing location (or go to naming) for the
+  // selected wines; stage 'name' = type a name for a brand-new location.
+  const [locModal, setLocModal] = useState<{ open: boolean; stage: 'choose' | 'name'; wineIds: string[] }>({ open: false, stage: 'choose', wineIds: [] });
+  const [locNameDraft, setLocNameDraft] = useState('');
+
+  function openAddLocationFromFilter() {
+    // From the filter dropdown: create a brand-new (initially empty) location.
+    setLocNameDraft('');
+    setLocModal({ open: true, stage: 'name', wineIds: [] });
+  }
+  function openAddSelectedToLocation() {
+    if (selectedIds.size === 0) return;
+    setLocNameDraft('');
+    setLocModal({ open: true, stage: 'choose', wineIds: [...selectedIds] });
+  }
+  function closeLocModal() { setLocModal({ open: false, stage: 'choose', wineIds: [] }); }
+
+  async function addWinesToExistingLocation(loc: CustomFilter) {
+    setBusy(true);
+    try {
+      const union = Array.from(new Set([...loc.wineIds, ...locModal.wineIds]));
+      await setCustomFilterWines(loc.id, union);
+      refetchLocations();
+      closeLocModal();
+      exitSelect();
+    } catch (err) {
+      showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally { setBusy(false); }
+  }
+
+  async function saveNewLocation() {
+    const name = locNameDraft.trim();
+    if (!name || !userId) return;
+    setBusy(true);
+    try {
+      await createCellarLocation(userId, name, locModal.wineIds);
+      refetchLocations();
+      closeLocModal();
+      exitSelect();
+    } catch (err) {
+      showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally { setBusy(false); }
   }
 
   const rackIds = racks.map((r) => r.id);
@@ -124,7 +236,8 @@ export default function FullCellarListScreen() {
   const wineToRackId: Record<string, string> = {};
   for (const slot of slotAssignments) wineToRackId[slot.cellar_wine_id] = slot.rack_id;
 
-  const [rackFilter, setRackFilter] = useState<string>('All');           // 'All' | rackId | 'Unassigned'
+  // 'All' | rackId | 'loc:'+locationId | 'Unassigned'
+  const [locationFilter, setLocationFilter] = useState<string>('All');
   const [countryFilter, setCountryFilter] = useState<string>('All');     // 'All' | country canonical
   const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
   const [maturityFilter, setMaturityFilter] = useState<string>('All');   // 'All' | 'too_young' | 'approaching' | 'peak' | 'declining'
@@ -192,10 +305,13 @@ export default function FullCellarListScreen() {
       ? [...wines, ...archivedWines]
       : wines;
   const filtered = baseWines.filter((w) => {
-    if (rackFilter !== 'All') {
-      if (rackFilter === 'Unassigned') {
+    if (locationFilter !== 'All') {
+      if (locationFilter === 'Unassigned') {
         if (wineToRackId[w.id]) return false;
-      } else if (wineToRackId[w.id] !== rackFilter) {
+      } else if (locationFilter.startsWith('loc:')) {
+        const loc = locations.find((l) => l.id === locationFilter.slice(4));
+        if (!loc || !loc.wineIds.includes(w.id)) return false;
+      } else if (wineToRackId[w.id] !== locationFilter) {
         return false;
       }
     }
@@ -231,14 +347,20 @@ export default function FullCellarListScreen() {
 
   const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
 
-  const rackOptions = useMemo(() => {
-    const opts: { value: string; label: string }[] = [{ value: 'All', label: 'All racks' }];
+  // Location dropdown: All · each rack/fridge · each custom location · Not in a
+  // rack · "+ Add Location" (an action, handled specially in onSelect).
+  const locationOptions = useMemo(() => {
+    const opts: { value: string; label: string }[] = [{ value: 'All', label: 'All locations' }];
     for (const r of racks) opts.push({ value: r.id, label: r.name });
+    for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
     opts.push({ value: 'Unassigned', label: 'Not in a rack' });
+    opts.push({ value: '__add__', label: '＋ Add Location' });
     return opts;
-  }, [racks]);
+  }, [racks, locations]);
 
-  const rackLabel = rackOptions.find((o) => o.value === rackFilter)?.label ?? 'All racks';
+  const locationLabel = locationFilter === 'All'
+    ? 'All'
+    : (locationOptions.find((o) => o.value === locationFilter)?.label ?? 'All');
   const priceActive = PRICE_SORTS.includes(sortMode);
   const scoreActive = SCORE_SORTS.includes(sortMode);
   const priceLabel = priceActive ? (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
@@ -255,8 +377,13 @@ export default function FullCellarListScreen() {
         ?? 'Recently Added');
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
-    if (field === 'rack') {
-      return { title: 'Filter by rack', options: rackOptions, selected: rackFilter, onSelect: setRackFilter };
+    if (field === 'location') {
+      return {
+        title: 'Filter by location',
+        options: locationOptions,
+        selected: locationFilter,
+        onSelect: (v) => { if (v === '__add__') openAddLocationFromFilter(); else setLocationFilter(v); },
+      };
     }
     if (field === 'country') {
       return {
@@ -371,6 +498,13 @@ export default function FullCellarListScreen() {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
+        <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Location</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
+          </View>
+          <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
           <View style={styles.filterChipHeadingRow}>
             <Text style={styles.filterChipLabel}>Price</Text>
@@ -391,13 +525,6 @@ export default function FullCellarListScreen() {
             <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, favouriteFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, rackFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('rack')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Rack</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'rack' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, rackFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{rackLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, countryFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('country')}>
           <View style={styles.filterChipHeadingRow}>
@@ -482,7 +609,7 @@ export default function FullCellarListScreen() {
       ) : (
         <ScrollView
           style={styles.listScroll}
-          contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: 60 }}
+          contentContainerStyle={{ paddingTop: spacing.xs, paddingBottom: selectMode ? 150 : 60 }}
         >
           {sorted.map((w) => {
             const headerLine = wineHeaderLine(w.producer, w.wine_name, w.vintage);
@@ -492,13 +619,14 @@ export default function FullCellarListScreen() {
             const valueText = w.estimated_value != null
               ? formatCurrency(Number(w.estimated_value), w.estimated_value_currency, { decimals: 0 })
               : null;
+            const isSelected = selectedIds.has(w.id);
             return (
               <TouchableOpacity
                 key={w.id}
-                style={styles.row}
-                onPress={() => router.push(`/cellar/${w.id}`)}
-                onLongPress={() => handleLongPressWine(w)}
-                delayLongPress={400}
+                style={[styles.row, isSelected && styles.rowSelected]}
+                onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}`); }}
+                onLongPress={() => { if (!selectMode) enterSelect(w.id); }}
+                delayLongPress={350}
                 activeOpacity={0.7}
               >
                 <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} />
@@ -521,6 +649,104 @@ export default function FullCellarListScreen() {
       )}
         </>
       )}
+
+      {/* Multi-select action bar — floats at the bottom while selecting. */}
+      {selectMode && (
+        <View style={styles.selectBar}>
+          <View style={styles.selectBarTop}>
+            <Text style={styles.selectBarCount}>{selectedIds.size} selected</Text>
+            <TouchableOpacity onPress={exitSelect} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.selectBarCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.selectBarActions}>
+            <TouchableOpacity
+              style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
+              disabled={selectedIds.size === 0 || busy}
+              onPress={confirmArchiveSelected}
+            >
+              <Text style={styles.selectActionText}>Archive Wines</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
+              disabled={selectedIds.size === 0 || busy}
+              onPress={confirmDeleteSelected}
+            >
+              <Text style={[styles.selectActionText, styles.selectActionDanger]}>Delete (permanent)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
+              disabled={selectedIds.size === 0 || busy}
+              onPress={openAddSelectedToLocation}
+            >
+              <Text style={styles.selectActionText}>Add to Location Filter</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
+
+      {/* Create / pick a Location for selected wines (or a fresh empty one
+          from the filter's "+ Add Location"). */}
+      <Modal visible={locModal.open} transparent animationType="fade" onRequestClose={closeLocModal}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={closeLocModal}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            {locModal.stage === 'choose' ? (
+              <>
+                <Text style={styles.modalTitle}>
+                  Add {locModal.wineIds.length} wine{locModal.wineIds.length === 1 ? '' : 's'} to a location
+                </Text>
+                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                  <TouchableOpacity
+                    style={styles.modalOption}
+                    onPress={() => { setLocNameDraft(''); setLocModal((m) => ({ ...m, stage: 'name' })); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.modalOptionText, { color: colors.gold }]}>＋ New location…</Text>
+                  </TouchableOpacity>
+                  {locations.length === 0 ? (
+                    <Text style={styles.locEmpty}>No locations yet — create one above.</Text>
+                  ) : locations.map((l) => (
+                    <TouchableOpacity key={l.id} style={styles.modalOption} disabled={busy} onPress={() => addWinesToExistingLocation(l)} activeOpacity={0.7}>
+                      <Text style={styles.modalOptionText} numberOfLines={1}>{l.name}</Text>
+                      <Text style={styles.locCount}>{l.wineIds.length}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity style={styles.modalCancel} onPress={closeLocModal}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.modalTitle}>Name your location</Text>
+                <TextInput
+                  style={styles.locNameInput}
+                  value={locNameDraft}
+                  onChangeText={setLocNameDraft}
+                  placeholder="e.g. Eton Park, LCB"
+                  placeholderTextColor={colors.textMuted}
+                  autoFocus
+                  maxLength={40}
+                  returnKeyType="done"
+                  onSubmitEditing={saveNewLocation}
+                />
+                <TouchableOpacity
+                  style={[styles.addBtn, (!locNameDraft.trim() || busy) && { opacity: 0.5 }]}
+                  disabled={!locNameDraft.trim() || busy}
+                  onPress={saveNewLocation}
+                >
+                  <Text style={styles.addBtnText}>
+                    {busy ? 'Saving…' : locModal.wineIds.length ? `Create & add ${locModal.wineIds.length}` : 'Create location'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.modalCancel} onPress={closeLocModal}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
@@ -658,6 +884,21 @@ const styles = StyleSheet.create({
   // Inter — empty body
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Gold tinge on a row picked in multi-select mode.
+  rowSelected: { backgroundColor: 'rgba(212,176,96,0.18)' },
+  // Floating bulk-action bar shown while selecting.
+  selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: spacing.sm },
+  selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
+  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  selectBarActions: { flexDirection: 'row', gap: spacing.sm },
+  selectAction: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  selectActionDisabled: { opacity: 0.4 },
+  selectActionText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+  selectActionDanger: { color: '#E0736B' },
+  locEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
+  locCount: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
+  locNameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
   rowThumb: { width: 38, height: 48, marginRight: spacing.md },
   rowMain: { flex: 1, marginRight: spacing.md },
   // Inter — wine card name
