@@ -41,7 +41,25 @@ export default function ScanLineupScreen() {
     try {
       const base64 = await prepareImageBase64(uri);
       const { bottles } = await detectLineup(base64);
-      setLineup((bottles ?? []).slice(0, 10), uri); // cap at 10
+      // Cap raw detections at 10, then batch identical bottles (same producer +
+      // name + vintage) into one row carrying a quantity, so a lineup with two
+      // of the same wine reads as a single "×2" entry instead of two rows.
+      const capped = (bottles ?? []).slice(0, 10);
+      const batched: DetectedBottle[] = [];
+      const indexByKey = new Map<string, number>();
+      for (const b of capped) {
+        const key = `${norm(b.producer)}|${norm(b.wineName)}|${(b.vintage ?? '').trim()}`;
+        const at = indexByKey.get(key);
+        if (at != null) {
+          batched[at].quantity = (batched[at].quantity ?? 1) + 1;
+          // If any read of this bottle was confident, treat the group as confident.
+          batched[at].confident = batched[at].confident || b.confident;
+        } else {
+          indexByKey.set(key, batched.length);
+          batched.push({ ...b, quantity: 1 });
+        }
+      }
+      setLineup(batched, uri);
       setStage('review');
     } catch (err) {
       showAlert({ title: 'Could not read the photo', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -71,6 +89,9 @@ export default function ScanLineupScreen() {
       vintage: b.vintage || '',
       style: null,
       bottleSizeMl: null,
+      // Pre-seed the cellar quantity from the batched count so a "×2" lineup
+      // entry adds 2 bottles (the user can still adjust on the results screen).
+      quantity: b.quantity ?? 1,
     } as any);
     router.replace('/label/confirm?context=lineup');
   }
@@ -127,12 +148,16 @@ export default function ScanLineupScreen() {
               <Text style={styles.sectionLabel}>Add to Your Cellar</Text>
               {lineupWines.map((b, i) => {
                 const added = isAdded(b);
+                const qty = b.quantity ?? 1;
                 const label = [b.vintage, b.producer, b.wineName].filter(Boolean).join(' ');
                 return (
                   <View key={i} style={styles.row}>
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>{label || 'Unreadable bottle'}</Text>
-                      {b.region ? <Text style={styles.rowMeta} numberOfLines={1}>{b.region}</Text> : null}
+                      <View style={styles.rowMetaRow}>
+                        {b.region ? <Text style={styles.rowMeta} numberOfLines={1}>{b.region}</Text> : null}
+                        {qty >= 2 ? <Text style={styles.qtyTag}>×{qty} bottles</Text> : null}
+                      </View>
                       {!b.confident && !added ? <Text style={styles.unconfident}>Low-confidence read — check the details</Text> : null}
                     </View>
                     {added ? (
@@ -182,7 +207,10 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
-  rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  rowMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 2 },
+  rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
+  // Batched-bottle count shown after the region, e.g. "×2 bottles".
+  qtyTag: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   unconfident: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.gold, marginTop: 2 },
   editAddLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   addedTag: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },

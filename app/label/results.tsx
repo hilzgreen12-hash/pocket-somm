@@ -87,7 +87,11 @@ export default function LabelResultsScreen() {
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   // Add-to-Cellar form: how many bottles, which compact field dropdown is
   // open, and the "Other" custom bottle size.
-  const [bottleCount, setBottleCount] = useState(1);
+  // Seed from a batched lineup quantity when present (e.g. a "×2" lineup entry
+  // pre-fills 2); plain single-bottle scans carry nothing and default to 1.
+  const [bottleCount, setBottleCount] = useState(() =>
+    Math.max(1, useLabelStore.getState().wineDetailsConfirmed?.quantity ?? 1)
+  );
   const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count'>(null);
   const [customSizeMode, setCustomSizeMode] = useState(false);
   const [customSizeCl, setCustomSizeCl] = useState('');
