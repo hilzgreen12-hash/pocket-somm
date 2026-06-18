@@ -6,12 +6,23 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
-import { addCellarWine } from '../../src/api/cellar';
+import { addCellarWine, getCellarWines } from '../../src/api/cellar';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 type Stage = 'capture' | 'analyzing' | 'review' | 'adding' | 'done';
+
+// Why a row is pre-unticked: it already exists in the cellar, or it repeats an
+// earlier row in this same import. null = a fresh wine, ticked by default.
+type DupFlag = 'cellar' | 'import' | null;
+
+const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+// Case-insensitive identity key — mirrors findMatchingWishlistWine in the
+// cellar API (producer + name + vintage).
+function wineKey(w: { producer?: string | null; wine_name?: string | null; vintage?: string | null }): string {
+  return `${norm(w.producer)}|${norm(w.wine_name)}|${(w.vintage ?? '').trim()}`;
+}
 
 export default function ImportCellarScreen() {
   const { session } = useAuth();
@@ -22,6 +33,7 @@ export default function ImportCellarScreen() {
   const [stage, setStage] = useState<Stage>('capture');
   const [wines, setWines] = useState<ImportedCellarWine[]>([]);
   const [keep, setKeep] = useState<boolean[]>([]);
+  const [dupFlags, setDupFlags] = useState<DupFlag[]>([]);
   const [addedCount, setAddedCount] = useState(0);
 
   async function pick(source: 'camera' | 'library') {
@@ -48,8 +60,36 @@ export default function ImportCellarScreen() {
         return w ?? [];
       }));
       const all = results.flat();
+
+      // Pre-tick logic: by default everything is ticked, but pre-untick wines
+      // that already exist in the cellar or repeat an earlier row in this
+      // import, so a re-import (or overlapping multi-screenshot grab) doesn't
+      // silently create parallel cellar lines. The user can re-tick any of them.
+      let existingKeys = new Set<string>();
+      const userId = session?.user.id;
+      if (userId) {
+        try {
+          const existing = await getCellarWines(userId);
+          existingKeys = new Set(existing.map(wineKey));
+        } catch {
+          // Dedup is best-effort — if the cellar can't be read, just don't
+          // pre-untick anything rather than blocking the import.
+        }
+      }
+      const seen = new Set<string>();
+      const flags: DupFlag[] = [];
+      const initialKeep: boolean[] = [];
+      for (const w of all) {
+        const k = wineKey(w);
+        const flag: DupFlag = existingKeys.has(k) ? 'cellar' : seen.has(k) ? 'import' : null;
+        seen.add(k);
+        flags.push(flag);
+        initialKeep.push(flag === null);
+      }
+
       setWines(all);
-      setKeep(all.map(() => true));
+      setDupFlags(flags);
+      setKeep(initialKeep);
       setStage('review');
     } catch (err) {
       showAlert({ title: 'Could not read the screenshot', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -63,12 +103,19 @@ export default function ImportCellarScreen() {
     if (!session?.user.id || keptCount === 0) return;
     setStage('adding');
     const userId = session.user.id;
-    const chosen = wines.filter((_, i) => keep[i]);
+    // Work over ORIGINAL indices so that if an insert throws partway we can drop
+    // exactly the rows already committed. Without this, a mid-loop failure left
+    // the full kept list intact, so re-tapping "Add" re-inserted everything that
+    // had already landed → duplicate cellar lines.
+    const keptIndices = wines.map((_, i) => i).filter((i) => keep[i]);
+    const succeeded: number[] = [];
+    let bottlesAdded = 0;
     try {
       // Bulk add identity + quantity + price. No per-wine AI enrichment here —
       // a cellar import can be dozens of wines; the user can generate intel on
       // any wine later from its card.
-      for (const w of chosen) {
+      for (const i of keptIndices) {
+        const w = wines[i];
         const qty = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
         await addCellarWine({
           user_id: userId,
@@ -96,12 +143,27 @@ export default function ImportCellarScreen() {
           purchase_price_currency: w.purchase_price != null ? (w.currency ?? defaultCurrency) : null,
           bottle_size_ml: 750,
         } as any);
+        succeeded.push(i);
+        bottlesAdded += qty;
       }
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
-      setAddedCount(chosen.reduce((s, w) => s + (Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1), 0));
+      setAddedCount((prev) => prev + bottlesAdded);
       setStage('done');
     } catch (err) {
-      showAlert({ title: 'Could not import', body: err instanceof Error ? err.message : 'Please try again.' });
+      console.warn('import-cellar: partial failure after', succeeded.length, 'of', keptIndices.length, err);
+      // Drop the rows we already committed so a retry only adds the remainder.
+      if (succeeded.length) {
+        const done = new Set(succeeded);
+        setWines((prev) => prev.filter((_, i) => !done.has(i)));
+        setKeep((prev) => prev.filter((_, i) => !done.has(i)));
+        setDupFlags((prev) => prev.filter((_, i) => !done.has(i)));
+        setAddedCount((prev) => prev + bottlesAdded);
+        qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      }
+      showAlert({
+        title: succeeded.length ? 'Imported some, then hit a snag' : 'Could not import',
+        body: `${succeeded.length ? `${bottlesAdded} bottle${bottlesAdded === 1 ? '' : 's'} added. The rest are still listed — tap Add to retry them. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
+      });
       setStage('review');
     }
   }
@@ -161,8 +223,14 @@ export default function ImportCellarScreen() {
           ) : (
             <>
               <Text style={styles.sectionLabel}>Found {wines.length} wine{wines.length === 1 ? '' : 's'} — tap to include or skip</Text>
+              {dupFlags.some(Boolean) ? (
+                <Text style={styles.dedupNote}>
+                  Wines already in your cellar (or repeated in this import) are unticked to avoid duplicates — tap to add them anyway.
+                </Text>
+              ) : null}
               {wines.map((w, i) => {
                 const on = keep[i];
+                const flag = dupFlags[i];
                 const qty = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
                 const label = [w.vintage, w.producer, w.wine_name].filter(Boolean).join(' ');
                 return (
@@ -175,7 +243,10 @@ export default function ImportCellarScreen() {
                     <Text style={[styles.checkbox, on && styles.checkboxOn]}>{on ? '☑' : '☐'}</Text>
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}{qty > 1 ? `  ×${qty}` : ''}</Text>
-                      {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
+                      <View style={styles.rowMetaRow}>
+                        {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
+                        {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? 'Already in cellar' : 'Repeated above'}</Text> : null}
+                      </View>
                     </View>
                   </TouchableOpacity>
                 );
@@ -227,5 +298,9 @@ const styles = StyleSheet.create({
   checkboxOn: { color: colors.gold },
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
-  rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  rowMetaRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 2 },
+  rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
+  // Small pill explaining why a row was pre-unticked (dup of cellar / import).
+  rowTag: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  dedupNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
 });
