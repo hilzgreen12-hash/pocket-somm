@@ -94,6 +94,12 @@ export default function RackDetectScreen() {
             : `Set your dimensions then give your ${isFridge ? 'fridge' : 'rack'} a name.`}
         </Text>
 
+        {isFridge && cameFromCamera ? (
+          <Text style={styles.fridgeNote}>
+            We've doubled the horizontal positions to include the bottles facing the back of your fridge, which the camera can't see. Adjust down if your fridge is single-depth.
+          </Text>
+        ) : null}
+
         <View style={styles.preview}>
           <Text style={styles.previewLabel}>{rows} × {cols}</Text>
           <Text style={styles.previewSub}>{rows * cols} bottle slots</Text>
@@ -151,6 +157,7 @@ const styles = StyleSheet.create({
   bodyContent: { padding: spacing.xl },
   // Inter — intro body
   intro: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl },
+  fridgeNote: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 20, marginTop: -spacing.md, marginBottom: spacing.xl },
   preview: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xl },
   // Inter — large stat value
   previewLabel: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },

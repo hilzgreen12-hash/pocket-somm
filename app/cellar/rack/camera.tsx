@@ -15,7 +15,7 @@ import { fonts } from '../../../src/constants/fonts';
 export default function RackCameraScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
-  const { setDetected, setImage } = useRackStore();
+  const { setDetected, setImage, pendingStorageType } = useRackStore();
   const [capturing, setCapturing] = useState(false);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
   // Intro shown only when the rack camera is reached straight from
@@ -56,10 +56,21 @@ export default function RackCameraScreen() {
       setImage(compressed.uri);
 
       const result = await detectRack(base64);
-      setDetected(result.rows, result.cols);
+      // A wine fridge is photographed from one side only, but each shelf
+      // typically holds a second run of bottles facing the other way (visible
+      // only from the back). The camera captures every vertical level (rows)
+      // but only half the horizontal positions (cols), so double the detected
+      // horizontal count for fridges. Racks are fully visible from the front,
+      // so they're left exactly as detected. Cap at 30 to match the manual
+      // editor and the edge-function bounds.
+      const isFridge = pendingStorageType === 'fridge';
+      const cols = isFridge ? Math.min(30, result.cols * 2) : result.cols;
+      setDetected(result.rows, cols);
       router.push('/cellar/rack/detect');
     } catch {
-      setDetected(4, 6);
+      // Blind fallback when detection fails — give fridges a wider horizontal
+      // default for the same one-side-visibility reason.
+      setDetected(4, pendingStorageType === 'fridge' ? 12 : 6);
       router.push('/cellar/rack/detect');
     } finally {
       setCapturing(false);
