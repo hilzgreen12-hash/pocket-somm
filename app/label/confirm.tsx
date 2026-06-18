@@ -53,6 +53,9 @@ export default function LabelConfirmScreen() {
       // through to /label/results so the Add modal can pre-populate the
       // picker. The user can still adjust it on that screen.
       bottleSizeMl: wineDetails?.bottleSizeMl ?? null,
+      // Carry a batched lineup quantity through so /label/results seeds the
+      // bottle count (e.g. a "×2" lineup entry adds 2 to the cellar).
+      quantity: wineDetails?.quantity ?? 1,
     };
 
     setLoading(true);

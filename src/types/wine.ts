@@ -75,6 +75,9 @@ export interface WineDetails {
   // (most labels print "750ml" / "75cl" / "1.5L" near the ABV). null when
   // not detected — the user picks a size manually in that case.
   bottleSizeMl: number | null;
+  // Pre-seeded quantity when this wine arrives from a batched lineup entry
+  // (N identical bottles). Optional — single-bottle flows omit it (=> 1).
+  quantity?: number;
 }
 
 export interface WineDetailsComplete {
@@ -84,6 +87,8 @@ export interface WineDetailsComplete {
   vintage: string;
   style?: string | null;
   bottleSizeMl?: number | null;
+  // Carried through from a batched lineup entry to seed the cellar quantity.
+  quantity?: number;
 }
 
 // A single named critic's published score. `critic` is a short

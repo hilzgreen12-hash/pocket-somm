@@ -108,6 +108,10 @@ export interface DetectedBottle {
   vintage: string | null;
   region?: string | null;
   confident: boolean;
+  // How many identical bottles this entry represents after the lineup is
+  // batched (same producer + name + vintage collapse into one row). Absent or
+  // 1 = a single bottle. Seeds the cellar quantity when the bottle is onboarded.
+  quantity?: number;
 }
 export async function detectLineup(base64Image: string): Promise<{ bottles: DetectedBottle[] }> {
   return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
