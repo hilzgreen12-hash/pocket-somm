@@ -6,7 +6,7 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { colors, spacing, typography } from '../../src/constants/theme';
 
 export default function PreviewScreen() {
-  const { imageUri, reset } = useScanStore();
+  const { imageUri } = useScanStore();
 
   // Pinch-to-zoom + pan so the user can actually read the uploaded wine list
   // and confirm it captured correctly. Mirrors the rack full-screen zoom.
@@ -17,12 +17,20 @@ export default function PreviewScreen() {
   const cur = useRef({ scale: 1, tx: 0, ty: 0 }).current;
   const [box, setBox] = useState({ w: 0, h: 0 });
 
-  // Guards against the retake handler and this safety-net effect BOTH firing
-  // router.replace when imageUri clears — the double navigation was surfacing
-  // an error instead of cleanly returning to the List tab.
+  // Guards against the retake handler and this safety-net effect BOTH firing a
+  // navigation when imageUri clears — the double navigation was surfacing the
+  // error screen instead of cleanly returning. Pop back to whatever pushed the
+  // preview (the camera, or the List tab for an upload); a cross-group
+  // router.replace from this pushed screen was what crashed into the
+  // ErrorBoundary.
   const leaving = useRef(false);
+  function leaveCleanly() {
+    leaving.current = true;
+    if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/scan');
+  }
   useEffect(() => {
-    if (!imageUri && !leaving.current) router.replace('/(tabs)/scan');
+    if (!imageUri && !leaving.current) leaveCleanly();
   }, [imageUri]);
 
   if (!imageUri) return null;
@@ -77,9 +85,10 @@ export default function PreviewScreen() {
   }, [box.w, box.h]);
 
   function handleRetake() {
-    leaving.current = true;
-    reset();
-    router.replace('/(tabs)/scan');
+    // Just discard the photo and pop back — keep the user's wine preferences
+    // (a full reset() here wiped them). The stale image is harmless; the next
+    // capture/upload overwrites it.
+    leaveCleanly();
   }
 
   function handleConfirm() {
