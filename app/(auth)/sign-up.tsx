@@ -29,7 +29,7 @@ export default function SignUp() {
     if (trimmedPassword !== trimmedConfirm) { setError('Passwords do not match.'); return; }
 
     setLoading(true);
-    const { error: signUpError } = await supabase.auth.signUp({
+    const { data, error: signUpError } = await supabase.auth.signUp({
       email: email.trim(),
       password: trimmedPassword,
       options: {
@@ -48,9 +48,18 @@ export default function SignUp() {
 
     if (signUpError) {
       setError(signUpError.message);
-    } else {
-      setConfirmed(true);
+      return;
     }
+    // Supabase obfuscates a signup for an ALREADY-registered email (an
+    // anti-account-enumeration safeguard): it returns no error but a user with
+    // an empty `identities` array and no confirmation email. Detect that and
+    // tell the user to log in, rather than leaving them waiting for a
+    // confirmation email that will never arrive.
+    if (data.user && (data.user.identities?.length ?? 0) === 0) {
+      setError('An account with this email already exists. Please log in instead — or tap "Forgot password?" if you\'ve forgotten it.');
+      return;
+    }
+    setConfirmed(true);
   }
 
   if (confirmed) {
