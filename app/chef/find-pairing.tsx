@@ -286,7 +286,6 @@ const styles = StyleSheet.create({
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
   // Expanded accordion body holding the bubbles.
   pickerWrap: { marginTop: spacing.xs, marginBottom: spacing.lg, paddingHorizontal: spacing.xs },
-  micRowCentred: { flexDirection: 'row', justifyContent: 'center', marginBottom: spacing.sm },
   regionInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.xl, width: '100%', textAlign: 'center' },
   helper: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginBottom: spacing.sm },
   micRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.sm },
