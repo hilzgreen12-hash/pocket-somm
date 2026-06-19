@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -364,6 +364,19 @@ export default function FullCellarListScreen() {
   });
 
   const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+
+  // Keep multi-select honest: when the filters/search change, drop any selected
+  // wines that are no longer visible so a bulk action can only ever touch what's
+  // on screen (previously the selection silently survived filter changes).
+  useEffect(() => {
+    if (!selectMode) return;
+    setSelectedIds((prev) => {
+      const visible = new Set(filtered.map((w) => w.id));
+      const next = new Set([...prev].filter((id) => visible.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [locationFilter, countryFilter, colourFilter, maturityFilter, favouriteFilter, archivedFilter, search, selectMode]);
 
   // Location dropdown: All · each rack/fridge · each custom location · Not in a
   // rack · "+ Add Location" (an action, handled specially in onSelect).
