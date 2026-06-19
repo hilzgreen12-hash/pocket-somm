@@ -28,7 +28,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
-import { fetchCellarLocations, setCustomFilterWines } from '../../src/api/customFilters';
+import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
@@ -499,13 +499,11 @@ export default function CellarWineDetail() {
         }
         setRemoveCount('1');
       }
-      // Removal was scoped to a location → untag the wine from it.
+      // Removal was scoped to a location → untag the wine from it. Single-row
+      // delete (not a full set-replace), so other members are never touched.
       if (removeLocationId) {
-        const loc = locations.find((l) => l.id === removeLocationId);
-        if (loc) {
-          await setCustomFilterWines(removeLocationId, loc.wineIds.filter((id) => id !== wine!.id));
-          qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
-        }
+        await removeWineFromFilter(removeLocationId, wine!.id);
+        qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
         setRemoveLocationId(null);
       }
     } catch {
@@ -528,12 +526,11 @@ export default function CellarWineDetail() {
         updates: { quantity: wine!.quantity + count },
       });
       // If the user picked a Location for this add, file the wine under it.
+      // Incremental insert (ignores duplicates) — never rewrites the set from a
+      // cached list, so a stale cache can't drop the location's other wines.
       if (pendingLocationId) {
-        const loc = locations.find((l) => l.id === pendingLocationId);
-        if (loc && !loc.wineIds.includes(wine!.id)) {
-          await setCustomFilterWines(pendingLocationId, [...loc.wineIds, wine!.id]);
-          qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
-        }
+        await addWinesToFilter(pendingLocationId, [wine!.id]);
+        qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
       }
       setAddBottlesOpen(false);
       setAddBottlesCount('1');

@@ -11,7 +11,7 @@ import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { archiveCellarWine, deleteCellarWine } from '../../src/api/cellar';
-import { fetchCellarLocations, createCellarLocation, setCustomFilterWines, type CustomFilter } from '../../src/api/customFilters';
+import { fetchCellarLocations, createCellarLocation, addWinesToFilter, type CustomFilter } from '../../src/api/customFilters';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -143,12 +143,20 @@ export default function FullCellarListScreen() {
           text: 'Archive Wines',
           onPress: async () => {
             setBusy(true);
+            const done: string[] = [];
             try {
-              for (const id of ids) { await clearWineFromRacks(id); await archiveCellarWine(id); }
+              for (const id of ids) { await clearWineFromRacks(id); await archiveCellarWine(id); done.push(id); }
               invalidateCellar();
               exitSelect();
             } catch (err) {
-              showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+              // Drop the wines already archived from the selection so a retry
+              // only runs the remainder, and tell the user how far it got.
+              invalidateCellar();
+              if (done.length) setSelectedIds((prev) => { const next = new Set(prev); done.forEach((id) => next.delete(id)); return next; });
+              showAlert({
+                title: done.length ? 'Archived some, then hit a snag' : 'Could not archive',
+                body: `${done.length ? `${done.length} of ${ids.length} archived. The rest are still selected — tap Archive Wines to retry. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
+              });
             } finally { setBusy(false); }
           },
         },
@@ -169,12 +177,20 @@ export default function FullCellarListScreen() {
           style: 'destructive',
           onPress: async () => {
             setBusy(true);
+            const done: string[] = [];
             try {
-              for (const id of ids) { await clearWineFromRacks(id); await deleteCellarWine(id); }
+              for (const id of ids) { await clearWineFromRacks(id); await deleteCellarWine(id); done.push(id); }
               invalidateCellar();
               exitSelect();
             } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+              // Drop the wines already deleted from the selection so a retry
+              // only runs the remainder.
+              invalidateCellar();
+              if (done.length) setSelectedIds((prev) => { const next = new Set(prev); done.forEach((id) => next.delete(id)); return next; });
+              showAlert({
+                title: done.length ? 'Deleted some, then hit a snag' : 'Could not delete',
+                body: `${done.length ? `${done.length} of ${ids.length} deleted. The rest are still selected — tap Delete to retry. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
+              });
             } finally { setBusy(false); }
           },
         },
@@ -203,8 +219,9 @@ export default function FullCellarListScreen() {
   async function addWinesToExistingLocation(loc: CustomFilter) {
     setBusy(true);
     try {
-      const union = Array.from(new Set([...loc.wineIds, ...locModal.wineIds]));
-      await setCustomFilterWines(loc.id, union);
+      // Incremental insert (ignores duplicates) — never rewrites the whole set
+      // from a cached list, so a stale cache can't drop other members.
+      await addWinesToFilter(loc.id, locModal.wineIds);
       refetchLocations();
       closeLocModal();
       exitSelect();

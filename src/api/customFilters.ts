@@ -86,12 +86,38 @@ export async function createCustomFilter(userId: string, name: string, wineIds: 
   await setCustomFilterWines(data.id, wineIds);
 }
 
-// Replace the wines on a filter (clears then inserts) — used by create + edit.
+// Replace the wines on a filter (clears then inserts) — used by create + edit,
+// where the caller is authoritatively setting the FULL ticked set (the rack
+// "edit filter" modal). Do NOT use this to add/remove a single wine off a
+// cached list — use the incremental helpers below, which can't drop other
+// members if the cache is stale and have no empty-set window.
 export async function setCustomFilterWines(filterId: string, wineIds: string[]): Promise<void> {
   await supabase.from('custom_filter_wines').delete().eq('filter_id', filterId);
   if (wineIds.length === 0) return;
   const rows = wineIds.map((cellar_wine_id) => ({ filter_id: filterId, cellar_wine_id }));
   const { error } = await supabase.from('custom_filter_wines').insert(rows);
+  if (error) throw new Error(error.message);
+}
+
+// Add wines to a filter incrementally — inserts only the given rows, ignoring
+// any that already exist. Touches no other membership, so a stale cached list
+// can never silently drop wines (the bug a full set-replace would cause).
+export async function addWinesToFilter(filterId: string, wineIds: string[]): Promise<void> {
+  if (wineIds.length === 0) return;
+  const rows = wineIds.map((cellar_wine_id) => ({ filter_id: filterId, cellar_wine_id }));
+  const { error } = await supabase
+    .from('custom_filter_wines')
+    .upsert(rows, { onConflict: 'filter_id,cellar_wine_id', ignoreDuplicates: true });
+  if (error) throw new Error(error.message);
+}
+
+// Remove a single wine from a filter — deletes just that one membership row.
+export async function removeWineFromFilter(filterId: string, wineId: string): Promise<void> {
+  const { error } = await supabase
+    .from('custom_filter_wines')
+    .delete()
+    .eq('filter_id', filterId)
+    .eq('cellar_wine_id', wineId);
   if (error) throw new Error(error.message);
 }
 
