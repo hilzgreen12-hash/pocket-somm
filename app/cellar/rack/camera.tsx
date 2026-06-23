@@ -6,8 +6,9 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import * as Haptics from 'expo-haptics';
 import { CameraOverlay } from '../../../src/components/scan/CameraOverlay';
 import { PermissionScreen } from '../../../src/components/scan/PermissionScreen';
-import { prepareImageBase64 } from '../../../src/api/label';
+import { showAlert } from '../../../src/components/AppAlert';
 import { detectRack } from '../../../src/api/racks';
+import { isNetworkError } from '../../../src/api/invokeResilient';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -41,21 +42,22 @@ export default function RackCameraScreen() {
       const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 0.8 });
       if (!photo?.uri) return;
 
-      // Show the captured photo immediately so the user gets visual feedback
-      // that the shot worked — keep it on screen while detection runs and
-      // through to the confirm-rack screen.
-      setPreviewUri(photo.uri);
-
-      const compressed = await ImageManipulator.manipulateAsync(
+      // Single resize+encode pass at 1100px / 0.72 (one pass is faster on-device
+      // and lighter to upload). Crucially, ImageManipulator also BAKES IN the
+      // EXIF orientation that the raw capture only carries as metadata — and
+      // <Image> ignores that metadata on Android. So we preview the PROCESSED
+      // image, not the raw photo; otherwise a landscape shot previews sideways /
+      // portrait the whole time detection runs (even though it saved correctly).
+      const processed = await ImageManipulator.manipulateAsync(
         photo.uri,
-        [{ resize: { width: 1200 } }],
-        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+        [{ resize: { width: 1100 } }],
+        { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
+      if (!processed.base64) throw new Error('Failed to encode image');
+      setPreviewUri(processed.uri);
+      setImage(processed.uri);
 
-      const base64 = await prepareImageBase64(compressed.uri);
-      setImage(compressed.uri);
-
-      const result = await detectRack(base64);
+      const result = await detectRack(processed.base64);
       // A wine fridge is photographed from one side only, but each shelf
       // typically holds a second run of bottles facing the other way (visible
       // only from the back). The camera captures every vertical level (rows)
@@ -67,7 +69,17 @@ export default function RackCameraScreen() {
       const cols = isFridge ? Math.min(30, result.cols * 2) : result.cols;
       setDetected(result.rows, cols);
       router.push('/cellar/rack/detect');
-    } catch {
+    } catch (err) {
+      // A connection drop (common on cellular) must not masquerade as a
+      // detected grid — tell the user it was the signal, not their photo,
+      // before dropping them into the manual editor where they can re-scan.
+      if (isNetworkError(err)) {
+        showAlert({
+          title: 'Weak connection',
+          body: "Vinster couldn't analyse the photo — you may be offline or on a weak signal. We've opened the manual grid editor; reconnect and re-scan any time.",
+          buttons: [{ text: 'OK' }],
+        });
+      }
       // Blind fallback when detection fails — give fridges a wider horizontal
       // default for the same one-side-visibility reason.
       setDetected(4, pendingStorageType === 'fridge' ? 12 : 6);

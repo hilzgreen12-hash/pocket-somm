@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
   // One-line note pointing users to the You tab to tune their results —
   // matches the topBlurb size/font exactly so the two read as one block.
-  prefsBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
+  prefsBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: 0, textAlign: 'center' },
   prefsLink: { color: colors.gold, textDecorationLine: 'underline' },
   // "View last result" link — body / link, Inter.
   lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },

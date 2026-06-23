@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
@@ -10,7 +10,8 @@ import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
-import type { ChosenWine } from '../../src/types/wine';
+import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
+import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -40,6 +41,33 @@ function DrinkingWindowBadge({ status, from, to }: { status: string; from: numbe
   );
 }
 
+// Compact label + colour for the drinking-window stat cell — mirrors the badge
+// above and the cellar wine card, with shorter labels for the tight cell.
+function windowMeta(status: string): { text: string; color: string } {
+  const map: Record<string, { text: string; color: string }> = {
+    too_young: { text: 'Too Young', color: colors.warning },
+    approaching: { text: 'Approaching', color: colors.gold },
+    peak: { text: 'Peak Now', color: colors.gold },
+    declining: { text: 'Declining', color: colors.error },
+    unknown: { text: 'Unknown', color: colors.textMuted },
+  };
+  return map[status] ?? map.unknown;
+}
+
+
+// Stand-in intel for the no-intel "Add Wine" flow so the shared render + save
+// code can read intel.* uniformly (all blank — real intel is generated later
+// from the wine card / Generate Wine Intel).
+const EMPTY_INTEL: WineIntelligence = {
+  criticScore: null,
+  drinkingWindowFrom: null,
+  drinkingWindowTo: null,
+  drinkingWindowStatus: 'unknown',
+  grapeVariety: null,
+  tastingNotes: '',
+  estimatedValue: null,
+  valueSource: null,
+};
 
 export default function LabelResultsScreen() {
   const { context } = useLocalSearchParams<{ context?: string }>();
@@ -51,6 +79,15 @@ export default function LabelResultsScreen() {
   // Entered from Scan a Lineup — after saving (placed or not) we return to the
   // lineup list to onboard the next bottle, rather than the rack / wine card.
   const isLineupFlow = context === 'lineup';
+  // Entered from the Cellar tab's "Generate Wine Intel" — view-only. The card
+  // surfaces the intel and nothing more; there's no Add-to-Cellar action here
+  // (saving a bottle lives in the rack / +Add Bottles flows). Other add flows
+  // — review-add, Archive a Night, manual add — keep their Add to Cellar.
+  const isIntelOnlyFlow = context === 'intel';
+  // Entered from Cellar List "Add Wine" — no Wine Intel card. Go straight to the
+  // Add-to-Cellar confirmation (size / quantity / orientation / location); intel
+  // is generated later, only from the Cellar tab's Generate Wine Intel.
+  const isAddFlow = context === 'add';
   const { wineDetailsConfirmed, intelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
@@ -66,6 +103,9 @@ export default function LabelResultsScreen() {
   const [addingToWishList, setAddingToWishList] = useState(false);
   const [addingReview, setAddingReview] = useState(false);
   const [selectedRackId, setSelectedRackId] = useState<string | null>(null);
+  // Bespoke cellar Location (rack_id NULL custom filter) chosen as the
+  // destination — mutually exclusive with a rack/fridge selection.
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [purchasePrice, setPurchasePrice] = useState('');
   // Pre-populate the bottle size picker from the label scanner. Lazy init
   // reads the labelStore once at mount; the user can still adjust the
@@ -104,6 +144,15 @@ export default function LabelResultsScreen() {
     enabled: !!pendingSlot,
   });
 
+  // Bespoke cellar-wide Locations (rack_id NULL) — offered as destinations in
+  // the Add flow alongside Cellar List and the racks/fridges. Per-rack filters
+  // are deliberately excluded.
+  const { data: cellarLocations = [] } = useQuery({
+    queryKey: ['cellar-locations', session?.user.id],
+    queryFn: () => fetchCellarLocations(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+
   // Across-all-racks placement map, so the duplicate prompt can tell the user
   // *where* their existing bottles already sit (e.g. "in your Kitchen rack").
   const allRackIds = racks.map((r) => r.id);
@@ -129,7 +178,22 @@ export default function LabelResultsScreen() {
     return `across your ${rackNames.slice(0, -1).join(', ')} and ${rackNames[rackNames.length - 1]} racks`;
   }
 
-  if (!wineDetailsConfirmed || !intelligence) {
+  // Pre-fill the purchase price with Vinster's estimate (now real Wine-Searcher
+  // market data when matched) so the field starts populated in every add flow —
+  // not just when the Add-to-Cellar button's onPress happens to fire first.
+  useEffect(() => {
+    const est = intelligence?.estimatedValue;
+    if (est != null) setPurchasePrice((prev) => prev || String(est));
+  }, [intelligence?.estimatedValue]);
+
+  // Add flow has no intel card — drop the user straight onto the Add-to-Cellar
+  // confirmation (size / quantity / orientation / location).
+  useEffect(() => {
+    if (isAddFlow) setAddingToCellar(true);
+  }, [isAddFlow]);
+
+  // The Add flow legitimately has no intel; every other flow needs it.
+  if (!wineDetailsConfirmed || (!intelligence && !isAddFlow)) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>No results available.</Text>
@@ -141,7 +205,7 @@ export default function LabelResultsScreen() {
   }
 
   const wine = wineDetailsConfirmed;
-  const intel = intelligence;
+  const intel = intelligence ?? EMPTY_INTEL;
 
   function computeSlots(
     startRow: number, startCol: number,
@@ -208,6 +272,9 @@ export default function LabelResultsScreen() {
       estimated_value: intel.estimatedValue,
       estimated_value_currency: userCurrency,
       estimated_value_at: intel.estimatedValue != null ? new Date().toISOString() : null,
+      // Real Wine-Searcher market price vs Claude estimate — drives the card's
+      // value source label. Set by generateWineIntel in the confirm step.
+      estimated_value_source: intel.valueSource ?? 'vinster',
       purchase_price: validPrice,
       purchase_price_currency: userCurrency,
       bottle_size_ml: bottleSizeMl,
@@ -388,12 +455,76 @@ export default function LabelResultsScreen() {
       return;
     }
 
-    // Non-slot paths: a merge adds one bottle onto the existing wine.
-    if (mode === 'merge') {
-      await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + 1 } });
+    // Lineup onboarding: each wine is saved (unplaced) and we return to the
+    // lineup list to do the next bottle — destination choice doesn't apply.
+    if (isLineupFlow) {
+      if (mode === 'merge') {
+        await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + 1 } });
+      }
+      setAddingToCellar(false);
+      router.replace('/cellar/scan-lineup');
+      return;
     }
 
-    if (selectedRackId === '__new__' && !isLineupFlow) {
+    // ---- Cellar List "Add Wine" flow ----
+    const qty = Math.max(1, bottleCount);
+
+    // Bespoke cellar Location: tag the wine to that location and leave it
+    // unplaced (locations aren't grid racks — no slots / orientation).
+    if (selectedLocationId) {
+      await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: mode === 'merge' ? baseQuantity + qty : qty } });
+      try { await addWinesToFilter(selectedLocationId, [savedWineId]); } catch { /* tag is best-effort */ }
+      qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      setAddingToCellar(false);
+      router.replace(`/cellar/${savedWineId}` as any);
+      return;
+    }
+
+    // A live rack/fridge: auto-place the bottles from the first free slot in
+    // the chosen orientation, then land on the rack.
+    if (selectedRackId && selectedRackId !== '__new__') {
+      const rack = racks.find((r) => r.id === selectedRackId);
+      if (rack) {
+        const slots = await getRackSlots(selectedRackId);
+        const occupied = new Set(slots.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
+        let start: { row: number; col: number } | null = null;
+        for (let r = 0; r < rack.rows && !start; r++) {
+          for (let c = 0; c < rack.cols; c++) {
+            if (!occupied.has(`${r},${c}`)) { start = { row: r, col: c }; break; }
+          }
+        }
+        if (start) {
+          const candidate = computeSlots(start.row, start.col, rack.rows, rack.cols, qty, placeOrientation, rack.large_format_cols);
+          const free = candidate.filter((s) => !occupied.has(`${s.row},${s.col}`));
+          const placed = free.length > 0 ? free : [start];
+          await assignSlots(selectedRackId, placed, savedWineId);
+          const targetQuantity = mode === 'merge' ? baseQuantity + placed.length : placed.length;
+          await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: targetQuantity } });
+          qc.invalidateQueries({ queryKey: ['rack-slots', selectedRackId] });
+          qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+          qc.invalidateQueries({ queryKey: ['cellar'] });
+          setAddingToCellar(false);
+          if (placed.length < qty) {
+            showAlert({
+              title: 'Placed what fit',
+              body: `Only ${placed.length} of ${qty} bottle${qty === 1 ? '' : 's'} fit from the first free slot — the rest weren't placed.`,
+              buttons: [{ text: 'OK', onPress: () => router.replace(`/cellar/rack/${selectedRackId}` as any) }],
+            });
+          } else {
+            router.replace(`/cellar/rack/${selectedRackId}` as any);
+          }
+          return;
+        }
+        showAlert({ title: 'Rack full', body: 'There were no free slots, so this wine was saved to your Cellar List instead.' });
+      }
+    }
+
+    // Build a brand-new rack, then place there.
+    if (selectedRackId === '__new__') {
+      if (mode === 'merge') {
+        await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + qty } });
+      }
       setPendingWineId(savedWineId);
       setPendingStorageType('rack');
       setAddingToCellar(false);
@@ -401,21 +532,13 @@ export default function LabelResultsScreen() {
       return;
     }
 
-    if (selectedRackId && !isLineupFlow) {
-      setPendingWineId(savedWineId);
-      setAddingToCellar(false);
-      router.replace(`/cellar/rack/${selectedRackId}` as any);
-      return;
+    // Cellar List (unplaced) — route straight to the full cellar wine card so
+    // the user lands on the same surface they see from Full Cellar List.
+    if (mode === 'merge') {
+      await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + qty } });
     }
-
-    // No rack — route the user straight to the full cellar wine card
-    // so they land on the same surface they see from Full Cellar List.
-    // The intel preview screen they came from is missing the cellar
-    // inputs (Additional Notes, Find a Recipe, Archive controls etc.),
-    // and the previous "Added to cellar — OK / View in cellar" alert
-    // forced an extra tap before the user could actually use the wine.
     setAddingToCellar(false);
-    router.replace(isLineupFlow ? '/cellar/scan-lineup' : `/cellar/${savedWineId}` as any);
+    router.replace(`/cellar/${savedWineId}` as any);
   }
 
   async function performNewEntry() {
@@ -623,13 +746,19 @@ export default function LabelResultsScreen() {
     ? '+ Create new rack'
     : selectedRackId
       ? (racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack')
-      : 'Save without placing';
+      : selectedLocationId
+        ? (cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'Location')
+        : 'Cellar List';
+  // Destinations: Cellar List (unplaced), each rack/fridge, each bespoke cellar
+  // Location, then "+ Create new rack". Per-rack filters are deliberately not
+  // offered here. Picking one kind clears the other so they stay exclusive.
   const fieldOptions: { label: string; value: string | number; onSelect: () => void }[] =
     openField === 'storage'
       ? [
-          { label: 'Save without placing', value: 'none', onSelect: () => setSelectedRackId(null) },
-          ...racks.map((r) => ({ label: `Save to ${r.name}`, value: r.id, onSelect: () => setSelectedRackId(r.id) })),
-          { label: '+ Create new rack', value: '__new__', onSelect: () => setSelectedRackId('__new__') },
+          { label: 'Cellar List', value: 'none', onSelect: () => { setSelectedRackId(null); setSelectedLocationId(null); } },
+          ...racks.map((r) => ({ label: `Save to ${r.name}`, value: r.id, onSelect: () => { setSelectedRackId(r.id); setSelectedLocationId(null); } })),
+          ...cellarLocations.map((l) => ({ label: `Save to ${l.name}`, value: `loc:${l.id}`, onSelect: () => { setSelectedLocationId(l.id); setSelectedRackId(null); } })),
+          { label: '+ Create new rack', value: '__new__', onSelect: () => { setSelectedRackId('__new__'); setSelectedLocationId(null); } },
         ]
       : openField === 'bottle'
         ? [
@@ -639,6 +768,29 @@ export default function LabelResultsScreen() {
         : openField === 'count'
           ? Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1, onSelect: () => setBottleCount(i + 1) }))
           : [];
+
+  const windowM = windowMeta(intel.drinkingWindowStatus);
+
+  // Dive Deeper works pre-save: the wine-knowledge screen falls back to query
+  // params when the path id matches no cellar row (so we pass a placeholder id
+  // + the wine fields). It just won't cache, which is fine for a preview.
+  function handleDiveDeeper() {
+    const q = [
+      `producer=${encodeURIComponent(wine.producer ?? '')}`,
+      `region=${encodeURIComponent(wine.region ?? '')}`,
+      `wineName=${encodeURIComponent(wine.wineName ?? '')}`,
+      `vintage=${encodeURIComponent(wine.vintage ?? '')}`,
+      `grape=${encodeURIComponent(intel.grapeVariety ?? '')}`,
+    ].join('&');
+    router.push(`/cellar/wine-knowledge/preview?${q}`);
+  }
+
+  // Chef pairing also works pre-save: wineDetailsConfirmed is already in the
+  // label store (it's what this card renders), so from=cellar ("bottle known")
+  // generates pairings straight away without needing a cellar wine id.
+  function handleChefPairing() {
+    router.push('/chef/review-requirements?from=cellar');
+  }
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
@@ -654,7 +806,7 @@ export default function LabelResultsScreen() {
         <Text style={styles.backLink}>Back</Text>
       </TouchableOpacity>
 
-      <Text style={styles.pageTitle}>Wine Intel</Text>
+      <Text style={styles.pageTitle}>{isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
       <View style={styles.header}>
         <Text style={styles.producer}>{wine.producer}</Text>
@@ -663,78 +815,69 @@ export default function LabelResultsScreen() {
         {intel.grapeVariety && <Text style={styles.grape}>{intel.grapeVariety}</Text>}
       </View>
 
-      {intel.criticScore !== null ? (
-        <View style={styles.criticBlock}>
-          <View style={styles.criticScoreRow}>
-            <Text style={styles.scoreLabel}>Avg Critic Score</Text>
-            <Text style={styles.score}>{intel.criticScore}</Text>
+      {/* Intel content — hidden in the Add flow, which carries no intel (it's
+          generated later, only from Generate Wine Intel). */}
+      {!isAddFlow && (
+        <>
+          {/* The three key numbers in the compact cellar-card format — tight
+              under the grape rather than three tall stacked sections. */}
+          <View style={styles.statsGrid}>
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>Avg Critic Score</Text>
+              <Text style={[styles.statValue, intel.criticScore == null && styles.statValueMuted]}>
+                {intel.criticScore != null ? intel.criticScore : '—'}
+              </Text>
+            </View>
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>Estimated Value</Text>
+              {intel.estimatedValue != null ? (
+                <>
+                  <Text style={[styles.statValue, styles.estimatedValueGold]}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
+                  {intel.valueSource === 'wine-searcher' ? <Text style={styles.statSub}>Wine-Searcher</Text> : null}
+                </>
+              ) : (
+                <Text style={[styles.statValue, styles.statValueMuted]}>No market data</Text>
+              )}
+            </View>
+            <View style={styles.statCell}>
+              <Text style={styles.statLabel}>Drinking Window</Text>
+              <Text style={[styles.statValue, { color: windowM.color }]}>{windowM.text}</Text>
+              {intel.drinkingWindowFrom && intel.drinkingWindowTo ? (
+                <Text style={styles.statSub}>{intel.drinkingWindowFrom}–{intel.drinkingWindowTo}</Text>
+              ) : null}
+            </View>
           </View>
-          {intel.criticScores && intel.criticScores.length > 0 ? (
-            <>
-              <View style={styles.criticBreakdown}>
-                {intel.criticScores.map((c, i) => (
-                  <Text key={`${c.critic}-${i}`} style={styles.criticChipText}>
-                    <Text style={styles.criticChipName}>{c.critic}</Text>
-                    {` ${c.scale && c.scale !== '100' ? `${c.score}/${c.scale}` : c.score}`}
-                  </Text>
-                ))}
-              </View>
-              <Text style={styles.criticBreakdownCaption}>Published scores as recalled by Vinster — verify against the critic before relying on them.</Text>
-            </>
-          ) : null}
-        </View>
-      ) : intel.criticScoreNote ? (
+
+          <View style={styles.section}>
+            <VinstersNoteHeading />
+            <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
+          </View>
+        </>
+      )}
+
+      {/* Generate Wine Intel (view-only) gets the two deep-dive actions beneath
+          Vinster's note. Estimated value now lives in the compact grid above,
+          so it isn't repeated here. */}
+      {isIntelOnlyFlow ? (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Avg Critic Score</Text>
-          <Text style={styles.tastingNotes}>{intel.criticScoreNote}</Text>
+          <TouchableOpacity style={styles.deepBtn} onPress={handleDiveDeeper} activeOpacity={0.8}>
+            <Text style={styles.deepBtnText}>Dive Deeper into this wine</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.deepBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.8}>
+            <Text style={styles.deepBtnText}>Chef, find me a recipe for this wine</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
-      <DrinkingWindowBadge
-        status={intel.drinkingWindowStatus}
-        from={intel.drinkingWindowFrom}
-        to={intel.drinkingWindowTo}
-      />
-
-      <View style={styles.section}>
-        <VinstersNoteHeading />
-        <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
-      </View>
-
-      <View style={styles.section}>
-        {/* Estimated value is shown straight away (no "Generate" tap) and
-            stamped with today's date — it's saved against the wine when it
-            goes into the cellar. */}
-        <Text style={styles.sectionTitle}>Estimated Value</Text>
-        {intel.estimatedValue != null ? (
-          <View style={{ marginTop: spacing.sm }}>
-            <Text style={styles.estimateValue}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
-            {(intel.estimatedValueLow != null && intel.estimatedValueHigh != null) || intel.valueConfidence ? (
-              <Text style={styles.estimateRange}>
-                {intel.estimatedValueLow != null && intel.estimatedValueHigh != null
-                  ? `Likely ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}`
-                  : ''}
-                {intel.estimatedValueLow != null && intel.estimatedValueHigh != null && intel.valueConfidence ? '  ·  ' : ''}
-                {intel.valueConfidence ? `${intel.valueConfidence} confidence` : ''}
-              </Text>
-            ) : null}
-            <Text style={styles.estimateCaption}>Vinster's estimate — verify before insuring or selling. Based on producer, region and vintage as of {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}. Adjust the price when saving to your cellar.</Text>
+      {!isAddFlow && (
+        <View style={styles.section}>
+          <View style={styles.communityRow}>
+            <Text style={styles.communityLabel}>Community notes on this wine</Text>
+            <Text style={styles.communityComingSoon}>coming soon</Text>
           </View>
-        ) : (
-          <View style={{ marginTop: spacing.sm }}>
-            <Text style={styles.estimateUnavailable}>Not enough market data</Text>
-            <Text style={styles.estimateCaption}>Vinster won't guess at a price for this one — it's too rare or obscure to estimate reliably. Set the estimated value yourself when saving it to your cellar.</Text>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.section}>
-        <View style={styles.communityRow}>
-          <Text style={styles.communityLabel}>Community notes on this wine</Text>
-          <Text style={styles.communityComingSoon}>coming soon</Text>
+          <Text style={styles.communityCaption}>See what other Vinster users have noted about this wine.</Text>
         </View>
-        <Text style={styles.communityCaption}>See what other Vinster users have noted about this wine.</Text>
-      </View>
+      )}
 
       {isWishlistFlow ? (
         // User entered the flow via "Add to Wish List" — they've already
@@ -774,6 +917,13 @@ export default function LabelResultsScreen() {
             <Text style={styles.discardText}>Cancel</Text>
           </TouchableOpacity>
         </>
+      ) : isIntelOnlyFlow ? (
+        // Cellar tab "Generate Wine Intel" — view-only. No Add to Cellar action
+        // (deliberately removed when the add-a-wine routes were simplified);
+        // this flow exists purely to surface the intel card.
+        <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/(tabs)/cellar')}>
+          <Text style={styles.discardText}>Discard</Text>
+        </TouchableOpacity>
       ) : (
         <>
           {/* This is the dedicated Add-to-Cellar flow (Cellar → Add Wine),
@@ -997,10 +1147,35 @@ export default function LabelResultsScreen() {
                   <Text style={styles.fieldSelectValue}>{bottleCount}</Text>
                   <Text style={styles.fieldSelectArrow}>▾</Text>
                 </TouchableOpacity>
+
+                {/* Fill direction only matters when placing into a rack/fridge
+                    grid — auto-placed from the first free slot. */}
+                {selectedRackId && selectedRackId !== '__new__' && (
+                  <>
+                    <Text style={styles.modalLabel}>Orientation</Text>
+                    <Text style={styles.modalHint}>Which way the bottles run from the first free slot.</Text>
+                    <View style={styles.orientationRow}>
+                      <TouchableOpacity
+                        style={[styles.orientationBtn, placeOrientation === 'Vertical' && styles.orientationBtnActive]}
+                        onPress={() => setPlaceOrientation('Vertical')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.orientationBtnText, placeOrientation === 'Vertical' && styles.orientationBtnTextActive]}>Vertical</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.orientationBtn, placeOrientation === 'Horizontal' && styles.orientationBtnActive]}
+                        onPress={() => setPlaceOrientation('Horizontal')}
+                        activeOpacity={0.8}
+                      >
+                        <Text style={[styles.orientationBtnText, placeOrientation === 'Horizontal' && styles.orientationBtnTextActive]}>Horizontal</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
+                )}
               </>
             )}
 
-            <Text style={styles.modalLabel}>Estimated Purchase Price, Adjust for Accuracy</Text>
+            <Text style={styles.modalLabel}>Estimated Purchase Price <Text style={styles.modalLabelHint}>(adjust for accuracy)</Text></Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
               <TextInput
@@ -1025,7 +1200,9 @@ export default function LabelResultsScreen() {
                     ? 'Save & Build a New Rack'
                     : selectedRackId
                       ? `Save & Place in ${racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack'}`
-                      : 'Save to Cellar'}
+                      : selectedLocationId
+                        ? `Save to ${cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'Location'}`
+                        : 'Save to Cellar List'}
               </Text>
             </TouchableOpacity>
 
@@ -1092,6 +1269,17 @@ const styles = StyleSheet.create({
   badgeWindow: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
+  // Compact 2-column stat grid mirroring the cellar wine card.
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+  statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
+  statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
+  statSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  estimatedValueGold: { color: colors.gold },
+  // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
+  deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  deepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
   estimateHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   estimateGenerateLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
@@ -1137,6 +1325,8 @@ const styles = StyleSheet.create({
   modalTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.xs },
   modalWine: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.lg },
   modalLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
+  // Lower-case bracketed hint inside an uppercase label, e.g. "(adjust for accuracy)".
+  modalLabelHint: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },

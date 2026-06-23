@@ -51,7 +51,9 @@ export default function ArchiveNightScreen() {
     try {
       const base64 = await prepareImageBase64(uri);
       const { bottles } = await detectLineup(base64);
-      const result = matchLineupToCellar(bottles ?? [], wines);
+      // Cap the lineup at 8 bottles.
+      const capped = (bottles ?? []).slice(0, 8);
+      const result = matchLineupToCellar(capped, wines);
       setMatches(result.matched);
       setUnmatched(result.unmatched);
       // Default each removal count to what was detected (capped at owned qty).
@@ -125,12 +127,12 @@ export default function ArchiveNightScreen() {
             Finished some bottles? Photograph the lineup and Vinster will match each one to your
             cellar so you can archive them in one go.
           </Text>
-          <Text style={styles.hint}>Stand 1–10 bottles up with their front labels facing the camera.</Text>
+          <Text style={styles.hint}>Stand up to 8 bottles up with their front labels facing the camera.</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
             <Text style={styles.primaryBtnText}>Take a photo</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFrom('library')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Choose from library</Text>
+            <Text style={styles.secondaryBtnText}>Upload a Photo</Text>
           </TouchableOpacity>
         </ScrollView>
       ) : stage === 'analyzing' ? (

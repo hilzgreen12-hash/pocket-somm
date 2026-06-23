@@ -26,7 +26,13 @@ function formatCreatedDate(iso: string) {
 }
 
 function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
-  const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  // `wines` is built one entry per OCCUPIED SLOT (see winesByRack below), and a
+  // slot holds exactly one bottle. So the rack's bottle count is the number of
+  // slots — NOT the sum of each wine's whole-cellar quantity, which counted
+  // bottles that live elsewhere in the cellar and wildly over-reported (e.g.
+  // 196 shown for a rack physically holding 54). This now matches the per-slot
+  // count on the rack detail screen.
+  const totalBottles = wines.length;
   // rackHomeToBlurb was phrased to follow "Home to" (now removed), so it's
   // lower-case — capitalise the first letter for the standalone line.
   const rawBlurb = rackHomeToBlurb(rack.id, wines);

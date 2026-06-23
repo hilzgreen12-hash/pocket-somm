@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RecipeShareCard, RECIPE_SHARE_QR_URL } from '../../src/components/RecipeShareCard';
@@ -250,33 +251,29 @@ export default function ChefResultsScreen() {
     const pairing = pairings[idx];
     if (!pairing || sharingIndex !== null) return;
     setSharingIndex(idx);
-    setSharePairing(pairing);
     try {
-      // Prefetch the remote QR so it's in cache when view-shot snapshots
-      // the card. Without this the QR can appear blank on Android.
-      try { await Image.prefetch(RECIPE_SHARE_QR_URL); } catch { /* non-fatal */ }
-      // Give RN one paint to mount the off-screen card with the new
-      // pairing data before we capture.
-      await new Promise((r) => setTimeout(r, 250));
-      if (!shareCardRef.current) throw new Error('Share card not ready');
-      // No fixed width/height — capture the card at its natural size so
-      // the full recipe is shared, however long it runs.
-      const uri = await captureRef(shareCardRef, {
-        format: 'png',
-        quality: 1,
-        result: 'tmpfile',
-      });
+      const wineLine = wine ? wineHeaderLine(wine.producer, wine.wineName, wine.vintage) : '';
+      // Share as a PDF (not a screenshot image) so an emailed recipe arrives
+      // as a readable document. expo-print lazy-required for build safety.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Print = require('expo-print');
+      const { uri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
+          mimeType: 'application/pdf',
           dialogTitle: `Share ${pairing.dishName}`,
-          UTI: 'public.png',
+          UTI: 'com.adobe.pdf',
         });
       } else {
         showAlert({ title: 'Sharing unavailable', body: 'This device cannot open the share sheet.' });
       }
     } catch (err) {
-      showAlert({ title: 'Could not share recipe', body: err instanceof Error ? err.message : 'Please try again.' });
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Cannot find module') || msg.includes("Can't find variable")) {
+        showAlert({ title: 'Share not available yet', body: 'Sharing as a PDF will work in the next app build.' });
+      } else if (!msg.toLowerCase().includes('cancel')) {
+        showAlert({ title: 'Could not share recipe', body: msg });
+      }
     } finally {
       setSharingIndex(null);
       setSharePairing(null);

@@ -1,22 +1,13 @@
 import { supabase } from './supabase';
+import { invokeResilient } from './invokeResilient';
 import type { WineRack, RackSlot } from '../types/wine';
 
-const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
-const ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
-
 export async function detectRack(base64Image: string): Promise<{ rows: number; cols: number }> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/detect-rack`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      apikey: ANON_KEY,
-      Authorization: `Bearer ${ANON_KEY}`,
-    },
-    body: JSON.stringify({ base64Image }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`detect-rack error ${res.status}: ${text}`);
-  return JSON.parse(text);
+  // Was a bare fetch with no timeout/retry — the worst-affected scan path on
+  // cellular, since the image upload stalls before the (fast) server work even
+  // starts. Routed through invokeResilient for the timeout + retry, and it now
+  // carries the user's JWT instead of the bare anon key.
+  return invokeResilient('detect-rack', { base64Image }) as Promise<{ rows: number; cols: number }>;
 }
 
 export async function getRacks(userId: string): Promise<WineRack[]> {

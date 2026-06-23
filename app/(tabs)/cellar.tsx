@@ -3,7 +3,7 @@ import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { useLineupStore } from '../../src/stores/lineupStore';
+import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
@@ -24,6 +24,20 @@ export default function CellarTab() {
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
+  // Persisted last result (survives app restart) — drives the "View last result" link.
+  const lastIntel = useLastIntelStore((s) => s.intel);
+
+  // Re-hydrate the (transient) label store from the persisted snapshot, then
+  // open the intel card. Needed because /label/results reads the label store,
+  // which is empty after a restart even though the persisted result survives.
+  function handleViewLastResult() {
+    const { wine, intel } = useLastIntelStore.getState();
+    if (!wine || !intel) return;
+    const ls = useLabelStore.getState();
+    ls.setWineDetailsConfirmed(wine);
+    ls.setIntelligence(intel);
+    router.push('/label/results?context=intel');
+  }
   const [addWineOpen, setAddWineOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
@@ -69,7 +83,7 @@ export default function CellarTab() {
     } finally {
       setScanningLabel(false);
     }
-    router.push('/label/confirm');
+    router.push('/label/confirm?context=intel');
   }
 
   return (
@@ -88,23 +102,31 @@ export default function CellarTab() {
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
-          <Text style={styles.buttonText}>Add Wine / Wine Intel</Text>
+          <Text style={styles.buttonText}>Generate Wine Intel</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
-          <Text style={styles.buttonText}>Quick Cellar Stats</Text>
-        </TouchableOpacity>
+        {/* Re-open the most recent intel card. Persisted, so it appears once
+            you've ever generated a result and survives an app restart. */}
+        {lastIntel ? (
+          <TouchableOpacity style={styles.lastResultLink} onPress={handleViewLastResult}>
+            <Text style={styles.lastResultText}>View last result</Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
-          <Text style={styles.buttonText}>Cellar List</Text>
+          <Text style={styles.buttonText}>View Cellar List & Add Wine</Text>
         </TouchableOpacity>
 
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
           <Text style={styles.buttonText}>Racks & Fridges</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
+          <Text style={styles.buttonText}>Quick Cellar Stats</Text>
         </TouchableOpacity>
       </View>
 
@@ -135,19 +157,13 @@ export default function CellarTab() {
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Add a wine</Text>
-            <Text style={styles.modalBody}>Scan the label or upload a photo and Vinster will pull in the details — or enter them yourself.</Text>
+            <Text style={styles.modalTitle}>Generate Wine Intel</Text>
+            <Text style={styles.modalBody}>Scan, upload, or enter a wine and Vinster will pull in critic scores, tasting notes, the drinking window and estimated value.</Text>
             <TouchableOpacity
               style={styles.modalButton}
-              onPress={() => { setAddWineOpen(false); router.push('/label/camera'); }}
+              onPress={() => { setAddWineOpen(false); router.push('/label/camera?context=intel'); }}
             >
               <Text style={styles.modalButtonText}>Scan Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); useLineupStore.getState().start(null); requireAuth(() => router.push('/cellar/scan-lineup')); }}
-            >
-              <Text style={styles.modalButtonText}>Scan a Lineup (up to 10 bottles)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
@@ -162,7 +178,7 @@ export default function CellarTab() {
                 // Clear any prior scan so Confirm Wine Details opens blank
                 // for the user to fill in by hand.
                 resetLabelStore();
-                router.push('/label/confirm?manual=1');
+                router.push('/label/confirm?manual=1&context=intel');
               }}
             >
               <Text style={styles.modalButtonText}>Manual Input</Text>
@@ -212,7 +228,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").
-  subtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, paddingHorizontal: spacing.xl, marginBottom: spacing.lg },
+  subtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, paddingHorizontal: spacing.xl, marginBottom: 0 },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Body description text under section CTAs — Inter for readability.
@@ -223,6 +239,9 @@ const styles = StyleSheet.create({
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button labels — Cormorant.
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  // "View last result" link beneath the Generate Wine Intel button.
+  lastResultLink: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: 2 },
+  lastResultText: { color: colors.gold, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   buttonDisabled: { borderColor: colors.borderLight, opacity: 0.45 },
   buttonTextDisabled: { color: colors.textMuted, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   // Coming-soon note — body content.

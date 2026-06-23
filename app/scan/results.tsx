@@ -18,6 +18,7 @@ import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/util
 import { normaliseCity } from '../../src/utils/city';
 import { currencySymbol } from '../../src/constants/currency';
 import { recommendWines } from '../../src/services/recommender';
+import { fetchPricing } from '../../src/services/pricing';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
@@ -36,6 +37,28 @@ if (Platform.OS === 'android') {
 }
 
 const RANK_LABELS = ['Top Pick', 'Second Choice', 'Third Choice'];
+
+// Per-pick Wine-Searcher enrichment, fetched after the recommendations render.
+interface WsEnrich {
+  criticScore: number | null;
+  avgPrice: number | null;
+  currency: string;
+  region: string | null;
+  grape: string | null;
+}
+
+// Value-for-money line built from the real market average vs the list price.
+// Both are in the same currency (we query WS in the wine's menu currency).
+function wsValueLine(menuPrice: number | null, avgPrice: number, sym: string): string {
+  const avg = `${sym}${Math.round(avgPrice)}`;
+  if (menuPrice == null || menuPrice <= 0) return `Market average ${avg} (Wine-Searcher).`;
+  const ratio = menuPrice / avgPrice;
+  const verdict = ratio <= 1.5 ? 'strong value'
+    : ratio <= 2 ? 'fair value'
+    : ratio <= 2.5 ? 'full but defensible'
+    : 'a steep markup';
+  return `Market average ${avg} — about ${ratio.toFixed(1)}× retail, ${verdict}.`;
+}
 
 // Join appellation + region without repeating the location. The AI sometimes
 // puts the country in both (e.g. appellation "West Sussex/England" + region
@@ -70,6 +93,9 @@ export default function ResultsScreen() {
   const inFlightSaveRef = useRef<Promise<string | null> | null>(null);
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
+  // index → real Wine-Searcher data for that pick (populated a beat after the
+  // cards render, so results never wait on the API).
+  const [wsByIndex, setWsByIndex] = useState<Record<number, WsEnrich>>({});
   // Per-recommendation map: index → wishlist row id. Used to toggle
   // a wine on/off the wish list from the results screen — if there's
   // a row id stored, the same button removes it; otherwise it adds
@@ -171,6 +197,33 @@ export default function ResultsScreen() {
       return next;
     });
   }, [session, recommendation, chosenWines, effectiveSessionId]);
+
+  // Progressively enrich the rendered picks with real Wine-Searcher data
+  // (critic score, market price + value verdict, region/grape gap-fill). Runs
+  // AFTER the cards render — in parallel, in each wine's own menu currency so
+  // the value ratio is apples-to-apples. Cached server-side, so repeats are
+  // instant; a no-match just leaves Claude's values untouched. Skipped for
+  // history re-opens to avoid spending API calls on an old scan.
+  useEffect(() => {
+    const wines = recommendation?.wines;
+    if (!wines?.length || isFromHistory) return;
+    let active = true;
+    (async () => {
+      const results = await Promise.all(wines.map(async (w) => {
+        const queryName = [w.producer, w.name].filter(Boolean).join(' ').trim();
+        if (!queryName) return null;
+        const cur = w.currency || userPrefs?.defaultCurrency || 'GBP';
+        const p = await fetchPricing(queryName, w.vintage ?? null, cur);
+        if (p.source !== 'wine-searcher' || p.matched === false) return null;
+        return { criticScore: p.criticScore, avgPrice: p.averageMarketPrice, currency: cur, region: p.region ?? null, grape: p.grape ?? null } as WsEnrich;
+      }));
+      if (!active) return;
+      const map: Record<number, WsEnrich> = {};
+      results.forEach((r, idx) => { if (r) map[idx] = r; });
+      setWsByIndex(map);
+    })();
+    return () => { active = false; };
+  }, [recommendation, isFromHistory, userPrefs?.defaultCurrency]);
 
   // Returns the scan_sessions id the name was saved against (or null if there
   // was nothing to save / it failed). Callers use the RETURNED id rather than
@@ -598,13 +651,22 @@ export default function ResultsScreen() {
           // function is redeployed; until then Critic Score falls back to a
           // computed line and Value stays hidden. Vintage + Producer reuse
           // the existing assessment notes.
-          const criticScoreText = wine.criticScoreNote
-            ?? (wine.criticScore > 0
-              ? (wine.criticScore === maxCriticScore && recommendation.wines.length > 1
-                  ? `Highest of the picks at ${wine.criticScore} points`
-                  : `${wine.criticScore} points`)
-              : null);
-          const valueText = wine.valueNote ?? null;
+          // Real Wine-Searcher data for this pick, once it has loaded in.
+          const wsE = wsByIndex[i];
+          const effCritic = wsE && wsE.criticScore != null ? wsE.criticScore : wine.criticScore;
+          const effRegion = wine.region || wsE?.region || null;
+          const effGrape = wine.grape || wsE?.grape || null;
+          const criticScoreText = wsE && wsE.criticScore != null
+            ? `${wsE.criticScore} points · Wine-Searcher`
+            : (wine.criticScoreNote
+              ?? (wine.criticScore > 0
+                ? (wine.criticScore === maxCriticScore && recommendation.wines.length > 1
+                    ? `Highest of the picks at ${wine.criticScore} points`
+                    : `${wine.criticScore} points`)
+                : null));
+          const valueText = wsE && wsE.avgPrice != null
+            ? wsValueLine(wine.menuPrice, wsE.avgPrice, currencySymbol(wsE.currency))
+            : (wine.valueNote ?? null);
           const vintageText = !noVintages && wine.vintageAssessment
             ? [wine.vintageAssessment.notes, wine.drinkingWindow?.notes].filter(Boolean).join(' ')
             : null;
@@ -624,8 +686,8 @@ export default function ResultsScreen() {
             producerSameAsName ? null : wine.name,
             wine.vintage ? String(wine.vintage) : null,
           ].filter(Boolean).join(', ');
-          const regionalPlacement = joinPlace(wine.appellation, wine.region);
-          const wineSubline = [regionalPlacement, wine.grape].filter(Boolean).join(' · ');
+          const regionalPlacement = joinPlace(wine.appellation, effRegion);
+          const wineSubline = [regionalPlacement, effGrape].filter(Boolean).join(' · ');
           return (
             <View key={wine.name + i} style={styles.card}>
               <View style={styles.cardInner}>
@@ -639,16 +701,16 @@ export default function ResultsScreen() {
                     field can be missing (some lists omit the price, some
                     wines lack a critic score) — the row stays balanced
                     by rendering only the present halves. */}
-                {(wine.menuPrice != null || wine.criticScore > 0) && (
+                {(wine.menuPrice != null || effCritic > 0) && (
                   <View style={styles.priceScoreRow}>
                     {wine.menuPrice != null && (
                       <Text style={styles.priceScoreText}>{currencySymbol(userPrefs?.defaultCurrency)}{wine.menuPrice}</Text>
                     )}
-                    {wine.menuPrice != null && wine.criticScore > 0 && (
+                    {wine.menuPrice != null && effCritic > 0 && (
                       <Text style={styles.priceScoreDot}> · </Text>
                     )}
-                    {wine.criticScore > 0 && (
-                      <Text style={styles.priceScoreText}>{wine.criticScore} pts</Text>
+                    {effCritic > 0 && (
+                      <Text style={styles.priceScoreText}>{effCritic} pts</Text>
                     )}
                   </View>
                 )}

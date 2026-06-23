@@ -49,6 +49,61 @@ function num(xml: string, name: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+// --- Currency conversion -----------------------------------------------------
+// Wine-Searcher's account returns prices in USD. We convert to the user's
+// selected currency using ECB rates (frankfurter.app, no key), cached in the
+// fx_rates table and refreshed at most once a day. pricing_cache always stores
+// the native USD value, so a single WS fetch serves every currency.
+const FX_TARGETS = ['GBP', 'EUR', 'AUD', 'CAD', 'NZD', 'JPY', 'CHF', 'HKD', 'SGD']; // USD = base
+const FX_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Returns "1 USD = <rate> <target>". USD → 1. Falls back to a stale cached rate,
+// then to 1 (USD passthrough), so an FX outage never breaks the price path.
+async function getUsdRate(target: string): Promise<number> {
+  const t = (target ?? 'USD').toUpperCase();
+  if (t === 'USD') return 1;
+
+  const { data: row } = await supabase
+    .from('fx_rates')
+    .select('rate, fetched_at')
+    .eq('currency', t)
+    .single();
+  if (row && Date.now() - new Date(row.fetched_at).getTime() < FX_TTL_MS) {
+    return Number(row.rate);
+  }
+
+  try {
+    const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${FX_TARGETS.join(',')}`);
+    if (res.ok) {
+      const body = await res.json();
+      const rates = body?.rates ?? {};
+      const now = new Date().toISOString();
+      const upserts = Object.entries(rates)
+        .filter(([, r]) => typeof r === 'number' && Number.isFinite(r))
+        .map(([currency, rate]) => ({ currency, rate, fetched_at: now }));
+      upserts.push({ currency: 'USD', rate: 1, fetched_at: now });
+      if (upserts.length) await supabase.from('fx_rates').upsert(upserts);
+      const fresh = rates[t];
+      if (typeof fresh === 'number' && Number.isFinite(fresh)) return fresh;
+    }
+  } catch (e) {
+    console.error('[wine-searcher-proxy] FX refresh failed:', e);
+  }
+
+  // Upstream FX unavailable — use the stale cached rate if we have one.
+  if (row && Number.isFinite(Number(row.rate))) return Number(row.rate);
+  return 1;
+}
+
+// Convert a native-USD value to the target currency (2dp). Accepts numeric or
+// numeric-string (pricing_cache numerics can arrive as strings).
+function convert(value: number | string | null, rate: number): number | null {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * rate * 100) / 100;
+}
+
 const UNAVAILABLE = {
   matched: false,
   source: 'unavailable' as const,
@@ -76,6 +131,9 @@ Deno.serve(async (req) => {
     // param), so the same wine+vintage is a single cache entry.
     const wineKey = `${wineName}_${vintageParam}`;
 
+    // USD→user-currency rate, applied to the (USD) prices on the way out.
+    const fxRate = await getUsdRate(cur);
+
     // 1) Cache hit within TTL → serve immediately.
     const { data: cached } = await supabase
       .from('pricing_cache')
@@ -89,11 +147,12 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({
             matched: cached.market_price_avg != null || cached.critic_score != null,
-            averageMarketPrice: cached.market_price_avg,
-            minPrice: cached.market_price_min,
-            maxPrice: cached.market_price_max,
+            // Cached values are native USD — convert to the requested currency.
+            averageMarketPrice: convert(cached.market_price_avg, fxRate),
+            minPrice: convert(cached.market_price_min, fxRate),
+            maxPrice: convert(cached.market_price_max, fxRate),
             criticScore: cached.critic_score,
-            currency: cached.currency,
+            currency: cur,
             source: 'wine-searcher',
           }),
           { headers: { 'Content-Type': 'application/json' } }
@@ -151,7 +210,15 @@ Deno.serve(async (req) => {
       console.error('[wine-searcher-proxy] pricing_cache upsert failed:', cacheErr);
     }
 
-    return new Response(JSON.stringify(pricing), {
+    // pricing_cache (above) holds native USD; the response converts to the
+    // user's currency. fxRate is USD→cur, applied to the USD prices.
+    return new Response(JSON.stringify({
+      ...pricing,
+      averageMarketPrice: convert(pricing.averageMarketPrice, fxRate),
+      minPrice: convert(pricing.minPrice, fxRate),
+      maxPrice: convert(pricing.maxPrice, fxRate),
+      currency: cur,
+    }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {

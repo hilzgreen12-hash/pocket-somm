@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   bodyContent: { padding: spacing.xl },
   // Inter — intro body
   intro: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, marginBottom: spacing.xl },
-  fridgeNote: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 20, marginTop: -spacing.md, marginBottom: spacing.xl },
+  fridgeNote: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 21, marginTop: -spacing.md, marginBottom: spacing.xl },
   preview: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.xl, alignItems: 'center', marginBottom: spacing.xl },
   // Inter — large stat value
   previewLabel: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },

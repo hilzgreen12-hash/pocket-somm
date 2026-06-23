@@ -9,6 +9,7 @@ import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { RecipeShareCard } from '../../src/components/RecipeShareCard';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../../src/constants/share';
+import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
@@ -51,14 +52,22 @@ export default function RecipeFullScreen() {
     if (!pairing || sharing) return;
     setSharing(true);
     try {
-      if (shareCardRef.current) {
-        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: pairing.dishName, UTI: 'public.png' });
-        }
+      // Share as a PDF (not a screenshot) so an emailed recipe arrives as a
+      // readable document. expo-print is lazy-required so this file still
+      // typechecks even if the native module isn't in a given build.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Print = require('expo-print');
+      const { uri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: pairing.dishName, UTI: 'com.adobe.pdf' });
       }
     } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('Cannot find module') || msg.includes("Can't find variable")) {
+        showAlert({ title: 'Share not available yet', body: 'Sharing as a PDF will work in the next app build.' });
+      } else if (!msg.toLowerCase().includes('cancel')) {
+        showAlert({ title: 'Could not share', body: msg });
+      }
     } finally {
       setSharing(false);
     }
@@ -73,7 +82,7 @@ export default function RecipeFullScreen() {
       // catch below shows a graceful fallback message.
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const Print = require('expo-print');
-      await Print.printAsync({ html: buildPrintHtml(pairing, wineLine) });
+      await Print.printAsync({ html: buildRecipeHtml(pairing, wineLine) });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes('Cannot find module') || msg.includes("Can't find variable")) {
