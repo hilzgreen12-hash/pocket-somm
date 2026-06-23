@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, TextInput, useWindowDimensions, ActivityIndicator, Modal, Keyboard, Animated } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
@@ -78,6 +77,10 @@ export default function RackGridScreen() {
   const [maturityOpen, setMaturityOpen] = useState(false);
   const [filterNameDraft, setFilterNameDraft] = useState('');
   const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
+  // Snapshot of the wines selected when the editor opened — used only to order
+  // the picker (already-in-filter wines first), so rows don't jump as the user
+  // ticks/unticks. Live ticks go to selectedWineIds.
+  const [pickerInitialSelected, setPickerInitialSelected] = useState<Set<string>>(new Set());
   const [savingFilter, setSavingFilter] = useState(false);
   const [bottleListOpen, setBottleListOpen] = useState(false);
   const [isLandscape, setIsLandscape] = useState(false);
@@ -112,33 +115,6 @@ export default function RackGridScreen() {
     return () => clearTimeout(t);
   }, [savedMsg]);
 
-  // How-this-works modal. Shows on EVERY rack-screen mount until the
-  // user explicitly opts out via "Don't show me this again", which
-  // persists the flag to AsyncStorage. Mid-mount the flag is read
-  // async, so the modal stays hidden by default and flips open only
-  // when the read resolves AND the flag isn't set.
-  const [rackHintOpen, setRackHintOpen] = useState(false);
-  const [rackHintDontShow, setRackHintDontShow] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const flag = await AsyncStorage.getItem('vinster_rack_hint_dismissed');
-        if (!cancelled && flag !== '1') setRackHintOpen(true);
-      } catch {
-        // AsyncStorage failure — fall through and show the modal,
-        // worst case the user dismisses it once per session.
-        if (!cancelled) setRackHintOpen(true);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, []);
-  async function closeRackHint() {
-    if (rackHintDontShow) {
-      try { await AsyncStorage.setItem('vinster_rack_hint_dismissed', '1'); } catch { /* best-effort */ }
-    }
-    setRackHintOpen(false);
-  }
 
   // Unlock landscape for this screen; restore portrait on leave
   useEffect(() => {
@@ -393,10 +369,25 @@ export default function RackGridScreen() {
         }
       }
     });
+    // Default order is recency — most recently added wines first — to match the
+    // Full Cellar List and every other list view.
     return Array.from(map.values()).sort((a, b) =>
-      a.wine.wine_name.localeCompare(b.wine.wine_name)
+      new Date(b.wine.created_at).getTime() - new Date(a.wine.created_at).getTime()
     );
   }, [slots]);
+
+  // Order for the filter wine-picker: wines already in the filter (when the
+  // editor opened) first, then the rest — each group keeps the recency order
+  // of winesInRack. Uses the open-time snapshot so rows don't reshuffle as the
+  // user ticks.
+  const pickerWines = useMemo(() => {
+    const inFilter: typeof winesInRack = [];
+    const rest: typeof winesInRack = [];
+    for (const w of winesInRack) {
+      (pickerInitialSelected.has(w.wine.id) ? inFilter : rest).push(w);
+    }
+    return [...inFilter, ...rest];
+  }, [winesInRack, pickerInitialSelected]);
 
   const PADDING = spacing.xl * 2;
   const GAP = 4;
@@ -892,6 +883,7 @@ export default function RackGridScreen() {
     setEditingFilterId(null);
     setFilterNameDraft('');
     setSelectedWineIds(new Set());
+    setPickerInitialSelected(new Set());
     setCreateFilterOpen(true);
   }
   // Open the same modal pre-filled to edit an existing filter's name + wines.
@@ -899,6 +891,7 @@ export default function RackGridScreen() {
     setEditingFilterId(filter.id);
     setFilterNameDraft(filter.name);
     setSelectedWineIds(new Set(filter.wineIds));
+    setPickerInitialSelected(new Set(filter.wineIds));
     setCreateFilterOpen(true);
   }
   function closeFilterModal() {
@@ -938,13 +931,14 @@ export default function RackGridScreen() {
       setSavingFilter(false);
     }
   }
-  // Long-press menu on a filter chip: edit it, delete it, or cancel.
+  // Long-press menu on a filter chip: rename it, change which wines it holds,
+  // delete it, or cancel.
   function openFilterOptions(filter: { id: string; name: string; wineIds: string[] }) {
     showAlert({
       title: filter.name,
-      body: 'Edit this filter’s name and wines, or delete it. Your wines stay in the cellar either way.',
+      body: 'Rename this filter, add or remove the wines it holds, or delete it. Your wines stay in the cellar either way.',
       buttons: [
-        { text: 'Edit', onPress: () => openEditFilter(filter) },
+        { text: 'Add/Remove Wines', onPress: () => openEditFilter(filter) },
         { text: 'Delete', style: 'destructive', onPress: () => {
             if (activeCustomFilterId === filter.id) setActiveCustomFilterId(null);
             removeFilter.mutate(filter.id);
@@ -1071,7 +1065,9 @@ export default function RackGridScreen() {
       {lineupSetup && (
         <View style={styles.lineupBanner}>
           <Text style={styles.lineupBannerTitle}>
-            Select the slot for the first bottle in your {rack.storage_type === 'fridge' ? 'fridge' : 'rack'}
+            {rack.storage_type === 'fridge'
+              ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right'
+              : 'Select the slot for the first bottle in your rack'}
           </Text>
           {rack.storage_type !== 'fridge' && (
             <>
@@ -1511,41 +1507,6 @@ export default function RackGridScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* How-this-works overlay. Fires on every rack open until the
-          user ticks "Don't show me this again". Dismiss requires an
-          explicit OK tap — overlay tap is a no-op so a stray finger
-          can't bypass the explanation. */}
-      <Modal
-        visible={rackHintOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => {}}
-      >
-        <View style={styles.rackHintOverlay}>
-          <View style={styles.rackHintSheet}>
-            <Text style={styles.rackHintTitle}>How the rack works</Text>
-            <Text style={styles.rackHintBody}>
-              Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.
-            </Text>
-
-            <TouchableOpacity
-              style={styles.rackHintCheckRow}
-              onPress={() => setRackHintDontShow((v) => !v)}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.rackHintCheckbox, rackHintDontShow && styles.rackHintCheckboxActive]}>
-                {rackHintDontShow ? <Text style={styles.rackHintCheckmark}>✓</Text> : null}
-              </View>
-              <Text style={styles.rackHintCheckLabel}>Don't show me this again</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity style={styles.rackHintOkBtn} onPress={closeRackHint} activeOpacity={0.8}>
-              <Text style={styles.rackHintOkBtnText}>OK</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
       {/* Create a custom filter — name it, then tick the wines it holds. */}
       <Modal visible={createFilterOpen} transparent animationType="fade" onRequestClose={closeFilterModal}>
         <KeyboardAvoidingView behavior="padding" style={styles.filterModalOverlay}>
@@ -1560,9 +1521,9 @@ export default function RackGridScreen() {
             />
             <Text style={styles.filterPickHint}>Choose wines from this location for the filter (optional) — {selectedWineIds.size} selected</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
-              {winesInRack.length === 0 ? (
+              {pickerWines.length === 0 ? (
                 <Text style={styles.searchNoResults}>No wines placed here yet — you can name the filter now and add wines later.</Text>
-              ) : winesInRack.map(({ wine: w }) => {
+              ) : pickerWines.map(({ wine: w }) => {
                 const checked = selectedWineIds.has(w.id);
                 return (
                   <TouchableOpacity key={w.id} style={styles.filterPickRow} onPress={() => toggleWineInSelection(w.id)} activeOpacity={0.7}>
@@ -1783,25 +1744,6 @@ const styles = StyleSheet.create({
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   // Inter — hint
   rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, lineHeight: 20 },
-  // How-this-works overlay shown on every rack open until dismissed
-  // with "Don't show me this again". Uses the standard sheet-on-dim-
-  // scrim pattern already established by other modals in the app.
-  rackHintOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  rackHintSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
-  // Cormorant — hint pop-up title
-  rackHintTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  // Inter — hint pop-up body
-  rackHintBody: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
-  rackHintCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg, paddingVertical: 4 },
-  rackHintCheckbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' },
-  rackHintCheckboxActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.20)' },
-  // Inter — checkmark glyph
-  rackHintCheckmark: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold, lineHeight: 16 },
-  // Inter — check label
-  rackHintCheckLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
-  rackHintOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  // Cormorant — button text
-  rackHintOkBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
