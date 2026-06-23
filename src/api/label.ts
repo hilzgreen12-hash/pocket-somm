@@ -1,18 +1,12 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-import { supabase } from './supabase';
+import { invokeResilient } from './invokeResilient';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
 
-// Use the supabase client so the user's JWT is attached to every edge
-// function call (when signed in). This makes auth checks possible inside the
-// functions and gives us the right identity in logs. Falls back to the anon
-// key automatically when no session exists.
+// All edge calls go through invokeResilient, which attaches the user's JWT (via
+// the supabase client), applies a per-call timeout, and retries transport
+// failures — the long AI calls here are exactly the ones that drop on cellular.
 async function invokeFunction(name: string, body: unknown): Promise<unknown> {
-  const { data, error } = await supabase.functions.invoke(name, { body });
-  if (error) {
-    const message = (error as any)?.message || `${name} error`;
-    throw new Error(`${name}: ${message}`);
-  }
-  return data;
+  return invokeResilient(name, body);
 }
 
 export async function prepareImageBase64(uri: string): Promise<string> {
@@ -115,6 +109,12 @@ export interface DetectedBottle {
   // batched (same producer + name + vintage collapse into one row). Absent or
   // 1 = a single bottle. Seeds the cellar quantity when the bottle is onboarded.
   quantity?: number;
+  // Bounding box of the bottle in the lineup photo, as fractions of the image
+  // (0–1). Used to crop a per-bottle thumbnail when placing a lineup into a rack.
+  box?: { x: number; y: number; w: number; h: number } | null;
+  // Bottle format in millilitres (default 750). Editable per row in the rack
+  // lineup review; seeds the cellar wine's bottle_size_ml on placement.
+  bottleSizeMl?: number;
 }
 export async function detectLineup(base64Image: string): Promise<{ bottles: DetectedBottle[] }> {
   return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;

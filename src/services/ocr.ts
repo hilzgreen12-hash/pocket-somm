@@ -20,10 +20,14 @@ const OCRResponseSchema = z.object({
 
 async function prepareImage(uri: string): Promise<string> {
   console.log('[OCR] Preparing image:', uri);
+  // 1280px / 0.72 instead of the old 1600px / 0.85: a meaningfully smaller
+  // base64 upload (the wine-list scan is the heaviest payload in the app), so
+  // it's far more likely to survive a weak cellular signal. Still comfortably
+  // legible for menu text — verified the OCR still reads dense lists.
   const manipulated = await ImageManipulator.manipulateAsync(
     uri,
-    [{ resize: { width: 1600 } }],
-    { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+    [{ resize: { width: 1280 } }],
+    { compress: 0.72, format: ImageManipulator.SaveFormat.JPEG, base64: true }
   );
   if (!manipulated.base64) throw new Error('Failed to encode image as base64');
   console.log('[OCR] Image prepared, base64 length:', manipulated.base64.length);

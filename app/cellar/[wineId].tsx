@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
@@ -171,6 +171,24 @@ export default function CellarWineDetail() {
   const [grapeDraft, setGrapeDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
 
+  // Auto-generate intel the first time an un-enriched wine card is opened — e.g.
+  // a wine added straight into a rack with no critic score / value / grape yet.
+  // Fires once per wine; the user can still re-run via the Generate buttons.
+  const autoGenRef = useRef<string | null>(null);
+  // True while a first-open auto-generation is running — drives the full-screen
+  // "generating" tracker so the card only ever appears finished.
+  const [autoGenerating, setAutoGenerating] = useState(false);
+  useEffect(() => {
+    if (!wine || isWishlist || isArchived || refreshingValue) return;
+    const ungenerated = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
+    if (ungenerated && autoGenRef.current !== wine.id) {
+      autoGenRef.current = wine.id;
+      setAutoGenerating(true);
+      handleRefreshEstimate().finally(() => setAutoGenerating(false));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, isWishlist, isArchived]);
+
   const [reviewExpanded, setReviewExpanded] = useState(false);
   // The review is now edited only through the canonical EditCellarReviewModal,
   // never inline on the card. This opens it.
@@ -338,34 +356,81 @@ export default function CellarWineDetail() {
     );
   }
 
+  // First open of an un-enriched wine: keep the card hidden behind the List-style
+  // generating tracker until Vinster's intel is in, so the user only ever sees
+  // the finished card — never it assembling. (Shown from load → through gen;
+  // hides once enriched, or if generation fails.)
+  const ungeneratedNow = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
+  if (!isWishlist && !isArchived && (autoGenerating || (ungeneratedNow && autoGenRef.current !== wine.id))) {
+    return (
+      <SearchProgress
+        title="Vinster is generating Wine Intel"
+        subtitle="You'll have it in just a moment"
+        body="Vinster is pulling together critic scores, market value, the drinking window and a tasting note for this wine."
+        durationMs={25000}
+      />
+    );
+  }
+
   // Send the wine to a rack grid for visual placement (existing flow).
   function placeInRack(rackId: string) {
     setPendingWineId(wine!.id);
     setPendingAddMode(true);
     router.push(`/cellar/rack/${rackId}` as any);
   }
-  // Add to a custom location — no grid; just tag membership + ask a count.
-  function startAddToLocation(locationId: string) {
-    setPendingLocationId(locationId);
+
+  // File the (unplaced) wine under a cellar-wide bespoke Location filter — an
+  // instant tag, no physical placement.
+  async function addWineToLocationFilter(locationId: string) {
+    try {
+      await addWinesToFilter(locationId, [wine!.id]);
+      qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
+      showAlert({ title: 'Added to location', body: `Filed under ${locations.find((l) => l.id === locationId)?.name ?? 'the location'}.` });
+    } catch (err) {
+      showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // "Add to Location" on an unplaced wine — either place it in a live
+  // rack/fridge, or file it under a cellar-wide bespoke Location filter.
+  function handleAddToLocation() {
+    const buttons = [
+      ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id) })),
+      ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addWineToLocationFilter(l.id) })),
+    ];
+    if (buttons.length === 0) {
+      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge, or a Cellar List location first, then you can add wines to it.' });
+      return;
+    }
+    showAlert({
+      title: 'Add to Location',
+      body: 'Place it in a rack/fridge, or file it under a Cellar List location:',
+      buttons: [
+        ...buttons,
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  // Add to the Cellar List with no specific folder — just bump the count.
+  // Deliberately does NOT tag the wine into any bespoke Location folder, so a
+  // same-wine bottle already filed in a folder keeps its membership untouched.
+  function startAddToCellarList() {
+    setPendingLocationId(null);
     setAddBottlesCount('1');
     setAddBottlesOpen(true);
   }
 
   function handleAddBottlesEntry() {
-    // "+ Add bottles" → choose a destination first (rack/fridge for visual
-    // placement, or a Location to file it under), then place/enter the count.
+    // "+ Add bottles" → choose a destination first: a live rack/fridge for
+    // visual placement, or the Cellar List for a plain count bump. We do NOT
+    // list bespoke Location folders here — folders are managed in the Cellar
+    // List itself, and offering them here filed bottles into the wrong place.
     const dests: { text: string; onPress: () => void }[] = [
       ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id) })),
-      ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => startAddToLocation(l.id) })),
+      { text: 'Cellar List', onPress: startAddToCellarList },
     ];
-    if (dests.length === 0) {
-      // No racks or locations yet — just bump the bottle count.
-      setPendingLocationId(null);
-      setAddBottlesCount('1');
-      setAddBottlesOpen(true);
-      return;
-    }
     if (dests.length === 1) {
+      // Only the Cellar List option (no racks/fridges yet) — skip the prompt.
       dests[0].onPress();
       return;
     }
@@ -726,6 +791,10 @@ export default function CellarWineDetail() {
           drinking_window_status: v.drinkingWindowStatus ?? wine.drinking_window_status ?? 'unknown',
           // Only fill grape if we don't already have one (don't clobber a user edit).
           grape_variety: wine.grape_variety ?? v.grapeVariety ?? null,
+          // Seed an estimated purchase price from the market value when the user
+          // hasn't entered one — never clobber a real price they've recorded.
+          purchase_price: wine.purchase_price ?? v.estimatedValue ?? null,
+          purchase_price_currency: wine.purchase_price != null ? wine.purchase_price_currency : (v.currency ?? null),
         },
       });
     } catch {
@@ -1187,19 +1256,14 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
-          {wineRack && !cameFromRack && (
+          {wineRack && (
             <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}?highlight=${wine.id}`)}>
               <Text style={styles.statAction}>In {wineRack.name} →</Text>
             </TouchableOpacity>
           )}
-          {!isArchived && !isWishlist && (
-            <TouchableOpacity onPress={() => handleAddBottlesEntry()}>
-              <Text style={styles.statAction}>+ Add bottles</Text>
-            </TouchableOpacity>
-          )}
-          {!isArchived && !isWishlist && wine.quantity > 0 && (
-            <TouchableOpacity onPress={handleRemoveBottlesEntry}>
-              <Text style={styles.statAction}>- Remove bottles</Text>
+          {!wineRack && !isArchived && !isWishlist && (
+            <TouchableOpacity onPress={handleAddToLocation}>
+              <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>
           )}
         </View>

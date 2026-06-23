@@ -6,7 +6,7 @@ import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
-import { getWineIntelligence } from '../../src/api/label';
+import { generateWineIntel } from '../../src/services/pricing';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -147,7 +147,7 @@ export default function CellarStatsScreen() {
         const myIdx = cursor++;
         const w = items[myIdx];
         try {
-          const intel = await getWineIntelligence({
+          const intel = await generateWineIntel({
             producer: w.producer ?? '',
             region: w.region ?? '',
             wineName: w.wine_name || null,
@@ -157,6 +157,11 @@ export default function CellarStatsScreen() {
             estimated_value: intel.estimatedValue,
             estimated_value_currency: currency,
             estimated_value_at: new Date().toISOString(),
+            // Persist where the value came from + the WS-anchored critic score
+            // so the card reflects the real Wine-Searcher data, not just a price.
+            estimated_value_source: intel.valueSource ?? 'vinster',
+            critic_score: intel.criticScore,
+            critic_score_note: intel.criticScoreNote ?? null,
           });
         } catch {
           // Skip this wine on error — partial progress is better than failing the lot

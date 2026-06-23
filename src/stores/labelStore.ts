@@ -15,7 +15,7 @@ interface LabelState {
   setImage: (uri: string, base64: string) => void;
   setWineDetails: (details: WineDetails) => void;
   setWineDetailsConfirmed: (details: WineDetailsComplete) => void;
-  setIntelligence: (intel: WineIntelligence) => void;
+  setIntelligence: (intel: WineIntelligence | null) => void;
   setPairings: (pairings: Pairing[]) => void;
   setFilters: (filters: Record<string, unknown> | null) => void;
   setStage: (stage: LabelState['stage']) => void;

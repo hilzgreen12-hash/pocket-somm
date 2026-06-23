@@ -2,6 +2,42 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
+const STYLES = ['Red', 'White', 'Rosé', 'Sparkling', 'Fortified'];
+
+// Coerce whatever the model returns into one of the 5 canonical styles, or null.
+function normalizeStyle(s: unknown): string | null {
+  if (typeof s !== 'string') return null;
+  const t = s.trim().toLowerCase();
+  if (!t) return null;
+  if (t.startsWith('ros')) return 'Rosé';                                  // rosé / rose
+  if (t.startsWith('spark') || t.includes('champ') || t.includes('cava') || t.includes('prosecco')) return 'Sparkling';
+  if (t.startsWith('fort') || t.includes('port') || t.includes('sherry') || t.includes('madeira')) return 'Fortified';
+  if (t.startsWith('red')) return 'Red';
+  if (t.startsWith('white') || t.includes('blanc')) return 'White';
+  return STYLES.find((v) => v.toLowerCase() === t) ?? null;
+}
+
+// Fallback when the vision pass omits style: a tiny text-only call that infers
+// the style from the wine's identity. Fires rarely, so cost is negligible.
+async function inferStyle(
+  producer: unknown, region: unknown, wineName: unknown, vintage: unknown,
+): Promise<string | null> {
+  try {
+    const resp = await client.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 8,
+      messages: [{
+        role: 'user',
+        content: `Wine — producer "${producer ?? ''}", region "${region ?? ''}", name "${wineName ?? ''}", vintage "${vintage ?? ''}". Reply with EXACTLY one word, the wine's style, chosen from: Red, White, Rosé, Sparkling, Fortified. No other text.`,
+      }],
+    });
+    const t = resp.content[0]?.type === 'text' ? resp.content[0].text : '';
+    return normalizeStyle(t);
+  } catch {
+    return null;
+  }
+}
+
 const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photograph. Extract the following information from this label:
 
 1. producer: The winery, estate, family, or maker — the entity that produced the wine. The producer is the SAME across every bottle that maker releases. For example: "Mullineux" produces Schist, Iron, and Granite cuvées; "Penfolds" produces Grange, Bin 28, etc.; "Domaine de la Romanée-Conti" produces La Tâche, Romanée-Conti, etc. The producer is usually a family/estate name, château, domaine, or recognisable winery brand and is often printed prominently as the maker's signature. Use your knowledge of the wine world — if you recognise the maker, that is the producer.
@@ -52,12 +88,20 @@ Deno.serve(async (req) => {
     const bottleSizeMl = Number.isFinite(sizeNum) && sizeNum >= 50 && sizeNum <= 30000
       ? Math.round(sizeNum)
       : null;
+    // Guarantee a style: normalise the vision result, and if it's still
+    // missing/invalid, infer it from the wine's identity so the Confirm screen
+    // is filled in ~100% of cases (the user can still correct it).
+    let style = normalizeStyle(parsed.style);
+    if (!style) {
+      style = await inferStyle(parsed.producer, parsed.region, parsed.wineName, parsed.vintage);
+    }
+
     return new Response(JSON.stringify({
       producer: parsed.producer ?? null,
       region: parsed.region ?? null,
       wineName: parsed.wineName ?? null,
       vintage: parsed.vintage ?? null,
-      style: parsed.style ?? null,
+      style,
       bottleSizeMl,
     }), { headers: { 'Content-Type': 'application/json' } });
 

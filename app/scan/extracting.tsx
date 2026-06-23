@@ -9,6 +9,7 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { extractWineList } from '../../src/services/ocr';
 import { recommendWines } from '../../src/services/recommender';
+import { isNetworkError } from '../../src/api/invokeResilient';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { COUNTRY_TO_CURRENCY } from '../../src/constants/currency';
@@ -192,7 +193,9 @@ export default function ExtractingScreen() {
       // messages (e.g. the rate-limit "try again in a few minutes") so the
       // generic guidance doesn't mask them.
       const isRateLimit = /minute|too many|rate limit/i.test(message);
-      const friendly = isRateLimit
+      const friendly = isNetworkError(err)
+        ? "Vinster couldn't reach the internet — you may be offline or on a weak signal. Find better reception and tap Try Again."
+        : isRateLimit
         ? message
         : 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.';
       setErrorDetail(friendly);

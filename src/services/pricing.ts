@@ -1,6 +1,6 @@
 import { fetchWinePrice } from '../api/wine-searcher';
 import { getWineIntelligence } from '../api/label';
-import type { PricingData, WineDetailsComplete } from '../types/wine';
+import type { PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
 export async function fetchPricing(
   wineName: string,
@@ -73,5 +73,38 @@ export async function valueWine(
     drinkingWindowStatus: intel.drinkingWindowStatus ?? 'unknown',
     grapeVariety: intel.grapeVariety ?? null,
     tastingNotes: intel.tastingNotes ?? null,
+  };
+}
+
+// Full Wine Intel for the single-wine flows (Generate Wine Intel, add-to-cellar,
+// stats batch, review estimate). Same Wine-Searcher-first logic as valueWine,
+// but returns the complete WineIntelligence the intel card + add payload consume
+// (vintage/rarity assessments, drinking window, per-critic scores, etc.), with
+// the real WS market price + WS-anchored score + grape gap-fill merged in.
+// fetchPricing already returns prices in the user's currency (proxy converts).
+export async function generateWineIntel(
+  wine: WineDetailsComplete,
+  currency: string = 'GBP',
+): Promise<WineIntelligence> {
+  const queryName = [wine.producer, wine.wineName].filter(Boolean).join(' ').trim() || (wine.wineName ?? '');
+  const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
+
+  const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
+  const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
+  const wsScore = wsMatched ? pricing.criticScore : null;
+
+  // Claude fills the rich fields; wsScore anchors its critic score to WS.
+  const intel = await getWineIntelligence(wine, currency, wsScore);
+
+  // Headline value: real WS market average (already in the user's currency)
+  // when matched, else Claude's estimate.
+  const useWs = wsMatched && pricing.averageMarketPrice != null;
+  return {
+    ...intel,
+    estimatedValue: useWs ? pricing.averageMarketPrice : intel.estimatedValue,
+    estimatedValueLow: useWs ? pricing.minPrice : (intel.estimatedValueLow ?? null),
+    estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
+    grapeVariety: intel.grapeVariety ?? pricing.grape ?? null,
+    valueSource: useWs ? 'wine-searcher' : 'vinster',
   };
 }

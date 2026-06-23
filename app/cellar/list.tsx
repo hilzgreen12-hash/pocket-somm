@@ -209,10 +209,37 @@ export default function FullCellarListScreen() {
     setLocNameDraft('');
     setLocModal({ open: true, stage: 'name', wineIds: [] });
   }
+  // "Add to Location" on the multi-select bar — adds the selected wines to a
+  // cellar-wide bespoke Location (created in the Full Cellar List). Rack/fridge
+  // filters are scoped to their rack and are added from within the rack itself.
   function openAddSelectedToLocation() {
     if (selectedIds.size === 0) return;
     setLocNameDraft('');
     setLocModal({ open: true, stage: 'choose', wineIds: [...selectedIds] });
+  }
+
+  // "Add a Lineup" from the Cellar List — a lineup is placed into a rack, so we
+  // pick which rack first (racks only for now), then hand off to the rack's
+  // slot/orientation setup via ?lineup=1.
+  function startLineup() {
+    setAddWineOpen(false);
+    const lineupRacks = racks.filter((r) => r.storage_type === 'rack');
+    if (lineupRacks.length === 0) {
+      showAlert({ title: 'No racks yet', body: 'Create a wine rack first, then you can add a lineup straight into it.' });
+      return;
+    }
+    if (lineupRacks.length === 1) {
+      router.push(`/cellar/rack/${lineupRacks[0].id}?lineup=1` as any);
+      return;
+    }
+    showAlert({
+      title: 'Add a Lineup',
+      body: 'Which rack?',
+      buttons: [
+        ...lineupRacks.map((r) => ({ text: r.name, onPress: () => router.push(`/cellar/rack/${r.id}?lineup=1` as any) })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
   }
   function closeLocModal() { setLocModal({ open: false, stage: 'choose', wineIds: [] }); }
 
@@ -504,6 +531,10 @@ export default function FullCellarListScreen() {
         )}
       </View>
 
+      {session && !isArchiveView && (
+        <Text style={styles.listHint}>Long hold a wine in your list to move or edit it</Text>
+      )}
+
       {!session ? (
         <ArchiveSignInPrompt
           title="Sign in to view your cellar"
@@ -710,7 +741,7 @@ export default function FullCellarListScreen() {
               disabled={selectedIds.size === 0 || busy}
               onPress={openAddSelectedToLocation}
             >
-              <Text style={styles.selectActionText}>Add to Location Filter</Text>
+              <Text style={styles.selectActionText}>Add to Location</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -830,9 +861,9 @@ export default function FullCellarListScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); useLineupStore.getState().start(null); router.push('/cellar/scan-lineup'); }}
+              onPress={startLineup}
             >
-              <Text style={styles.addBtnText}>Scan a Lineup (up to 10 bottles)</Text>
+              <Text style={styles.addBtnText}>Add a Lineup (up to 8 bottles)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
@@ -895,6 +926,8 @@ const styles = StyleSheet.create({
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   // Inter — hint
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
+  // Interaction hint shown under the Full Cellar List header.
+  listHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   listScroll: { flex: 1 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },

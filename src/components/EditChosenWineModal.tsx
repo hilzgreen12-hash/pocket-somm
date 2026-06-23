@@ -14,7 +14,7 @@ import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
 import { patchChosenWine } from '../api/chosenWines';
 import { addCellarWine } from '../api/cellar';
-import { getWineIntelligence } from '../api/label';
+import { generateWineIntel } from '../services/pricing';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
@@ -82,7 +82,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     if (estimating) return;
     setEstimating(true);
     try {
-      const intel = await getWineIntelligence({
+      const intel = await generateWineIntel({
         producer: w.producer ?? '',
         region: w.region ?? '',
         wineName: w.wine_name || null,

@@ -1,25 +1,11 @@
-import { supabase } from './supabase';
+import { invokeResilient } from './invokeResilient';
 
+// Thin alias kept so the call sites below read unchanged. The timeout, retry
+// and friendly-error handling now live in invokeResilient (shared with the
+// edge calls in label.ts) — see that file for why the resilience matters on
+// cellular.
 async function invokeFunction(name: string, body: unknown): Promise<unknown> {
-  const { data, error } = await supabase.functions.invoke(name, { body });
-  if (error) {
-    // supabase-js wraps non-2xx responses in FunctionsHttpError and exposes
-    // the underlying Response on error.context. For rate-limit (429) and
-    // other handled error cases the function sends a `message` field that's
-    // already user-friendly — surface that verbatim instead of the generic
-    // "ocr error: Edge Function returned a non-2xx status code".
-    const ctx = (error as { context?: Response }).context;
-    let friendlyMessage: string | null = null;
-    if (ctx && typeof ctx.json === 'function') {
-      try {
-        const errBody = await ctx.json();
-        if (errBody?.message) friendlyMessage = errBody.message;
-        else if (errBody?.error) friendlyMessage = `${name} error: ${errBody.error}`;
-      } catch { /* body wasn't JSON — fall through to the generic path */ }
-    }
-    throw new Error(friendlyMessage ?? `${name} error: ${error.message}`);
-  }
-  return data;
+  return invokeResilient(name, body);
 }
 
 export async function callOCR(imageBase64: string): Promise<unknown> {

@@ -14,7 +14,12 @@ import { useLineupStore } from '../../../src/stores/lineupStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks } from '../../../src/api/racks';
+import { addCellarWineRemoval } from '../../../src/api/cellar';
 import { supabase } from '../../../src/api/supabase';
+import * as ImagePicker from 'expo-image-picker';
+import { prepareImageBase64, scanLabel } from '../../../src/api/label';
+import { useLabelStore } from '../../../src/stores/labelStore';
+import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
@@ -46,7 +51,7 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
 ];
 
 export default function RackGridScreen() {
-  const { rackId, highlight } = useLocalSearchParams<{ rackId: string; highlight?: string }>();
+  const { rackId, highlight, lineup } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
@@ -57,7 +62,7 @@ export default function RackGridScreen() {
   const { width, height } = useWindowDimensions();
   const qc = useQueryClient();
 
-  const { setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
+  const { pendingSlot, setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
   const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(rackId);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -86,6 +91,15 @@ export default function RackGridScreen() {
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [placing, setPlacing] = useState(false);
+  // Empty-slot "what would you like to add?" chooser + the cellar-wine picker
+  // and the upload-in-progress spinner it can open.
+  const { setImage, setWineDetails, setError: setLabelError } = useLabelStore();
+  const [slotChooser, setSlotChooser] = useState<{ row: number; col: number } | null>(null);
+  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  const [slotUploading, setSlotUploading] = useState(false);
+  // "Add a Lineup" setup: pick the start slot + orientation before scanning.
+  const [lineupSetup, setLineupSetup] = useState(false);
+  const [lineupOrientation, setLineupOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   // Edit-rack modal — Wipe Contents / Rename / Delete.
   const [editOpen, setEditOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -141,6 +155,17 @@ export default function RackGridScreen() {
   }, []);
 
   const rack = racks.find((r) => r.id === rackId);
+
+  // Arrived via "Add a Lineup" from the Cellar List (?lineup=1) — auto-enter the
+  // slot/orientation setup once the rack has loaded (once per mount).
+  const lineupParamHandled = useRef(false);
+  useEffect(() => {
+    if (lineup === '1' && rack && !lineupParamHandled.current) {
+      lineupParamHandled.current = true;
+      setLineupOrientation(rack.storage_type === 'fridge' ? 'Horizontal' : 'Vertical');
+      setLineupSetup(true);
+    }
+  }, [lineup, rack]);
 
   // Inter-rack swipe — mirrors the pattern in TabSwipeView: horizontal
   // pan with 30px activation threshold, fails on >30px vertical so the
@@ -406,6 +431,17 @@ export default function RackGridScreen() {
   }
 
   function openSlot(row: number, col: number) {
+    // Lineup setup: the user is choosing the starting slot for "Add a Lineup".
+    // Only an empty slot can be the start; record it + the orientation, then go
+    // to scan/upload — which places the whole lineup from here.
+    if (lineupSetup) {
+      if (slotMap[`${row},${col}`]) return; // occupied — must start on a free slot
+      useLineupStore.getState().start(rackId);
+      useLineupStore.getState().setPlacement({ row, col }, lineupOrientation);
+      setLineupSetup(false);
+      router.push('/cellar/scan-lineup');
+      return;
+    }
     // If we're in the middle of a move, treat this tap as the drop target.
     if (moving) {
       // Tapping the source slot (on its own rack) cancels the move.
@@ -432,8 +468,47 @@ export default function RackGridScreen() {
       setPlaceCount('1');
       setPlaceOrientation('Vertical');
     } else {
+      // Empty slot, nothing pending — offer the user a choice instead of
+      // jumping straight to the camera. pendingSlot is set now so the scan /
+      // upload / manual paths place into this slot automatically.
       setPendingSlot({ rackId, row, col, rows: rack.rows, cols: rack.cols, largeFormatCols: rack.large_format_cols, largeFormatBottleSizeMl: rack.large_format_bottle_size_ml });
-      router.push('/label/camera');
+      setSlotChooser({ row, col });
+    }
+  }
+
+  // Upload a label screenshot to fill the tapped slot — mirrors the Cellar tab's
+  // upload, then routes to Confirm (where pendingSlot drives placement).
+  async function handleUploadForSlot() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (result.canceled || !result.assets[0]) return;
+      setSlotUploading(true);
+      const uri = result.assets[0].uri;
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+    } catch (err) {
+      setLabelError(err instanceof Error ? err.message : 'Failed to scan label');
+    } finally {
+      setSlotUploading(false);
+    }
+    router.push('/label/confirm?context=place');
+  }
+
+  // Place an EXISTING cellar wine (chosen in the picker) straight into the slot.
+  async function placeExistingWine(wine: CellarWine) {
+    if (!pendingSlot) return;
+    const { rackId: rid, row, col } = pendingSlot;
+    try {
+      await assignSlots(rid, [{ row, col }], wine.id);
+      qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    } catch (err) {
+      showAlert({ title: 'Could not place wine', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setCellarPickerOpen(false);
+      setPendingSlot(null);
     }
   }
 
@@ -567,10 +642,26 @@ export default function RackGridScreen() {
     // removing a wine directly from the rack grid.
     const buttons: { text: string; style?: 'destructive' | 'cancel'; onPress?: () => void }[] = [
       {
+        // Primary action: add more of this same wine into the rack. Reuses the
+        // existing place-into-rack mode (banner → tap an empty slot → choose
+        // how many), which bumps the wine's quantity to match.
+        text: 'Add More Bottles',
+        onPress: () => {
+          setPendingWineId(wineId);
+          setPendingAddMode(true);
+        },
+      },
+      {
         text: 'Move to another slot or rack',
         onPress: () => {
           setPendingMove({ sourceRackId: rackId, row, col, wineId, wineName: wine.wine_name });
         },
+      },
+      {
+        // Archive keeps the wine in the user's records (Cellar Archive) but
+        // takes it out of the live Cellar List and this rack.
+        text: 'Archive Wine',
+        onPress: () => confirmArchiveWine(wineId, wine.wine_name, qty),
       },
     ];
     // When more than one bottle is on record, deleting from a single slot
@@ -585,7 +676,7 @@ export default function RackGridScreen() {
       });
     }
     buttons.push({
-      text: qty > 1 ? `Delete all ${qty} bottles from cellar` : 'Delete wine from cellar',
+      text: qty > 1 ? `Delete all ${qty} bottles from cellar (Permanent)` : 'Delete wine from cellar (Permanent)',
       style: 'destructive',
       onPress: () => confirmDeleteWine(wineId, wine.wine_name, qty),
     });
@@ -617,6 +708,47 @@ export default function RackGridScreen() {
               qc.invalidateQueries({ queryKey: ['slot-assignments'] });
             } catch (err) {
               showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Archive the whole listing from the rack long-press: log the removal, mark
+  // the row archived, and pull it out of the live cellar + every rack slot. The
+  // wine stays in the Cellar Archive (and Removal History). Mirrors the wine
+  // card's full-archive branch, scoped to the entire quantity.
+  function confirmArchiveWine(wineId: string, wineName: string, qty: number) {
+    const today = new Date().toISOString().slice(0, 10);
+    showAlert({
+      title: qty > 1 ? `Archive all ${qty} bottles?` : 'Archive wine?',
+      body: qty > 1
+        ? `Move all ${qty} bottles of ${wineName} to your Cellar Archive. They'll leave the Cellar List and this rack but stay in your records.`
+        : `Move ${wineName} to your Cellar Archive. It'll leave the Cellar List and this rack but stay in your records.`,
+      buttons: [
+        {
+          text: 'Archive',
+          onPress: async () => {
+            try {
+              await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count: qty });
+              await updateWine.mutateAsync({
+                id: wineId,
+                updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` },
+              });
+              await clearWineFromRacks(wineId);
+              if (session?.user.id) {
+                qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
+                  (old ?? []).filter((w) => w.id !== wineId));
+                qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+                qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+              }
+              qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
+              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+            } catch (err) {
+              showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
             }
           },
         },
@@ -783,16 +915,20 @@ export default function RackGridScreen() {
   async function saveCustomFilter() {
     const name = filterNameDraft.trim();
     if (!name) { setSavedMsg('Name your filter first'); return; }
-    if (selectedWineIds.size === 0) { setSavedMsg('Pick at least one wine'); return; }
+    // An empty filter is allowed — users can name it now and fill it later.
+    // A rack/fridge filter may only contain wines from that location, so prune
+    // any stray selections (e.g. from a legacy filter saved before this rule).
+    const rackWineIds = new Set(winesInRack.map(({ wine }) => wine.id));
+    const wineIds = Array.from(selectedWineIds).filter((id) => rackWineIds.has(id));
     setSavingFilter(true);
     try {
       if (editingFilterId) {
         await renameFilter.mutateAsync({ filterId: editingFilterId, name });
-        await setFilterWines.mutateAsync({ filterId: editingFilterId, wineIds: Array.from(selectedWineIds) });
+        await setFilterWines.mutateAsync({ filterId: editingFilterId, wineIds });
         closeFilterModal();
         setSavedMsg(`"${name}" filter updated`);
       } else {
-        await createFilter.mutateAsync({ name, wineIds: Array.from(selectedWineIds) });
+        await createFilter.mutateAsync({ name, wineIds });
         closeFilterModal();
         setSavedMsg(`"${name}" filter created`);
       }
@@ -932,6 +1068,37 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </View>
 
+      {lineupSetup && (
+        <View style={styles.lineupBanner}>
+          <Text style={styles.lineupBannerTitle}>
+            Select the slot for the first bottle in your {rack.storage_type === 'fridge' ? 'fridge' : 'rack'}
+          </Text>
+          {rack.storage_type !== 'fridge' && (
+            <>
+              <Text style={styles.lineupBannerLabel}>Lineup orientation</Text>
+              <View style={styles.lineupOrientRow}>
+                <TouchableOpacity
+                  style={[styles.lineupOrientBtn, lineupOrientation === 'Vertical' && styles.lineupOrientBtnActive]}
+                  onPress={() => setLineupOrientation('Vertical')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.lineupOrientText, lineupOrientation === 'Vertical' && styles.lineupOrientTextActive]}>Vertical</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.lineupOrientBtn, lineupOrientation === 'Horizontal' && styles.lineupOrientBtnActive]}
+                  onPress={() => setLineupOrientation('Horizontal')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[styles.lineupOrientText, lineupOrientation === 'Horizontal' && styles.lineupOrientTextActive]}>Horizontal</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+          <TouchableOpacity onPress={() => setLineupSetup(false)} style={styles.lineupBannerCancel}>
+            <Text style={styles.lineupBannerCancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
@@ -1120,14 +1287,19 @@ export default function RackGridScreen() {
           </GestureDetector>
         </View>
 
-        {/* Add a lineup straight into this storage — photograph up to 10
+        {/* Add a lineup straight into this storage — photograph up to 8
             bottles and onboard them via the same flow as Add a Wine. */}
         <TouchableOpacity
           style={styles.addLineupBtn}
-          onPress={() => { useLineupStore.getState().start(rackId); router.push('/cellar/scan-lineup'); }}
+          onPress={() => {
+            // Pick the start slot + orientation first. Fridges are always
+            // horizontal, so they skip the toggle and force Horizontal.
+            setLineupOrientation(rack.storage_type === 'fridge' ? 'Horizontal' : 'Vertical');
+            setLineupSetup(true);
+          }}
           activeOpacity={0.7}
         >
-          <Text style={styles.addLineupBtnText}>Add A Lineup (up to 10 bottles)</Text>
+          <Text style={styles.addLineupBtnText}>Add A Lineup (up to 8 bottles)</Text>
         </TouchableOpacity>
 
         {/* Edit bubble — opens the rack-management modal (wipe / rename /
@@ -1147,6 +1319,44 @@ export default function RackGridScreen() {
           pending wine is set. Asks how many bottles to place; orientation
           only shown if > 1 bottle. Skips already-occupied slots so we don't
           stomp an existing wine in the path. */}
+      {/* Empty-slot chooser — how to fill the tapped slot. */}
+      <Modal visible={slotChooser !== null} transparent animationType="fade" onRequestClose={() => { setSlotChooser(null); setPendingSlot(null); }}>
+        <TouchableOpacity style={styles.slotChooserOverlay} activeOpacity={1} onPress={() => { setSlotChooser(null); setPendingSlot(null); }}>
+          <TouchableOpacity activeOpacity={1} style={styles.slotChooserSheet} onPress={() => {}}>
+            <Text style={styles.slotChooserTitle}>Add a wine to this slot</Text>
+            <TouchableOpacity style={styles.slotChooserBtn} onPress={() => { setSlotChooser(null); router.push('/label/camera?context=place'); }} activeOpacity={0.8}>
+              <Text style={styles.slotChooserBtnText}>Scan a Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.slotChooserBtn} onPress={() => { setSlotChooser(null); setCellarPickerOpen(true); }} activeOpacity={0.8}>
+              <Text style={styles.slotChooserBtnText}>Select from Cellar List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.slotChooserBtn} onPress={() => { setSlotChooser(null); handleUploadForSlot(); }} activeOpacity={0.8}>
+              <Text style={styles.slotChooserBtnText}>Upload Screenshot</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.slotChooserBtn} onPress={() => { setSlotChooser(null); router.push('/label/confirm?manual=1&context=place'); }} activeOpacity={0.8}>
+              <Text style={styles.slotChooserBtnText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.slotChooserCancel} onPress={() => { setSlotChooser(null); setPendingSlot(null); }}>
+              <Text style={styles.slotChooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <CellarWinePicker
+        visible={cellarPickerOpen}
+        onClose={() => { setCellarPickerOpen(false); setPendingSlot(null); }}
+        onSelect={placeExistingWine}
+      />
+
+      {/* OCR-in-progress overlay while an uploaded label is read. */}
+      <Modal visible={slotUploading} transparent animationType="fade">
+        <View style={styles.slotUploadingOverlay}>
+          <ActivityIndicator color={colors.gold} size="large" />
+          <Text style={styles.slotUploadingText}>Reading the label…</Text>
+        </View>
+      </Modal>
+
       <Modal visible={placingAt !== null} transparent animationType="fade" onRequestClose={() => !placing && setPlacingAt(null)}>
         <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
@@ -1348,11 +1558,11 @@ export default function RackGridScreen() {
               placeholder="Filter name (e.g. Christmas Wines)"
               placeholderTextColor={colors.textMuted}
             />
-            <Text style={styles.filterPickHint}>Choose the wines for this filter — {selectedWineIds.size} selected</Text>
+            <Text style={styles.filterPickHint}>Choose wines from this location for the filter (optional) — {selectedWineIds.size} selected</Text>
             <ScrollView style={{ maxHeight: 320 }} keyboardShouldPersistTaps="handled">
-              {wines.length === 0 ? (
-                <Text style={styles.searchNoResults}>Your cellar is empty.</Text>
-              ) : wines.map((w) => {
+              {winesInRack.length === 0 ? (
+                <Text style={styles.searchNoResults}>No wines placed here yet — you can name the filter now and add wines later.</Text>
+              ) : winesInRack.map(({ wine: w }) => {
                 const checked = selectedWineIds.has(w.id);
                 return (
                   <TouchableOpacity key={w.id} style={styles.filterPickRow} onPress={() => toggleWineInSelection(w.id)} activeOpacity={0.7}>
@@ -1403,6 +1613,27 @@ export default function RackGridScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Empty-slot "add a wine" chooser.
+  slotChooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  slotChooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  slotChooserTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.lg },
+  slotChooserBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  slotChooserBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  slotChooserCancel: { alignItems: 'center', paddingTop: spacing.sm },
+  slotChooserCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  slotUploadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  slotUploadingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: '#FFFFFF' },
+  // "Add a Lineup" setup banner (pick the start slot + orientation).
+  lineupBanner: { backgroundColor: colors.background, borderBottomWidth: 1, borderBottomColor: colors.gold, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, alignItems: 'center' },
+  lineupBannerTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, textAlign: 'center' },
+  lineupBannerLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.sm },
+  lineupOrientRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
+  lineupOrientBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.lg },
+  lineupOrientBtnActive: { backgroundColor: colors.gold },
+  lineupOrientText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  lineupOrientTextActive: { color: colors.background },
+  lineupBannerCancel: { marginTop: spacing.sm },
+  lineupBannerCancelText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — back/nav link

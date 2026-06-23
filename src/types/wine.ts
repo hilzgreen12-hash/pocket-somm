@@ -125,6 +125,10 @@ export interface WineIntelligence {
   estimatedValueLow?: number | null;
   estimatedValueHigh?: number | null;
   valueConfidence?: 'high' | 'medium' | 'low' | null;
+  // Where the headline estimatedValue came from once Wine-Searcher is consulted:
+  // 'wine-searcher' = real market average (in the user's currency), 'vinster' =
+  // Claude estimate. Set by generateWineIntel; persisted to estimated_value_source.
+  valueSource?: 'wine-searcher' | 'vinster' | null;
 }
 
 export interface Recipe {
