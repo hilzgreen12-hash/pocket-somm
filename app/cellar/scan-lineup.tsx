@@ -119,28 +119,24 @@ export default function ScanLineupScreen() {
       // name + vintage) into one row carrying a quantity, so a lineup with two
       // of the same wine reads as a single "×2" entry instead of two rows.
       const capped = (bottles ?? []).slice(0, 8);
-      let result: DetectedBottle[];
-      if (isRackPlacement) {
-        // Rack lineup: each physical bottle is its own row (1x75cl), un-batched
-        // — the user ticks/edits each before placing one bottle per slot.
-        result = capped.map((b) => ({ ...b, quantity: 1, bottleSizeMl: b.bottleSizeMl ?? 750 }));
-      } else {
-        // Non-rack onboarding: batch identical bottles into one ×N row.
-        const batched: DetectedBottle[] = [];
-        const indexByKey = new Map<string, number>();
-        for (const b of capped) {
-          const key = `${norm(b.producer)}|${norm(b.wineName)}|${(b.vintage ?? '').trim()}`;
-          const at = indexByKey.get(key);
-          if (at != null) {
-            batched[at].quantity = (batched[at].quantity ?? 1) + 1;
-            batched[at].confident = batched[at].confident || b.confident;
-          } else {
-            indexByKey.set(key, batched.length);
-            batched.push({ ...b, quantity: 1 });
-          }
+      // Batch identical bottles (same producer + name + vintage) into one ×N row
+      // — different vintages of the same wine stay separate. This recognises
+      // duplicates in EVERY lineup flow (rack/fridge and onboarding), so a
+      // scanned pair becomes one cellar listing of quantity 2, not two listings.
+      const batched: DetectedBottle[] = [];
+      const indexByKey = new Map<string, number>();
+      for (const b of capped) {
+        const key = `${norm(b.producer)}|${norm(b.wineName)}|${(b.vintage ?? '').trim()}`;
+        const at = indexByKey.get(key);
+        if (at != null) {
+          batched[at].quantity = (batched[at].quantity ?? 1) + 1;
+          batched[at].confident = batched[at].confident || b.confident;
+        } else {
+          indexByKey.set(key, batched.length);
+          batched.push({ ...b, quantity: 1, bottleSizeMl: b.bottleSizeMl ?? 750 });
         }
-        result = batched;
       }
+      const result = batched;
       setConfirmed(new Set());
       setLineup(result, uri);
       setStage('review');
@@ -162,6 +158,9 @@ export default function ScanLineupScreen() {
   const allDone = lineupWines.length > 0 && addedCount === lineupWines.length;
   const lineupRackName = racks.find((r) => r.id === originRackId)?.name ?? 'the rack';
   const allConfirmed = lineupWines.length > 0 && confirmed.size === lineupWines.length;
+  // Total physical bottles vs distinct wines — duplicates (same producer + name
+  // + vintage) are batched, so these differ when the lineup has repeats.
+  const totalBottles = lineupWines.reduce((sum, b) => sum + (b.quantity ?? 1), 0);
 
   function openEdit(i: number) {
     const b = lineupWines[i];
@@ -365,7 +364,7 @@ export default function ScanLineupScreen() {
             Adding several bottles? Photograph the lineup and Vinster will identify each one and add them for you.
           </Text>
           {isFridge && (
-            <Text style={styles.hint}>Ensure your lineup includes all bottles from the row, with all labels right side up. You may need to remove the bottles from the fridge for an accurate photo.</Text>
+            <Text style={styles.hint}>Line up all bottles from the row, including those facing the back, with all labels right side up — you will likely need to remove the bottles from your fridge and line them up for an accurate photo.</Text>
           )}
           <Text style={styles.hint}>Stand up to 8 bottles up with their front labels facing the camera. Get your photo as close up to the labels as possible.</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
@@ -398,7 +397,8 @@ export default function ScanLineupScreen() {
                   </TouchableOpacity>
                 ) : null}
               </View>
-              <Text style={styles.hint}>Tick each wine to confirm, or Edit to fix a read. They fill the rack from your chosen slot, running {orientation.toLowerCase()}.</Text>
+              <Text style={styles.summaryLine}>{totalBottles} {totalBottles === 1 ? 'bottle' : 'bottles'} / {lineupWines.length} {lineupWines.length === 1 ? 'wine' : 'wines'}</Text>
+              <Text style={styles.hint}>Tick each wine to confirm, or Edit to fix a read. Duplicates of the same wine are grouped. They fill the rack from your chosen slot, running {orientation.toLowerCase()}.</Text>
               {lineupWines.map((b, i) => {
                 const isOn = confirmed.has(i);
                 const name = [b.producer, b.wineName].filter(Boolean).join(' ') || 'Unreadable bottle';
@@ -410,7 +410,7 @@ export default function ScanLineupScreen() {
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>
                         {b.vintage ? `${b.vintage} ` : ''}{name}
-                        <Text style={styles.formatTag}>  1x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
+                        <Text style={styles.formatTag}>  {b.quantity ?? 1}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
                       </Text>
                       {!b.confident && !isOn ? <Text style={styles.unconfident}>Low-confidence read — check it</Text> : null}
                     </View>
@@ -427,7 +427,7 @@ export default function ScanLineupScreen() {
                 activeOpacity={0.85}
               >
                 <Text style={styles.primaryBtnText}>
-                  {placing ? 'Placing…' : `Add ${lineupWines.length} ${lineupWines.length === 1 ? 'Bottle' : 'Bottles'}`}
+                  {placing ? 'Placing…' : `Add ${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}`}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
@@ -524,7 +524,7 @@ export default function ScanLineupScreen() {
         <View style={styles.tipOverlay}>
           <View style={styles.tipSheet}>
             <Text style={styles.tipTitle}>Before you photograph</Text>
-            <Text style={styles.tipBody}>Ensure your lineup includes all bottles from the row, with all labels right side up. You may need to remove the bottles from the fridge for an accurate photo.</Text>
+            <Text style={styles.tipBody}>Line up all bottles from the row, including those facing the back, with all labels right side up — you will likely need to remove the bottles from your fridge and line them up for an accurate photo.</Text>
             <TouchableOpacity style={styles.tipCheckRow} onPress={() => setDontShowFridgeTip((v) => !v)} activeOpacity={0.7}>
               <Text style={[styles.tipCheckbox, dontShowFridgeTip && styles.tipCheckboxOn]}>{dontShowFridgeTip ? '☑' : '☐'}</Text>
               <Text style={styles.tipCheckLabel}>Don't show me this message again</Text>
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingBottom: 60 },
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
-  hint: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
+  hint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   preview: { width: '80%', height: 240, borderRadius: 12, backgroundColor: '#000' },
   previewSmall: { width: '100%', height: 160, borderRadius: 12, backgroundColor: '#000', marginBottom: spacing.md },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
@@ -558,6 +558,7 @@ const styles = StyleSheet.create({
   doneBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
+  summaryLine: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
@@ -565,7 +566,7 @@ const styles = StyleSheet.create({
   rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
   // Batched-bottle count shown after the region, e.g. "×2 bottles".
   qtyTag: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
-  unconfident: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.gold, marginTop: 2 },
+  unconfident: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.gold, marginTop: 2 },
   editAddLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   // Rack-placement review: per-row remove toggle (legacy, unused now).
   rowRemoved: { opacity: 0.4 },
@@ -588,7 +589,7 @@ const styles = StyleSheet.create({
   editDiscard: { alignItems: 'center', paddingTop: spacing.md },
   editDiscardText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   addedTag: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
-  progressHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
+  progressHint: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.md },
   successBlock: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.lg },
   successTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', lineHeight: 28, marginBottom: spacing.sm },
   tipOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },

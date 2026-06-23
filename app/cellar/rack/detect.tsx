@@ -1,12 +1,16 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../../src/components/AppAlert';
 import { router } from 'expo-router';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useRacks } from '../../../src/hooks/useRacks';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
+
+// Persisted "don't show me this again" flag for the fridge depth-doubling tip.
+const FRIDGE_DOUBLE_TIP_KEY = 'vinster_hide_fridge_double_tip';
 
 function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
   return (
@@ -36,6 +40,25 @@ export default function RackDetectScreen() {
   const [name, setName] = useState(isFridge ? 'My Wine Fridge' : 'My Wine Rack');
   const [saving, setSaving] = useState(false);
   const { create } = useRacks();
+
+  // Depth-doubling tip — surfaced as a popup on the Confirm Fridge screen
+  // (camera-detected fridges only) because the inline note is easy to miss.
+  // The inline note stays on the page regardless of whether this is dismissed.
+  const [showDoubleTip, setShowDoubleTip] = useState(false);
+  const [dontShowDoubleTip, setDontShowDoubleTip] = useState(false);
+  useEffect(() => {
+    if (!(isFridge && cameFromCamera)) return;
+    let active = true;
+    AsyncStorage.getItem(FRIDGE_DOUBLE_TIP_KEY)
+      .then((v) => { if (active && v !== '1') setShowDoubleTip(true); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [isFridge, cameFromCamera]);
+
+  function dismissDoubleTip() {
+    if (dontShowDoubleTip) AsyncStorage.setItem(FRIDGE_DOUBLE_TIP_KEY, '1').catch(() => {});
+    setShowDoubleTip(false);
+  }
 
   async function handleSave() {
     if (!name.trim()) {
@@ -139,6 +162,28 @@ export default function RackDetectScreen() {
           <Text style={styles.cancelLinkText}>Cancel</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Depth-doubling tip popup — the inline note below the dimensions is
+          easy to miss, so surface it once (until dismissed for good). */}
+      <Modal visible={showDoubleTip} transparent animationType="fade" onRequestClose={dismissDoubleTip}>
+        <View style={styles.tipOverlay}>
+          <View style={styles.tipSheet}>
+            <Text style={styles.tipTitle}>About your fridge size</Text>
+            <Text style={styles.tipBody}>
+              We've doubled the horizontal positions to include the bottles facing the back of your fridge, which the camera can't see. Adjust down if your fridge is single-depth.
+            </Text>
+            <TouchableOpacity style={styles.tipCheckRow} onPress={() => setDontShowDoubleTip((v) => !v)} activeOpacity={0.7}>
+              <View style={[styles.tipCheckbox, dontShowDoubleTip && styles.tipCheckboxOn]}>
+                {dontShowDoubleTip ? <Text style={styles.tipCheckmark}>✓</Text> : null}
+              </View>
+              <Text style={styles.tipCheckLabel}>Don't show me this again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tipOkBtn} onPress={dismissDoubleTip} activeOpacity={0.8}>
+              <Text style={styles.tipOkBtnText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -195,4 +240,16 @@ const styles = StyleSheet.create({
   cancelLink: { alignItems: 'center', paddingVertical: spacing.md },
   // Inter — cancel link (not a button)
   cancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+  // Depth-doubling tip popup — gold-bordered sheet on a dim scrim.
+  tipOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  tipSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  tipTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  tipBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  tipCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg, paddingVertical: 4 },
+  tipCheckbox: { width: 22, height: 22, borderRadius: 4, borderWidth: 1, borderColor: colors.borderLight, alignItems: 'center', justifyContent: 'center' },
+  tipCheckboxOn: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.20)' },
+  tipCheckmark: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold, lineHeight: 16 },
+  tipCheckLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
+  tipOkBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  tipOkBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
 });
