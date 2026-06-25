@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
+import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
 import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
@@ -65,9 +66,52 @@ export default function RacksScreen() {
   const { racks, isLoading, remove: removeRack } = useRacks();
   const { wines } = useCellar();
   const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
+  const qc = useQueryClient();
+  const userId = session?.user.id;
+  // Bespoke Cellar List locations, so the "place wine" pop-up can offer them
+  // alongside racks/fridges — the same options the wine card's Add to Location
+  // gives.
+  const { data: locations = [] } = useQuery({
+    queryKey: ['cellar-locations', userId],
+    queryFn: () => fetchCellarLocations(userId!),
+    enabled: !!userId,
+  });
   // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
   // that storage type (photograph vs manual layout).
   const [chooser, setChooser] = useState<'rack' | 'fridge' | null>(null);
+
+  // Long-press an Unplaced Cellar Wine → the SAME "Add to Location" pop-up the
+  // wine card offers: place in a rack/fridge (visual), or file under a Cellar
+  // List location (instant tag).
+  function placeUnplacedInRack(wineId: string, rackId: string) {
+    setPendingWineId(wineId);
+    setPendingAddMode(true);
+    router.push(`/cellar/rack/${rackId}` as any);
+  }
+  async function addUnplacedToLocation(wineId: string, locationId: string) {
+    try {
+      await addWinesToFilter(locationId, [wineId]);
+      qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
+      showAlert({ title: 'Added to location', body: `Filed under ${locations.find((l) => l.id === locationId)?.name ?? 'the location'}.` });
+    } catch (err) {
+      showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+  function handlePlaceUnplaced(wine: CellarWine) {
+    const buttons = [
+      ...racks.map((r) => ({ text: r.name, onPress: () => placeUnplacedInRack(wine.id, r.id) })),
+      ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addUnplacedToLocation(wine.id, l.id) })),
+    ];
+    if (buttons.length === 0) {
+      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge, or a Cellar List location first, then you can add wines to it.' });
+      return;
+    }
+    showAlert({
+      title: 'Add to Location',
+      body: 'Place it in a rack/fridge, or file it under a Cellar List location:',
+      buttons: [...buttons, { text: 'Cancel', style: 'cancel' as const }],
+    });
+  }
 
   function handleLongPressRack(rack: WineRack) {
     showAlert({
@@ -114,10 +158,10 @@ export default function RacksScreen() {
     }
   }
 
-  // useCellar returns wines newest-first, so the most recent additions are
-  // just the head of the list — they update and roll off automatically as
-  // the cellar query refreshes.
-  const recentAdditions = wines.slice(0, 5);
+  // Unplaced Cellar Wines — bottles the user has added but not yet put into a
+  // rack/fridge. Newest-first (useCellar order), so freshly-added unplaced wines
+  // sit at the top, and a wine drops off this list the moment it's placed.
+  const unplacedWines = wines.filter((w) => !rackNameByWineId[w.id]);
 
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
@@ -214,16 +258,17 @@ export default function RacksScreen() {
             />
           ))}
 
-          {recentAdditions.length > 0 && (
+          {unplacedWines.length > 0 && (
             <>
-              <View style={styles.divider} />
-              <Text style={styles.subHeader}>Recently Added</Text>
+              <Text style={styles.subHeader}>Unplaced Cellar Wines</Text>
               <View style={styles.cellarListSection}>
-                {recentAdditions.map((w) => (
+                {unplacedWines.map((w) => (
                   <TouchableOpacity
                     key={w.id}
                     style={styles.recentRow}
                     onPress={() => router.push(`/cellar/${w.id}`)}
+                    onLongPress={() => handlePlaceUnplaced(w)}
+                    delayLongPress={400}
                     activeOpacity={0.7}
                   >
                     <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.recentThumb} />
@@ -235,8 +280,6 @@ export default function RacksScreen() {
                         <Text style={styles.recentMeta}>{formatCreatedDate(w.created_at)}</Text>
                         <Text style={styles.recentMetaDot}>·</Text>
                         <Text style={styles.recentMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
-                        <Text style={styles.recentMetaDot}>·</Text>
-                        <Text style={styles.recentMeta} numberOfLines={1}>{rackNameByWineId[w.id] ?? 'Not in a rack'}</Text>
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -281,7 +324,7 @@ export default function RacksScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Inter — back/nav link
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   // Cormorant — page header
@@ -290,8 +333,9 @@ const styles = StyleSheet.create({
   subHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
-  // Inter — rack card name (card content, not a page header)
-  rowName: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3 },
+  // Rack / fridge name — all-caps gold, matching the "Bottle Picks Awaiting
+  // Review" section-header look, kept at the existing 18pt title size.
+  rowName: { fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   rowMetaLine: { flexDirection: 'row', alignItems: 'baseline', marginTop: 4, gap: spacing.sm },
   // Inter — meta value
   rowBottles: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold },

@@ -87,7 +87,7 @@ const motifStyles = StyleSheet.create({
 
 const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: () => React.JSX.Element }> = [
   { label: 'List',      desc: 'scan a wine list',      route: '/(tabs)/scan',      Motif: ListMotif },
-  { label: 'Chef',      desc: 'get cooking',           route: '/(tabs)/chef',      Motif: ChefMotif },
+  { label: 'Chef',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
   { label: 'Cellar',    desc: 'build your collection', route: '/(tabs)/cellar',    Motif: CellarMotif },
   { label: 'Community', desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
 ];

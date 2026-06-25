@@ -12,14 +12,16 @@ import { useRackStore } from '../../../src/stores/rackStore';
 import { useLineupStore } from '../../../src/stores/lineupStore';
 import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
-import { assignSlot, assignSlots, clearSlot, clearWineFromRacks } from '../../../src/api/racks';
-import { addCellarWineRemoval } from '../../../src/api/cellar';
+import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
+import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { effectiveMaturity } from '../../../src/utils/maturity';
+import { RenameModal } from '../../../src/components/RenameModal';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -76,6 +78,9 @@ export default function RackGridScreen() {
   const [maturityHighlight, setMaturityHighlight] = useState<string>('');
   const [maturityOpen, setMaturityOpen] = useState(false);
   const [filterNameDraft, setFilterNameDraft] = useState('');
+  // Standalone "Rename Filter" sheet (separate from the Add/Remove Wines editor).
+  const [renameFilterTarget, setRenameFilterTarget] = useState<{ id: string; name: string } | null>(null);
+  const [renamingFilter, setRenamingFilter] = useState(false);
   const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
   // Snapshot of the wines selected when the editor opened — used only to order
   // the picker (already-in-filter wines first), so rows don't jump as the user
@@ -88,12 +93,26 @@ export default function RackGridScreen() {
   // survives navigating to another rack — pick up on rack A, drop on rack B.
   const moving = pendingMove;
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
+  // "Archive Wine" on a multi-bottle wine → ask how many (or Archive All).
+  const [archiveModal, setArchiveModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
+  const [archiveCount, setArchiveCount] = useState('1');
+  const [archiving, setArchiving] = useState(false);
+  // "Delete Wine (Permanent)" on a multi-bottle wine → ask how many (or Delete All).
+  const [deleteModal, setDeleteModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
+  const [deleteCount, setDeleteCount] = useState('1');
+  const [deleting, setDeleting] = useState(false);
   // Placement modal — shown when the user taps an empty slot with a
   // pending wine. Asks how many bottles and (when > 1) orientation.
   const [placingAt, setPlacingAt] = useState<{ row: number; col: number; wineId: string } | null>(null);
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [placing, setPlacing] = useState(false);
+  // "Add More Bottles" asks how many UP FRONT (one pop-up), then a single tap
+  // places that many — no second modal after the tap. addMoreUpfront drives the
+  // upfront pop-up; placePrechosen flags that the count's already chosen so the
+  // slot tap places straight away.
+  const [addMoreUpfront, setAddMoreUpfront] = useState<{ wineId: string; wineName: string } | null>(null);
+  const [placePrechosen, setPlacePrechosen] = useState(false);
   // Empty-slot "what would you like to add?" chooser + the cellar-wine picker
   // and the upload-in-progress spinner it can open.
   const { setImage, setWineDetails, setError: setLabelError } = useLabelStore();
@@ -452,12 +471,18 @@ export default function RackGridScreen() {
       // (which would just point back to where we came from).
       router.push(`/cellar/${wine.id}?from=rack` as any);
     } else if (pendingWineId) {
-      // Ask the user how many bottles to place at this slot. The wine was
-      // saved with quantity = 1 by default; if they place more here we'll
-      // also bump the wine's quantity to match.
-      setPlacingAt({ row, col, wineId: pendingWineId });
-      setPlaceCount('1');
-      setPlaceOrientation('Vertical');
+      if (placePrechosen) {
+        // "Add More Bottles" already asked how many up front — place straight
+        // away at the tapped slot, no second pop-up.
+        confirmPlacement({ row, col, wineId: pendingWineId });
+      } else {
+        // Ask the user how many bottles to place at this slot. The wine was
+        // saved with quantity = 1 by default; if they place more here we'll
+        // also bump the wine's quantity to match.
+        setPlacingAt({ row, col, wineId: pendingWineId });
+        setPlaceCount('1');
+        setPlaceOrientation('Vertical');
+      }
     } else {
       // Empty slot, nothing pending — offer the user a choice instead of
       // jumping straight to the camera. pendingSlot is set now so the scan /
@@ -534,17 +559,19 @@ export default function RackGridScreen() {
     return result;
   }
 
-  async function confirmPlacement() {
-    if (!placingAt) return;
+  // `at` defaults to the placingAt modal's slot, but the upfront Add-More flow
+  // passes the just-tapped slot directly (count already chosen, no modal).
+  async function confirmPlacement(at: { row: number; col: number; wineId: string } | null = placingAt) {
+    if (!at) return;
     Keyboard.dismiss();
     // Soft warning when the bottle's size doesn't match the slot's
     // expected size. Fires once before the placement runs — user can
     // continue and place anyway, or cancel back to the modal.
-    const wineForCheck = wines.find((w) => w.id === placingAt.wineId);
+    const wineForCheck = wines.find((w) => w.id === at.wineId);
     if (wineForCheck && rack) {
       const mismatch = detectPlacementMismatch(
         wineForCheck.bottle_size_ml,
-        placingAt.row,
+        at.row,
         rack.large_format_bottle_size_ml,
       );
       if (mismatch) {
@@ -553,21 +580,21 @@ export default function RackGridScreen() {
           body: placementWarningBody(mismatch),
           buttons: [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Place anyway', onPress: () => { void runPlacement(); } },
+            { text: 'Place anyway', onPress: () => { void runPlacement(at); } },
           ],
         });
         return;
       }
     }
-    void runPlacement();
+    void runPlacement(at);
   }
 
-  async function runPlacement() {
-    if (!placingAt) return;
+  async function runPlacement(at: { row: number; col: number; wineId: string } | null = placingAt) {
+    if (!at) return;
     const requested = Math.max(1, parseInt(placeCount, 10) || 1);
     setPlacing(true);
     try {
-      const slots = computePlacementSlots(placingAt.row, placingAt.col, requested, placeOrientation);
+      const slots = computePlacementSlots(at.row, at.col, requested, placeOrientation);
       // Skip any slots that are already occupied — assign one at a time
       // so an existing wine in the path doesn't blow up the whole batch.
       const freeSlots = slots.filter((s) => !slotMap[`${s.row},${s.col}`]?.cellar_wine_id);
@@ -576,9 +603,9 @@ export default function RackGridScreen() {
         setPlacing(false);
         return;
       }
-      await assignSlots(rackId, freeSlots, placingAt.wineId);
+      await assignSlots(rackId, freeSlots, at.wineId);
 
-      const wine = wines.find((w) => w.id === placingAt.wineId);
+      const wine = wines.find((w) => w.id === at.wineId);
       if (pendingAddMode && wine) {
         // "+ Add bottles" flow — the wine already exists with N bottles,
         // we're adding M more. Increment quantity by the placed count.
@@ -595,22 +622,22 @@ export default function RackGridScreen() {
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setPendingWineId(null);
       setPlacingAt(null);
+      setPlacePrechosen(false);
 
       const placed = freeSlots.length;
       if (pendingAddMode) {
-        // "+ Add bottles" flow: confirm with a popup, then on OK drop the user
-        // back to the screen they were on BEFORE the wine card (Full Cellar
-        // List or a rack) — feels like a finished task.
+        // "+ Add bottles" flow: confirm with a popup, then STAY on the live rack
+        // so the user sees the bottles they just placed. (Previously this
+        // router.dismiss(2)'d back, which over-popped to the Cellar tab when the
+        // flow was started from the rack's own long-press — the stack only had
+        // [Cellar tab, rack], so dismissing two routes skipped past the rack.)
         setPendingAddMode(false);
         showAlert({
           title: 'Your bottle has been added',
           body: placed === 1
             ? `Added to ${rack?.name ?? 'your rack'}.`
             : `${placed} bottles added to ${rack?.name ?? 'your rack'}.`,
-          buttons: [{
-            text: 'OK',
-            onPress: () => { if (router.canGoBack()) { try { router.dismiss(2); } catch { router.back(); } } },
-          }],
+          buttons: [{ text: 'OK' }],
         });
       } else {
         setSavedMsg(placed === 1 ? 'Wine saved to rack' : `${placed} bottles saved to rack`);
@@ -620,6 +647,16 @@ export default function RackGridScreen() {
     } finally {
       setPlacing(false);
     }
+  }
+
+  // Confirm the upfront "how many?" for Add More Bottles → enter placement mode
+  // with the count locked in, so the next slot tap places straight away.
+  function startAddMorePlacement() {
+    if (!addMoreUpfront) return;
+    setPendingWineId(addMoreUpfront.wineId);
+    setPendingAddMode(true);
+    setPlacePrechosen(true);
+    setAddMoreUpfront(null);
   }
 
   function pickUpSlot(row: number, col: number) {
@@ -638,8 +675,11 @@ export default function RackGridScreen() {
         // how many), which bumps the wine's quantity to match.
         text: 'Add More Bottles',
         onPress: () => {
-          setPendingWineId(wineId);
-          setPendingAddMode(true);
+          // Ask how many up front (one pop-up); the tap that follows places
+          // them straight away — no second modal.
+          setPlaceCount('1');
+          setPlaceOrientation('Vertical');
+          setAddMoreUpfront({ wineId, wineName: wine.wine_name });
         },
       },
       {
@@ -652,58 +692,30 @@ export default function RackGridScreen() {
         // Archive keeps the wine in the user's records (Cellar Archive) but
         // takes it out of the live Cellar List and this rack.
         text: 'Archive Wine',
-        onPress: () => confirmArchiveWine(wineId, wine.wine_name, qty),
+        onPress: () => {
+          // Multiple bottles → ask how many (with an Archive All option).
+          // Single bottle → the simple confirm is enough.
+          if (qty > 1) { setArchiveCount('1'); setArchiveModal({ wineId, wineName: wine.wine_name, qty }); }
+          else confirmArchiveWine(wineId, wine.wine_name, qty);
+        },
       },
     ];
-    // When more than one bottle is on record, deleting from a single slot
-    // must only remove THAT bottle — not wipe the whole listing. Offer the
-    // per-bottle removal as the primary destructive action, with the
-    // whole-listing delete as a clearly separate, heavier option.
-    if (qty > 1) {
-      buttons.push({
-        text: `Remove this bottle (1 of ${qty})`,
-        style: 'destructive',
-        onPress: () => confirmRemoveOneBottle(row, col, wineId, wine.wine_name, qty),
-      });
-    }
+    // Delete — same shape as Archive: ask how many to permanently remove when
+    // there's more than one bottle (with a "Delete all" option); a single bottle
+    // just confirms.
     buttons.push({
-      text: qty > 1 ? `Delete all ${qty} bottles from cellar (Permanent)` : 'Delete wine from cellar (Permanent)',
+      text: 'Delete Wine (Permanent)',
       style: 'destructive',
-      onPress: () => confirmDeleteWine(wineId, wine.wine_name, qty),
+      onPress: () => {
+        if (qty > 1) { setDeleteCount('1'); setDeleteModal({ wineId, wineName: wine.wine_name, qty }); }
+        else confirmDeleteWine(wineId, wine.wine_name, qty);
+      },
     });
     buttons.push({ text: 'Cancel', style: 'cancel' });
     showAlert({
       title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
       body: 'What would you like to do?',
       buttons,
-    });
-  }
-
-  // Remove a single physical bottle from this slot: clear the slot and
-  // decrement the wine's recorded quantity by one. The listing (and any
-  // other bottles) stay in the cellar. Used only when qty > 1, so the
-  // post-decrement quantity is always >= 1.
-  function confirmRemoveOneBottle(row: number, col: number, wineId: string, wineName: string, qty: number) {
-    showAlert({
-      title: 'Remove this bottle?',
-      body: `Permanently remove one bottle of ${wineName} from this slot. You'll have ${qty - 1} left in your cellar.`,
-      buttons: [
-        {
-          text: 'Remove one bottle',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await clearSlot(rackId, row, col);
-              await updateWine.mutateAsync({ id: wineId, updates: { quantity: Math.max(1, qty - 1) } });
-              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-            } catch (err) {
-              showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
     });
   }
 
@@ -748,6 +760,56 @@ export default function RackGridScreen() {
     });
   }
 
+  // Archive from the multi-bottle modal. `archiveAll` archives the whole
+  // listing; otherwise it archives the entered count, decrementing the live
+  // row and cloning an archive row for the removed bottles (mirrors the wine
+  // card's partial-archive so the "Bottles in My Archive" stat stays correct).
+  async function handleRackArchive(archiveAll: boolean) {
+    if (!archiveModal || archiving) return;
+    const { wineId, qty } = archiveModal;
+    const count = archiveAll ? qty : (parseInt(archiveCount, 10) || 0);
+    if (count < 1 || count > qty) {
+      showAlert({ title: 'Invalid', body: `Enter between 1 and ${qty} bottles.` });
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const wine = wines.find((w) => w.id === wineId);
+    setArchiving(true);
+    try {
+      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count });
+      qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
+
+      if (count === qty) {
+        // Full archive — mark the row archived and clear all its slots.
+        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` } });
+        await clearWineFromRacks(wineId);
+        if (session?.user.id) {
+          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wineId));
+          qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+        }
+      } else {
+        // Partial — decrement the live row, clone an archive row for the
+        // removed bottles, and free exactly `count` of its slots.
+        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty - count } });
+        if (wine) {
+          const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
+          await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
+        }
+        await removeSlotsForWine(wineId, count);
+        if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      }
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      setArchiveModal(null);
+      setSavedMsg(count === qty ? 'Wine archived' : `${count} bottle${count === 1 ? '' : 's'} archived`);
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setArchiving(false);
+    }
+  }
+
   function confirmDeleteWine(wineId: string, wineName: string, qty: number) {
     showAlert({
       title: qty > 1 ? `Delete all ${qty} bottles?` : 'Delete wine?',
@@ -782,6 +844,46 @@ export default function RackGridScreen() {
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  // Delete from the multi-bottle modal. `deleteAll` removes the whole listing
+  // (row + all slots). Otherwise it permanently removes the entered count:
+  // decrement the live row and free exactly that many slots. No archive clone —
+  // this is a permanent delete, not an archive.
+  async function handleRackDelete(deleteAll: boolean) {
+    if (!deleteModal || deleting) return;
+    const { wineId, qty } = deleteModal;
+    const count = deleteAll ? qty : (parseInt(deleteCount, 10) || 0);
+    if (count < 1 || count > qty) {
+      showAlert({ title: 'Invalid', body: `Enter between 1 and ${qty} bottles.` });
+      return;
+    }
+    setDeleting(true);
+    try {
+      if (count === qty) {
+        // Full delete — remove the row and clear all its slots.
+        await clearWineFromRacks(wineId);
+        const { error } = await supabase.from('cellar_wines').delete().eq('id', wineId);
+        if (error) throw error;
+        if (session?.user.id) {
+          qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) => (old ?? []).filter((w) => w.id !== wineId));
+        }
+        qc.invalidateQueries({ queryKey: ['cellar'] });
+        qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+      } else {
+        // Partial — decrement the live row and free exactly `count` of its slots.
+        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty - count } });
+        await removeSlotsForWine(wineId, count);
+      }
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      setDeleteModal(null);
+      setSavedMsg(count === qty ? 'Wine deleted' : `${count} bottle${count === 1 ? '' : 's'} deleted`);
+    } catch (err) {
+      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleDrop(toRow: number, toCol: number) {
@@ -832,7 +934,7 @@ export default function RackGridScreen() {
       (wine.region ?? '').toLowerCase().includes(q) ||
       (wine.grape_variety ?? '').toLowerCase().includes(q) ||
       (wine.vintage ?? '').toString().includes(q) ||
-      statuses.includes(wine.drinking_window_status)
+      statuses.includes(effectiveMaturity(wine))
     );
   }, [winesInRack, searchQuery]);
 
@@ -843,7 +945,7 @@ export default function RackGridScreen() {
     if (searchQuery.trim()) return new Set(filteredWines.map(({ wine }) => wine.id));
     if (maturityHighlight) {
       return new Set(
-        winesInRack.filter(({ wine }) => wine.drinking_window_status === maturityHighlight).map(({ wine }) => wine.id)
+        winesInRack.filter(({ wine }) => effectiveMaturity(wine) === maturityHighlight).map(({ wine }) => wine.id)
       );
     }
     if (activeCustomFilterId) {
@@ -852,15 +954,6 @@ export default function RackGridScreen() {
     }
     return highlightedWineId ? new Set([highlightedWineId]) : new Set<string>();
   }, [searchQuery, filteredWines, highlightedWineId, activeCustomFilterId, customFilters, maturityHighlight, winesInRack]);
-
-  // Whether any highlight/filter is active (drives the Unselect link).
-  const anyFilterActive = !!(highlightedWineId || searchQuery.trim() || activeCustomFilterId || maturityHighlight);
-  function clearAllFilters() {
-    setHighlightedWineId(null);
-    setSearchQuery('');
-    setActiveCustomFilterId(null);
-    setMaturityHighlight('');
-  }
 
   // Pick a readiness option from the Maturity chip → highlight those bottles.
   function selectMaturity(value: string) {
@@ -939,6 +1032,7 @@ export default function RackGridScreen() {
       body: 'Rename this filter, add or remove the wines it holds, or delete it. Your wines stay in the cellar either way.',
       buttons: [
         { text: 'Add/Remove Wines', onPress: () => openEditFilter(filter) },
+        { text: 'Rename Filter', onPress: () => setRenameFilterTarget({ id: filter.id, name: filter.name }) },
         { text: 'Delete', style: 'destructive', onPress: () => {
             if (activeCustomFilterId === filter.id) setActiveCustomFilterId(null);
             removeFilter.mutate(filter.id);
@@ -946,6 +1040,20 @@ export default function RackGridScreen() {
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  async function saveFilterRename(name: string) {
+    if (!renameFilterTarget) return;
+    setRenamingFilter(true);
+    try {
+      await renameFilter.mutateAsync({ filterId: renameFilterTarget.id, name });
+      setRenameFilterTarget(null);
+      setSavedMsg(`"${name}" filter renamed`);
+    } catch (err) {
+      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setRenamingFilter(false);
+    }
   }
 
   if (isLoading || !rack) {
@@ -1185,12 +1293,6 @@ export default function RackGridScreen() {
               )}
             </View>
 
-            {anyFilterActive && (
-              <TouchableOpacity style={styles.unselectRow} onPress={clearAllFilters} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.unselectLink}>Unselect</Text>
-              </TouchableOpacity>
-            )}
-
             {bottleListOpen && (
               <View style={styles.bottleList}>
                 {filteredWines.length === 0 ? (
@@ -1252,7 +1354,7 @@ export default function RackGridScreen() {
                   until they place it. Dismissing leaves the wine safely in
                   the cellar, unplaced, to be racked later (or never). */}
               <TouchableOpacity
-                onPress={() => { setPendingWineId(null); setPendingAddMode(false); }}
+                onPress={() => { setPendingWineId(null); setPendingAddMode(false); setPlacePrechosen(false); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={styles.pendingBannerCancel}>Not now — leave it in my cellar</Text>
@@ -1393,12 +1495,154 @@ export default function RackGridScreen() {
 
             <TouchableOpacity
               style={[styles.placeConfirmBtn, placing && { opacity: 0.6 }]}
-              onPress={confirmPlacement}
+              onPress={() => confirmPlacement()}
               disabled={placing}
             >
               <Text style={styles.placeConfirmText}>{placing ? 'Placing…' : 'Place in rack'}</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setPlacingAt(null)} disabled={placing} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Add More Bottles — upfront "how many?" pop-up. After Continue the user
+          taps a slot and the bottles are placed straight away (no second modal). */}
+      <Modal visible={!!addMoreUpfront} transparent animationType="fade" onRequestClose={() => setAddMoreUpfront(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>How many bottles?</Text>
+            <Text style={styles.placeBody}>How many bottles of {addMoreUpfront?.wineName} are you adding? Then tap a slot to place them.</Text>
+
+            <TextInput
+              style={styles.placeInput}
+              value={placeCount}
+              onChangeText={setPlaceCount}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+              autoFocus
+              selectTextOnFocus
+            />
+
+            {(parseInt(placeCount, 10) || 1) > 1 && (
+              <>
+                <Text style={styles.placeFieldLabel}>Orientation</Text>
+                <View style={styles.placeOrientationRow}>
+                  <TouchableOpacity
+                    style={[styles.placeOrientationBtn, placeOrientation === 'Vertical' && styles.placeOrientationBtnActive]}
+                    onPress={() => setPlaceOrientation('Vertical')}
+                  >
+                    <Text style={[styles.placeOrientationText, placeOrientation === 'Vertical' && styles.placeOrientationTextActive]}>Vertical</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.placeOrientationBtn, placeOrientation === 'Horizontal' && styles.placeOrientationBtnActive]}
+                    onPress={() => setPlaceOrientation('Horizontal')}
+                  >
+                    <Text style={[styles.placeOrientationText, placeOrientation === 'Horizontal' && styles.placeOrientationTextActive]}>Horizontal</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+
+            <TouchableOpacity style={styles.placeConfirmBtn} onPress={startAddMorePlacement}>
+              <Text style={styles.placeConfirmText}>Continue</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setAddMoreUpfront(null)} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Rename a custom filter. */}
+      <RenameModal
+        visible={!!renameFilterTarget}
+        initialName={renameFilterTarget?.name ?? ''}
+        title="Rename filter"
+        saving={renamingFilter}
+        onSave={saveFilterRename}
+        onClose={() => setRenameFilterTarget(null)}
+      />
+
+      {/* Archive-a-multi-bottle-wine modal — how many, or Archive All. */}
+      <Modal visible={!!archiveModal} transparent animationType="fade" onRequestClose={() => !archiving && setArchiveModal(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>Archive bottles</Text>
+            <Text style={styles.placeBody}>
+              How many of your {archiveModal?.qty} bottles of {archiveModal?.wineName} to move to your Cellar Archive? They leave the Cellar List and this rack but stay in your records.
+            </Text>
+
+            <TextInput
+              style={styles.placeInput}
+              value={archiveCount}
+              onChangeText={setArchiveCount}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+              selectTextOnFocus
+            />
+
+            <TouchableOpacity
+              style={[styles.placeConfirmBtn, archiving && { opacity: 0.6 }]}
+              onPress={() => handleRackArchive(false)}
+              disabled={archiving}
+            >
+              <Text style={styles.placeConfirmText}>{archiving ? 'Archiving…' : `Archive ${parseInt(archiveCount, 10) || 1}`}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.archiveAllBtn, archiving && { opacity: 0.6 }]}
+              onPress={() => handleRackArchive(true)}
+              disabled={archiving}
+            >
+              <Text style={styles.archiveAllText}>Archive all {archiveModal?.qty}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setArchiveModal(null)} disabled={archiving} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Delete-a-multi-bottle-wine modal — how many to permanently remove, or Delete All. */}
+      <Modal visible={!!deleteModal} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteModal(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>Delete bottles</Text>
+            <Text style={styles.placeBody}>
+              How many of your {deleteModal?.qty} bottles of {deleteModal?.wineName} to permanently remove? This can't be undone.
+            </Text>
+
+            <TextInput
+              style={styles.placeInput}
+              value={deleteCount}
+              onChangeText={setDeleteCount}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+              selectTextOnFocus
+            />
+
+            <TouchableOpacity
+              style={[styles.placeConfirmBtn, deleting && { opacity: 0.6 }]}
+              onPress={() => handleRackDelete(false)}
+              disabled={deleting}
+            >
+              <Text style={styles.placeConfirmText}>{deleting ? 'Deleting…' : `Delete ${parseInt(deleteCount, 10) || 1}`}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.archiveAllBtn, deleting && { opacity: 0.6 }]}
+              onPress={() => handleRackDelete(true)}
+              disabled={deleting}
+            >
+              <Text style={styles.archiveAllText}>Delete all {deleteModal?.qty}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setDeleteModal(null)} disabled={deleting} style={styles.placeCancel}>
               <Text style={styles.placeCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
@@ -1629,9 +1873,6 @@ const styles = StyleSheet.create({
   maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
   maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
   maturityOptionTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
-  // "Unselect" — clears the highlighted bottle, shown only while one is selected.
-  unselectLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline', paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
-  unselectRow: { alignItems: 'center', paddingTop: 2 },
   bottleList: { paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
   createFilterRow: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   createFilterLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
@@ -1666,6 +1907,8 @@ const styles = StyleSheet.create({
   placeBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   // Inter — form input
   placeInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 20, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', width: 96, alignSelf: 'center', marginBottom: spacing.md },
+  archiveAllBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
+  archiveAllText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Inter — form label
   placeFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   placeOrientationRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },

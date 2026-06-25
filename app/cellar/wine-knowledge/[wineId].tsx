@@ -1,8 +1,14 @@
-import { useEffect, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCellar, useWishList } from '../../../src/hooks/useCellar';
 import { getWineKnowledge } from '../../../src/api/label';
+import { WineKnowledgeShareCard } from '../../../src/components/WineKnowledgeShareCard';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../../src/constants/share';
+import { showAlert } from '../../../src/components/AppAlert';
 import type { WineKnowledgeData } from '../../../src/types/wine';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -81,6 +87,42 @@ export default function WineKnowledgeScreen() {
     return parts.filter(Boolean).join(' · ');
   })();
 
+  // Share the four profiles as a branded PNG (same off-screen-capture pattern
+  // the wine card uses), falling back to formatted text where unavailable.
+  const shareRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
+
+  async function handleShare() {
+    if (!knowledge || sharing) return;
+    setSharing(true);
+    try {
+      // One paint to let the off-screen card mount.
+      await new Promise((r) => setTimeout(r, 250));
+      if (shareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share wine knowledge',
+          UTI: 'public.png',
+        });
+        return;
+      }
+      // Plain-text fallback for devices without share-sheet support.
+      const grapeLine = info.grape ? `\n${info.grape}` : '';
+      const body =
+        `${headerLine}${grapeLine}\n\n` +
+        `PRODUCER PROFILE\n${knowledge.producerProfile}\n\n` +
+        `REGION PROFILE\n${knowledge.regionProfile}\n\n` +
+        `VINTAGE PROFILE\n${knowledge.vintageProfile}\n\n` +
+        `GRAPE VARIETY\n${knowledge.grapeProfile}` +
+        VINSTER_TEXT_SHARE_FOOTER;
+      await Share.share({ message: body, title: headerLine });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharing(false);
+    }
+  }
 
   return (
     <View style={styles.container}>
@@ -88,7 +130,19 @@ export default function WineKnowledgeScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
-        <View style={{ width: 44 }} />
+        {knowledge ? (
+          <TouchableOpacity
+            onPress={handleShare}
+            disabled={sharing}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={styles.shareBtn}
+          >
+            <Ionicons name="share-outline" size={20} color={sharing ? colors.textMuted : colors.gold} />
+            <Text style={[styles.shareText, sharing && { color: colors.textMuted }]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 44 }} />
+        )}
       </View>
 
       {!hasWine ? (
@@ -141,6 +195,21 @@ export default function WineKnowledgeScreen() {
           ) : null}
         </ScrollView>
       )}
+
+      {/* Off-screen branded card, mounted only while a share is in flight. */}
+      {sharing && knowledge ? (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <WineKnowledgeShareCard
+            ref={shareRef}
+            headerLine={headerLine}
+            grape={info.grape}
+            producerProfile={knowledge.producerProfile}
+            regionProfile={knowledge.regionProfile}
+            vintageProfile={knowledge.vintageProfile}
+            grapeProfile={knowledge.grapeProfile}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -149,6 +218,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  shareBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  shareText: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.gold },
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 80 },
 
   // Wine card header replica.

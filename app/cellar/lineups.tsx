@@ -1,9 +1,14 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, useWindowDimensions } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
-import { listLineupArchives, lineupSignedUrl, setLineupFavourite, type LineupArchive } from '../../src/api/lineups';
+import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote, type LineupArchive } from '../../src/api/lineups';
+import { MicButton } from '../../src/components/MicButton';
+import { LineupShareCard } from '../../src/components/LineupShareCard';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
@@ -21,7 +26,7 @@ function monthKey(iso: string): string {
 }
 
 // A single lineup tile — resolves a fresh signed URL for its photo on mount.
-function LineupTile({ item, size, onPress, onToggleFav }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void }) {
+function LineupTile({ item, size, onPress, onToggleFav, onOpenNote }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void; onOpenNote: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -39,8 +44,22 @@ function LineupTile({ item, size, onPress, onToggleFav }: { item: LineupArchive;
           <Text style={[styles.favStarText, item.is_favourite && styles.favStarActive]}>{item.is_favourite ? '★' : '☆'}</Text>
         </TouchableOpacity>
       </View>
-      <Text style={styles.tileDate}>{item.is_favourite ? '★ ' : ''}{date}</Text>
-      {item.bottle_count ? <Text style={styles.tileCount}>{item.bottle_count} bottle{item.bottle_count === 1 ? '' : 's'}</Text> : null}
+      {/* Date on the left, the note "letter" on the right — top-aligned with the
+          date, pulled in one notch from the right edge. */}
+      <View style={styles.tileTopRow}>
+        <Text style={styles.tileDate} numberOfLines={1}>{item.is_favourite ? '★ ' : ''}{date}</Text>
+        {/* Hand-drawn gold envelope outline (matches the mic / bin motif), muted
+            until a note exists. Short press opens the note (read / record / type). */}
+        <TouchableOpacity onPress={onOpenNote} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7} style={styles.envelopeWrap}>
+          <View style={[styles.envelope, !item.note && styles.envelopeEmpty]}>
+            <View style={styles.envFlapLeft} />
+            <View style={styles.envFlapRight} />
+          </View>
+        </TouchableOpacity>
+      </View>
+      {item.bottle_count ? (
+        <Text style={styles.tileCount}>{item.bottle_count} bottle{item.bottle_count === 1 ? '' : 's'}</Text>
+      ) : null}
     </TouchableOpacity>
   );
 }
@@ -146,6 +165,72 @@ export default function LineupLibraryScreen() {
     setViewerOpen(true);
   }
 
+  // Note "letter" — view / record / type a memory note for a lineup.
+  const [noteTarget, setNoteTarget] = useState<LineupArchive | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  function openNote(item: LineupArchive) {
+    setNoteTarget(item);
+    setNoteDraft(item.note ?? '');
+  }
+  async function saveNote() {
+    if (!noteTarget || savingNote) return;
+    setSavingNote(true);
+    try {
+      await setLineupNote(noteTarget.id, noteDraft);
+      qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
+      setNoteTarget(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
+  // Share the lineup as a branded image (photo + date stamp + note). Resolves a
+  // fresh signed URL, mounts the off-screen card, and snapshots it once the
+  // photo has loaded (captureAndShareLineup, fired by the card's onImageReady).
+  const [shareData, setShareData] = useState<{ url: string; date: string; note: string } | null>(null);
+  const [sharingNote, setSharingNote] = useState(false);
+  const shareCardRef = useRef<View>(null);
+  const capturedRef = useRef(false);
+
+  async function handleShareNote() {
+    if (!noteTarget || sharingNote) return;
+    setSharingNote(true);
+    try {
+      const url = await lineupSignedUrl(noteTarget.image_path);
+      if (!url) throw new Error('Could not load the lineup photo.');
+      capturedRef.current = false;
+      setShareData({
+        url,
+        date: new Date(noteTarget.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
+        note: noteDraft.trim() || (noteTarget.note ?? ''),
+      });
+    } catch (err) {
+      setSharingNote(false);
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  async function captureAndShareLineup() {
+    if (capturedRef.current || !shareCardRef.current) return;
+    capturedRef.current = true;
+    try {
+      await new Promise((r) => setTimeout(r, 150)); // let the photo settle after load
+      if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share this lineup', UTI: 'public.png' });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharingNote(false);
+      setShareData(null);
+      capturedRef.current = false;
+    }
+  }
+
   const cols = 2;
   const gap = spacing.md;
   const tileWidth = (width - spacing.xl * 2 - gap * (cols - 1)) / cols;
@@ -231,7 +316,7 @@ export default function LineupLibraryScreen() {
           ) : (
             <ScrollView contentContainerStyle={styles.grid}>
               {filtered.map((item) => (
-                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => openViewer(item)} onToggleFav={() => toggleFav(item)} />
+                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => openViewer(item)} onToggleFav={() => toggleFav(item)} onOpenNote={() => openNote(item)} />
               ))}
             </ScrollView>
           )}
@@ -269,6 +354,58 @@ export default function LineupLibraryScreen() {
           {viewerUrl ? <Image source={{ uri: viewerUrl }} style={styles.viewerImage} resizeMode="contain" /> : <ActivityIndicator color={colors.gold} />}
         </TouchableOpacity>
       </Modal>
+
+      {/* The "letter" — opens with the night's note. View it, or record / type
+          one if it's empty. */}
+      <Modal visible={!!noteTarget} transparent animationType="fade" onRequestClose={() => setNoteTarget(null)}>
+        <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
+          <View style={styles.letterSheet}>
+            <Text style={styles.letterFlap}>✉︎</Text>
+            <Text style={styles.letterTitle}>A note from your night</Text>
+            {noteTarget ? (
+              <Text style={styles.letterDate}>
+                {new Date(noteTarget.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+              </Text>
+            ) : null}
+            <View style={styles.letterInputRow}>
+              <TextInput
+                style={styles.letterInput}
+                value={noteDraft}
+                onChangeText={setNoteDraft}
+                placeholder="Tap the mic to speak, or type your memories of the night…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                textAlignVertical="top"
+              />
+              <MicButton value={noteDraft} onChangeText={setNoteDraft} />
+            </View>
+            <View style={styles.letterActions}>
+              <TouchableOpacity onPress={() => setNoteTarget(null)}>
+                <Text style={styles.letterCancel}>Close</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShareNote} disabled={sharingNote}>
+                <Text style={[styles.letterShare, sharingNote && { color: colors.textMuted }]}>{sharingNote ? 'Preparing…' : 'Share'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.letterSaveBtn} onPress={saveNote} disabled={savingNote}>
+                <Text style={styles.letterSaveText}>{savingNote ? 'Saving…' : 'Save note'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Off-screen branded lineup card, mounted only while a share is in flight. */}
+      {shareData ? (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <LineupShareCard
+            ref={shareCardRef}
+            imageUrl={shareData.url}
+            date={shareData.date}
+            note={shareData.note}
+            onImageReady={captureAndShareLineup}
+          />
+        </View>
+      ) : null}
 
       <LibraryFilterModal
         visible={filterModalOpen}
@@ -311,8 +448,17 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.xl, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
   tileImageWrap: { borderRadius: 10, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  tileDate: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginTop: spacing.xs },
-  tileCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  // Date + envelope share a top-aligned row; bottle count sits below.
+  tileTopRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', alignSelf: 'stretch', marginTop: spacing.xs },
+  tileDate: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginRight: spacing.sm },
+  envelopeWrap: { marginRight: spacing.xs },
+  tileCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  // Hand-drawn envelope: a gold-outlined body with a "V" flap (two rotated
+  // gold strokes), ~3:2 wide so it stands out. Matches the mic / bin motif.
+  envelope: { width: 40, height: 26, borderWidth: 1.5, borderColor: colors.gold, borderRadius: 3, overflow: 'hidden' },
+  envelopeEmpty: { opacity: 0.45 },
+  envFlapLeft: { position: 'absolute', top: 5.5, left: -0.5, width: 22, height: 1.5, backgroundColor: colors.gold, transform: [{ rotate: '30deg' }] },
+  envFlapRight: { position: 'absolute', top: 5.5, left: 18.5, width: 22, height: 1.5, backgroundColor: colors.gold, transform: [{ rotate: '-30deg' }] },
   favStar: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
   favStarActive: { color: colors.gold },
@@ -333,4 +479,18 @@ const styles = StyleSheet.create({
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   viewerImage: { width: '100%', height: '80%' },
+  // The note "letter" — a cream card with a gold flap glyph at the top.
+  letterSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg, width: '100%', alignSelf: 'center', marginHorizontal: spacing.xl },
+  letterFlap: { fontSize: 28, color: colors.gold, textAlign: 'center', marginBottom: spacing.xs },
+  letterTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center' },
+  letterDate: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: 2, marginBottom: spacing.md },
+  letterInputRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  letterInput: { flex: 1, minHeight: 100, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
+  letterActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.lg, marginTop: spacing.md },
+  letterCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  letterShare: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Off-screen position only (no opacity:0 — that degrades the Android snapshot).
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
+  letterSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  letterSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 });

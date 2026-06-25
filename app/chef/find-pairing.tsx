@@ -267,7 +267,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: 112, paddingBottom: 60 },
   backRow: { alignSelf: 'flex-start', marginBottom: spacing.xl },
-  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 44 },
   // Cellar-style header bar.
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },

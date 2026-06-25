@@ -1,5 +1,6 @@
 import * as ImageManipulator from 'expo-image-manipulator';
-import { invokeResilient } from './invokeResilient';
+import { invokeResilient, isNetworkError } from './invokeResilient';
+import { streamPairings } from './pairingsStream';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
 
 // All edge calls go through invokeResilient, which attaches the user's JWT (via
@@ -70,15 +71,29 @@ export async function generatePairings(
   filters: DietaryFilters,
   options?: { excludeChefs?: string[]; additionalRequest?: string | null },
 ): Promise<Pairing[]> {
-  const data = await invokeFunction('generate-pairings', {
+  // Backwards-compatible: omitted keys are treated as defaults by the
+  // edge function (no excludes, no steer).
+  const body = {
     wine,
     filters,
-    // Backwards-compatible: omitted keys are treated as defaults by the
-    // edge function (no excludes, no steer).
     excludeChefs: options?.excludeChefs ?? [],
     additionalRequest: options?.additionalRequest ?? null,
-  }) as { pairings: Pairing[] };
-  return data.pairings;
+  };
+
+  // Prefer the streamed path: this ~65s generation is the one most likely to
+  // drop on cellular, and a heartbeat-kept SSE connection survives where a
+  // single idle request doesn't. If streaming drops (after its own retries) or
+  // isn't supported on the device, fall back to the buffered invoke so pairings
+  // still work — less cellular-robust, but better than a hard failure. A real
+  // application error (not a transport drop) propagates without falling back.
+  try {
+    const data = await streamPairings(body) as { pairings: Pairing[] };
+    return data.pairings;
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    const data = await invokeResilient('generate-pairings', { ...body, stream: false }) as { pairings: Pairing[] };
+    return data.pairings;
+  }
 }
 
 export interface ImportedCellarWine {

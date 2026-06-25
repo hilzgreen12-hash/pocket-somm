@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
@@ -7,8 +7,11 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
 import { matchLineupToCellar, archiveBottles, type NightMatch } from '../../src/services/archiveNight';
-import { saveLineupArchive } from '../../src/api/lineups';
+import { saveLineupArchive, setLineupNote, type LineupArchive } from '../../src/api/lineups';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { MicButton } from '../../src/components/MicButton';
+import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
+import { createManualRestaurantSession, deleteScanSession } from '../../src/api/restaurantSessions';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -30,6 +33,33 @@ export default function ArchiveNightScreen() {
   // is the critical action and must not be blocked by a photo failure, but we
   // shouldn't claim the photo saved when it didn't.
   const [photoSaved, setPhotoSaved] = useState(true);
+  // The saved lineup row (when the photo made it to the Library) — lets the
+  // done screen attach a "memory" note to it. Plus the note draft + save state.
+  const [savedLineup, setSavedLineup] = useState<LineupArchive | null>(null);
+  const [note, setNote] = useState('');
+  const [savingNote, setSavingNote] = useState(false);
+  const [noteSaved, setNoteSaved] = useState(false);
+  // "Where did you enjoy these bottles?" — Private Location is just selectable
+  // for now (no input flow yet); A Restaurant opens the full review modal on a
+  // blank manual restaurant session, saved to Your Restaurants.
+  const [locationChoice, setLocationChoice] = useState<'private' | 'restaurant' | null>(null);
+  const [restaurantSessionId, setRestaurantSessionId] = useState<string | null>(null);
+  const [openingRestaurant, setOpeningRestaurant] = useState(false);
+  const restaurantSavedRef = useRef(false);
+
+  async function handleChooseRestaurant() {
+    if (!session?.user.id || openingRestaurant) return;
+    setOpeningRestaurant(true);
+    try {
+      const id = await createManualRestaurantSession(session.user.id);
+      restaurantSavedRef.current = false;
+      setRestaurantSessionId(id);
+    } catch (err) {
+      showAlert({ title: 'Could not start a review', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setOpeningRestaurant(false);
+    }
+  }
 
   async function pickFrom(source: 'camera' | 'library') {
     try {
@@ -76,6 +106,20 @@ export default function ArchiveNightScreen() {
 
   const totalToArchive = matches.reduce((sum, m) => sum + (counts[m.wine.id] ?? 0), 0);
 
+  async function handleSaveNote() {
+    if (!savedLineup || savingNote || !note.trim()) return;
+    setSavingNote(true);
+    try {
+      await setLineupNote(savedLineup.id, note);
+      setNoteSaved(true);
+      if (session?.user.id) qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
+    } catch (err) {
+      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
   async function confirmArchive() {
     if (!session?.user.id || totalToArchive === 0) return;
     setStage('archiving');
@@ -91,7 +135,8 @@ export default function ArchiveNightScreen() {
       let savedPhoto = false;
       if (imageUri) {
         try {
-          await saveLineupArchive(session.user.id, imageUri, totalToArchive);
+          const row = await saveLineupArchive(session.user.id, imageUri, totalToArchive);
+          setSavedLineup(row);
           savedPhoto = true;
         } catch (e) {
           console.warn('saveLineupArchive failed:', e);
@@ -147,21 +192,75 @@ export default function ArchiveNightScreen() {
           <Text style={styles.hint}>Archiving…</Text>
         </View>
       ) : stage === 'done' ? (
-        <View style={styles.centerBlock}>
-          <Text style={styles.doneTitle}>Night archived</Text>
-          <Text style={styles.hint}>
+        <ScrollView contentContainerStyle={styles.doneContent} keyboardShouldPersistTaps="handled">
+          <Text style={styles.doneTitle}>Night Archived</Text>
+          <Text style={styles.doneCount}>
             {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive.{' '}
             {photoSaved
               ? 'The photo is saved in Your Lineup Library.'
               : "The bottles were archived, but the lineup photo couldn't be saved to Your Lineup Library."}
           </Text>
+
+          {savedLineup ? (
+            <>
+              <Text style={styles.doneBlurb}>Fun session! Can you tell Vinster a little more about it?</Text>
+
+              <Text style={styles.notePrompt}>Where did you enjoy these bottles?</Text>
+              <View style={styles.locationRow}>
+                <TouchableOpacity
+                  style={[styles.locationBtn, locationChoice === 'private' && styles.locationBtnActive]}
+                  onPress={() => setLocationChoice('private')}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.locationBtnText, locationChoice === 'private' && styles.locationBtnTextActive]}>Private Location</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.locationBtn, locationChoice === 'restaurant' && styles.locationBtnActive]}
+                  onPress={handleChooseRestaurant}
+                  disabled={openingRestaurant}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.locationBtnText, locationChoice === 'restaurant' && styles.locationBtnTextActive]}>
+                    {openingRestaurant ? '…' : locationChoice === 'restaurant' ? '✓ Restaurant' : 'A Restaurant'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.notePrompt}>
+                What stood out? A note about this lineup will be kept next to the photo in Your Lineup Library.
+              </Text>
+              <View style={styles.noteRow}>
+                <TextInput
+                  style={styles.noteInput}
+                  value={note}
+                  onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
+                  placeholder="Tap the mic to speak, or type a few words…"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <MicButton value={note} onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }} />
+              </View>
+              <TouchableOpacity
+                style={[styles.saveNoteBtn, (!note.trim() || savingNote) && styles.primaryBtnDisabled]}
+                onPress={handleSaveNote}
+                disabled={!note.trim() || savingNote}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.saveNoteText}>
+                  {noteSaved ? '✓ Note saved' : savingNote ? 'Saving…' : 'Save note'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          ) : null}
+
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list?archived=1')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>View Cellar Archive</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>Done</Text>
           </TouchableOpacity>
-        </View>
+        </ScrollView>
       ) : (
         // review
         <ScrollView contentContainerStyle={styles.content}>
@@ -227,6 +326,27 @@ export default function ArchiveNightScreen() {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* Restaurant review on a blank manual session, saved to Your Restaurants.
+          Cancelling without saving removes the empty draft. */}
+      {restaurantSessionId ? (
+        <RestaurantReviewModal
+          visible
+          sessionId={restaurantSessionId}
+          initialName={null}
+          initialNote={null}
+          initialRatings={null}
+          initialFavourite={false}
+          city={null}
+          date={null}
+          wines={[]}
+          onClose={() => {
+            if (restaurantSessionId && !restaurantSavedRef.current) void deleteScanSession(restaurantSessionId);
+            setRestaurantSessionId(null);
+          }}
+          onSaved={() => { restaurantSavedRef.current = true; setLocationChoice('restaurant'); setRestaurantSessionId(null); }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -255,6 +375,22 @@ const styles = StyleSheet.create({
   doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: spacing.sm },
   doneTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center' },
+  doneContent: { padding: spacing.xl, paddingTop: spacing.xl * 2, paddingBottom: 60, gap: spacing.md },
+  // Non-italic — the count summary + the "fun session" blurb read as plain copy.
+  // Count summary in gold; "Fun session!" + note prompt in white.
+  doneCount: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },
+  doneBlurb: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 22, marginTop: spacing.sm, textAlign: 'center' },
+  notePrompt: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 20, marginTop: spacing.sm },
+  locationRow: { flexDirection: 'row', gap: spacing.sm },
+  locationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  locationBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
+  locationBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
+  locationBtnTextActive: { color: colors.gold },
+  noteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  noteInput: { flex: 1, minHeight: 88, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
+  // Save note — gold, but the SAME footprint as the View Cellar Archive / Done buttons.
+  saveNoteBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  saveNoteText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMuted: { opacity: 0.45 },
   thumb: { width: 40, height: 52, borderRadius: 4 },

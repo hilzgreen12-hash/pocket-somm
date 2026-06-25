@@ -1,11 +1,13 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
@@ -169,6 +171,36 @@ export default function ChosenWinesScreen() {
     })),
     ...cellarReviews.map((w): ReviewItem => ({ source: 'cellar', date: w.review_date ?? w.created_at, score: w.review_score, wine: w })),
   ];
+
+  // Restaurant bottle picks the user has NOT yet reviewed — these are excluded
+  // from the main reviews list (they live in Your Restaurants until reviewed),
+  // and surface in the "Bottle Picks Awaiting Review" section + the on-open prompt.
+  const awaitingReview = chosenWines.filter((w) => w.source !== 'other' && !chosenHasReview(w));
+
+  // One-time, dismissible prompt nudging the user to review a waiting pick.
+  const { session } = useAuth();
+  const promptKey = `vinster-bottle-pick-prompt-dismissed:${session?.user.id ?? 'anon'}`;
+  const [reviewPrompt, setReviewPrompt] = useState<ChosenWine | null>(null);
+  const [dontShowPrompt, setDontShowPrompt] = useState(false);
+  const promptShownRef = useRef(false);
+  useEffect(() => {
+    if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
+    promptShownRef.current = true;
+    const first = awaitingReview[0];
+    AsyncStorage.getItem(promptKey)
+      .then((dismissed) => { if (!dismissed) setReviewPrompt(first); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, awaitingReview.length]);
+
+  async function resolvePrompt(review: boolean) {
+    const wine = reviewPrompt;
+    if (dontShowPrompt) {
+      try { await AsyncStorage.setItem(promptKey, '1'); } catch { /* non-fatal */ }
+    }
+    setReviewPrompt(null);
+    if (review && wine) setEditingWine(wine);
+  }
 
   // Wish-list is a review-level flag on chosen_wines only — cellar-source
   // reviews are never wish-list.
@@ -514,6 +546,35 @@ export default function ChosenWinesScreen() {
         onSaved={() => setAddOpen(false)}
       />
 
+      {/* On-open nudge to review a waiting restaurant bottle pick. */}
+      <Modal visible={!!reviewPrompt} transparent animationType="fade" onRequestClose={() => setReviewPrompt(null)}>
+        <View style={styles.promptOverlay}>
+          <View style={styles.promptSheet}>
+            <Text style={styles.promptTitle}>A bottle pick is waiting for your review</Text>
+            {reviewPrompt ? (
+              <Text style={styles.promptBody}>
+                Your bottle pick from {reviewPrompt.restaurant_name?.trim() || 'your visit'} is waiting for your review —{' '}
+                <Text style={styles.promptWine}>{wineHeaderLine(reviewPrompt.producer, reviewPrompt.wine_name, reviewPrompt.vintage)}</Text>
+              </Text>
+            ) : null}
+            <TouchableOpacity style={styles.promptCheckRow} onPress={() => setDontShowPrompt((v) => !v)} activeOpacity={0.7}>
+              <View style={[styles.promptCheckbox, dontShowPrompt && styles.promptCheckboxOn]}>
+                {dontShowPrompt ? <Text style={styles.promptCheckTick}>✓</Text> : null}
+              </View>
+              <Text style={styles.promptCheckLabel}>Don't show me this again</Text>
+            </TouchableOpacity>
+            <View style={styles.promptActions}>
+              <TouchableOpacity onPress={() => resolvePrompt(false)}>
+                <Text style={styles.promptLater}>Remind me later</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.promptReviewBtn} onPress={() => resolvePrompt(true)}>
+                <Text style={styles.promptReviewText}>Review wine</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
 {/* Fullscreen overlay while the chosen photo is being read. Sits
           above the screen so the user can't tap "+ Add" again mid-scan. */}
       {uploading ? (
@@ -699,6 +760,27 @@ export default function ChosenWinesScreen() {
               );
             })
           )}
+
+          {/* Bottle Picks Awaiting Review — restaurant picks not yet reviewed.
+              Tapping one opens the same review flow as Your Restaurants. */}
+          {awaitingReview.length > 0 ? (
+            <View style={styles.awaitingSection}>
+              <Text style={styles.awaitingHeader}>Bottle Picks Awaiting Review</Text>
+              {awaitingReview.map((w) => (
+                <TouchableOpacity
+                  key={`await-${w.id}`}
+                  style={styles.awaitingRow}
+                  onPress={() => setEditingWine(w)}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.awaitingName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                  <Text style={styles.awaitingMeta} numberOfLines={1}>
+                    {[locationLine(w), formatDate(w.chosen_at)].filter(Boolean).join(' · ')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
         </ScrollView>
         </>
       )}
@@ -758,6 +840,27 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  // On-open review prompt.
+  promptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  promptSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 440 },
+  promptTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  promptBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
+  promptWine: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  promptCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
+  promptCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  promptCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
+  promptCheckTick: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold },
+  promptCheckLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
+  promptActions: { flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.lg, marginTop: spacing.lg },
+  promptLater: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  promptReviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
+  promptReviewText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Bottle Picks Awaiting Review section.
+  awaitingSection: { marginTop: spacing.xl },
+  awaitingHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginBottom: spacing.sm },
+  awaitingRow: { marginHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  awaitingName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  awaitingMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
   addLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, width: 50, textAlign: 'right' },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
