@@ -17,6 +17,7 @@ import { fonts } from '../../src/constants/fonts';
 const DIETARY_OPTIONS = ['None', 'Vegetarian', 'Vegan', 'Pescatarian', 'Other'];
 const ALLERGY_OPTIONS = ['None', 'Nut Free', 'Dairy Free', 'Gluten Free', 'Other'];
 const DIFFICULTY_OPTIONS = ['Any', 'Super Simple', 'Easy to Moderate', 'Challenging', 'Very Technical'];
+const COURSE_OPTIONS = ['Any', 'Amuse Bouche / Canapés', 'Starter', 'Main', 'Pudding / Dessert'];
 
 const TIME_OPTIONS: { value: string; label: string; sub?: string }[] = [
   { value: 'any',        label: 'Any' },
@@ -26,7 +27,7 @@ const TIME_OPTIONS: { value: string; label: string; sub?: string }[] = [
   { value: 'low_slow',   label: 'Low & Slow',             sub: '3 hours plus' },
 ];
 
-type DropdownField = 'dietary' | 'allergy' | 'difficulty' | 'time' | 'people' | null;
+type DropdownField = 'dietary' | 'allergy' | 'course' | 'difficulty' | 'time' | 'people' | null;
 
 export default function ReviewRequirementsScreen() {
   useKeepAwake();
@@ -51,6 +52,7 @@ export default function ReviewRequirementsScreen() {
   const [customDietary, setCustomDietary] = useState('');
   const [customAllergy, setCustomAllergy] = useState('');
   const [specificConcerns, setSpecificConcerns] = useState('');
+  const [course, setCourse] = useState<string>('Any');
   const [difficulty, setDifficulty] = useState<string>('Any');
   const [timeChoice, setTimeChoice] = useState<string>('any');
   const [people, setPeople] = useState<string>('2');
@@ -91,6 +93,7 @@ export default function ReviewRequirementsScreen() {
       allergens: mergedAllergies as any,
       customAllergen: '',
       dietaryNote: null,
+      course: course !== 'Any' ? course : null,
       difficulty: difficulty !== 'Any' ? difficulty : null,
       timeConsideration: timeLabel,
       specificConcerns: mergedConcerns || null,
@@ -208,6 +211,14 @@ export default function ReviewRequirementsScreen() {
         onSelect: setAllergy,
       };
     }
+    if (field === 'course') {
+      return {
+        title: 'Which course are you planning?',
+        options: COURSE_OPTIONS.map((o) => ({ value: o, label: o })),
+        selected: course,
+        onSelect: setCourse,
+      };
+    }
     if (field === 'difficulty') {
       return {
         title: 'Recipe Difficulty',
@@ -295,6 +306,18 @@ export default function ReviewRequirementsScreen() {
         textAlignVertical="top"
       />
 
+      <Text style={styles.label}>Which Course Are You Planning?</Text>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('course')}>
+        <Text style={styles.selectValue}>{course}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
+
+      <Text style={styles.label}>How many people are you cooking for?</Text>
+      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('people')}>
+        <Text style={styles.selectValue}>{people}</Text>
+        <Text style={styles.selectArrow}>▾</Text>
+      </TouchableOpacity>
+
       <Text style={styles.label}>Recipe Difficulty</Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('difficulty')}>
         <Text style={styles.selectValue}>{difficulty}</Text>
@@ -304,12 +327,6 @@ export default function ReviewRequirementsScreen() {
       <Text style={styles.label}>Time Consideration</Text>
       <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('time')}>
         <Text style={styles.selectValue}>{timeDisplay}</Text>
-        <Text style={styles.selectArrow}>▾</Text>
-      </TouchableOpacity>
-
-      <Text style={styles.label}>How many people are you cooking for?</Text>
-      <TouchableOpacity style={styles.select} activeOpacity={0.7} onPress={() => setOpenDropdown('people')}>
-        <Text style={styles.selectValue}>{people}</Text>
         <Text style={styles.selectArrow}>▾</Text>
       </TouchableOpacity>
 
@@ -415,7 +432,7 @@ export default function ReviewRequirementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 112, paddingHorizontal: spacing.xl, paddingBottom: 60 },
+  content: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: 60 },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
@@ -437,7 +454,7 @@ const styles = StyleSheet.create({
   backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   // Top-left Back, matching the rest of the app.
   backTop: { alignSelf: 'flex-start', marginBottom: spacing.md },
-  backTopText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 16 },
+  backTopText: { color: colors.gold, fontFamily: fonts.bodyRegular, fontSize: 16 },
   scanRow: { flexDirection: 'row', gap: spacing.sm },
   halfButton: { flex: 1 },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, paddingVertical: spacing.md },

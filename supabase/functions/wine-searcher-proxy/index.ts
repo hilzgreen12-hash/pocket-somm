@@ -117,6 +117,50 @@ const UNAVAILABLE = {
   wsWineId: null,
 };
 
+// Build the Wine-Searcher request URL. vintageValue === null queries across ALL
+// vintages by dropping the vintage param entirely (the URL template carries one
+// by default).
+function buildWsUrl(name: string, vintageValue: string | null, cur: string): string {
+  const base = WINE_SEARCHER_URL
+    .replace('{KEY}', WINE_SEARCHER_API_KEY)
+    .replace('{NAME}', encodeURIComponent(name))
+    .replace('{VINTAGE}', encodeURIComponent(vintageValue ?? ''))
+    .replace('{CURRENCY}', encodeURIComponent(cur));
+  if (vintageValue === null) {
+    try {
+      const u = new URL(base);
+      u.searchParams.delete('vintage');
+      return u.toString();
+    } catch {
+      return base;
+    }
+  }
+  return base;
+}
+
+// One Wine-Searcher lookup. Returns parsed (native-USD) pricing on a hit
+// (return-code 0), or null on any miss/suspension so the caller can broaden the
+// query or fall back to the Claude estimate. Logs the return code so misses are
+// diagnosable (vintage miss vs name miss) from the function logs.
+async function lookupWineSearcher(name: string, vintageValue: string | null, cur: string) {
+  const res = await fetch(buildWsUrl(name, vintageValue, cur));
+  if (!res.ok) throw new Error(`Wine-Searcher returned ${res.status}`);
+  const xml = await res.text();
+  const returnCode = tag(xml, 'return-code');
+  console.log(`[wine-searcher-proxy] name="${name}" vintage=${vintageValue ?? 'ALL'} return-code=${returnCode}`);
+  if (returnCode !== '0') return null;
+  return {
+    averageMarketPrice: num(xml, 'price-average'),
+    minPrice: num(xml, 'price-min'),
+    maxPrice: num(xml, 'price-max'),
+    criticScore: num(xml, 'ws-score'),
+    currency: tag(xml, 'list-currency-code') ?? cur,
+    region: tag(xml, 'region'),
+    grape: tag(xml, 'grape'),
+    wsWineId: tag(xml, 'wine-name-id'),
+  };
+}
+
 Deno.serve(async (req) => {
   try {
     const { wineName, vintage, currency } = await req.json();
@@ -160,50 +204,40 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) Call Wine-Searcher.
-    const url = WINE_SEARCHER_URL
-      .replace('{KEY}', WINE_SEARCHER_API_KEY)
-      .replace('{NAME}', encodeURIComponent(wineName))
-      .replace('{VINTAGE}', encodeURIComponent(String(vintageParam)))
-      .replace('{CURRENCY}', encodeURIComponent(cur));
-
-    const wsResponse = await fetch(url);
-    if (!wsResponse.ok) {
-      throw new Error(`Wine-Searcher returned ${wsResponse.status}`);
+    // 2) Call Wine-Searcher. Try the exact vintage first; if that misses and we
+    // have a real vintage, retry across ALL vintages. Wine-Searcher's API often
+    // has no row for one specific vintage of a niche wine even though the wine
+    // (and its all-vintage average price + aggregate score) exists — the API
+    // matches far more strictly than the website's fuzzy search. The all-vintage
+    // figure is a better answer than a blank, and still anchors the critic score.
+    const hasRealVintage = vintageParam !== 'NV';
+    let result = await lookupWineSearcher(wineName, String(vintageParam), cur);
+    let priceScope: 'vintage' | 'all-vintage' = 'vintage';
+    if (!result && hasRealVintage) {
+      result = await lookupWineSearcher(wineName, null, cur);
+      priceScope = 'all-vintage';
     }
-    const xml = await wsResponse.text();
 
-    // return-code 0 = hit. Anything else (e.g. 7 = "API Access Suspended", or a
+    // return-code != 0 on both attempts (e.g. 7 = "API Access Suspended", or a
     // genuine no-match) → fall back to the Claude estimate.
-    const returnCode = tag(xml, 'return-code');
-    if (returnCode !== '0') {
+    if (!result) {
       return new Response(JSON.stringify(UNAVAILABLE), {
         headers: { 'Content-Type': 'application/json' },
       });
     }
 
-    const pricing = {
-      matched: true,
-      source: 'wine-searcher' as const,
-      averageMarketPrice: num(xml, 'price-average'),
-      minPrice: num(xml, 'price-min'),
-      maxPrice: num(xml, 'price-max'),
-      criticScore: num(xml, 'ws-score'),
-      currency: tag(xml, 'list-currency-code') ?? cur,
-      region: tag(xml, 'region'),
-      grape: tag(xml, 'grape'),
-      wsWineId: tag(xml, 'wine-name-id'),
-    };
-
-    // 3) Cache. Surface upsert errors so a misconfigured RLS / key collision
-    // doesn't silently force every call to re-hit the upstream API.
+    // 3) Cache native USD so one fetch serves every currency. An all-vintage
+    // result is cached under the requested vintage key — for a niche wine that's
+    // the figure we want to keep showing for this bottle. Surface upsert errors
+    // so a misconfigured RLS / key collision doesn't silently force every call
+    // to re-hit the upstream API.
     const { error: cacheErr } = await supabase.from('pricing_cache').upsert({
       wine_key: wineKey,
-      market_price_avg: pricing.averageMarketPrice,
-      market_price_min: pricing.minPrice,
-      market_price_max: pricing.maxPrice,
-      critic_score: pricing.criticScore,
-      currency: pricing.currency,
+      market_price_avg: result.averageMarketPrice,
+      market_price_min: result.minPrice,
+      market_price_max: result.maxPrice,
+      critic_score: result.criticScore,
+      currency: result.currency,
       fetched_at: new Date().toISOString(),
     });
     if (cacheErr) {
@@ -213,11 +247,17 @@ Deno.serve(async (req) => {
     // pricing_cache (above) holds native USD; the response converts to the
     // user's currency. fxRate is USD→cur, applied to the USD prices.
     return new Response(JSON.stringify({
-      ...pricing,
-      averageMarketPrice: convert(pricing.averageMarketPrice, fxRate),
-      minPrice: convert(pricing.minPrice, fxRate),
-      maxPrice: convert(pricing.maxPrice, fxRate),
+      matched: true,
+      source: 'wine-searcher',
+      averageMarketPrice: convert(result.averageMarketPrice, fxRate),
+      minPrice: convert(result.minPrice, fxRate),
+      maxPrice: convert(result.maxPrice, fxRate),
+      criticScore: result.criticScore,
       currency: cur,
+      region: result.region,
+      grape: result.grape,
+      wsWineId: result.wsWineId,
+      priceScope,
     }), {
       headers: { 'Content-Type': 'application/json' },
     });

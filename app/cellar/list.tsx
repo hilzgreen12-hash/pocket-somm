@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Share } from 'react-native';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -11,15 +13,21 @@ import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { archiveCellarWine, deleteCellarWine } from '../../src/api/cellar';
-import { fetchCellarLocations, createCellarLocation, addWinesToFilter, type CustomFilter } from '../../src/api/customFilters';
+import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { RenameModal } from '../../src/components/RenameModal';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
+import { CellarListShareCard } from '../../src/components/CellarListShareCard';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
+import { effectiveMaturity } from '../../src/utils/maturity';
+import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
 import { inferCountry } from '../../src/utils/wineCountry';
 import { formatCurrency } from '../../src/constants/currency';
-import { bottleSizeCl } from '../../src/components/BottleSizePicker';
+import { bottleSizeCl, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
@@ -91,6 +99,14 @@ export default function FullCellarListScreen() {
 
   const userId = session?.user.id;
 
+  // One-time, gentle backfill so wines added before entry-time maturity
+  // generation (and never opened) still get a drinking window — otherwise the
+  // maturity filter silently drops them. Runs sequentially, paced, capped.
+  useEffect(() => {
+    if (!userId || wines.length === 0) return;
+    void backfillMissingMaturities(wines, () => qc.invalidateQueries({ queryKey: ['cellar', userId] }));
+  }, [userId, wines.length, qc]);
+
   // Cellar-wide "Location" filters (custom_filters with rack_id NULL).
   const { data: locations = [] } = useQuery({
     queryKey: ['cellar-locations', userId],
@@ -98,6 +114,80 @@ export default function FullCellarListScreen() {
     enabled: !!userId,
   });
   function refetchLocations() { qc.invalidateQueries({ queryKey: ['cellar-locations', userId] }); }
+
+  // Long-press a bespoke Location chip in the filter → manage it, mirroring the
+  // rack filter menu: Add/Remove Wines · Rename Filter · Delete.
+  const [renameLoc, setRenameLoc] = useState<{ id: string; name: string } | null>(null);
+  const [locEditTarget, setLocEditTarget] = useState<CustomFilter | null>(null);
+  const [busyLoc, setBusyLoc] = useState(false);
+
+  function openLocationOptions(id: string, name: string) {
+    const loc = locations.find((l) => l.id === id);
+    showAlert({
+      title: name,
+      body: 'Add or remove the wines in this location, rename it, or delete it. Your wines stay in your cellar either way.',
+      buttons: [
+        { text: 'Add/Remove Wines', onPress: () => { if (loc) setLocEditTarget(loc); } },
+        { text: 'Rename Filter', onPress: () => setRenameLoc({ id, name }) },
+        { text: 'Delete', style: 'destructive', onPress: () => confirmDeleteLocation(id, name) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  function confirmDeleteLocation(id: string, name: string) {
+    showAlert({
+      title: `Delete "${name}"?`,
+      body: 'This removes the location. Your wines stay in your cellar.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteCustomFilter(id);
+              if (locationFilter === `loc:${id}`) setLocationFilter('All');
+              refetchLocations();
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  async function saveLocationRename(name: string) {
+    if (!renameLoc) return;
+    setBusyLoc(true);
+    try {
+      await renameCustomFilter(renameLoc.id, name);
+      refetchLocations();
+      setRenameLoc(null);
+    } catch (err) {
+      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setBusyLoc(false);
+    }
+  }
+
+  async function saveLocationEdit(name: string, ids: string[]) {
+    if (!locEditTarget) return;
+    setBusyLoc(true);
+    try {
+      // The picker is authoritative over the FULL set, so a full replace is
+      // correct here (same as the rack's edit-filter modal).
+      await renameCustomFilter(locEditTarget.id, name);
+      await setCustomFilterWines(locEditTarget.id, ids);
+      refetchLocations();
+      setLocEditTarget(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setBusyLoc(false);
+    }
+  }
 
   // ---- Multi-select mode (long-press) ----
   // Long-pressing a wine tints it gold and enters selection mode, where the
@@ -296,6 +386,12 @@ export default function FullCellarListScreen() {
   const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
+
+  // Share the current (filtered) list as a branded PNG. Same off-screen-capture
+  // pattern the wine card uses.
+  const shareListRef = useRef<View>(null);
+  const [sharingList, setSharingList] = useState(false);
+  const [listSharePayload, setListSharePayload] = useState<React.ComponentProps<typeof CellarListShareCard> | null>(null);
   // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
   // "Add Wine / Generate Wine Intel" flow so the user can kick the
   // same scan / upload / manual entry path from this screen without
@@ -362,7 +458,7 @@ export default function FullCellarListScreen() {
     }
     if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
     if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
-    if (maturityFilter !== 'All' && w.drinking_window_status !== maturityFilter) return false;
+    if (maturityFilter !== 'All' && effectiveMaturity(w) !== maturityFilter) return false;
     if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
     if (q) {
       const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
@@ -391,6 +487,54 @@ export default function FullCellarListScreen() {
   });
 
   const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+
+  async function handleShareList() {
+    if (sharingList || sorted.length === 0) return;
+    const items = sorted.map((w) => ({
+      producer: w.producer,
+      wineName: w.wine_name,
+      region: w.region,
+      vintage: w.vintage,
+      quantity: w.quantity ?? 1,
+      format: bottleSizeLabel(w.bottle_size_ml ?? 750),
+    }));
+    // Summarise the active filters for the card header (the simple chips only).
+    const bits: string[] = [];
+    if (countryFilter !== 'All') bits.push(countryFilter);
+    if (colourFilter !== 'All') bits.push(colourFilter);
+    if (maturityFilter !== 'All') bits.push(MATURITY_OPTIONS.find((m) => m.value === maturityFilter)?.label ?? maturityFilter);
+    if (favouriteFilter === 'favourites') bits.push('Favourites');
+    const filterSummary = bits.length ? bits.join(' · ') : null;
+    const title = isArchiveView ? 'My Archive' : 'My Cellar';
+
+    setListSharePayload({ title, items, wineCount: filtered.length, bottleCount: totalBottles, filterSummary });
+    setSharingList(true);
+    try {
+      // One paint to let the off-screen card mount with the new props.
+      await new Promise((r) => setTimeout(r, 300));
+      if (shareListRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareListRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share my cellar list', UTI: 'public.png' });
+        return;
+      }
+      // Plain-text fallback for devices without share-sheet support.
+      const lines = items.map((w) => {
+        const identity = [wineHeaderLine(w.producer, w.wineName, null), w.region, w.vintage]
+          .filter((p) => p && String(p).trim().length > 0)
+          .join(' · ');
+        return `• ${identity} — ${w.quantity} × ${w.format}`;
+      });
+      await Share.share({
+        message: `${title} (${filtered.length} ${filtered.length === 1 ? 'wine' : 'wines'} · ${totalBottles} ${totalBottles === 1 ? 'bottle' : 'bottles'})\n\n${lines.join('\n')}${VINSTER_TEXT_SHARE_FOOTER}`,
+        title,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharingList(false);
+      setListSharePayload(null);
+    }
+  }
 
   // Keep multi-select honest: when the filters/search change, drop any selected
   // wines that are no longer visible so a bulk action can only ever touch what's
@@ -519,17 +663,33 @@ export default function FullCellarListScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
-        {isArchiveView ? (
-          <View style={{ width: 44 }} />
-        ) : (
+        <View style={styles.headerActions}>
+          {!isArchiveView ? (
+            <TouchableOpacity
+              onPress={() => setAddWineOpen(true)}
+              hitSlop={{ top: 10, bottom: 6, left: 8, right: 8 }}
+            >
+              <Text style={styles.addLink}>+ Add</Text>
+            </TouchableOpacity>
+          ) : null}
           <TouchableOpacity
-            onPress={() => setAddWineOpen(true)}
-            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            onPress={handleShareList}
+            disabled={sharingList || sorted.length === 0}
+            hitSlop={{ top: 6, bottom: 10, left: 8, right: 8 }}
           >
-            <Text style={styles.addLink}>+ Add</Text>
+            <Text style={[styles.shareLink, (sharingList || sorted.length === 0) && { color: colors.textMuted }]}>
+              {sharingList ? 'Preparing…' : 'Share'}
+            </Text>
           </TouchableOpacity>
-        )}
+        </View>
       </View>
+
+      {/* Off-screen branded share card, mounted only while a share is in flight. */}
+      {listSharePayload && (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <CellarListShareCard ref={shareListRef} {...listSharePayload} />
+        </View>
+      )}
 
       {session && !isArchiveView && (
         <Text style={styles.listHint}>Long hold a wine in your list to move or edit it</Text>
@@ -734,7 +894,7 @@ export default function FullCellarListScreen() {
               disabled={selectedIds.size === 0 || busy}
               onPress={confirmDeleteSelected}
             >
-              <Text style={[styles.selectActionText, styles.selectActionDanger]}>Delete (permanent)</Text>
+              <Text style={styles.selectActionText}>Delete (permanent)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]}
@@ -816,9 +976,14 @@ export default function FullCellarListScreen() {
             {activeDropdown && (
               <>
                 <Text style={styles.modalTitle}>{activeDropdown.title}</Text>
+                {openDropdown === 'location' && locations.length > 0 ? (
+                  <Text style={styles.locationHint}>Long-press a location to rename or delete it</Text>
+                ) : null}
                 <ScrollView style={{ maxHeight: 400 }}>
                   {activeDropdown.options.map((opt) => {
                     const active = activeDropdown.selected === opt.value;
+                    // Bespoke locations (loc:…) can be managed via long-press.
+                    const isLocation = openDropdown === 'location' && opt.value.startsWith('loc:');
                     return (
                       <TouchableOpacity
                         key={opt.value}
@@ -827,6 +992,8 @@ export default function FullCellarListScreen() {
                           activeDropdown.onSelect(opt.value);
                           setOpenDropdown(null);
                         }}
+                        onLongPress={isLocation ? () => { setOpenDropdown(null); openLocationOptions(opt.value.slice(4), opt.label); } : undefined}
+                        delayLongPress={400}
                         activeOpacity={0.7}
                       >
                         <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>{opt.label}</Text>
@@ -843,6 +1010,33 @@ export default function FullCellarListScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Rename a bespoke Location. */}
+      <RenameModal
+        visible={!!renameLoc}
+        initialName={renameLoc?.name ?? ''}
+        title="Rename location"
+        saving={busyLoc}
+        onSave={saveLocationRename}
+        onClose={() => setRenameLoc(null)}
+      />
+
+      {/* Add/Remove the wines in a Location — the same picker the rack uses. */}
+      <LibraryFilterModal
+        visible={!!locEditTarget}
+        title="Edit location"
+        itemNoun="wines"
+        items={wines.map((w) => ({
+          id: w.id,
+          label: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+          sublabel: w.region ?? undefined,
+        }))}
+        initialName={locEditTarget?.name}
+        initialSelected={locEditTarget?.wineIds}
+        saving={busyLoc}
+        onSave={saveLocationEdit}
+        onClose={() => setLocEditTarget(null)}
+      />
 
       {/* Add-wine chooser — Scan / Upload / Manual. Same three-way
           flow as the Cellar tab's "Add Wine / Generate Wine Intel"
@@ -906,11 +1100,17 @@ export default function FullCellarListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  // Inter — back/nav link
-  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  // Inter — back/nav link (gold, to match the rest of the app)
+  back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
+  // Add + Share stacked at the top-right of the header.
+  headerActions: { alignItems: 'flex-end', gap: 6 },
   // Cormorant — add link reads as a button
-  addLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, width: 50, textAlign: 'right' },
+  // Add / Share match Back exactly (same Spectral face + size), stacked at the
+  // top-right so Add sits in line with Back and the title.
+  addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
+  shareLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   // Inter — body in modal
   addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
@@ -962,10 +1162,11 @@ const styles = StyleSheet.create({
   selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
   selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   selectBarActions: { flexDirection: 'row', gap: spacing.sm },
-  selectAction: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  // Elegant, uniform action buttons — soft cream outline + cream text, no gold
+  // and no separate destructive colour (Delete reads the same as the rest).
+  selectAction: { flex: 1, borderWidth: 1, borderColor: 'rgba(244,235,224,0.30)', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
   selectActionDisabled: { opacity: 0.4 },
-  selectActionText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
-  selectActionDanger: { color: '#E0736B' },
+  selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
   locEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
   locCount: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
   locNameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
@@ -987,6 +1188,7 @@ const styles = StyleSheet.create({
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   // Cormorant — modal pop-up title
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  locationHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.sm },
   modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
   // Cormorant — option button text

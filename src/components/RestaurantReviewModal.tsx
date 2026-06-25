@@ -12,6 +12,7 @@ import { publishRestaurantSessionToCommunity } from '../services/communityPublis
 import { StarRating } from './StarRating';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
+import { COMMUNITY_ENABLED } from '../constants/features';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
@@ -280,12 +281,12 @@ export function RestaurantReviewModal({
             {/* Share — community + native share, side by side. */}
             <View style={styles.shareRow}>
               <TouchableOpacity
-                style={[styles.shareBtn, (posting || !sessionId) && styles.btnDisabled]}
+                style={[styles.shareBtn, (!COMMUNITY_ENABLED || posting || !sessionId) && styles.btnDisabled]}
                 onPress={handleShareToCommunity}
-                disabled={posting || !sessionId}
+                disabled={!COMMUNITY_ENABLED || posting || !sessionId}
                 activeOpacity={0.8}
               >
-                <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
+                <Text style={styles.shareBtnText}>{!COMMUNITY_ENABLED ? 'Share to Community (coming soon)' : posting ? 'Sharing…' : 'Share to Community'}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.shareBtn, sharing && styles.btnDisabled]}

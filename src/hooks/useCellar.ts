@@ -29,6 +29,11 @@ export function useCellar() {
     enabled: !!userId,
   });
 
+  // Adding a wine is kept deliberately FAST — no wine-intel generation here.
+  // Intel (critic score, value, tasting note) is generated lazily when the user
+  // opens the wine card, and maturity/drinking-window is backfilled in the
+  // background from the Full Cellar List (see services/maturityBackfill) so the
+  // maturity filter still works without slowing down the add.
   const addWine = useMutation({
     mutationFn: (wine: Omit<CellarWine, 'id' | 'created_at' | 'updated_at'>) => addCellarWine(wine),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar', userId] }),

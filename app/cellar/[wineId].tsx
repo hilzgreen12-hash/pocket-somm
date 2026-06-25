@@ -11,7 +11,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
+import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
+import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
+import { COMMUNITY_ENABLED } from '../../src/constants/features';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -46,7 +49,8 @@ const STATUS_COLORS: Record<string, string> = {
   too_young: colors.warning,
   approaching: colors.gold,
   peak: colors.gold,
-  declining: colors.error,
+  // Declining reads in the same gold as the other maturity levels — never red.
+  declining: colors.gold,
   unknown: colors.textMuted,
 };
 
@@ -189,6 +193,13 @@ export default function CellarWineDetail() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, isWishlist, isArchived]);
 
+  // After an auto-generate attempt, if Vinster still couldn't produce any intel
+  // (no critic score and no value), it's almost always because the wine name is
+  // misspelt or the producer/name are in the wrong fields — so prompt the user
+  // to check and edit. Dismissible; resets per wine.
+  const [noIntelDismissed, setNoIntelDismissed] = useState(false);
+  useEffect(() => { setNoIntelDismissed(false); }, [wine?.id]);
+
   const [reviewExpanded, setReviewExpanded] = useState(false);
   // The review is now edited only through the canonical EditCellarReviewModal,
   // never inline on the card. This opens it.
@@ -217,6 +228,12 @@ export default function CellarWineDetail() {
   const reviewShareRef = useRef<View>(null);
   const [sharingOutside, setSharingOutside] = useState(false);
   const [reviewSharePayload, setReviewSharePayload] = useState<React.ComponentProps<typeof WineReviewShareCard> | null>(null);
+
+  // Same off-screen-capture pattern for the top-right "Share" on the wine
+  // card itself — shares Vinster's intelligence (scores, value, tasting note).
+  const intelShareRef = useRef<View>(null);
+  const [sharingIntel, setSharingIntel] = useState(false);
+  const [intelSharePayload, setIntelSharePayload] = useState<React.ComponentProps<typeof WineIntelShareCard> | null>(null);
 
   // Add or replace this wine's framed label photo. Take a fresh photo or
   // pick one from the library, then upload + persist the path. Best-effort
@@ -923,6 +940,65 @@ export default function CellarWineDetail() {
     }
   }
 
+  async function handleShareIntel() {
+    if (!wine || sharingIntel) return;
+    const headerLine = (() => {
+      const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+      return sameName
+        ? [wine.producer, wine.vintage].filter(Boolean).join(' ')
+        : [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
+    })();
+    // Only share an unambiguous year range — skip the bare "Unknown" status.
+    const drinkingWindow = wine.drinking_window_from && wine.drinking_window_to
+      ? `${wine.drinking_window_from}–${wine.drinking_window_to}`
+      : null;
+    const estimatedValue = wine.estimated_value != null
+      ? formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })
+      : null;
+    setIntelSharePayload({
+      producer: wine.producer,
+      wineName: wine.wine_name,
+      vintage: wine.vintage,
+      region: wine.region,
+      grape: wine.grape_variety,
+      criticScore: wine.critic_score,
+      drinkingWindow,
+      estimatedValue,
+      tastingNote: wine.tasting_notes,
+    });
+    setSharingIntel(true);
+    try {
+      // One paint to let the off-screen card mount with the new props.
+      await new Promise((r) => setTimeout(r, 250));
+      if (intelShareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(intelShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share this wine',
+          UTI: 'public.png',
+        });
+        return;
+      }
+      // Plain-text fallback for devices without share-sheet support.
+      const lines: string[] = [];
+      if (wine.critic_score != null) lines.push(`Critic score: ${wine.critic_score} pts`);
+      if (drinkingWindow) lines.push(`Drinking window: ${drinkingWindow}`);
+      if (estimatedValue) lines.push(`Estimated value: ${estimatedValue}`);
+      const note = (wine.tasting_notes ?? '').trim();
+      const noteFormatted = note ? `\n\n${note}` : '';
+      const statsFormatted = lines.length ? `\n${lines.join('\n')}` : '';
+      await Share.share({
+        message: `${headerLine}${statsFormatted}${noteFormatted}${VINSTER_TEXT_SHARE_FOOTER}`,
+        title: headerLine,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharingIntel(false);
+      setIntelSharePayload(null);
+    }
+  }
+
   function handleFindPairings() {
     if (!wine) return;
     // Route through the same per-search preferences screen that the Chef
@@ -986,7 +1062,15 @@ export default function CellarWineDetail() {
     norm(w.wine_name) === norm(wine.wine_name) &&
     norm(w.vintage) === norm(wine.vintage);
   const bottlesInCellar = wines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-  const bottlesInArchive = archivedWines.filter(matchesIdentity).reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  const archivedMatches = archivedWines.filter(matchesIdentity);
+  const bottlesInArchive = archivedMatches.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  // Most-recent archive date + bottle size among the matching archived bottles,
+  // for the "Bottles in My Archive" stat (e.g. "1x75cl, 24/06/26").
+  const lastArchivedAt = archivedMatches.reduce<string | null>((latest, w) => {
+    if (!w.archived_at) return latest;
+    return !latest || new Date(w.archived_at).getTime() > new Date(latest).getTime() ? w.archived_at : latest;
+  }, null);
+  const archiveBottleMl = archivedMatches.find((w) => w.bottle_size_ml)?.bottle_size_ml ?? wine.bottle_size_ml ?? 750;
 
   function bottleLabel(n: number) {
     return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
@@ -1048,34 +1132,41 @@ export default function CellarWineDetail() {
     >
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text style={styles.backText}>Back</Text>
         </TouchableOpacity>
         {/* Card-type label — sits centred between Back and the star
             so it reads as a chip / breadcrumb identifying which kind
             of card the user is looking at. */}
         <Text style={styles.cardTypeLabel}>
-          {isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Cellar Wine'}
+          {isWishlist ? 'Wish List Wine' : isArchived ? 'Archived Wine' : 'Wine Card'}
         </Text>
-        {!isArchived ? (
-          <TouchableOpacity onPress={handleToggleFavourite} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-            <Text style={[styles.favouriteStar, wine.is_favourite && styles.favouriteStarActive]}>
-              {wine.is_favourite ? '★' : '☆'}
+        <View style={styles.topBarActions}>
+          <TouchableOpacity
+            onPress={handleShareIntel}
+            disabled={sharingIntel}
+            hitSlop={{ top: 10, bottom: 6, left: 12, right: 12 }}
+          >
+            <Text style={[styles.topBarShareText, sharingIntel && { color: colors.textMuted }]}>
+              {sharingIntel ? 'Preparing…' : 'Share'}
             </Text>
           </TouchableOpacity>
-        ) : (
-          // Spacer so the label stays centred when the favourite star
-          // doesn't render (archived wines).
-          <View style={{ width: 28 }} />
-        )}
+          {!isArchived ? (
+            <TouchableOpacity onPress={handleToggleFavourite} hitSlop={{ top: 6, bottom: 10, left: 12, right: 12 }}>
+              <Text style={[styles.favouriteStar, wine.is_favourite && styles.favouriteStarActive]}>
+                {wine.is_favourite ? '★' : '☆'}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
 
-      {/* Date added — sits just below the 'Cellar Wine' chip, with a gap before
+      {/* Date cellared — sits just below the 'Wine Card' chip, with a gap before
           the wine name. Same muted style as before. */}
       {(() => {
         const added = wine.date_received ?? wine.created_at;
         if (!added) return null;
-        const addedLabel = `Added ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
-        return <Text style={styles.addedDateTop}>{addedLabel}</Text>;
+        const cellaredLabel = `Cellared ${new Date(added).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+        return <Text style={styles.addedDateTop}>{cellaredLabel}</Text>;
       })()}
 
       <View style={styles.header}>
@@ -1129,6 +1220,19 @@ export default function CellarWineDetail() {
         <KeyboardAvoidingView behavior="padding" style={styles.titleEditOverlay}>
           <View style={styles.titleEditSheet}>
             <Text style={styles.titleEditHeading}>Edit wine</Text>
+            {/* Label photo — add / change / remove without leaving the Edit sheet.
+                Closes this modal first so the picker/menu isn't stacked behind it. */}
+            <Text style={styles.fieldLabel}>Label photo</Text>
+            <View style={styles.editPhotoRow}>
+              <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.editThumb} />
+              <TouchableOpacity
+                onPress={() => { setTitleEditOpen(false); void handleAddPhoto(); }}
+                activeOpacity={0.7}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.editPhotoLink}>{wine.label_image_path ? 'Change label photo' : '+ Add label photo'}</Text>
+              </TouchableOpacity>
+            </View>
             <Text style={styles.fieldLabel}>Producer</Text>
             <TextInput style={styles.input} value={producerDraft} onChangeText={setProducerDraft} placeholder="Producer" placeholderTextColor={colors.textMuted} />
             <Text style={styles.fieldLabel}>Wine name</Text>
@@ -1146,6 +1250,20 @@ export default function CellarWineDetail() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Couldn't-generate-intel prompt. Shows after a failed auto-generate
+          (no critic score and no value) — usually a misspelt or wrongly-split
+          name. Offers a jump straight into the Edit sheet. */}
+      <NoIntelPrompt
+        visible={
+          !!wine && !isWishlist && !isArchived && !autoGenerating && !refreshingValue &&
+          autoGenRef.current === wine.id && wine.critic_score == null && wine.estimated_value == null &&
+          !noIntelDismissed
+        }
+        onDismiss={() => setNoIntelDismissed(true)}
+        onEdit={() => { setNoIntelDismissed(true); openTitleEdit(); }}
+        editLabel="Edit Wine"
+      />
 
       {/* Compact stats grid — score / window / bottle counts only. The
           Purchase and Estimated values are pulled out into full-width rows
@@ -1269,7 +1387,14 @@ export default function CellarWineDetail() {
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Archive</Text>
-          <Text style={[styles.statValue, bottlesInArchive === 0 && styles.statValueMuted]}>{bottleLabel(bottlesInArchive)}</Text>
+          {bottlesInArchive === 0 ? (
+            <Text style={[styles.statValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
+          ) : (
+            <Text style={styles.statValue}>
+              {bottlesInArchive}x{bottleSizeLabel(archiveBottleMl)}
+              {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
+            </Text>
+          )}
         </View>
       </View>
       )}
@@ -1325,13 +1450,13 @@ export default function CellarWineDetail() {
                 written review exists. Editing opens the canonical review form. */}
             <View style={styles.reviewShareRow}>
               <TouchableOpacity
-                style={[styles.reviewShareBtn, (postingReview || reviewPosted || !wine.review_note) && styles.buttonDisabled]}
+                style={[styles.reviewShareBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted || !wine.review_note) && styles.buttonDisabled]}
                 onPress={handlePostToCommunity}
-                disabled={postingReview || reviewPosted || !wine.review_note}
+                disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted || !wine.review_note}
                 activeOpacity={0.7}
               >
                 <Text style={styles.reviewShareBtnText}>
-                  {reviewPosted ? '✓ Posted' : postingReview ? 'Posting…' : 'Share to Community'}
+                  {!COMMUNITY_ENABLED ? 'Share to Community (coming soon)' : reviewPosted ? '✓ Posted' : postingReview ? 'Posting…' : 'Share to Community'}
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -1446,13 +1571,13 @@ export default function CellarWineDetail() {
       {!isArchived && (
         isWishlist ? null : cameFromReviews ? (
           <TouchableOpacity
-            style={[styles.chefBtn, (postingReview || reviewPosted) && styles.chefBtnDisabled]}
+            style={[styles.chefBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted) && styles.chefBtnDisabled]}
             onPress={handlePostToCommunity}
-            disabled={postingReview || reviewPosted}
+            disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted}
             activeOpacity={0.7}
           >
             <Text style={styles.chefBtnText}>
-              {reviewPosted ? '✓ Posted to Community' : postingReview ? 'Posting…' : 'Post Review To Community'}
+              {!COMMUNITY_ENABLED ? 'Post Review To Community (coming soon)' : reviewPosted ? '✓ Posted to Community' : postingReview ? 'Posting…' : 'Post Review To Community'}
             </Text>
           </TouchableOpacity>
         ) : (
@@ -1633,6 +1758,13 @@ export default function CellarWineDetail() {
         </View>
       )}
 
+      {/* Off-screen share card for the top-right "Share" on the wine card. */}
+      {intelSharePayload && (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <WineIntelShareCard ref={intelShareRef} {...intelSharePayload} />
+        </View>
+      )}
+
       <Modal
         visible={removeStep !== 'idle'}
         transparent
@@ -1685,19 +1817,26 @@ const styles = StyleSheet.create({
   linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
   backRow: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignSelf: 'flex-start' },
   // Inter — back/nav link
-  backText: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold },
-  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
-  // Cormorant — card-type header label
+  // Back / Share share one Cormorant face, regular weight, first-letter cap —
+  // level with the bold WINE CARD title between them.
+  backText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
+  topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  // Cormorant — card-type header title, bold + uppercase.
   cardTypeLabel: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 12,
+    fontFamily: fonts.headingBold,
+    fontSize: 16,
     color: colors.gold,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    letterSpacing: 1,
     flex: 1,
     textAlign: 'center',
     marginHorizontal: spacing.md,
   },
+  topBarActions: { flexDirection: 'column', alignItems: 'flex-end', gap: 6 },
+  topBarShareText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
+  editPhotoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.sm },
+  editThumb: { width: 44, height: 56 },
+  editPhotoLink: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold },
   favouriteStar: { fontSize: 28, color: 'rgba(255,255,255,0.55)', lineHeight: 28 },
   favouriteStarActive: { color: colors.gold },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },

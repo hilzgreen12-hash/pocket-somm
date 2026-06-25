@@ -7,6 +7,7 @@ import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
+import { createManualRestaurantSession } from '../../src/api/restaurantSessions';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
 import { ShareIcon } from '../../src/components/ShareIcon';
@@ -217,7 +218,50 @@ export default function RestaurantReviewsScreen() {
   // Close the restaurant review form, returning to the origin screen: if it
   // was opened from the List results page (deep link), pop back there;
   // otherwise just dismiss and stay on the Your Restaurants list.
+  // "Add+" — a manual restaurant review. Creates a blank scan_sessions row and
+  // opens the same review modal on it. If the user cancels without saving, the
+  // blank draft is removed (see closeRestaurantReview) so it doesn't linger.
+  const manualDraftIdRef = useRef<string | null>(null);
+  const manualSavedRef = useRef(false);
+  const [addingRestaurant, setAddingRestaurant] = useState(false);
+
+  async function handleAddRestaurant() {
+    if (!session?.user.id || addingRestaurant) return;
+    setAddingRestaurant(true);
+    try {
+      const id = await createManualRestaurantSession(session.user.id);
+      manualDraftIdRef.current = id;
+      manualSavedRef.current = false;
+      setEditingFromLink(false);
+      setEditing({
+        id,
+        capturedAt: new Date().toISOString(),
+        extractedWines: [],
+        recommendation: null as any,
+        city: null,
+        restaurantName: null,
+        restaurantNote: null,
+        ratingFood: null,
+        ratingService: null,
+        ratingWineList: null,
+        ratingOverall: null,
+        ratingValue: null,
+        isFavourite: false,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not start a review', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setAddingRestaurant(false);
+    }
+  }
+
   function closeRestaurantReview() {
+    // Drop an unsaved manual draft so empty rows don't pile up in the list.
+    if (manualDraftIdRef.current && !manualSavedRef.current) {
+      removeArchiveItem.mutate(manualDraftIdRef.current);
+    }
+    manualDraftIdRef.current = null;
+    manualSavedRef.current = false;
     setEditing(null);
     if (editingFromLink) {
       setEditingFromLink(false);
@@ -424,7 +468,13 @@ export default function RestaurantReviewsScreen() {
           <Text style={styles.back}>Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Restaurants</Text>
-        <View style={{ width: 40 }} />
+        {session ? (
+          <TouchableOpacity onPress={handleAddRestaurant} disabled={addingRestaurant} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.addLink}>{addingRestaurant ? '…' : 'Add +'}</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       {!session ? (
@@ -614,7 +664,7 @@ export default function RestaurantReviewsScreen() {
             if (cw) { closeRestaurantReview(); setEditingWine(cw); }
           }}
           onClose={closeRestaurantReview}
-          onSaved={closeRestaurantReview}
+          onSaved={() => { manualSavedRef.current = true; closeRestaurantReview(); }}
         />
       )}
 
@@ -685,6 +735,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
+  addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, width: 50, textAlign: 'right' },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },

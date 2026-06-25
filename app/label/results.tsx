@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal 
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
+import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -27,7 +28,7 @@ function DrinkingWindowBadge({ status, from, to }: { status: string; from: numbe
     too_young: { text: 'Too Young', color: colors.warning },
     approaching: { text: 'Approaching Peak', color: colors.gold },
     peak: { text: 'Peak Now', color: colors.gold },
-    declining: { text: 'Declining', color: colors.error },
+    declining: { text: 'Declining', color: colors.gold },
     unknown: { text: 'Drinking Window Unknown', color: colors.textMuted },
   };
   const badge = labels[status] ?? labels.unknown;
@@ -48,7 +49,7 @@ function windowMeta(status: string): { text: string; color: string } {
     too_young: { text: 'Too Young', color: colors.warning },
     approaching: { text: 'Approaching', color: colors.gold },
     peak: { text: 'Peak Now', color: colors.gold },
-    declining: { text: 'Declining', color: colors.error },
+    declining: { text: 'Declining', color: colors.gold },
     unknown: { text: 'Unknown', color: colors.textMuted },
   };
   return map[status] ?? map.unknown;
@@ -99,6 +100,9 @@ export default function LabelResultsScreen() {
   const qc = useQueryClient();
   const userCurrency = preferences?.defaultCurrency ?? 'GBP';
 
+  // When Generate Wine Intel comes back empty (no score, no value) it's almost
+  // always a misspelt / wrongly-ordered name — prompt the user to check it.
+  const [noIntelDismissed, setNoIntelDismissed] = useState(false);
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
   const [addingReview, setAddingReview] = useState(false);
@@ -477,7 +481,7 @@ export default function LabelResultsScreen() {
       qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setAddingToCellar(false);
-      router.replace(`/cellar/${savedWineId}` as any);
+      router.replace('/cellar/list');
       return;
     }
 
@@ -532,13 +536,14 @@ export default function LabelResultsScreen() {
       return;
     }
 
-    // Cellar List (unplaced) — route straight to the full cellar wine card so
-    // the user lands on the same surface they see from Full Cellar List.
+    // Cellar List (unplaced) — land on the Full Cellar List, NOT the wine card.
+    // Opening the card auto-generates intel; adding should stay quick, with intel
+    // generated only when the user deliberately taps into a wine to view it.
     if (mode === 'merge') {
       await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + qty } });
     }
     setAddingToCellar(false);
-    router.replace(`/cellar/${savedWineId}` as any);
+    router.replace('/cellar/list');
   }
 
   async function performNewEntry() {
@@ -814,6 +819,14 @@ export default function LabelResultsScreen() {
         <Text style={styles.detail}>{wine.region} · {wine.vintage}</Text>
         {intel.grapeVariety && <Text style={styles.grape}>{intel.grapeVariety}</Text>}
       </View>
+
+      {/* Generate Wine Intel came back empty → prompt to check the name/format. */}
+      <NoIntelPrompt
+        visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed}
+        onDismiss={() => setNoIntelDismissed(true)}
+        onEdit={() => router.replace('/(tabs)/cellar')}
+        editLabel="Check details"
+      />
 
       {/* Intel content — hidden in the Add flow, which carries no intel (it's
           generated later, only from Generate Wine Intel). */}

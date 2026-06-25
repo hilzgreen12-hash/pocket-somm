@@ -245,8 +245,9 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
 
             <View style={styles.header}>
               <Text style={styles.headerLine}>{headerLine}</Text>
-              {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
-              {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
+              {(wine.region || wine.grape_variety) ? (
+                <Text style={styles.region}>{[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}</Text>
+              ) : null}
             </View>
 
             <View style={styles.divider} />

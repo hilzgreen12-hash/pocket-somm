@@ -12,7 +12,7 @@ const STATUS_COLORS: Record<string, string> = {
   'Approaching': '#5BAAD9',
   'Peak':        '#5CB85C',
   'Fading':      '#C4823A',
-  'Past Peak':   '#C44040',
+  'Past Peak':   '#C4823A',
 };
 
 export function DrinkingWindowBadge({ window: dw }: Props) {

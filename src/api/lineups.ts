@@ -13,6 +13,8 @@ export interface LineupArchive {
   archived_at: string;
   created_at: string;
   is_favourite: boolean;
+  note: string | null;
+  note_updated_at: string | null;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -88,6 +90,17 @@ export async function listLineupArchives(userId: string): Promise<LineupArchive[
 
 export async function setLineupFavourite(id: string, isFavourite: boolean): Promise<void> {
   const { error } = await supabase.from('lineup_archives').update({ is_favourite: isFavourite }).eq('id', id);
+  if (error) throw error;
+}
+
+// Attach (or clear) the free-text "memory" note on a lineup. Empty/whitespace
+// stores null so the Library can treat a blank note as "no note yet".
+export async function setLineupNote(id: string, note: string | null): Promise<void> {
+  const clean = note?.trim() ? note.trim() : null;
+  const { error } = await supabase
+    .from('lineup_archives')
+    .update({ note: clean, note_updated_at: clean ? new Date().toISOString() : null })
+    .eq('id', id);
   if (error) throw error;
 }
 

@@ -345,8 +345,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
             {/* Header — same shape as the cellar wine card. No favourite star. */}
             <View style={styles.header}>
               <Text style={styles.headerLine}>{headerLine}</Text>
-              {wine.region ? <Text style={styles.region}>{wine.region}</Text> : null}
-              {wine.grape ? <Text style={styles.grape}>{wine.grape}</Text> : null}
+              {(wine.region || wine.grape) ? (
+                <Text style={styles.region}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
+              ) : null}
             </View>
 
             <View style={styles.divider} />
@@ -376,6 +377,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
                     {wine.rationale ? (
                       <Text style={styles.vinsterFieldBody}><Text style={styles.vinsterLabel}>Sommelier's Note · </Text>{wine.rationale}</Text>
                     ) : null}
+                    {/* Learn more — sits at the foot of Vinster's Review note. */}
+                    <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7} style={styles.diveDeeperLink}>
+                      <Text style={styles.diveDeeperLinkText}>Dive Deeper into this wine</Text>
+                    </TouchableOpacity>
                   </View>
                 ) : null}
               </View>
@@ -412,12 +417,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               onDelete={handleDelete}
               deleteLabel={remove.isPending ? 'Deleting…' : 'Delete this review'}
             />
-
-            {/* Dive Deeper — a gold text link (not a button), mirroring the
-                "View Last Result" style. Opens the Vinster Wine Knowledge page. */}
-            <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7} style={styles.diveDeeperLink}>
-              <Text style={styles.diveDeeperLinkText}>Dive Deeper into this wine</Text>
-            </TouchableOpacity>
 
           </KeyboardAwareScrollView>
         </View>

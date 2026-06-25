@@ -26,6 +26,12 @@ export default function RackCameraScreen() {
   const { intro } = useLocalSearchParams<{ intro?: string }>();
   const [introVisible, setIntroVisible] = useState(intro === '1');
 
+  // This camera is shared by the rack and fridge scan flows — keep the wording
+  // matched to what the user is actually photographing.
+  const isFridge = pendingStorageType === 'fridge';
+  const frameNoun = isFridge ? 'fridge' : 'wine rack';   // "Frame your …"
+  const shortNoun = isFridge ? 'fridge' : 'rack';        // "Reading the …" / "New …"
+
   // Drop the still-photo preview when the screen regains focus (e.g. user
   // navigated back from /cellar/rack/detect) so the live camera returns.
   useFocusEffect(useCallback(() => { setPreviewUri(null); }, []));
@@ -65,7 +71,6 @@ export default function RackCameraScreen() {
       // horizontal count for fridges. Racks are fully visible from the front,
       // so they're left exactly as detected. Cap at 30 to match the manual
       // editor and the edge-function bounds.
-      const isFridge = pendingStorageType === 'fridge';
       const cols = isFridge ? Math.min(30, result.cols * 2) : result.cols;
       setDetected(result.rows, cols);
       router.push('/cellar/rack/detect');
@@ -95,7 +100,7 @@ export default function RackCameraScreen() {
         <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={styles.processingOverlay}>
           <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.processingText}>Reading the rack…</Text>
+          <Text style={styles.processingText}>Reading the {shortNoun}…</Text>
         </View>
       </View>
     );
@@ -106,14 +111,14 @@ export default function RackCameraScreen() {
       <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" autofocus="on" focusable />
       <CameraOverlay
         onCapture={handleCapture}
-        hint="Frame your wine rack within the guides"
+        hint={`Frame your ${frameNoun} within the guides`}
       />
 
       <Modal visible={introVisible} transparent animationType="fade" onRequestClose={() => setIntroVisible(false)}>
         <View style={styles.introOverlay}>
           <View style={styles.introSheet}>
-            <Text style={styles.introTitle}>New Rack</Text>
-            <Text style={styles.introBody}>You're creating a new rack in Vinster. Point your camera at your rack, fit it within the frame, and shoot.</Text>
+            <Text style={styles.introTitle}>New {isFridge ? 'Fridge' : 'Rack'}</Text>
+            <Text style={styles.introBody}>You're creating a new {shortNoun} in Vinster. Point your camera at your {shortNoun}, fit it within the frame, and shoot.</Text>
             <TouchableOpacity style={styles.introBtn} onPress={() => setIntroVisible(false)} activeOpacity={0.8}>
               <Text style={styles.introBtnText}>Got it</Text>
             </TouchableOpacity>

@@ -1,6 +1,7 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MicButton } from './MicButton';
 import { formatCurrency } from '../constants/currency';
+import { COMMUNITY_ENABLED } from '../constants/features';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -187,8 +188,8 @@ export function WineReviewFields({
       {(onShareCommunity || onShare) ? (
         <View style={styles.shareRow}>
           {onShareCommunity ? (
-            <TouchableOpacity style={[styles.shareBtn, sharingCommunity && styles.btnDisabled]} onPress={onShareCommunity} disabled={sharingCommunity} activeOpacity={0.8}>
-              <Text style={styles.shareBtnText}>{sharingCommunity ? 'Sharing…' : 'Share to Community'}</Text>
+            <TouchableOpacity style={[styles.shareBtn, (!COMMUNITY_ENABLED || sharingCommunity) && styles.btnDisabled]} onPress={onShareCommunity} disabled={!COMMUNITY_ENABLED || sharingCommunity} activeOpacity={0.8}>
+              <Text style={styles.shareBtnText}>{!COMMUNITY_ENABLED ? 'Share to Community (coming soon)' : sharingCommunity ? 'Sharing…' : 'Share to Community'}</Text>
             </TouchableOpacity>
           ) : null}
           {onShare ? (
