@@ -54,7 +54,7 @@ export default function CommunityCategoryScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
 
         {/* Community is still in build — the screen is previewable but

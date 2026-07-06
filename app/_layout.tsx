@@ -1,9 +1,12 @@
 import { useEffect } from 'react';
+import { View } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
+import { AppBottomBar } from '../src/components/AppBottomBar';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/hooks/useAuth';
 import * as Font from 'expo-font';
@@ -140,10 +143,13 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
       <KeyboardProvider>
       <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
+          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="home" />
@@ -198,12 +204,16 @@ export default function RootLayout() {
             <Stack.Screen name="age-gate" />
             <Stack.Screen name="legal/privacy" />
           </Stack>
+          </View>
+          <AppBottomBar />
+          </View>
           <StatusBar style="light" />
           <AppAlertHost />
         </AuthProvider>
       </QueryClientProvider>
       </ErrorBoundary>
       </KeyboardProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

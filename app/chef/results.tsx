@@ -486,7 +486,7 @@ export default function ChefResultsScreen() {
         }}
         style={styles.backRow}
       >
-        <Text style={styles.backLink}>Back</Text>
+        <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
       {(stampDate || stampLocation) && (

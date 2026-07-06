@@ -437,7 +437,7 @@ export default function ResultsScreen() {
 
   useEffect(() => {
     if (!recommendation) {
-      router.replace('/(tabs)/scan');
+      router.dismissTo('/scan/wine-list');
     }
   }, [recommendation]);
 
@@ -543,14 +543,14 @@ export default function ResultsScreen() {
                 router.back();
               } else {
                 // Skip the camera/preview/extracting stack on the way back —
-                // jump straight to the List tab.
+                // return straight to the Wine List form.
                 reset();
-                router.replace('/(tabs)/scan');
+                router.dismissTo('/scan/wine-list');
               }
             }}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
-            <Text style={styles.backLink}>Back</Text>
+            <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
           <View style={styles.topRightCol}>
             <TouchableOpacity

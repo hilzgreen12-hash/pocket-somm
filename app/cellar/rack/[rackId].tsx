@@ -16,6 +16,7 @@ import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForW
 import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
@@ -495,6 +496,7 @@ export default function RackGridScreen() {
   // Upload a label screenshot to fill the tapped slot — mirrors the Cellar tab's
   // upload, then routes to Confirm (where pendingSlot drives placement).
   async function handleUploadForSlot() {
+    if (!(await ensureMediaPermission('library'))) return;
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
       if (result.canceled || !result.assets[0]) return;
@@ -1135,7 +1137,7 @@ export default function RackGridScreen() {
             pushed a SECOND copy of racks onto the stack, which then
             looped the user back through the rack on the next Back. */}
         <TouchableOpacity onPress={handleBack}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.titleNav}>
           <TouchableOpacity

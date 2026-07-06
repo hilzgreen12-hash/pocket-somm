@@ -17,7 +17,7 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
-    title: 'How List Works',
+    title: 'How Scan Works',
     body: 'Point your camera at a restaurant wine list or upload a photo. Vinster reads the list using AI-powered optical character recognition, then scores every wine against your preferences — wine type, style, budget, and food pairing — before surfacing your best match. From your results screen you can also save a review of the wine you chose and a review of the restaurant you dined at — both kept in your archive for future reference.',
     subsections: [
       {
@@ -46,7 +46,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'Your Preferences',
-    body: 'The settings you save in your Profile are used as default parameters across List and Chef as you generate recommendations. You can override your preferences on each specific search you generate in List or Chef, depending on one-off requirements.',
+    body: 'The settings you save in your Profile are used as default parameters across Scan and Chef as you generate recommendations. You can override your preferences on each specific search you generate in Scan or Chef, depending on one-off requirements.',
   },
   {
     title: 'Privacy & Data',
@@ -64,7 +64,7 @@ export default function AboutScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-        <Text style={styles.backText}>Back</Text>
+        <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
       <Text style={styles.heading}>About Vinster</Text>
@@ -115,7 +115,7 @@ const styles = StyleSheet.create({
   sectionBody: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 27 },
   // Subsection sits inside its parent section with no separator above it —
   // by design, since "How Recommendations Are Scored" reads as a subheading
-  // under "How List Works" rather than a standalone section.
+  // under "How Scan Works" rather than a standalone section.
   subsection: { marginTop: spacing.lg },
   subsectionTitle: { fontSize: 17, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.sm, textTransform: 'uppercase' },
   privacyLinkRow: { paddingVertical: spacing.md, alignItems: 'center' },

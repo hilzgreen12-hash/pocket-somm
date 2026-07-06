@@ -5,6 +5,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -136,6 +137,7 @@ export default function ReviewRequirementsScreen() {
 
   async function handleUpload() {
     setFilters(buildFilters() as unknown as Record<string, unknown>);
+    if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
@@ -254,7 +256,7 @@ export default function ReviewRequirementsScreen() {
           centred title / spacer, with the blurb beneath at 16pt italic. */}
       <View style={styles.headerBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.backTopText}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.backTopText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Recipe Requirements</Text>
         <View style={{ width: 44 }} />

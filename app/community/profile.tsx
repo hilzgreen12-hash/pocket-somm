@@ -66,7 +66,7 @@ export default function CommunityProfileScreen() {
     <View style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
 
         {/* Community is still in build — previewable but faded and

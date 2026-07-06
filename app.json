@@ -46,6 +46,22 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Vinster uses your photo library so you can upload photos of wine lists and bottle labels to scan.",
+          "cameraPermission": "Vinster uses your camera to scan wine lists and bottle labels.",
+          "microphonePermission": "Vinster uses your microphone so you can dictate tasting notes and reviews, and ask about your wines by voice."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Vinster uses your camera to scan wine lists and bottle labels.",
+          "microphonePermission": "Vinster uses your microphone so you can dictate tasting notes and reviews, and ask about your wines by voice.",
+          "recordAudioAndroid": false
+        }
+      ],
+      [
         "expo-speech-recognition",
         {
           "microphonePermission": "Vinster uses your microphone so you can dictate tasting notes and reviews, and ask about your wines by voice.",

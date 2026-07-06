@@ -98,7 +98,7 @@ export default function ExtractingScreen() {
 
   useEffect(() => {
     if (!imageUri && !imageUris) {
-      router.replace('/(tabs)/scan');
+      router.dismissTo('/scan/wine-list');
       return;
     }
     const token = { active: true };
@@ -209,7 +209,7 @@ export default function ExtractingScreen() {
       <ScrollView contentContainerStyle={styles.errorContainer}>
         <Text style={styles.errorTitle}>Please try again!</Text>
         <Text style={styles.errorBody}>{errorDetail}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => router.replace('/(tabs)/scan')}>
+        <TouchableOpacity style={styles.retryButton} onPress={() => router.dismissTo('/scan/wine-list')}>
           <Text style={styles.retryText}>Try Again</Text>
         </TouchableOpacity>
       </ScrollView>

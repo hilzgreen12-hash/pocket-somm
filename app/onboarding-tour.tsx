@@ -12,7 +12,7 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    badge: 'List',
+    badge: 'Scan',
     title: 'Scan any wine list',
     body: 'Point your camera at any wine list and Vinster will dive deep into online resources to find the best wines for your tastes based on critic scores, value for money, rarity, vintage quality and drinkability. Don\'t ever sweat a wine pairing again.',
   },
@@ -110,7 +110,7 @@ const styles = StyleSheet.create({
   topBar: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.lg },
   brandLogo: { width: 180, height: 130 },
   slide: { paddingHorizontal: spacing.xl, justifyContent: 'center' },
-  // Slide eyebrow (List / Chef / …) — sized to match the title beneath it,
+  // Slide eyebrow (Scan / Chef / …) — sized to match the title beneath it,
   // in gold Cormorant, per the onboarding brief.
   badge: { fontFamily: fonts.headingBold, fontSize: 38, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, lineHeight: 44, textAlign: 'center', marginBottom: spacing.sm },
   title: { fontFamily: fonts.headingBold, fontSize: 38, color: colors.text, letterSpacing: 0.5, lineHeight: 46, textAlign: 'center', marginBottom: spacing.lg },

@@ -106,7 +106,7 @@ export default function RecipeProfileScreen() {
             spacer, with the blurb beneath at the same size + italic style. */}
         <View style={styles.headerBar}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.back}>Back</Text>
+            <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Recipe Requirements</Text>
           <View style={{ width: 44 }} />

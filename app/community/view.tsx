@@ -52,7 +52,7 @@ export default function CommunityViewScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{heading}</Text>
         <View style={{ width: 40 }} />

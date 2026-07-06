@@ -4,6 +4,7 @@ import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
@@ -72,7 +73,7 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'Declining' },
 ];
 
-type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | 'archived' | null;
+type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | null;
 
 type FavouriteFilter = 'all' | 'favourites';
 const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
@@ -80,15 +81,11 @@ const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
   { value: 'favourites', label: 'Favourites only' },
 ];
 
-// Archived view — last chip on the filter carousel. Swaps the list source
-// from live cellar wines to archived ones (replaces the old Cellar tab
-// "Archived Wines" button).
+// Live cellar vs archived. Archived wines are viewed ONLY in the dedicated
+// Cellar Archive (this same screen opened with ?archived=1); the Full Cellar
+// List always hides them. There is no user-facing chip — the value is fixed by
+// the route (see isArchiveView below).
 type ArchivedFilter = 'hide' | 'include' | 'only';
-const ARCHIVED_OPTIONS: { value: ArchivedFilter; label: string }[] = [
-  { value: 'hide', label: 'Hide' },
-  { value: 'include', label: 'Include' },
-  { value: 'only', label: 'Only Archived' },
-];
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
@@ -401,6 +398,7 @@ export default function FullCellarListScreen() {
   const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
 
   async function handleUpload() {
+    if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
     const uri = result.assets[0].uri;
@@ -569,7 +567,6 @@ export default function FullCellarListScreen() {
   const scoreLabel = scoreActive ? (SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
   const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
   const maturityLabel = maturityFilter === 'All' ? 'All' : (MATURITY_OPTIONS.find((o) => o.value === maturityFilter)?.label ?? 'All');
-  const archivedLabel = ARCHIVED_OPTIONS.find((o) => o.value === archivedFilter)?.label ?? 'Hide';
   // Current ordering, shown in the hint above the filters. Dynamic so it stays
   // accurate when the user switches to a Price/Score sort.
   const sortLabel = sortMode === 'recent'
@@ -635,14 +632,6 @@ export default function FullCellarListScreen() {
         onSelect: (v) => setFavouriteFilter(v as FavouriteFilter),
       };
     }
-    if (field === 'archived') {
-      return {
-        title: 'Archived wines',
-        options: ARCHIVED_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-        selected: archivedFilter,
-        onSelect: (v) => setArchivedFilter(v as ArchivedFilter),
-      };
-    }
     return null;
   }
 
@@ -660,7 +649,7 @@ export default function FullCellarListScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
         <View style={styles.headerActions}>
@@ -720,13 +709,17 @@ export default function FullCellarListScreen() {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
-        <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Location</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
-        </TouchableOpacity>
+        {/* Location filtering is a Full Cellar List affordance — the Archive
+            has no racks/locations to filter by, so hide the chip there. */}
+        {!isArchiveView && (
+          <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
+            <View style={styles.filterChipHeadingRow}>
+              <Text style={styles.filterChipLabel}>Location</Text>
+              <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
+            </View>
+            <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
           <View style={styles.filterChipHeadingRow}>
             <Text style={styles.filterChipLabel}>Price</Text>
@@ -771,25 +764,6 @@ export default function FullCellarListScreen() {
               <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
             </View>
             <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
-          </TouchableOpacity>
-        )}
-        {/* Archived view — a dropdown like the other filters. Swaps the list
-            between live and archived wines (Hide / Include / Only Archived).
-            Hidden entirely in the dedicated archive view so the user can't
-            switch away from their archive. */}
-        {!isArchiveView && (
-          <TouchableOpacity style={[styles.filterChip, archivedFilter !== 'hide' && styles.sortChip]} onPress={() => setOpenDropdown('archived')}>
-            <View style={styles.filterChipHeadingRow}>
-              <Text style={styles.filterChipLabel}>Archived</Text>
-              <Text style={styles.filterChipChevron}>{openDropdown === 'archived' ? '▴' : '▾'}</Text>
-            </View>
-            <Text
-              style={[styles.filterChipValue, archivedFilter !== 'hide' && { color: colors.gold }]}
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {archivedLabel}
-            </Text>
           </TouchableOpacity>
         )}
       </ScrollView>

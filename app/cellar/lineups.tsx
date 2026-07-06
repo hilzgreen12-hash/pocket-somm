@@ -2,13 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput, useWindowDimensions } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
-import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote, type LineupArchive } from '../../src/api/lineups';
+import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote, saveLineupArchive, type LineupArchive } from '../../src/api/lineups';
 import { MicButton } from '../../src/components/MicButton';
 import { LineupShareCard } from '../../src/components/LineupShareCard';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
@@ -79,6 +81,31 @@ export default function LineupLibraryScreen() {
   const [favFilter, setFavFilter] = useState<'all' | 'fav'>('all');
   const [monthFilter, setMonthFilter] = useState<string>('All');
   const [openDropdown, setOpenDropdown] = useState<'fav' | 'month' | null>(null);
+
+  // "+ Add" a lineup straight from a photo — no cellar match, no bottle count,
+  // just the picture. Once saved it behaves exactly like an Archive-a-Night
+  // lineup (favourite, note, share).
+  const [addOpen, setAddOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  async function addLineupFrom(source: 'camera' | 'library') {
+    setAddOpen(false);
+    if (!userId) return;
+    if (source === 'library' && !(await ensureMediaPermission('library'))) return;
+    try {
+      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
+      const result = source === 'camera'
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync(opts);
+      if (result.canceled || !result.assets.length) return;
+      setAdding(true);
+      await saveLineupArchive(userId, result.assets[0].uri, null);
+      qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
+    } catch (err) {
+      showAlert({ title: source === 'camera' ? 'Could not open camera' : 'Could not add the photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setAdding(false);
+    }
+  }
 
   // Bespoke user-created filters.
   const { filters: customFilters, create, setItems, rename, remove } = useLibraryFilters('lineup');
@@ -248,10 +275,12 @@ export default function LineupLibraryScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Lineup Library</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+          <Text style={styles.addLink}>+ Add</Text>
+        </TouchableOpacity>
       </View>
 
       <Text style={styles.blurb}>
@@ -271,7 +300,7 @@ export default function LineupLibraryScreen() {
       ) : lineups.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No lineups yet</Text>
-          <Text style={styles.emptyBody}>Use Archive a Night in your Cellar to photograph a bottle lineup — each one is saved here with its date.</Text>
+          <Text style={styles.emptyBody}>Tap + Add to save a lineup photo straight to your library, or use Archive a Night in your Cellar to photograph and log a bottle lineup — each one is saved here with its date.</Text>
         </View>
       ) : (
         <>
@@ -418,6 +447,32 @@ export default function LineupLibraryScreen() {
         onSave={saveFilter}
         onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
       />
+
+      {/* Add a lineup straight from a photo — scan (camera) or upload. */}
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Add a lineup</Text>
+            <Text style={styles.addBody}>Photograph a bottle lineup or upload one from your library. It saves to Your Lineup Library with today’s date, ready to note and share.</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={() => addLineupFrom('camera')} activeOpacity={0.85}>
+              <Text style={styles.addBtnText}>Take a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addBtn, { marginTop: spacing.sm }]} onPress={() => addLineupFrom('library')} activeOpacity={0.85}>
+              <Text style={styles.addBtnText}>Upload a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setAddOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {adding && (
+        <View style={styles.savingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.savingText}>Saving your lineup…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -428,6 +483,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   headerSpacer: { width: 40 },
+  addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
@@ -477,6 +533,12 @@ const styles = StyleSheet.create({
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // "Add a lineup" chooser — mirrors the Cellar List add-wine sheet.
+  addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  savingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  savingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   viewerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
   viewerImage: { width: '100%', height: '80%' },
   // The note "letter" — a cream card with a gold flap glyph at the top.

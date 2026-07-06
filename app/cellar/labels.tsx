@@ -1,8 +1,12 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, useWindowDimensions } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { showAlert } from '../../src/components/AppAlert';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
@@ -45,6 +49,31 @@ export default function MyLabelsScreen() {
   const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
   const [favFilter, setFavFilter] = useState<FavFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+
+  // "+ Add" a label — reuses the standard scan/upload-a-wine path, so the new
+  // label is a full cellar wine (with its photo) and gets note/share for free.
+  const { setImage, setWineDetails, setError } = useLabelStore();
+  const [addOpen, setAddOpen] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
+  async function handleUpload() {
+    setAddOpen(false);
+    if (!(await ensureMediaPermission('library'))) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    setScanningLabel(true);
+    try {
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to scan label');
+    } finally {
+      setScanningLabel(false);
+    }
+    router.push('/label/confirm');
+  }
 
   // Bespoke user-created filters.
   const { filters: customFilters, create, setItems, rename, remove } = useLibraryFilters('label');
@@ -136,10 +165,12 @@ export default function MyLabelsScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Label Library</Text>
-        <View style={styles.headerSpacer} />
+        <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+          <Text style={styles.addLink}>+ Add</Text>
+        </TouchableOpacity>
       </View>
 
       {!hasAnyPhotos ? (
@@ -272,6 +303,34 @@ export default function MyLabelsScreen() {
         onSave={saveFilter}
         onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
       />
+
+      {/* Add a label — scan or upload a wine photo. Runs the same path as any
+          scanned wine, so it lands in the cellar (and this library) with note
+          and share available on the wine card. */}
+      <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Add a label</Text>
+            <Text style={styles.addBody}>Scan a wine label or upload a photo — Vinster reads the details and it joins your cellar and this library.</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={() => { setAddOpen(false); router.push('/label/camera'); }} activeOpacity={0.85}>
+              <Text style={styles.addBtnText}>Scan Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addBtn, { marginTop: spacing.sm }]} onPress={handleUpload} activeOpacity={0.85}>
+              <Text style={styles.addBtnText}>Upload a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setAddOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {scanningLabel && (
+        <View style={styles.scanningOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.scanningText}>Reading the label…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -282,6 +341,7 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   headerSpacer: { width: 40 },
+  addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   // Filter hint + carousel — mirrors app/cellar/list.tsx.
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
@@ -319,4 +379,10 @@ const styles = StyleSheet.create({
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // "Add a label" chooser — mirrors the Cellar List add-wine sheet.
+  addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  scanningOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  scanningText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
 });

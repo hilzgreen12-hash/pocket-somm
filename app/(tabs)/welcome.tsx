@@ -17,7 +17,7 @@ export default function WelcomeTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>List</Text>
+        <Text style={styles.sectionTitle}>Scan</Text>
         <Text style={styles.sectionDesc}>Scan or photograph a restaurant wine list and Vinster will recommend the best bottles for your taste, budget, and what you're eating.</Text>
       </View>
 

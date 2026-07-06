@@ -86,11 +86,32 @@ const motifStyles = StyleSheet.create({
 });
 
 const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: () => React.JSX.Element }> = [
-  { label: 'List',      desc: 'scan a wine list',      route: '/(tabs)/scan',      Motif: ListMotif },
+  { label: 'Scan',      desc: 'Wine Lists & Labels',   route: '/(tabs)/scan',      Motif: ListMotif },
   { label: 'Chef',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
   { label: 'Cellar',    desc: 'build your collection', route: '/(tabs)/cellar',    Motif: CellarMotif },
   { label: 'Community', desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
 ];
+
+// Top-right hamburger menu — a shortcut to every destination in the app.
+const MENU_ITEMS: ReadonlyArray<{ label: string; route: string }> = [
+  { label: 'Your Stuff',    route: '/(tabs)/you' },
+  { label: 'About Vinster', route: '/about' },
+  { label: 'Scan',          route: '/(tabs)/scan' },
+  { label: 'Cellar',        route: '/(tabs)/cellar' },
+  { label: 'Chef',          route: '/(tabs)/chef' },
+  { label: 'Community',     route: '/(tabs)/community' },
+];
+
+// Three-line hamburger glyph, drawn with Views to avoid an icon dependency.
+function MenuGlyph() {
+  return (
+    <View style={styles.menuGlyph}>
+      <View style={styles.menuGlyphLine} />
+      <View style={styles.menuGlyphLine} />
+      <View style={styles.menuGlyphLine} />
+    </View>
+  );
+}
 
 // --- Featured personality (popup-driven) ----------------------------------
 // Returns the most-recently-generated sketch (wine or recipe) so the home
@@ -139,6 +160,7 @@ export default function HomeScreen() {
   // sketch. View = navigate to /profile/personality; the personality
   // screen itself writes the ack timestamp so the popup stops re-firing.
   const [readyPopupVisible, setReadyPopupVisible] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   useFocusEffect(useCallback(() => {
     let cancelled = false;
     (async () => {
@@ -163,6 +185,18 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
+      {/* Top-right hamburger — opens a shortcut menu to every destination. */}
+      <TouchableOpacity
+        style={styles.menuButton}
+        onPress={() => setMenuOpen(true)}
+        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityRole="button"
+        accessibilityLabel="Menu"
+        activeOpacity={0.7}
+      >
+        <MenuGlyph />
+      </TouchableOpacity>
+
       <ScrollView
         contentContainerStyle={styles.scroll}
         showsVerticalScrollIndicator={false}
@@ -202,6 +236,24 @@ export default function HomeScreen() {
           })}
         </View>
       </ScrollView>
+
+      {/* Hamburger menu sheet — anchored top-right below the icon. */}
+      <Modal visible={menuOpen} transparent animationType="fade" onRequestClose={() => setMenuOpen(false)}>
+        <TouchableOpacity style={styles.menuOverlay} activeOpacity={1} onPress={() => setMenuOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.menuPanel} onPress={() => {}}>
+            {MENU_ITEMS.map((item, i) => (
+              <TouchableOpacity
+                key={item.label}
+                style={[styles.menuRow, i > 0 && styles.menuRowBorder]}
+                onPress={() => { setMenuOpen(false); router.push(item.route as any); }}
+                activeOpacity={0.7}
+              >
+                <Text style={styles.menuRowText}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <PersonalityPromptModal
         visible={!!personalityCategory && !promptDismissed}
@@ -248,6 +300,16 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background, paddingBottom: spacing.xxl },
+  // Hamburger button + glyph, top-right above the scroll content.
+  menuButton: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, padding: 6 },
+  menuGlyph: { width: 26, height: 18, justifyContent: 'space-between' },
+  menuGlyphLine: { height: 2, backgroundColor: colors.gold, borderRadius: 1 },
+  // Menu sheet, anchored under the icon (top-right).
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'flex-end', paddingTop: 92, paddingRight: spacing.xl },
+  menuPanel: { backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, borderRadius: 12, minWidth: 210, overflow: 'hidden' },
+  menuRow: { paddingVertical: spacing.md, paddingHorizontal: spacing.lg },
+  menuRowBorder: { borderTopWidth: 1, borderTopColor: colors.border },
+  menuRowText: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.text, letterSpacing: 0.3 },
   // Top padding doubled (48 → 96) so VINSTER sits comfortably below the
   // status bar / notch instead of crowding the top edge.
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl * 2, paddingBottom: spacing.lg },

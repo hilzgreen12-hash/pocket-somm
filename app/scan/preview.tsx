@@ -20,14 +20,14 @@ export default function PreviewScreen() {
   // Guards against the retake handler and this safety-net effect BOTH firing a
   // navigation when imageUri clears — the double navigation was surfacing the
   // error screen instead of cleanly returning. Pop back to whatever pushed the
-  // preview (the camera, or the List tab for an upload); a cross-group
+  // preview (the camera, or the Wine List page for an upload); a cross-group
   // router.replace from this pushed screen was what crashed into the
   // ErrorBoundary.
   const leaving = useRef(false);
   function leaveCleanly() {
     leaving.current = true;
     if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/scan');
+    else router.dismissTo('/scan/wine-list');
   }
   useEffect(() => {
     if (!imageUri && !leaving.current) leaveCleanly();
