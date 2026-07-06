@@ -113,6 +113,24 @@ export default function RacksScreen() {
     });
   }
 
+  // The gold "Add to Location" link under each unplaced wine — lists just the
+  // user's Cellar List locations (mirrors the Location filter in Full Cellar
+  // List), filing the wine under the chosen one.
+  function handleAddToLocation(wine: CellarWine) {
+    if (locations.length === 0) {
+      showAlert({ title: 'No locations yet', body: 'Create a location in your Full Cellar List first, then you can file wines under it.' });
+      return;
+    }
+    showAlert({
+      title: 'Add to Location',
+      body: 'File this wine under one of your Cellar List locations:',
+      buttons: [
+        ...locations.map((l) => ({ text: l.name, onPress: () => addUnplacedToLocation(wine.id, l.id) })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
   function handleLongPressRack(rack: WineRack) {
     showAlert({
       title: rack.name,
@@ -281,6 +299,9 @@ export default function RacksScreen() {
                         <Text style={styles.recentMetaDot}>·</Text>
                         <Text style={styles.recentMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
                       </View>
+                      <TouchableOpacity onPress={() => handleAddToLocation(w)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                        <Text style={styles.addToLocationLink}>Add to Location</Text>
+                      </TouchableOpacity>
                     </View>
                   </TouchableOpacity>
                 ))}
@@ -375,6 +396,7 @@ const styles = StyleSheet.create({
   recentMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   recentMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, flexShrink: 1 },
   recentMetaDot: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  addToLocationLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: 4 },
   // Photograph / manual chooser overlay
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },

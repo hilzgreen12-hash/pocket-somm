@@ -16,6 +16,8 @@ export type AppAlertOptions = {
   body?: string;
   buttons?: AppAlertButton[];
   dismissable?: boolean;
+  // Show a close "✕" in the top-right of the sheet (in addition to any buttons).
+  showCloseX?: boolean;
 };
 
 let setAlertImpl: ((opts: AppAlertOptions | null) => void) | null = null;
@@ -57,6 +59,11 @@ export function AppAlertHost() {
     <Modal visible={visible} transparent animationType="fade" onRequestClose={dismissable ? close : undefined}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={dismissable ? close : undefined}>
         <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
+          {opts?.showCloseX ? (
+            <TouchableOpacity style={styles.closeX} onPress={close} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={styles.closeXText}>✕</Text>
+            </TouchableOpacity>
+          ) : null}
           {opts?.title ? <Text style={styles.title}>{opts.title}</Text> : null}
           {opts?.body ? <Text style={styles.body}>{opts.body}</Text> : null}
 
@@ -106,6 +113,8 @@ const styles = StyleSheet.create({
     width: '100%',
     maxWidth: 420,
   },
+  closeX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 10, padding: 4 },
+  closeXText: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted },
   title: {
     fontFamily: fonts.headingBold,
     fontSize: 22,

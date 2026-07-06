@@ -226,7 +226,7 @@ export default function WineListScreen() {
 
       <View style={styles.header}>
         <View style={styles.titleRow}>
-          <Text style={styles.appName}>Scan</Text>
+          <Text style={styles.appName}>Scan a List</Text>
         </View>
         <Text style={styles.subtitle}>Input a wine list alongside your preferences to generate three recommendations.</Text>
         <HelpButton label="More About Scan" title="How Scan works" body={LIST_HELP} />
@@ -310,7 +310,7 @@ export default function WineListScreen() {
       >
         <TouchableOpacity style={styles.introOverlay} activeOpacity={1} onPress={dismissIntro}>
           <TouchableOpacity activeOpacity={1} style={styles.introSheet} onPress={() => {}}>
-            <Text style={styles.introTitle}>Welcome to Scan</Text>
+            <Text style={styles.introTitle}>Welcome to Scan A List</Text>
             <Text style={styles.introBody}>
               Scan a wine list or upload screenshots. Vinster works best with <Text style={styles.introBodyEmph}>around 80 wines or fewer per session</Text> — bigger lists may not process at all, so focus your photos on the section you care about (reds, by the glass, under £100…) and keep them clear and well-lit.
             </Text>

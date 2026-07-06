@@ -138,7 +138,7 @@ export default function YouScreen() {
           <VinsterHeader />
           <View style={styles.body}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>You</Text>
+              <Text style={styles.title}>Your Stuff</Text>
             </View>
             <ArchiveSignInPrompt
               title="Sign in to manage your account"
@@ -187,7 +187,7 @@ export default function YouScreen() {
       <View style={styles.body}>
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>You</Text>
+        <Text style={styles.title}>Your Stuff</Text>
       </View>
       <Text style={styles.identityLine}>
         {currentUsername || currentEmail.split('@')[0]} · Vinster since {formatJoinedShort(session?.user.created_at)}

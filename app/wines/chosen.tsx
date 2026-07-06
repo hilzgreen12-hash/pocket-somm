@@ -17,8 +17,10 @@ import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity } from '../../src/utils/city';
+import { splitLocationString } from '../../src/services/reviewSync';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ChosenWine, CellarWine } from '../../src/types/wine';
@@ -175,7 +177,7 @@ export default function ChosenWinesScreen() {
   // Restaurant bottle picks the user has NOT yet reviewed — these are excluded
   // from the main reviews list (they live in Your Restaurants until reviewed),
   // and surface in the "Bottle Picks Awaiting Review" section + the on-open prompt.
-  const awaitingReview = chosenWines.filter((w) => w.source !== 'other' && !chosenHasReview(w));
+  const awaitingReview = chosenWines.filter((w) => !chosenHasReview(w));
 
   // One-time, dismissible prompt nudging the user to review a waiting pick.
   const { session } = useAuth();
@@ -208,27 +210,27 @@ export default function ChosenWinesScreen() {
     return item.source !== 'cellar' && !!(item.wine as ChosenWine).wishlist;
   }
 
-  // Canonical city for a review — restaurant reviews carry a clean
-  // chosen_wines.city; cellar reviews don't have a structured city
-  // field (review_location is free-form "Restaurant, City"), so they
-  // don't participate in the Location filter — selecting a city
-  // implicitly narrows to restaurant reviews. The available-cities
-  // computation reflects this.
+  // Canonical city for a review so every review type can feed the Location
+  // filter. Restaurant / off-list reviews carry a clean chosen_wines.city;
+  // cellar reviews keep a free-form review_location ("Restaurant, City" — or
+  // just a place), so parse the city out of it (falling back to the whole
+  // string when there's no comma).
   function cityFor(item: ReviewItem): string {
-    // Both restaurant and other reviews live on chosen_wines and may
-    // carry a city. Cellar reviews use the free-form review_location
-    // field which isn't structured enough to feed the Location chip.
-    if (item.source === 'cellar') return '';
+    if (item.source === 'cellar') {
+      const loc = (item.wine as CellarWine).review_location ?? '';
+      const { city } = splitLocationString(loc);
+      return normaliseCity(city || loc);
+    }
     return normaliseCity((item.wine as ChosenWine).city);
   }
 
-  // Cities surfaced by the Location chip — only those that exist on
-  // at least one restaurant review, normalised + de-duplicated.
+  // Cities surfaced by the Location chip — every city that appears on a shown
+  // review (bare, unreviewed picks live in Your Restaurants, so skip them),
+  // normalised + de-duplicated.
   const availableCities = useMemo(() => {
     const set = new Set<string>();
     for (const it of items) {
-      // Restaurant picks aren't shown here, so don't offer their cities.
-      if (it.source === 'restaurant') continue;
+      if ((it.source === 'restaurant' || it.source === 'other') && !chosenHasReview(it.wine as ChosenWine)) continue;
       const c = cityFor(it);
       if (c) set.add(c);
     }
@@ -246,15 +248,15 @@ export default function ChosenWinesScreen() {
     if (typeFilter === 'wishlist') {
       if (!isWishlist(it)) return false;
     } else if (typeFilter === 'all') {
-      // Bare restaurant bottle picks (no written review) live only in You ·
-      // Your Restaurants. A pick that's since been reviewed — or a wine
-      // reviewed straight from List → Review Wine — still belongs here.
-      // (Wish-listed picks stay reachable via the Wish List slice above.)
-      if (it.source === 'restaurant' && !chosenHasReview(it.wine as ChosenWine)) return false;
+      // Bare bottle picks (no written review) — List or Off-List — live only in
+      // You · Your Restaurants. A pick that's since been reviewed still belongs
+      // here. (Wish-listed picks stay reachable via the Wish List slice above.)
+      if ((it.source === 'restaurant' || it.source === 'other') && !chosenHasReview(it.wine as ChosenWine)) return false;
     } else if (typeFilter === 'restaurant') {
-      // Restaurant Wines slice — restaurant-source reviews only, and only
-      // those actually reviewed (bare picks stay in Your Restaurants).
-      if (it.source !== 'restaurant') return false;
+      // Restaurant Wines slice — both List Bottles ('restaurant') and Off-List
+      // Bottles ('other'), and only those actually reviewed (bare picks stay in
+      // Your Restaurants).
+      if (it.source !== 'restaurant' && it.source !== 'other') return false;
       if (!chosenHasReview(it.wine as ChosenWine)) return false;
     } else if (it.source !== typeFilter) {
       return false;
@@ -300,14 +302,12 @@ export default function ChosenWinesScreen() {
   const PORTFOLIO_OPTIONS: { value: TypeFilter; label: string }[] = [
     { value: 'all',        label: 'All Reviews' },
     { value: 'cellar',     label: 'Cellar Wines' },
-    // Restaurant Wines = wines reviewed at a restaurant (source 'restaurant')
-    // that carry an actual review. Bare bottle picks with no review still
-    // live only in You · Your Restaurants and are filtered out below.
-    { value: 'restaurant', label: 'Bottle Picks' },
+    // Restaurant Wines = wines reviewed at a restaurant — both List Bottles
+    // (source 'restaurant', chosen off the list) and Off-List Bottles (source
+    // 'other', brought to the visit). Bare picks with no review stay in Your
+    // Restaurants and are filtered out below.
+    { value: 'restaurant', label: 'Restaurant Wines' },
     { value: 'wishlist',   label: 'Wish List Wines' },
-    // 'Other' captures reviews saved via the "Review without adding"
-    // path on the Cellar add-wine flow (migration 042 column).
-    { value: 'other',      label: 'Other' },
   ];
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added (default)';
   const portfolioLabel = PORTFOLIO_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Reviews';
@@ -495,13 +495,9 @@ export default function ChosenWinesScreen() {
   async function handleChooseUpload() {
     setChooserOpen(false);
     try {
-      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!perm.granted) {
-        showAlert({ title: 'Photo access needed', body: 'Enable photo access in Settings to upload a wine label image.' });
-        return;
-      }
+      if (!(await ensureMediaPermission('library'))) return;
       const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ['images'],
         quality: 1,
       });
       if (picked.canceled || !picked.assets?.[0]) return;
@@ -546,11 +542,35 @@ export default function ChosenWinesScreen() {
         onSaved={() => setAddOpen(false)}
       />
 
+      {/* "+ Add" chooser — Scan / Upload run the same label recognise+confirm
+          pathway as an intel scan, but land on the review input (context=reviews)
+          instead of the intel card. Manual opens the by-hand review form. */}
+      <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
+            <Text style={styles.chooserTitle}>Add a wine review</Text>
+            <Text style={styles.chooserBody}>Scan or upload a wine label and Vinster will identify the bottle, then take you straight to your review — or enter it by hand.</Text>
+            <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseScan} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Scan Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseUpload} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Upload A Wine Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseManual} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setChooserOpen(false)} style={styles.chooserCancel}>
+              <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* On-open nudge to review a waiting restaurant bottle pick. */}
       <Modal visible={!!reviewPrompt} transparent animationType="fade" onRequestClose={() => setReviewPrompt(null)}>
         <View style={styles.promptOverlay}>
           <View style={styles.promptSheet}>
-            <Text style={styles.promptTitle}>A bottle pick is waiting for your review</Text>
+            <Text style={styles.promptTitle}>Wines you drank recently are awaiting your review</Text>
             {reviewPrompt ? (
               <Text style={styles.promptBody}>
                 Your bottle pick from {reviewPrompt.restaurant_name?.trim() || 'your visit'} is waiting for your review —{' '}
@@ -611,7 +631,7 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
         <TouchableOpacity
-          onPress={() => setAddOpen(true)}
+          onPress={() => setChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Text style={styles.addLink}>+ Add</Text>
@@ -641,6 +661,9 @@ export default function ChosenWinesScreen() {
                 const r = filtered.length, n = wineKeys.size;
                 return `${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`;
               })()}
+            </Text>
+            <Text style={styles.summaryText}>
+              {awaitingReview.length} {awaitingReview.length === 1 ? 'wine' : 'wines'} awaiting your review
             </Text>
           </View>
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
@@ -765,7 +788,7 @@ export default function ChosenWinesScreen() {
               Tapping one opens the same review flow as Your Restaurants. */}
           {awaitingReview.length > 0 ? (
             <View style={styles.awaitingSection}>
-              <Text style={styles.awaitingHeader}>Bottle Picks Awaiting Review</Text>
+              <Text style={styles.awaitingHeader}>Restaurant Wines Awaiting Review</Text>
               {awaitingReview.map((w) => (
                 <TouchableOpacity
                   key={`await-${w.id}`}

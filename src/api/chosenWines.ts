@@ -80,6 +80,35 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
   return data as ChosenWine;
 }
 
+// Attach a wine to a restaurant visit as a bottle the user brought (e.g. from
+// home). Linked to the scan session and marked source='other' so it shows in
+// the visit's "Your Bottles" but never in the List-scan "Bottle Picks".
+export async function addSessionBottle(userId: string, input: {
+  sessionId: string;
+  restaurantName: string | null;
+  city: string | null;
+  producer: string | null;
+  wineName: string;
+  region: string | null;
+  vintage: number | null;
+  // 'restaurant' = a List Bottle (chosen off the restaurant's list);
+  // 'other' = an Off-List Bottle (brought to the visit, e.g. from home).
+  source: 'restaurant' | 'other';
+}): Promise<void> {
+  const { error } = await supabase.from('chosen_wines').insert({
+    user_id: userId,
+    scan_session_id: input.sessionId,
+    wine_name: input.wineName.trim(),
+    producer: input.producer?.trim() || null,
+    region: input.region?.trim() || null,
+    vintage: input.vintage,
+    restaurant_name: input.restaurantName?.trim() || null,
+    city: input.city?.trim() || null,
+    source: input.source,
+  });
+  if (error) throw new Error(error.message);
+}
+
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<ChosenWine> {
   const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore, listPrice, isFavourite, reviewDate } = input;
   const row: Record<string, unknown> = {
