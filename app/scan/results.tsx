@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -101,7 +101,13 @@ export default function ResultsScreen() {
   // a row id stored, the same button removes it; otherwise it adds
   // and stashes the new id. Lets a user undo an accidental tap
   // without leaving the screen.
-  const { save: saveChosen, update: updateChosen, chosenWines } = useChosenWines();
+  const { save: saveChosen, update: updateChosen, chosenWines, remove: removeChosen } = useChosenWines();
+  // "Add a restaurant first" prompt — the List-Bottle button can't save without
+  // a restaurant name, so we collect it (+ location) inline before proceeding.
+  const [restaurantPromptOpen, setRestaurantPromptOpen] = useState(false);
+  const [pendingWine, setPendingWine] = useState<{ wine: WineRecommendation; i: number } | null>(null);
+  const [promptRestaurant, setPromptRestaurant] = useState('');
+  const [promptCity, setPromptCity] = useState('');
   const [restaurantName, setRestaurantName] = useState('');
   const [editingRestaurant, setEditingRestaurant] = useState(false);
   const [renderedAt] = useState(() => new Date().toISOString());
@@ -230,9 +236,9 @@ export default function ResultsScreen() {
   // autoSave.data, which only updates on the next render and is stale right
   // after the await — the cause of the "add a restaurant first" prompt firing
   // even though the save had just succeeded.
-  async function handleSaveRestaurant(): Promise<string | null> {
+  async function handleSaveRestaurant(nameOverride?: string): Promise<string | null> {
     setEditingRestaurant(false);
-    const trimmed = restaurantName.trim();
+    const trimmed = (nameOverride ?? restaurantName).trim();
     if (effectiveSessionId) {
       // Row already in scan_sessions — just update the restaurant name.
       // Covers both the in-session autoSave path and View Last Result
@@ -318,16 +324,16 @@ export default function ResultsScreen() {
   // they've had before should reinforce the existing review, not
   // fragment it. Same-scan-session re-taps are a silent no-op (the chip
   // just flips to Chosen).
-  async function handleQuickSelect(wine: WineRecommendation, i: number) {
+  async function handleQuickSelect(wine: WineRecommendation, i: number, overrides?: { restaurant?: string; city?: string }) {
     if (!session || chosenIndexes.has(i)) return;
     try {
       const sid = isFromHistory
         ? (sessionId ?? null)
         : (autoSave.data?.[0]?.sessionId ?? null);
-      const cityValue = isFromHistory
-        ? (historyCity ?? '')
-        : (autoSave.data?.[0]?.city ?? '');
-      const currentRestaurant = restaurantName ?? '';
+      const cityValue = overrides?.city
+        ?? cityOverride
+        ?? (isFromHistory ? (historyCity ?? '') : (autoSave.data?.[0]?.city ?? ''));
+      const currentRestaurant = overrides?.restaurant ?? restaurantName ?? '';
 
       const existing = findExistingReview(chosenWines, {
         producer: wine.producer,
@@ -396,17 +402,45 @@ export default function ResultsScreen() {
       setChosenIndexes((prev) => new Set([...prev, i]));
       showAlert({
         title: 'Added to You · Your Restaurants',
-        body: "Saved to your Bottle Picks under You · Your Restaurants. Vinster will fold this into their understanding of your vinous amour.",
-        buttons: [
-          { text: 'Okay', style: 'cancel' },
-          // Review now → opens the review input for this just-added pick and
-          // saves the review onto it (no separate re-entry from the list card).
-          { text: 'Review Wine', onPress: () => setChosenModalWine(wine) },
-        ],
+        body: "Saved to your List Bottles under You · Your Restaurants. To review it, head to the You tab. Vinster will fold this into their understanding of your vinous amour.",
+        showCloseX: true,
+        buttons: [{ text: 'Cancel', style: 'cancel' }],
       });
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     }
+  }
+
+  // Unselect a List Bottle added on THIS scan — deletes the chosen_wine created
+  // for this session (never a pre-existing review from another visit) and clears
+  // the chip so the button flips back to "Add …".
+  async function unselectBottle(wine: WineRecommendation, i: number) {
+    const sid = isFromHistory ? (sessionId ?? null) : (autoSave.data?.[0]?.sessionId ?? null);
+    try {
+      const existing = findExistingReview(chosenWines, { producer: wine.producer, wineName: wine.name, vintage: wine.vintage });
+      if (existing && sid && existing.scan_session_id === sid) {
+        await removeChosen.mutateAsync(existing.id);
+      }
+      setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
+    } catch (err) {
+      showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Restaurant-first prompt: capture name (+ location), persist it, then add
+  // the pending bottle with those details threaded in (state isn't updated yet
+  // this tick, so pass overrides directly).
+  async function continueAfterRestaurant() {
+    const name = promptRestaurant.trim();
+    if (!name) { showAlert({ title: 'Restaurant needed', body: 'Please enter a restaurant name to continue.' }); return; }
+    const cityVal = promptCity.trim();
+    setRestaurantName(name);
+    if (cityVal) setCityOverride(cityVal);
+    setRestaurantPromptOpen(false);
+    await handleSaveRestaurant(name);
+    const target = pendingWine;
+    setPendingWine(null);
+    if (target) await handleQuickSelect(target.wine, target.i, { restaurant: name, city: cityVal || undefined });
   }
 
 
@@ -599,8 +633,8 @@ export default function ResultsScreen() {
               placeholder="Tap to add restaurant"
               placeholderTextColor="rgba(255,255,255,0.45)"
               autoFocus
-              onBlur={handleSaveRestaurant}
-              onSubmitEditing={handleSaveRestaurant}
+              onBlur={() => handleSaveRestaurant()}
+              onSubmitEditing={() => handleSaveRestaurant()}
               returnKeyType="done"
             />
             {stampCity ? <Text style={styles.restaurantLineCity}> · {stampCity}</Text> : null}
@@ -769,17 +803,23 @@ export default function ResultsScreen() {
                   <TouchableOpacity
                     style={[styles.bottlePicksButton, chosenIndexes.has(i) && styles.bottlePicksButtonDone]}
                     onPress={() => {
-                      if (chosenIndexes.has(i)) {
-                        router.push('/restaurants/reviews');
-                      } else {
-                        handleQuickSelect(wine, i);
+                      if (chosenIndexes.has(i)) { unselectBottle(wine, i); return; }
+                      // Can't save a bottle to Your Restaurants without a
+                      // restaurant name — collect it (and location) first.
+                      if (!restaurantName.trim()) {
+                        setPendingWine({ wine, i });
+                        setPromptRestaurant(restaurantName);
+                        setPromptCity('');
+                        setRestaurantPromptOpen(true);
+                        return;
                       }
+                      handleQuickSelect(wine, i);
                     }}
                     disabled={saveChosen.isPending && !chosenIndexes.has(i)}
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? '✓ View & Review in Your Restaurants - Bottle Picks' : 'Add to Your Restaurants - Bottle Picks'}
+                      {chosenIndexes.has(i) ? 'Added to Your Restaurants - List Bottles' : 'Add to Your Restaurants - List Bottles'}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -852,6 +892,27 @@ export default function ResultsScreen() {
           setChosenModalWine(null);
         }}
       />
+
+      {/* "Add a restaurant first" — the List-Bottle button needs a restaurant
+          name to save against, so collect it (and location) inline here. */}
+      <Modal visible={restaurantPromptOpen} transparent animationType="fade" onRequestClose={() => setRestaurantPromptOpen(false)}>
+        <View style={styles.promptOverlay}>
+          <View style={styles.promptSheet}>
+            <TouchableOpacity style={styles.promptCloseX} onPress={() => setRestaurantPromptOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={styles.promptCloseXText}>✕</Text>
+            </TouchableOpacity>
+            <Text style={styles.promptTitle}>Add a restaurant</Text>
+            <Text style={styles.promptBody}>Please input a restaurant before you can continue to save a bottle to Your Restaurants.</Text>
+            <Text style={styles.promptLabel}>Restaurant Name</Text>
+            <TextInput style={styles.promptInput} value={promptRestaurant} onChangeText={setPromptRestaurant} placeholder="Restaurant name" placeholderTextColor={colors.textMuted} autoFocus />
+            <Text style={styles.promptLabel}>Location</Text>
+            <TextInput style={styles.promptInput} value={promptCity} onChangeText={setPromptCity} placeholder="City or location" placeholderTextColor={colors.textMuted} />
+            <TouchableOpacity style={styles.promptContinueBtn} onPress={continueAfterRestaurant} activeOpacity={0.85}>
+              <Text style={styles.promptContinueText}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Restaurant review form — opened from the location line or the
           foot-of-page CTA. Pre-filled from the saved scan_session when one
@@ -1206,6 +1267,17 @@ const styles = StyleSheet.create({
   bottlePicksButtonTextDone: {
     color: colors.gold,
   },
+  // "Add a restaurant first" prompt.
+  promptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  promptSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  promptCloseX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 10, padding: 4 },
+  promptCloseXText: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted },
+  promptTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  promptBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, marginBottom: spacing.lg },
+  promptLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  promptInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
+  promptContinueBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
+  promptContinueText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   // Sommelier note expand toggle — collapsed by default, label + chevron.
   // Row holding the Vinster's Review toggle + the "(what's this)" link.
   sommHeaderRow: {

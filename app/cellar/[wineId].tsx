@@ -180,6 +180,8 @@ export default function CellarWineDetail() {
   const [titleEditOpen, setTitleEditOpen] = useState(false);
   const [producerDraft, setProducerDraft] = useState('');
   const [wineNameDraft, setWineNameDraft] = useState('');
+  const [regionDraft, setRegionDraft] = useState('');
+  const [vintageDraft, setVintageDraft] = useState('');
   const [grapeDraft, setGrapeDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
 
@@ -319,6 +321,8 @@ export default function CellarWineDetail() {
     if (!wine) return;
     setProducerDraft(wine.producer ?? '');
     setWineNameDraft(wine.wine_name ?? '');
+    setRegionDraft(wine.region ?? '');
+    setVintageDraft(wine.vintage ?? '');
     setGrapeDraft(wine.grape_variety ?? '');
     setTitleEditOpen(true);
   }
@@ -333,6 +337,8 @@ export default function CellarWineDetail() {
         updates: {
           producer: producerDraft.trim() || null,
           wine_name: wineNameDraft.trim() || wine.wine_name,
+          region: regionDraft.trim() || null,
+          vintage: vintageDraft.trim() || null,
           grape_variety: grapeDraft.trim() || null,
         },
       });
@@ -1245,6 +1251,10 @@ export default function CellarWineDetail() {
             <TextInput style={styles.input} value={producerDraft} onChangeText={setProducerDraft} placeholder="Producer" placeholderTextColor={colors.textMuted} />
             <Text style={styles.fieldLabel}>Wine name</Text>
             <TextInput style={styles.input} value={wineNameDraft} onChangeText={setWineNameDraft} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.fieldLabel}>Region</Text>
+            <TextInput style={styles.input} value={regionDraft} onChangeText={setRegionDraft} placeholder="Region" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.fieldLabel}>Vintage</Text>
+            <TextInput style={styles.input} value={vintageDraft} onChangeText={setVintageDraft} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
             <Text style={styles.fieldLabel}>Grape variety</Text>
             <TextInput style={styles.input} value={grapeDraft} onChangeText={setGrapeDraft} placeholder="Grape variety" placeholderTextColor={colors.textMuted} />
             <View style={styles.noteActions}>

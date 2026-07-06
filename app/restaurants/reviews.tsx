@@ -658,6 +658,7 @@ export default function RestaurantReviewsScreen() {
             wineName: cw.wine_name,
             vintage: cw.vintage,
             userScore: cw.user_score,
+            source: cw.source,
           }))}
           onReviewWine={(i) => {
             const cw = findChosenForVisit(editing)[i];

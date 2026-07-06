@@ -1,13 +1,19 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share,
+  StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
+import { addSessionBottle } from '../api/chosenWines';
+import { prepareImageBase64, scanLabel } from '../api/label';
+import { ensureMediaPermission } from '../utils/mediaPermissions';
+import { useCellar } from '../hooks/useCellar';
+import { useAuth } from '../hooks/useAuth';
 import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
@@ -23,6 +29,9 @@ interface WineLine {
   wineName: string;
   vintage: string | number | null;
   userScore: number | null;
+  // 'other' = brought to the visit (Off-List); anything else = chosen off the
+  // restaurant's list (List Bottle). Undefined from legacy callers → List.
+  source?: string | null;
 }
 
 interface Props {
@@ -52,6 +61,8 @@ export function RestaurantReviewModal({
   city, date, wines, onReviewWine, onClose, onSaved,
 }: Props) {
   const qc = useQueryClient();
+  const { session } = useAuth();
+  const { wines: cellarWines } = useCellar();
   // Restaurant identity — prefilled from the scan but editable here so the
   // user can correct the name or place while saving their review.
   const [restaurantName, setRestaurantName] = useState((initialName ?? '').trim());
@@ -67,6 +78,95 @@ export function RestaurantReviewModal({
   const [sharing, setSharing] = useState(false);
   const [posting, setPosting] = useState(false);
   const shareCardRef = useRef<View>(null);
+
+  // --- Add a Bottle: attach a wine the user brought to this visit. Four ways
+  // in (Cellar / Upload / Scan / Manual), all landing on a confirm-details
+  // sheet, then saved as a source='other' bottle linked to this session. ---
+  const [bottleChooserOpen, setBottleChooserOpen] = useState(false);
+  // Which bucket the in-flight add targets — a List Bottle (off the restaurant
+  // list) or an Off-List Bottle (brought to the visit).
+  const [bottleKind, setBottleKind] = useState<'list' | 'off'>('off');
+  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  const [cellarSearch, setCellarSearch] = useState('');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [bottleBusy, setBottleBusy] = useState(false);
+  const [cbProducer, setCbProducer] = useState('');
+  const [cbWineName, setCbWineName] = useState('');
+  const [cbRegion, setCbRegion] = useState('');
+  const [cbVintage, setCbVintage] = useState('');
+
+  function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }) {
+    setCbProducer(prefill.producer ?? '');
+    setCbWineName(prefill.wineName ?? '');
+    setCbRegion(prefill.region ?? '');
+    setCbVintage(prefill.vintage != null ? String(prefill.vintage) : '');
+    setConfirmOpen(true);
+  }
+
+  function openBottleChooser(kind: 'list' | 'off') { setBottleKind(kind); setBottleChooserOpen(true); }
+  function chooseManual() { setBottleChooserOpen(false); openConfirm({}); }
+  function chooseCellar() { setBottleChooserOpen(false); setCellarSearch(''); setCellarPickerOpen(true); }
+
+  async function chooseFromImage(source: 'camera' | 'library') {
+    setBottleChooserOpen(false);
+    if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
+    try {
+      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
+      const res = source === 'camera'
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync(opts);
+      if (res.canceled || !res.assets.length) return;
+      setBottleBusy(true);
+      try {
+        const base64 = await prepareImageBase64(res.assets[0].uri);
+        const details = await scanLabel(base64);
+        openConfirm({ producer: details.producer, wineName: details.wineName, region: details.region, vintage: details.vintage });
+      } catch {
+        // OCR failed — still let them fill it in by hand on the confirm sheet.
+        openConfirm({});
+      }
+    } catch (err) {
+      showAlert({ title: source === 'camera' ? 'Could not open camera' : 'Could not open photos', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setBottleBusy(false);
+    }
+  }
+
+  const cellarMatches = useMemo(() => {
+    const q = cellarSearch.trim().toLowerCase();
+    const list = q
+      ? cellarWines.filter((w) => [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase().includes(q))
+      : cellarWines;
+    return list.slice(0, 50);
+  }, [cellarWines, cellarSearch]);
+
+  async function handleAddBottle() {
+    if (bottleBusy) return;
+    const name = cbWineName.trim();
+    if (!name) { showAlert({ title: 'Wine name needed', body: 'Enter at least the wine name to add this bottle.' }); return; }
+    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to add bottles to a visit.' }); return; }
+    setBottleBusy(true);
+    try {
+      const vint = cbVintage.trim();
+      await addSessionBottle(session.user.id, {
+        sessionId,
+        restaurantName: restaurantName.trim() || null,
+        city: cityValue.trim() || null,
+        producer: cbProducer.trim() || null,
+        wineName: name,
+        region: cbRegion.trim() || null,
+        vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
+        source: bottleKind === 'list' ? 'restaurant' : 'other',
+      });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      setConfirmOpen(false);
+    } catch (err) {
+      showAlert({ title: 'Could not add bottle', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setBottleBusy(false);
+    }
+  }
 
   function communityPayload() {
     return {
@@ -168,100 +268,107 @@ export function RestaurantReviewModal({
     }
   }
 
+  // Split the visit's wines into List Bottles (chosen off the restaurant list)
+  // and Off-List Bottles (brought along). Keep each wine's original index so
+  // "Review this wine →" still targets the right chosen_wine.
+  const indexedWines = (wines ?? []).map((w, i) => ({ ...w, _idx: i }));
+  const listBottles = indexedWines.filter((w) => w.source !== 'other');
+  const offListBottles = indexedWines.filter((w) => w.source === 'other');
+  const renderBottle = (w: WineLine & { _idx: number }) => {
+    const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
+    return (
+      <View key={w._idx} style={styles.wineRow}>
+        <Text style={styles.wineLine}>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}</Text>
+        {onReviewWine ? (
+          <TouchableOpacity onPress={() => onReviewWine(w._idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={styles.wineReviewLink}>Review this wine →</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  };
+
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          {/* Favourite star — top-left, mirroring the wine review page. */}
-          <TouchableOpacity
-            style={styles.favouriteBtn}
-            onPress={() => setIsFavourite((v) => !v)}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
-          </TouchableOpacity>
+          {/* Top bar: gold back arrow (left); Share + favourite star (right). */}
+          <View style={styles.topBar}>
+            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+              <Text accessibilityLabel="Back" style={styles.backArrow}>←</Text>
+            </TouchableOpacity>
+            <View style={styles.topRight}>
+              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 6, left: 10, right: 10 }} activeOpacity={0.7}>
+                <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 6, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
+                <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
-            {/* Restaurant + Place on one line — replaces the old "Add a
-                Review" heading. Both prefilled from the scan, editable here. */}
-            <View style={styles.identityRow}>
-              <View style={styles.identityCol}>
-                <Text style={styles.fieldLabel}>Restaurant</Text>
-                <TextInput
-                  style={styles.input}
-                  value={restaurantName}
-                  onChangeText={setRestaurantName}
-                  placeholder="Restaurant name"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-              <View style={styles.identityCol}>
-                <Text style={styles.fieldLabel}>Place</Text>
-                <TextInput
-                  style={styles.input}
-                  value={cityValue}
-                  onChangeText={setCityValue}
-                  placeholder="City or location"
-                  placeholderTextColor={colors.textMuted}
-                />
-              </View>
-            </View>
-            {date ? <Text style={styles.stampMeta}>{date}</Text> : null}
-
-            {/* Bottle pick(s) — auto-attached by Vinster from the scan, sitting
-                directly under the restaurant line. Each links out to its own
-                wine review. */}
-            {wines && wines.length > 0 ? (
-              <View style={styles.bottlePickBlock}>
-                <Text style={styles.sectionLabel}>{wines.length > 1 ? 'Your Bottle Picks' : 'Your Bottle Pick'}</Text>
-                <View style={styles.wineBlock}>
-                  {wines.map((w, i) => {
-                    const line = [w.producer, w.wineName, w.vintage]
-                      .filter((x) => x != null && String(x).trim().length > 0)
-                      .join(' · ');
-                    return (
-                      <View key={i} style={styles.wineRow}>
-                        <Text style={styles.wineLine}>
-                          {line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}
-                        </Text>
-                        {onReviewWine ? (
-                          <TouchableOpacity onPress={() => onReviewWine(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                            <Text style={styles.wineReviewLink}>Review this wine →</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </View>
-              </View>
-            ) : null}
+            {/* Restaurant + location read as headers at the top, date below —
+                all prefilled from the scan, editable here. */}
+            <TextInput
+              style={styles.restaurantHeaderInput}
+              value={restaurantName}
+              onChangeText={setRestaurantName}
+              placeholder="Restaurant name"
+              placeholderTextColor={colors.textMuted}
+            />
+            <TextInput
+              style={styles.locationHeaderInput}
+              value={cityValue}
+              onChangeText={setCityValue}
+              placeholder="City or location"
+              placeholderTextColor={colors.textMuted}
+            />
+            {date ? <Text style={styles.dateHeader}>{date}</Text> : null}
 
             <View style={styles.divider} />
 
-            <Text style={styles.fieldLabel}>Ratings</Text>
-            <View style={styles.ratingsBlock}>
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>Overall</Text>
-                <StarRating value={overall} onChange={setOverall} />
-              </View>
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>Food</Text>
-                <StarRating value={food} onChange={setFood} />
-              </View>
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>Wine list</Text>
-                <StarRating value={wineList} onChange={setWineList} />
-              </View>
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>Service</Text>
-                <StarRating value={service} onChange={setService} />
-              </View>
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingLabel}>Value</Text>
-                <StarRating value={value} onChange={setValue} />
-              </View>
+            {/* Wines You Drank — split into List Bottles (chosen off the
+                restaurant's list) and Off-List Bottles (brought along). Each
+                bucket can be added to directly. */}
+            <Text style={styles.sectionLabel}>Wines You Drank</Text>
+
+            <Text style={styles.bottleGroupLabel}>List Bottles</Text>
+            <View style={styles.wineBlock}>
+              {listBottles.map(renderBottle)}
+              <TouchableOpacity style={styles.addBottleBtn} onPress={() => openBottleChooser('list')} activeOpacity={0.8}>
+                <Text style={styles.addBottleText}>+ Add a List Bottle</Text>
+              </TouchableOpacity>
             </View>
+
+            <Text style={styles.bottleGroupLabel}>Off-List Bottles</Text>
+            <View style={styles.wineBlock}>
+              {offListBottles.map(renderBottle)}
+              <TouchableOpacity style={styles.addBottleBtn} onPress={() => openBottleChooser('off')} activeOpacity={0.8}>
+                <Text style={styles.addBottleText}>+ Add an Off-List Bottle</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Ratings — condensed to a two-column grid to save vertical space. */}
+            <Text style={styles.fieldLabel}>Ratings</Text>
+            <View style={styles.ratingsGrid}>
+              {([
+                { label: 'Overall', value: overall, set: setOverall },
+                { label: 'Food', value: food, set: setFood },
+                { label: 'Wine list', value: wineList, set: setWineList },
+                { label: 'Service', value: service, set: setService },
+                { label: 'Value', value: value, set: setValue },
+              ] as const).map((r) => (
+                <View key={r.label} style={styles.ratingItem}>
+                  <Text style={styles.ratingItemLabel}>{r.label}</Text>
+                  <StarRating value={r.value} onChange={r.set} size={18} />
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.divider} />
 
             <View style={styles.dictateRow}>
               <Text style={styles.fieldLabel}>Your review</Text>
@@ -286,7 +393,8 @@ export function RestaurantReviewModal({
                 disabled={!COMMUNITY_ENABLED || posting || !sessionId}
                 activeOpacity={0.8}
               >
-                <Text style={styles.shareBtnText}>{!COMMUNITY_ENABLED ? 'Share to Community (coming soon)' : posting ? 'Sharing…' : 'Share to Community'}</Text>
+                <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
+                {!COMMUNITY_ENABLED ? <Text style={styles.comingSoonText}>(coming soon)</Text> : null}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.shareBtn, sharing && styles.btnDisabled]}
@@ -301,11 +409,83 @@ export function RestaurantReviewModal({
             <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
               <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurants'}</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.cancelButton} onPress={onClose}>
-              <Text style={styles.cancelText}>Cancel</Text>
-            </TouchableOpacity>
           </KeyboardAwareScrollView>
+
+          {/* Add-a-Bottle chooser — four ways in. */}
+          {bottleChooserOpen && (
+            <View style={styles.bottleOverlay}>
+              <TouchableOpacity style={styles.bottleBackdrop} activeOpacity={1} onPress={() => setBottleChooserOpen(false)} />
+              <View style={styles.bottleSheet}>
+                <Text style={styles.bottleSheetTitle}>{bottleKind === 'list' ? 'Add a List Bottle' : 'Add an Off-List Bottle'}</Text>
+                <Text style={styles.bottleSheetBody}>{bottleKind === 'list' ? 'Log a wine you chose off the restaurant’s list.' : 'Log a wine you brought to this visit — e.g. from home.'}</Text>
+                <TouchableOpacity style={styles.bottleOptBtn} onPress={chooseCellar} activeOpacity={0.85}><Text style={styles.bottleOptText}>Add Bottle From Cellar</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('library')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Upload a Wine Label</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('camera')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Scan a Label</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseManual} activeOpacity={0.85}><Text style={styles.bottleOptText}>Manual Input</Text></TouchableOpacity>
+                <TouchableOpacity style={styles.bottleCancel} onPress={() => setBottleChooserOpen(false)}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Cellar picker — a simple searchable list. */}
+          {cellarPickerOpen && (
+            <View style={styles.bottleOverlay}>
+              <TouchableOpacity style={styles.bottleBackdrop} activeOpacity={1} onPress={() => setCellarPickerOpen(false)} />
+              <View style={styles.bottleSheet}>
+                <Text style={styles.bottleSheetTitle}>Choose from your cellar</Text>
+                <TextInput style={styles.bottleInput} value={cellarSearch} onChangeText={setCellarSearch} placeholder="Search your cellar…" placeholderTextColor={colors.textMuted} />
+                <ScrollView style={styles.cellarList} keyboardShouldPersistTaps="handled">
+                  {cellarMatches.length === 0 ? (
+                    <Text style={styles.cellarEmpty}>No cellar wines match.</Text>
+                  ) : cellarMatches.map((w) => (
+                    <TouchableOpacity
+                      key={w.id}
+                      style={styles.cellarRow}
+                      onPress={() => { setCellarPickerOpen(false); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.cellarRowName} numberOfLines={1}>{w.wine_name}</Text>
+                      <Text style={styles.cellarRowMeta} numberOfLines={1}>{[w.producer, w.vintage].filter(Boolean).join(' · ')}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity style={styles.bottleCancel} onPress={() => setCellarPickerOpen(false)}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Confirm wine details — the shared last step for every add path. */}
+          {confirmOpen && (
+            <View style={styles.bottleOverlay}>
+              <View style={styles.bottleBackdrop} />
+              <View style={styles.bottleSheet}>
+                <Text style={styles.bottleSheetTitle}>Confirm wine details</Text>
+                <Text style={styles.bottleFieldLabel}>Producer</Text>
+                <TextInput style={styles.bottleInput} value={cbProducer} onChangeText={setCbProducer} placeholder="Producer" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.bottleFieldLabel}>Wine name</Text>
+                <TextInput style={styles.bottleInput} value={cbWineName} onChangeText={setCbWineName} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.bottleFieldLabel}>Region</Text>
+                <TextInput style={styles.bottleInput} value={cbRegion} onChangeText={setCbRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.bottleFieldLabel}>Vintage</Text>
+                <TextInput style={styles.bottleInput} value={cbVintage} onChangeText={setCbVintage} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
+                <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddBottle} disabled={bottleBusy}>
+                  <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : 'Add to This Visit'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bottleCancel} onPress={() => setConfirmOpen(false)} disabled={bottleBusy}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* OCR spinner while reading a scanned / uploaded label. */}
+          {bottleBusy && !confirmOpen && (
+            <View style={styles.bottleOverlay}>
+              <View style={styles.bottleBackdrop} />
+              <View style={styles.ocrCard}>
+                <ActivityIndicator size="large" color={colors.gold} />
+                <Text style={styles.ocrText}>Reading the label…</Text>
+              </View>
+            </View>
+          )}
         </View>
       </View>
 
@@ -337,16 +517,18 @@ export function RestaurantReviewModal({
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
-  favouriteBtn: {
-    position: 'absolute',
-    top: 56,
-    left: spacing.xl,
-    zIndex: 10,
-    padding: 4,
-  },
-  favouriteStar: { fontSize: 30, color: colors.textMuted },
+  // Top bar — gold back arrow (left), Share + favourite star stacked (right).
+  topBar: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  backArrow: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
+  topRight: { alignItems: 'flex-end', gap: 4 },
+  topShareText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
+  favouriteStar: { fontSize: 26, color: colors.textMuted },
   favouriteStarActive: { color: colors.gold },
-  content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 60 },
+  content: { padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
+  // Restaurant + location read as headers; date beneath.
+  restaurantHeaderInput: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, letterSpacing: 0.3, paddingVertical: 2 },
+  locationHeaderInput: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, paddingVertical: 2, marginTop: 2 },
+  dateHeader: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
   heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
@@ -362,6 +544,8 @@ const styles = StyleSheet.create({
   stampName: { flex: 1, fontFamily: fonts.headingBold, fontSize: 24, color: colors.text },
   stampMeta: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
   sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
+  // Sub-heading for each bottle bucket (List / Off-List).
+  bottleGroupLabel: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginTop: spacing.sm, marginBottom: spacing.xs },
   fieldLabel: {
     fontFamily: fonts.bodySemibold,
     fontSize: 12,
@@ -399,6 +583,15 @@ const styles = StyleSheet.create({
   // Wine reference — gold italic, matching the wine reference style elsewhere.
   wineLine: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, lineHeight: 21 },
   wineReviewLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 2 },
+  // "Add a Bottle" — dashed gold affordance under the bottle list.
+  addBottleBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
+  addBottleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Condensed ratings — two-column grid so the five ratings fit in three rows.
+  ratingsGrid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.sm, marginBottom: spacing.md },
+  ratingItem: { width: '47%', gap: 2 },
+  ratingItemLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
+  // "(coming soon)" line beneath "Share to Community".
+  comingSoonText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: '#FFFFFF', textAlign: 'center', marginTop: 2, opacity: 0.85 },
   shareRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   shareBtn: {
     flex: 1,
@@ -424,4 +617,27 @@ const styles = StyleSheet.create({
   // Off-screen wrapper so the branded share card can be snapshotted while
   // staying out of the visible layout (off-screen position only — no opacity).
   shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
+  // --- Add-a-Bottle overlays (rendered inside this full-screen modal, not as
+  // nested RN Modals, which misbehave on Android). ---
+  bottleOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  bottleBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
+  bottleSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460, maxHeight: '82%' },
+  bottleSheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  bottleSheetBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  bottleOptBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  bottleOptMt: { marginTop: spacing.sm },
+  bottleOptText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  bottleCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
+  bottleCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  bottleFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
+  bottleInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
+  bottleAddBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
+  bottleAddText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  cellarList: { maxHeight: 320, marginBottom: spacing.sm },
+  cellarEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
+  cellarRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  cellarRowName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  cellarRowMeta: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
+  ocrCard: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, paddingVertical: spacing.xl, paddingHorizontal: spacing.xl, alignItems: 'center', gap: spacing.md },
+  ocrText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.3 },
 });
