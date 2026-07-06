@@ -1140,7 +1140,7 @@ export default function CellarWineDetail() {
     >
       <View style={styles.topBar}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={styles.backText}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         {/* Card-type label — sits centred between Back and the star
             so it reads as a chip / breadcrumb identifying which kind

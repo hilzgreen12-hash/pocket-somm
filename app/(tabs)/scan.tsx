@@ -1,175 +1,46 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, useWindowDimensions, Modal } from 'react-native';
+import { useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Modal, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
+import * as ImagePicker from 'expo-image-picker';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
-import { HelpButton } from '../../src/components/HelpButton';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
-if (Platform.OS === 'android') {
-  UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
-import { router } from 'expo-router';
-import * as ImagePicker from 'expo-image-picker';
 import { useScanStore } from '../../src/stores/scanStore';
-import { usePreferences } from '../../src/hooks/usePreferences';
-import { WineTypePicker, WineType } from '../../src/components/preferences/WineTypePicker';
-import { StylePicker } from '../../src/components/preferences/StylePicker';
-import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
-import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { useLastIntelStore } from '../../src/stores/lastIntelStore';
+import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useAuth } from '../../src/hooks/useAuth';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-const LIST_HELP = `Point your camera at any wine list — or upload a screenshot — and Vinster reads every bottle on the page.
-
-It weighs each one against your preferences — wine type, style, what you're eating, your budget — and against its own criteria of critic score, value compared to market, vintage quality, and readiness for drinking, before handing you its top three.
-
-Record and/or review the bottle you ordered, as well as the restaurant you enjoyed it in, which all quietly helps Vinster know you better. Share results with friends and the community.`;
-
 export default function ScanTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
-  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
-  const { preferences: savedPreferences, prefsLoading } = usePreferences();
+  const { setExtractedWines, setRecommendation } = useScanStore();
+  const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
 
-  // Restore the inputs from the last search when it FAILED, so a retry doesn't
-  // force the user to re-enter everything (they're saved to the store on scan).
-  // A successful result's Back calls reset() — clearing preferences + flagging
-  // needsReset — so after success there's nothing to restore and the form
-  // resets instead (handled by the needsReset effect below).
-  const restored = useRef(useScanStore.getState().preferences).current;
-  const isRestoring = useRef(
-    !useScanStore.getState().needsReset && (
-      restored.wineTypes.length > 0 || restored.styleProfiles.length > 0 ||
-      !!restored.foodPairing || restored.budget != null || restored.topScoringMode
-    )
-  ).current;
-
-  const [wineTypes, setWineTypes] = useState<WineType[]>(isRestoring ? (restored.wineTypes as WineType[]) : []);
-  const [styleProfiles, setStyleProfiles] = useState<string[]>(isRestoring ? restored.styleProfiles : []);
-  const [budget, setBudget] = useState<number | null>(isRestoring ? restored.budget : (savedPreferences?.defaultBudget ?? null));
-  const [foodPairing, setFoodPairing] = useState(isRestoring ? restored.foodPairing : '');
-  const [wineTypeOpen, setWineTypeOpen] = useState(false);
-  const [styleOpen, setStyleOpen] = useState(false);
-  const [topScoringMode, setTopScoringMode] = useState(isRestoring ? restored.topScoringMode : false);
-
-  function toggleSection(section: 'wineType' | 'style') {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    if (section === 'wineType') setWineTypeOpen((v) => !v);
-    else setStyleOpen((v) => !v);
-  }
-
-  const WINE_TYPE_LABELS: Record<string, string> = {
-    red: 'Red', white: 'White', rose: 'Rosé', sparkling: 'Sparkling',
-    natural: 'Natural / Low Intervention', 'sweet-fortified': 'Sweet & Fortified',
-  };
-
-  const wineTypeLabel = wineTypes.length > 0
-    ? wineTypes.map((t) => WINE_TYPE_LABELS[t]).join(', ')
-    : 'Any';
-
-  const styleLabel = styleProfiles.length
-    ? styleProfiles.length === 1
-      ? styleProfiles[0].replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-      : `${styleProfiles.length} styles selected`
-    : 'Any';
-
-  const [isUploading, setIsUploading] = useState(false);
-  const [hasLastSearch, setHasLastSearch] = useState(false);
+  const [addWineOpen, setAddWineOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
-  const [signInPromptShown, setSignInPromptShown] = useState(false);
-  const [introVisible, setIntroVisible] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
-  const lastSyncedBudgetRef = useRef<number | null | undefined>(undefined);
 
-  useFocusEffect(useCallback(() => {
-    AsyncStorage.getItem(scanHistoryKey(session?.user.id)).then((raw) => {
-      try { setHasLastSearch(!!(raw && JSON.parse(raw).length)); } catch { /* ignore */ }
-    });
-    // Show the welcome popup every time the tab gains focus, until the
-    // user explicitly opts out via "Don't show this again". A simple
-    // dismiss closes for the visit only — the popup reappears on the
-    // next focus.
-    AsyncStorage.getItem('vinster_list_intro_dismissed').then((value) => {
-      if (value !== 'true') setIntroVisible(true);
-    });
-  }, [session?.user.id]));
-
-  function dismissIntro() {
-    setIntroVisible(false);
-  }
-
-  async function dontShowIntroAgain() {
-    try {
-      await AsyncStorage.setItem('vinster_list_intro_dismissed', 'true');
-    } catch { /* AsyncStorage unavailable — fall back to in-session dismiss */ }
-    setIntroVisible(false);
-  }
-
-  // Sync the scan tab's budget to the profile default any time the
-  // profile default changes (first load, profile edit, account switch).
-  // Tracking the last-synced value avoids clobbering an in-progress
-  // local override on every render.
-  useEffect(() => {
-    // Don't clobber a restored failed-search budget with the profile default.
-    if (isRestoring) return;
-    const profileBudget = savedPreferences?.defaultBudget ?? null;
-    if (profileBudget !== lastSyncedBudgetRef.current) {
-      setBudget(profileBudget);
-      lastSyncedBudgetRef.current = profileBudget;
-    }
-  }, [savedPreferences?.defaultBudget]);
-
-  useEffect(() => {
-    if (needsReset) {
-      setWineTypes([]);
-      setStyleProfiles([]);
-      setBudget(savedPreferences?.defaultBudget ?? null);
-      setFoodPairing('');
-      setTopScoringMode(false);
-      clearNeedsReset();
-    }
-  }, [needsReset]);
-
-  function buildPreferences() {
-    return {
-      wineTypes,
-      styleProfiles,
-      budget,
-      foodPairing,
-      favouriteRegions: savedPreferences?.favouriteRegions ?? [],
-      favouriteGrapes: savedPreferences?.favouriteGrapes ?? [],
-      dislikedRegions: savedPreferences?.dislikedRegions ?? [],
-      dislikedGrapes: savedPreferences?.dislikedGrapes ?? [],
-      topScoringMode,
-      profileWineTypes: savedPreferences?.wineTypes ?? [],
-      profileStyleProfiles: savedPreferences?.styleProfiles ?? [],
-    };
-  }
-
-  function maybeShowSignInPrompt(proceed: () => void): boolean {
-    if (!session && !signInPromptShown) {
-      setSignInPromptShown(true);
-      pendingActionRef.current = proceed;
+  function requireAuth(action: () => void) {
+    if (!session) {
+      pendingActionRef.current = action;
       setSignInPromptVisible(true);
-      return true;
+      return;
     }
-    return false;
+    action();
   }
 
-  // Dismissing the prompt (tap X or outside) is treated as "ignore the
-  // message and carry on" — the action the user originally tapped still
-  // runs. Sign In / Create Account are the only paths that interrupt.
   function dismissSignInPrompt() {
     setSignInPromptVisible(false);
-    const action = pendingActionRef.current;
     pendingActionRef.current = null;
-    action?.();
   }
 
   function continueWithoutAccount() {
@@ -179,15 +50,13 @@ export default function ScanTab() {
     action?.();
   }
 
-  async function handleViewLastSearch() {
+  // ---- Wine List: revisit the last restaurant-list recommendation ----
+  async function handleViewLastListResult() {
     try {
       const raw = await AsyncStorage.getItem(scanHistoryKey(session?.user.id));
       const items = raw ? JSON.parse(raw) : [];
       if (!items.length) {
-        showAlert({
-          title: 'No previous search',
-          body: 'Once you scan a wine list, you can come back here to revisit it.',
-        });
+        showAlert({ title: 'No previous search', body: 'Once you scan a wine list, you can come back here to revisit it.' });
         return;
       }
       const last = items[0];
@@ -197,171 +66,139 @@ export default function ScanTab() {
       if (last.savedAt) params.set('date', last.savedAt);
       if (last.restaurantName) params.set('restaurant', last.restaurantName);
       if (last.city) params.set('city', last.city);
-      // Pass the scan_sessions id through if the autoSave already
-      // promoted this cached scan to the cloud. Lets the results
-      // screen target the right row when the user edits the
-      // restaurant name on a re-opened result.
       if (last.sessionId) params.set('sessionId', last.sessionId);
       router.push(`/scan/results?${params.toString()}`);
     } catch {
-      showAlert({
-        title: 'No previous search',
-        body: 'Once you scan a wine list, you can come back here to revisit it.',
-      });
+      showAlert({ title: 'No previous search', body: 'Once you scan a wine list, you can come back here to revisit it.' });
     }
   }
 
-  function handleScan() {
-    const go = () => { setPreferences(buildPreferences()); router.push('/scan/camera'); };
-    if (maybeShowSignInPrompt(go)) return;
-    go();
+  // ---- Wine Label: the Generate Wine Intel flow (moved here from Cellar) ----
+  // Re-hydrate the (transient) label store from the persisted snapshot, then
+  // open the intel card. Needed because /label/results reads the label store,
+  // which is empty after a restart even though the persisted result survives.
+  function handleViewLastIntel() {
+    const { wine, intel } = useLastIntelStore.getState();
+    if (!wine || !intel) {
+      showAlert({ title: 'No previous result', body: 'Once you generate wine intel from a label, you can come back here to revisit it.' });
+      return;
+    }
+    const ls = useLabelStore.getState();
+    ls.setWineDetailsConfirmed(wine);
+    ls.setIntelligence(intel);
+    router.push('/label/results?context=intel');
   }
 
-  async function handleScreenshot() {
-    if (isUploading) return;
-    const go = async () => {
-      setIsUploading(true);
-      try {
-        const result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ['images'],
-          allowsMultipleSelection: true,
-          quality: 1,
-        });
-        if (!result.canceled && result.assets.length > 0) {
-          setPreferences(buildPreferences());
-          if (result.assets.length === 1) {
-            setImage(result.assets[0].uri);
-            router.push('/scan/preview');
-          } else {
-            setImageUris(result.assets.map((a) => a.uri));
-            router.push('/scan/extracting');
-          }
-        }
-      } catch (err) {
-        console.error('[Scan] Image picker failed:', err);
-        showAlert({ title: 'Upload failed', body: 'Could not open the photo library. Please try again.' });
-      } finally {
-        setIsUploading(false);
-      }
-    };
-    if (maybeShowSignInPrompt(go)) return;
-    await go();
+  async function handleUploadLabel() {
+    if (!(await ensureMediaPermission('library'))) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    // Scanning overlay covers the ~5–15s OCR round-trip so the app doesn't
+    // appear frozen between the picker dismiss and the confirm screen.
+    setScanningLabel(true);
+    try {
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to scan label');
+    } finally {
+      setScanningLabel(false);
+    }
+    router.push('/label/confirm?context=intel');
   }
 
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView
-      style={{ flex: 1 }}
-      contentContainerStyle={{ paddingBottom: 20, paddingTop }}
-      automaticallyAdjustKeyboardInsets
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="interactive"
-    >
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
-      <View style={styles.header}>
-        <VinsterHeader />
-        <View style={styles.titleRow}>
-          <Text style={styles.appName}>List</Text>
-        </View>
-        <Text style={styles.subtitle}>Input a wine list alongside your preferences to generate three recommendations.</Text>
-        <HelpButton label="More About List" title="How List works" body={LIST_HELP} />
+      <VinsterHeader />
+
+      <View style={styles.titleRow}>
+        <Text style={styles.appName}>Scan</Text>
       </View>
 
-      <View style={styles.body}>
-
-        {/* Wine type accordion */}
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>What wine style would you like?</Text>
-              {!wineTypeOpen && <Text style={[styles.selectionSummary, styles.selectionSummaryActive]}>{wineTypeLabel}</Text>}
-            </View>
-            <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {wineTypeOpen && (
-            <View style={styles.pickerWrap}>
-              <WineTypePicker selected={wineTypes} onChange={(types) => { setWineTypes(types); setStyleProfiles([]); }} />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <TouchableOpacity onPress={() => toggleSection('style')} activeOpacity={0.7} style={styles.accordionRow}>
-            <View style={styles.accordionLeft}>
-              <Text style={styles.question}>Let's refine that further</Text>
-              {!styleOpen && <Text style={[styles.selectionSummary, styles.selectionSummaryActive]}>{styleLabel}</Text>}
-            </View>
-            <Text style={styles.chevron}>{styleOpen ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-          {styleOpen && (
-            <View style={styles.pickerWrap}>
-              <StylePicker selected={styleProfiles} onChange={setStyleProfiles} wineTypes={wineTypes} />
-            </View>
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.bubbleWrap}>
-            <Text style={styles.question}>What are you dining on? (optional)</Text>
-            <FoodPairingInput value={foodPairing} onChange={setFoodPairing} />
-          </View>
-        </View>
-
-        <View style={styles.section}>
-          <View style={styles.bubbleWrap}>
-            {prefsLoading
-              ? <View style={{ height: 60 }} />
-              : <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" />}
-          </View>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.accordionRow, topScoringMode && styles.accordionRowActive]}
-          onPress={() => setTopScoringMode((v) => !v)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.accordionLeft}>
-            <Text style={[styles.question, topScoringMode && styles.questionActive]}>Top Scoring Wines</Text>
-            <Text style={styles.selectionSummary}>Ignore all preferences — show the 3 highest-rated wines on the list</Text>
-          </View>
+      <View style={styles.section}>
+        <Text style={styles.topBlurb}>
+          Scan restaurant wine lists for recommendations or scan wine bottle labels to generate wine intel and dive deeply into what's in the bottle.
+        </Text>
+        {/* Placeholder link — the "More About Scan" explainer is coming later. */}
+        <TouchableOpacity onPress={() => {}} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="More About Scan">
+          <Text style={styles.moreAboutLink}>More About Scan</Text>
         </TouchableOpacity>
+      </View>
 
-        <View style={styles.buttonRow}>
-          <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>
-            <Text style={styles.buttonHalfText}>Scan Wine List</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.buttonHalf, isUploading && { opacity: 0.5 }]} onPress={handleScreenshot} disabled={isUploading}>
-            <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Wine List'}</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity onPress={handleViewLastSearch}>
+      <View style={styles.divider} />
+
+      {/* Wine List → restaurant-list recommendations */}
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/scan/wine-list')}>
+          <Text style={styles.buttonText}>Wine List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleViewLastListResult}>
           <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
-
       </View>
 
-      <Modal
-        visible={introVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={dismissIntro}
-      >
-        <TouchableOpacity style={styles.introOverlay} activeOpacity={1} onPress={dismissIntro}>
-          <TouchableOpacity activeOpacity={1} style={styles.introSheet} onPress={() => {}}>
-            <Text style={styles.introTitle}>Welcome to the List</Text>
-            <Text style={styles.introBody}>
-              Scan a wine list or upload screenshots. Vinster works best with <Text style={styles.introBodyEmph}>around 80 wines or fewer per session</Text> — bigger lists may not process at all, so focus your photos on the section you care about (reds, by the glass, under £100…) and keep them clear and well-lit.
-            </Text>
+      {/* Wine Label → Generate Wine Intel */}
+      <View style={[styles.section, { marginTop: spacing.lg }]}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
+          <Text style={styles.buttonText}>Wine Label</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={handleViewLastIntel}>
+          <Text style={styles.lastResultLink}>View Last Result</Text>
+        </TouchableOpacity>
+      </View>
 
-            <TouchableOpacity style={styles.introPrimaryBtn} onPress={dismissIntro} activeOpacity={0.8}>
-              <Text style={styles.introPrimaryBtnText}>Got it</Text>
+      {/* Generate Wine Intel chooser (same flow as the old Cellar button). */}
+      <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Generate Wine Intel</Text>
+            <Text style={styles.modalBody}>Scan, upload, or enter a wine and Vinster will pull in critic scores, tasting notes, the drinking window and estimated value.</Text>
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => { setAddWineOpen(false); router.push('/label/camera?context=intel'); }}
+            >
+              <Text style={styles.modalButtonText}>Scan Label</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity style={styles.introDismissBtn} onPress={dontShowIntroAgain} activeOpacity={0.7}>
-              <Text style={styles.introDismissText}>Don't show this again</Text>
+            <TouchableOpacity
+              style={[styles.modalButton, { marginTop: spacing.sm }]}
+              onPress={() => { setAddWineOpen(false); handleUploadLabel(); }}
+            >
+              <Text style={styles.modalButtonText}>Upload A Wine Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.modalButton, { marginTop: spacing.sm }]}
+              onPress={() => {
+                setAddWineOpen(false);
+                // Clear any prior scan so Confirm Wine Details opens blank
+                // for the user to fill in by hand.
+                resetLabelStore();
+                router.push('/label/confirm?manual=1&context=intel');
+              }}
+            >
+              <Text style={styles.modalButtonText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
+      </Modal>
+
+      <Modal visible={scanningLabel} transparent animationType="fade">
+        <View style={styles.scanningOverlay}>
+          <View style={styles.scanningSheet}>
+            <ActivityIndicator color={colors.gold} size="large" />
+            <Text style={styles.scanningTitle}>Reading your wine label…</Text>
+            <Text style={styles.scanningBody}>
+              Vinster is identifying the producer, region and vintage from your photo.
+            </Text>
+          </View>
+        </View>
       </Modal>
 
       <SignInPromptModal
@@ -371,243 +208,37 @@ export default function ScanTab() {
         onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
         onContinue={continueWithoutAccount}
       />
-
     </ScrollView>
     </TabSwipeView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  header: {
-    paddingTop: 0,
-    paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.md,
-    alignItems: 'center',
-  },
-  // Tab landing brand mark — stays Cormorant (header-tier).
-  brandName: {
-    fontFamily: fonts.headingItalic,
-    fontSize: 23,
-    color: '#FFFFFF',
-    letterSpacing: 1,
-    marginBottom: spacing.md,
-  },
-  // The big "List" title — header.
-  appName: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 42,
-    color: '#FFFFFF',
-    letterSpacing: 1.5,
-  },
-  // Row container so the gold "i" sits inline with the centred title.
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  // Italic blurb directly under the "List" title — explicitly kept
-  // Cormorant per user spec ("the blurbs below the headers on the
-  // tab screens").
-  subtitle: {
-    fontFamily: fonts.headingRegular,
-    fontSize: 19,
-    color: '#FFFFFF',
-    marginTop: spacing.xs,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: colors.divider,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  goldDivider: {
-    height: 1,
-    backgroundColor: colors.gold,
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.sm,
-    marginBottom: spacing.lg,
-  },
-  body: {
-    paddingHorizontal: spacing.xl,
-  },
-  section: {
-    marginBottom: spacing.sm,
-  },
-  accordionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: 4,
-  },
-  accordionRowActive: {
-    borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.08)',
-  },
-  accordionLeft: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  chevron: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    marginLeft: spacing.sm,
-  },
-  // Accordion question — acts as a section sub-header. Cormorant.
-  question: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 17,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  questionActive: {
-    color: colors.gold,
-  },
-  // Selection summary (the "Any" / "Cellar wines" line under a
-  // collapsed accordion) — body readout, Inter.
-  selectionSummary: {
-    fontFamily: fonts.bodyMedium,
-    fontSize: 16,
-    color: '#FFFFFF',
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  // Gold readout once a preference has actually been chosen.
-  selectionSummaryActive: {
-    color: colors.gold,
-  },
-  bubbleWrap: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    borderRadius: 10,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-  },
-  pickerWrap: {
-    marginTop: spacing.sm,
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    gap: spacing.xs,
-    marginTop: spacing.sm,
-  },
-  buttonFull: {
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  // "View Last Result" link beneath the action buttons — matches the
-  // underlined link format used on the other tabs.
-  lastResultLink: {
-    fontSize: 13,
-    fontFamily: fonts.bodyRegular,
-    color: colors.gold,
-    textDecorationLine: 'underline',
-    textAlign: 'center',
-    marginTop: spacing.sm,
-  },
-  buttonHalf: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 14,
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.xs,
-    alignItems: 'center',
-  },
-  // Button label — Cormorant (button rule).
-  buttonHalfText: {
-    fontFamily: fonts.headingSemibold,
-    color: '#FFFFFF',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  // In-body informational text (e.g. "Your saved preferences apply
-  // unless you adjust them here"). Body content → Inter for readability.
-  profileNote: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 17,
-    color: '#FFFFFF',
-    marginTop: spacing.xs,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
-  introOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: spacing.xl,
-  },
-  introSheet: {
-    backgroundColor: colors.background,
-    borderRadius: 16,
-    borderWidth: 1.5,
-    borderColor: colors.gold,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.lg,
-    width: '100%',
-    maxWidth: 420,
-  },
-  // Pop-up title — Cormorant (pop-up header rule).
-  introTitle: {
-    fontFamily: fonts.headingBold,
-    fontSize: 26,
-    color: colors.gold,
-    textAlign: 'center',
-    letterSpacing: 0.5,
-    marginBottom: spacing.md,
-  },
-  // Pop-up body — Inter (pop-up body rule).
-  introBody: {
-    fontFamily: fonts.bodyRegular,
-    fontSize: 16,
-    color: '#FFFFFF',
-    lineHeight: 23,
-    marginBottom: spacing.sm,
-  },
-  introBodyEmph: {
-    fontFamily: fonts.bodyBold,
-    fontStyle: 'normal',
-    color: colors.gold,
-  },
-  introPrimaryBtn: {
-    borderWidth: 1,
-    borderColor: '#FFFFFF',
-    borderRadius: 12,
-    paddingVertical: spacing.sm,
-    alignItems: 'center',
-    marginTop: spacing.md,
-  },
-  // Pop-up button label — Cormorant.
-  introPrimaryBtnText: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 16,
-    color: '#FFFFFF',
-    letterSpacing: 0.5,
-  },
-  introDismissBtn: {
-    alignItems: 'center',
-    paddingVertical: spacing.sm,
-    marginTop: 4,
-  },
-  // Pop-up dismiss link — body / link, Inter.
-  introDismissText: {
-    fontFamily: fonts.bodyRegular,
-    fontSize: 14,
-    color: colors.textMuted,
-    textDecorationLine: 'underline',
-  },
+  container: { flex: 1, backgroundColor: colors.background },
+  // Big "Scan" tab title — header, Cormorant.
+  appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
+  // Top blurb under the Scan heading — kept Cormorant per user spec
+  // ("blurbs below the headers on the tab screens").
+  topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
+  // Gold "More About Scan" placeholder link beneath the blurb.
+  moreAboutLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
+  // "View last result" link — matches the other tab pages.
+  lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
+  buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  scanningOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  scanningSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.md, width: '100%' },
+  scanningTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
+  scanningBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  modalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  modalBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
+  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

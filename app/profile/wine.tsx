@@ -47,7 +47,7 @@ export default function WineProfileScreen() {
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 60, paddingTop: isOnboarding ? 70 : 0 }}>
         {!isOnboarding && (
           <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-            <Text style={styles.back}>Back</Text>
+            <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
         )}
 

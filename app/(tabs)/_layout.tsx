@@ -14,13 +14,14 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.gold,
         tabBarInactiveTintColor: colors.textMuted,
-        tabBarStyle: { borderTopColor: colors.border, backgroundColor: colors.background },
-        // Tab-bar labels — small 11pt navigation chips. Inter for
-        // legibility at tiny sizes (Cormorant struggled below 14pt).
+        // The bottom bar is now a single app-wide component (AppBottomBar,
+        // mounted in the root layout so it shows on every screen), so the
+        // native per-tab bar is hidden to avoid a double bar.
+        tabBarStyle: { display: 'none' },
         tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 11 },
       }}
     >
-      <Tabs.Screen name="scan" options={{ title: 'List', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
+      <Tabs.Screen name="scan" options={{ title: 'Scan', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="chef" options={{ title: 'Chef', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="cellar" options={{ title: 'Cellar', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />

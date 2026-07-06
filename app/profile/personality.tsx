@@ -242,7 +242,7 @@ export default function PersonalityScreen() {
       <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
         <View style={styles.topRow}>
           <TouchableOpacity onPress={() => router.back()} style={styles.backRow}>
-            <Text style={styles.backText}>← Back</Text>
+            <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
           {text ? (
             <View style={styles.topRightStack}>

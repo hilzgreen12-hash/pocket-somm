@@ -425,7 +425,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // No horizontal padding here so the V mark sits flush-left like the other
   // tabs; the rest of the page gets its inset from `body`. paddingTop is
-  // applied inline (dynamic, matching List/Cellar/Chef).
+  // applied inline (dynamic, matching Scan/Cellar/Chef).
   content: { paddingBottom: 40 },
   body: { paddingHorizontal: spacing.xl },
   // Page title — matches the other tabs (42px Cormorant SemiBold, centred).

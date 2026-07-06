@@ -808,7 +808,7 @@ export default function LabelResultsScreen() {
           : '/(tabs)/cellar'
         )}
       >
-        <Text style={styles.backLink}>Back</Text>
+        <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
       <Text style={styles.pageTitle}>{isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>

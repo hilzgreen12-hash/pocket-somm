@@ -211,7 +211,7 @@ export default function ChefArchiveScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-          <Text style={styles.back}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Cookbook</Text>
         {session ? (

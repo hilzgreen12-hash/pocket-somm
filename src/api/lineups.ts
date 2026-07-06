@@ -52,7 +52,7 @@ function base64ToBytes(base64: string): Uint8Array {
 export async function saveLineupArchive(
   userId: string,
   localUri: string,
-  bottleCount: number,
+  bottleCount: number | null = null,
 ): Promise<LineupArchive> {
   const processed = await manipulateAsync(localUri, [{ resize: { width: 1200 } }], {
     compress: 0.7, format: SaveFormat.JPEG, base64: true,

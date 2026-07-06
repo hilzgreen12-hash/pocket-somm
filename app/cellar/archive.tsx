@@ -84,7 +84,7 @@ export default function CellarArchiveScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Archived Wines</Text>
         <View style={{ width: 40 }} />

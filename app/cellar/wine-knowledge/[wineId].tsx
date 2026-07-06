@@ -128,7 +128,7 @@ export default function WineKnowledgeScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.backText}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         {knowledge ? (
           <TouchableOpacity

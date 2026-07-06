@@ -100,7 +100,7 @@ export default function RecipeFullScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={() => router.back()}>
-            <Text style={styles.backText}>Back</Text>
+            <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
           <View style={{ flex: 1 }} />
         </View>
@@ -116,7 +116,7 @@ export default function RecipeFullScreen() {
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
-          <Text style={styles.backText}>Back</Text>
+          <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={handleShare} disabled={sharing || printing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
