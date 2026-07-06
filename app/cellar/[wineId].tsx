@@ -126,8 +126,16 @@ export default function CellarWineDetail() {
     queryFn: () => getSlotAssignments(rackIds),
     enabled: rackIds.length > 0,
   });
-  const wineSlot = slotAssignments.find((s) => s.cellar_wine_id === wineId);
-  const wineRack = wineSlot ? racks.find((r) => r.id === wineSlot.rack_id) ?? null : null;
+  // A single listing's bottles can span several racks, so tally a per-rack
+  // count and surface one "N bottles in <rack>" link for each.
+  const wineRackCounts = slotAssignments.reduce<Record<string, number>>((acc, s) => {
+    if (s.cellar_wine_id === wineId) acc[s.rack_id] = (acc[s.rack_id] ?? 0) + 1;
+    return acc;
+  }, {});
+  const wineRacks = Object.entries(wineRackCounts).flatMap(([rackId, count]) => {
+    const rack = racks.find((r) => r.id === rackId);
+    return rack ? [{ rack, count }] : [];
+  });
 
   // Cellar-wide Location filters — offered as add destinations and as the
   // "remove from which location?" choices.
@@ -1374,12 +1382,12 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
-          {wineRack && (
-            <TouchableOpacity onPress={() => router.push(`/cellar/rack/${wineRack.id}?highlight=${wine.id}`)}>
-              <Text style={styles.statAction}>In {wineRack.name} →</Text>
+          {wineRacks.map(({ rack, count }) => (
+            <TouchableOpacity key={rack.id} onPress={() => router.push(`/cellar/rack/${rack.id}?highlight=${wine.id}`)}>
+              <Text style={styles.statAction}>{count} bottle{count === 1 ? '' : 's'} in {rack.name} →</Text>
             </TouchableOpacity>
-          )}
-          {!wineRack && !isArchived && !isWishlist && (
+          ))}
+          {wineRacks.length === 0 && !isArchived && !isWishlist && (
             <TouchableOpacity onPress={handleAddToLocation}>
               <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>
