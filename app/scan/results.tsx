@@ -327,13 +327,17 @@ export default function ResultsScreen() {
   async function handleQuickSelect(wine: WineRecommendation, i: number, overrides?: { restaurant?: string; city?: string }) {
     if (!session || chosenIndexes.has(i)) return;
     try {
-      const sid = isFromHistory
-        ? (sessionId ?? null)
-        : (autoSave.data?.[0]?.sessionId ?? null);
       const cityValue = overrides?.city
         ?? cityOverride
         ?? (isFromHistory ? (historyCity ?? '') : (autoSave.data?.[0]?.city ?? ''));
       const currentRestaurant = overrides?.restaurant ?? restaurantName ?? '';
+      // Guarantee the scan_session_id FK: resolve (or create, joining any
+      // in-flight save) the session BEFORE writing the pick, so the bottle is
+      // never orphaned with a null link because the background autoSave hadn't
+      // landed yet.
+      const sid = isFromHistory
+        ? (sessionId ?? null)
+        : await handleSaveRestaurant(currentRestaurant);
 
       const existing = findExistingReview(chosenWines, {
         producer: wine.producer,
@@ -396,9 +400,12 @@ export default function ResultsScreen() {
       setChosenIndexes((prev) => new Set([...prev, i]));
       showAlert({
         title: 'Added to You · Your Restaurants',
-        body: "Saved to your List Bottles under You · Your Restaurants. To review it, head to the You tab. Vinster will fold this into their understanding of your vinous amour.",
+        body: "Saved to your List Bottles under You · Your Restaurants. Review it now while it's fresh, or later from the You tab — Vinster folds it into your vinous amour either way.",
         showCloseX: true,
-        buttons: [{ text: 'Cancel', style: 'cancel' }],
+        buttons: [
+          { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
+          { text: 'Later', style: 'cancel' },
+        ],
       });
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
