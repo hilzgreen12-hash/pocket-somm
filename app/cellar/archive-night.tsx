@@ -7,7 +7,8 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
 import { matchLineupToCellar, archiveBottles, type NightMatch } from '../../src/services/archiveNight';
-import { saveLineupArchive, setLineupNote, type LineupArchive } from '../../src/api/lineups';
+import { saveLineupArchive, setLineupNote, type LineupArchive, type LineupWine } from '../../src/api/lineups';
+import { captureCity } from '../../src/utils/captureCity';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { MicButton } from '../../src/components/MicButton';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
@@ -135,7 +136,29 @@ export default function ArchiveNightScreen() {
       let savedPhoto = false;
       if (imageUri) {
         try {
-          const row = await saveLineupArchive(session.user.id, imageUri, totalToArchive);
+          // Persist the lineup's bottles (migration 065): matched cellar wines
+          // (flagged as archived when the user kept a count) + off-cellar
+          // bottles. Plus a best-effort city stamp.
+          const lineupWines: LineupWine[] = [
+            ...matches.map((m) => ({
+              producer: m.wine.producer,
+              wine_name: m.wine.wine_name,
+              vintage: m.wine.vintage,
+              cellar_wine_id: m.wine.id,
+              archived: (counts[m.wine.id] ?? 0) > 0,
+              count: m.count,
+            })),
+            ...unmatched.map((b) => ({
+              producer: b.producer ?? null,
+              wine_name: b.wineName,
+              vintage: b.vintage,
+              cellar_wine_id: null,
+              archived: false,
+              count: b.quantity ?? 1,
+            })),
+          ];
+          const city = await captureCity();
+          const row = await saveLineupArchive(session.user.id, imageUri, totalToArchive, { wines: lineupWines, city });
           setSavedLineup(row);
           savedPhoto = true;
         } catch (e) {
