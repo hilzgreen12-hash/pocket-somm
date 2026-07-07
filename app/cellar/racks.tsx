@@ -283,21 +283,15 @@ export default function RacksScreen() {
             </TouchableOpacity>
           </ScrollView>
 
-          {/* Other Locations — the user's own free-form places (shed, under the
-              bed…). Also a carousel with a permanent "+ Add" tile. */}
-          <Text style={styles.blockHeader}>Other Locations</Text>
+          {/* Other Home Storage Locations — the user's own free-form home
+              places (shed, under the bed…). A distinct concept from the Cellar
+              List "Locations" filter, so those are NOT shown here. Just the
+              permanent "+ Add" tile until this feature is built out. */}
+          <Text style={styles.blockHeader}>Other Home Storage Locations</Text>
           <Text style={styles.blockBlurb}>
             Add your own locations: In the Shed, Under the bed, etc.
           </Text>
-          {locations.length > 0 && <Text style={styles.swipeHint}>Swipe to see all →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-            {locations.map((loc) => (
-              <View key={loc.id} style={styles.storageCard}>
-                <Text style={styles.storageCardType}>Location</Text>
-                <Text style={styles.storageCardName} numberOfLines={2}>{loc.name}</Text>
-                <Text style={styles.storageCardCount}>{bottleLabel(loc.wineIds.length)}</Text>
-              </View>
-            ))}
             <TouchableOpacity style={styles.addTile} onPress={handleAddLocationPrompt} activeOpacity={0.85}>
               <Text style={styles.addTilePlus}>+ Add</Text>
             </TouchableOpacity>
