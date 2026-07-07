@@ -30,7 +30,7 @@ export default function ArchiveNightScreen() {
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [unmatched, setUnmatched] = useState<DetectedBottle[]>([]);
   const [archivedCount, setArchivedCount] = useState(0);
-  // Whether the lineup photo made it into Your Lineup Library. Bottle archiving
+  // Whether the lineup photo made it into Your Lineup Archive. Bottle archiving
   // is the critical action and must not be blocked by a photo failure, but we
   // shouldn't claim the photo saved when it didn't.
   const [photoSaved, setPhotoSaved] = useState(true);
@@ -130,7 +130,7 @@ export default function ArchiveNightScreen() {
         const n = counts[m.wine.id] ?? 0;
         if (n > 0) await archiveBottles(m.wine, n, today);
       }
-      // Save the lineup photo to Your Lineup Library. Non-fatal: a photo
+      // Save the lineup photo to Your Lineup Archive. Non-fatal: a photo
       // failure must not lose the (already-committed) archiving, but we record
       // the outcome so the done screen tells the truth.
       let savedPhoto = false;
@@ -196,7 +196,7 @@ export default function ArchiveNightScreen() {
             Photograph your lineup and Vinster will match which bottles came from your cellar. Confirm the selection to archive.
           </Text>
           <Text style={styles.leadBody}>
-            All of your lineup photos are saved to Your Lineup Library in the You tab — you can comment on lineups and share them with friends.
+            All of your lineup photos are saved to Your Lineup Archive in the You tab — you can comment on lineups and share them with friends.
           </Text>
           <Text style={styles.hint}>Photograph up to 8 bottles with their front labels facing the camera</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
@@ -223,8 +223,8 @@ export default function ArchiveNightScreen() {
           <Text style={styles.doneCount}>
             {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive.{' '}
             {photoSaved
-              ? 'The photo is saved in Your Lineup Library.'
-              : "The bottles were archived, but the lineup photo couldn't be saved to Your Lineup Library."}
+              ? 'The photo is saved in Your Lineup Archive.'
+              : "The bottles were archived, but the lineup photo couldn't be saved to Your Lineup Archive."}
           </Text>
 
           {savedLineup ? (
@@ -253,7 +253,7 @@ export default function ArchiveNightScreen() {
               </View>
 
               <Text style={styles.notePrompt}>
-                What stood out? A note about this lineup will be kept next to the photo in Your Lineup Library.
+                What stood out? A note about this lineup will be kept next to the photo in Your Lineup Archive.
               </Text>
               <View style={styles.noteRow}>
                 <TextInput

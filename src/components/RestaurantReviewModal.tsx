@@ -379,26 +379,7 @@ export function RestaurantReviewModal({
               textAlignVertical="top"
             />
 
-            {/* Share — community + native share, side by side. */}
-            <View style={styles.shareRow}>
-              <TouchableOpacity
-                style={[styles.shareBtn, (!COMMUNITY_ENABLED || posting || !sessionId) && styles.btnDisabled]}
-                onPress={handleShareToCommunity}
-                disabled={!COMMUNITY_ENABLED || posting || !sessionId}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.shareBtnText}>{posting ? 'Sharing…' : 'Share to Community'}</Text>
-                {!COMMUNITY_ENABLED ? <Text style={styles.comingSoonText}>(coming soon)</Text> : null}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.shareBtn, sharing && styles.btnDisabled]}
-                onPress={handleShare}
-                disabled={sharing}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.shareBtnText}>{sharing ? 'Preparing…' : 'Share'}</Text>
-              </TouchableOpacity>
-            </View>
+            {/* Share lives in the top-right corner now — no bottom share row. */}
 
             <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
               <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurants'}</Text>
