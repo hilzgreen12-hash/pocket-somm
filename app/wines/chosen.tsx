@@ -148,10 +148,11 @@ export default function ChosenWinesScreen() {
   // 'date' option, renamed for consistency with Full Cellar List).
   type SortMode = 'recent' | 'score-desc' | 'score-asc';
   type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'wishlist' | 'other';
-  type FilterField = 'sort' | 'type' | 'location' | null;
+  type FilterField = 'sort' | 'type' | 'location' | 'favourite' | null;
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [locationFilter, setLocationFilter] = useState<string>('All');
+  const [favouriteFilter, setFavouriteFilter] = useState<'all' | 'fav'>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
 
@@ -269,6 +270,7 @@ export default function ChosenWinesScreen() {
       return false;
     }
     if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
+    if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
     if (q) {
       const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
       const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null]
@@ -320,11 +322,18 @@ export default function ChosenWinesScreen() {
   const portfolioLabel = PORTFOLIO_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Reviews';
   const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'Any';
   const locationLabel = locationFilter === 'All' ? 'All' : locationFilter;
+  const favouriteLabel = favouriteFilter === 'fav' ? 'Favourites' : 'All';
 
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'sort') return { title: 'Your Score', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
     if (field === 'type') return { title: 'Collection', options: PORTFOLIO_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
+    if (field === 'favourite') return {
+      title: 'Favourites',
+      options: [{ value: 'all', label: 'All reviews' }, { value: 'fav', label: 'View Favourites' }],
+      selected: favouriteFilter,
+      onSelect: (v) => setFavouriteFilter(v as 'all' | 'fav'),
+    };
     if (field === 'location') {
       return {
         title: 'Filter by city',
@@ -681,6 +690,13 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, yourScoreLabel !== 'Any' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Favourites</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, favouriteFilter === 'fav' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>City</Text>
@@ -894,7 +910,9 @@ const styles = StyleSheet.create({
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   wineNameCompact: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 2 },
-  scoreCompact: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold },
+  // The user's own review score — white, matching the wine cards (critic scores
+  // are gold; the user's score is white).
+  scoreCompact: { fontSize: 18, fontFamily: fonts.bodyBold, color: '#FFFFFF' },
   // Cluster sits as a column on the right: score (+ favourite star) at
   // the top, the white share icon below it.
   scoreCluster: { alignItems: 'flex-end', gap: spacing.xs },

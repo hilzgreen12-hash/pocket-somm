@@ -138,7 +138,7 @@ export default function LineupLibraryScreen() {
   function openFilterOptions(f: LibraryFilter) {
     showAlert({
       title: f.name,
-      body: 'Edit this filter’s name and lineups, or delete it. Your lineups stay in the library either way.',
+      body: 'Edit this filter’s name and lineups, or delete it. Your lineups stay in the archive either way.',
       buttons: [
         { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
         { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); remove.mutate(f.id); } },
@@ -272,7 +272,7 @@ export default function LineupLibraryScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Lineup Library</Text>
+        <Text style={styles.title}>Your Lineup Archive</Text>
         <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
           <Text style={styles.addLink}>+ Add</Text>
         </TouchableOpacity>
@@ -287,7 +287,7 @@ export default function LineupLibraryScreen() {
       ) : isError ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Couldn't load your lineups</Text>
-          <Text style={styles.emptyBody}>Something went wrong reaching your library. Check your connection and try again.</Text>
+          <Text style={styles.emptyBody}>Something went wrong reaching your archive. Check your connection and try again.</Text>
           <TouchableOpacity style={styles.retryBtn} onPress={() => refetch()} activeOpacity={0.85}>
             <Text style={styles.retryBtnText}>Try again</Text>
           </TouchableOpacity>
@@ -295,7 +295,7 @@ export default function LineupLibraryScreen() {
       ) : lineups.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No lineups yet</Text>
-          <Text style={styles.emptyBody}>Tap + Add to save a lineup photo straight to your library, or use Archive a Night in your Cellar to photograph and log a bottle lineup — each one is saved here with its date.</Text>
+          <Text style={styles.emptyBody}>Tap + Add to save a lineup photo straight to your archive, or use Archive a Night in your Cellar to photograph and log a bottle lineup — each one is saved here with its date.</Text>
         </View>
       ) : (
         <>
@@ -448,7 +448,7 @@ export default function LineupLibraryScreen() {
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>Add a lineup</Text>
-            <Text style={styles.addBody}>Photograph a bottle lineup or upload one from your library. It saves to Your Lineup Library with today’s date, ready to note and share.</Text>
+            <Text style={styles.addBody}>Photograph a bottle lineup or upload one from your library. It saves to Your Lineup Archive with today’s date, ready to note and share.</Text>
             <TouchableOpacity style={styles.addBtn} onPress={() => addLineupFrom('camera')} activeOpacity={0.85}>
               <Text style={styles.addBtnText}>Take a Photo</Text>
             </TouchableOpacity>
