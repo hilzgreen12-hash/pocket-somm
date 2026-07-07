@@ -8,7 +8,6 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
-import { rackHomeToBlurb } from '../../src/utils/rackBlurb';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -26,37 +25,22 @@ function formatCreatedDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-function RackRow({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
-  // `wines` is built one entry per OCCUPIED SLOT (see winesByRack below), and a
-  // slot holds exactly one bottle. So the rack's bottle count is the number of
-  // slots — NOT the sum of each wine's whole-cellar quantity, which counted
-  // bottles that live elsewhere in the cellar and wildly over-reported (e.g.
-  // 196 shown for a rack physically holding 54). This now matches the per-slot
-  // count on the rack detail screen.
+// A compact carousel card for a rack/fridge. `wines` is one entry per occupied
+// slot, so its length is the bottle count. Tap → rack detail; long-press → the
+// delete prompt.
+function RackCard({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
   const totalBottles = wines.length;
-  // rackHomeToBlurb was phrased to follow "Home to" (now removed), so it's
-  // lower-case — capitalise the first letter for the standalone line.
-  const rawBlurb = rackHomeToBlurb(rack.id, wines);
-  const blurb = rawBlurb ? rawBlurb.charAt(0).toUpperCase() + rawBlurb.slice(1) : rawBlurb;
-
   return (
     <TouchableOpacity
-      style={styles.row}
+      style={styles.storageCard}
       onPress={() => router.push(`/cellar/rack/${rack.id}`)}
       onLongPress={onLongPress}
       delayLongPress={400}
+      activeOpacity={0.85}
     >
-      <View style={styles.rowMain}>
-        <Text style={styles.rowName}>{rack.name}</Text>
-        <View style={styles.rowMetaLine}>
-          <Text style={styles.rowBottles}>{bottleLabel(totalBottles)}</Text>
-          <Text style={styles.rowCreated}>Created {formatCreatedDate(rack.created_at)}</Text>
-        </View>
-        <View style={styles.homeToRow}>
-          <Text style={styles.homeToBlurb}>{blurb}</Text>
-        </View>
-      </View>
-      <Text style={styles.arrow}>→</Text>
+      <Text style={styles.storageCardType}>{rack.storage_type === 'fridge' ? 'Fridge' : 'Rack'}</Text>
+      <Text style={styles.storageCardName} numberOfLines={2}>{rack.name}</Text>
+      <Text style={styles.storageCardCount}>{bottleLabel(totalBottles)}</Text>
     </TouchableOpacity>
   );
 }
@@ -188,6 +172,34 @@ export default function RacksScreen() {
     setChooser(type);
   }
 
+  // The "+ Add" tile in the Wine Racks & Fridges carousel — first asks which
+  // kind, then hands off to the existing photograph/manual chooser.
+  function handleAddStoragePrompt() {
+    showAlert({
+      title: 'Add storage',
+      body: 'What would you like to add?',
+      buttons: [
+        { text: 'Add a Wine Rack', onPress: () => handleAddType('rack') },
+        { text: 'Add a Wine Fridge', onPress: () => handleAddType('fridge') },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
+  // The "+ Add" tile in the Other Locations carousel. For now this only asks
+  // the grid question — the rest of the flow is intentionally not built yet.
+  function handleAddLocationPrompt() {
+    showAlert({
+      title: 'New location',
+      body: "Does this location have a horizontal & vertical grid layout you'd like to replicate?",
+      buttons: [
+        { text: 'Yes', onPress: () => showAlert({ title: 'Coming soon', body: 'Setting this up is on the way — we\'ll have it ready for you shortly.' }) },
+        { text: 'No', onPress: () => showAlert({ title: 'Coming soon', body: 'Setting this up is on the way — we\'ll have it ready for you shortly.' }) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
   // Clear any stale "place this wine" intent left over from an earlier,
   // abandoned add flow. Creating a rack here is a fresh start — the new
   // rack should open empty, not demanding the user place a wine they chose
@@ -235,7 +247,7 @@ export default function RacksScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Wine Racks & Fridges</Text>
+        <Text style={styles.title}>Home Storage</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -246,37 +258,50 @@ export default function RacksScreen() {
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          {/* Add a Wine Rack + Add a Wine Fridge — gold side-by-side pair
-              directly beneath the page header. */}
-          <View style={styles.addButtonRow}>
-            <TouchableOpacity
-              style={[styles.addButtonGold, { flex: 1 }]}
-              onPress={() => handleAddType('rack')}
-            >
-              <Text style={styles.addButtonGoldText}>Add a Wine Rack</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.addButtonGold, { flex: 1 }]}
-              onPress={() => handleAddType('fridge')}
-            >
-              <Text style={styles.addButtonGoldText}>Add a Wine Fridge</Text>
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.pageIntro}>
+            Replicate your home wine storage in Vinster, whether you've got organised storage solutions or cases under the stairs Vinster will help you keep track of what's where.
+          </Text>
 
-          {racks.length === 0 && (
-            <Text style={styles.introBlurb}>
-              This is a good place to start adding bottles to your cellar — create your rack or fridge first, then inputting wines is easy and instinctive. Once created, you'll be able to view your racks and fridges here, mirroring those at home, and search for where bottles are in your real-life storage. Bottles automatically add to your Full Cellar List with complete intel and reviews.
-            </Text>
-          )}
+          {/* Wine Racks & Fridges — a horizontal carousel of racks/fridges with
+              a permanent "+ Add" tile at the end. */}
+          <Text style={styles.blockHeader}>Wine Racks & Fridges</Text>
+          <Text style={styles.blockBlurb}>
+            Add a wine rack or fridge by photographing or manually inputting it's layout. Once you have your grid set up you can input individual wines, multiples of the same wine, or lineups of up to 8 bottles at a time.
+          </Text>
+          {racks.length > 0 && <Text style={styles.swipeHint}>Swipe to see all →</Text>}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+            {racks.map((rack) => (
+              <RackCard
+                key={rack.id}
+                rack={rack}
+                wines={winesByRack[rack.id] ?? []}
+                onLongPress={() => handleLongPressRack(rack)}
+              />
+            ))}
+            <TouchableOpacity style={styles.addTile} onPress={handleAddStoragePrompt} activeOpacity={0.85}>
+              <Text style={styles.addTilePlus}>+ Add</Text>
+            </TouchableOpacity>
+          </ScrollView>
 
-          {racks.map((rack) => (
-            <RackRow
-              key={rack.id}
-              rack={rack}
-              wines={winesByRack[rack.id] ?? []}
-              onLongPress={() => handleLongPressRack(rack)}
-            />
-          ))}
+          {/* Other Locations — the user's own free-form places (shed, under the
+              bed…). Also a carousel with a permanent "+ Add" tile. */}
+          <Text style={styles.blockHeader}>Other Locations</Text>
+          <Text style={styles.blockBlurb}>
+            Add your own locations: In the Shed, Under the bed, etc.
+          </Text>
+          {locations.length > 0 && <Text style={styles.swipeHint}>Swipe to see all →</Text>}
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+            {locations.map((loc) => (
+              <View key={loc.id} style={styles.storageCard}>
+                <Text style={styles.storageCardType}>Location</Text>
+                <Text style={styles.storageCardName} numberOfLines={2}>{loc.name}</Text>
+                <Text style={styles.storageCardCount}>{bottleLabel(loc.wineIds.length)}</Text>
+              </View>
+            ))}
+            <TouchableOpacity style={styles.addTile} onPress={handleAddLocationPrompt} activeOpacity={0.85}>
+              <Text style={styles.addTilePlus}>+ Add</Text>
+            </TouchableOpacity>
+          </ScrollView>
 
           {unplacedWines.length > 0 && (
             <>
@@ -354,6 +379,22 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   // Cormorant — section header
   subHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
+  // One-line page intro beneath the header.
+  pageIntro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  // Left-aligned section subheader (Wine Racks & Fridges / Other Locations).
+  blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 4 },
+  blockBlurb: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  // "Swipe to see all →" — matches the Full Cellar List filter hint.
+  swipeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
+  // Horizontal carousel of storage cards.
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
+  storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
+  storageCardType: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  storageCardName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
+  storageCardCount: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // The permanent "+ Add" tile (dashed gold) at the end of each carousel.
+  addTile: { width: 152, height: 108, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
   // Rack / fridge name — all-caps gold, matching the "Bottle Picks Awaiting
