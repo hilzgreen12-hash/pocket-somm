@@ -399,6 +399,9 @@ export default function ChosenWinesScreen() {
   // flight so we don't pay for layout work when nothing's queued.
   const reviewShareRef = useRef<View>(null);
   const [reviewSharing, setReviewSharing] = useState(false);
+  // Scroll-to for the "awaiting review" summary link → the awaiting section.
+  const listScrollRef = useRef<ScrollView>(null);
+  const [awaitingY, setAwaitingY] = useState(0);
   const [reviewSharePayload, setReviewSharePayload] = useState<{
     producer: string | null;
     wineName: string;
@@ -655,9 +658,15 @@ export default function ChosenWinesScreen() {
                 return `${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`;
               })()}
             </Text>
-            <Text style={styles.summaryText}>
-              {awaitingReview.length} {awaitingReview.length === 1 ? 'wine' : 'wines'} awaiting your review
-            </Text>
+            <TouchableOpacity
+              onPress={() => { if (awaitingReview.length > 0) listScrollRef.current?.scrollTo({ y: Math.max(0, awaitingY - 12), animated: true }); }}
+              disabled={awaitingReview.length === 0}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.summaryText, awaitingReview.length > 0 && styles.summaryLink]}>
+                {awaitingReview.length} {awaitingReview.length === 1 ? 'wine' : 'wines'} awaiting your review
+              </Text>
+            </TouchableOpacity>
           </View>
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
@@ -701,7 +710,7 @@ export default function ChosenWinesScreen() {
             )}
           </View>
 
-        <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
+        <ScrollView ref={listScrollRef} contentContainerStyle={{ paddingBottom: 60 }}>
           {sorted.length === 0 ? (
             <View style={styles.emptyFilter}>
               <Text style={styles.emptyBody}>No reviews match these filters.</Text>
@@ -773,7 +782,7 @@ export default function ChosenWinesScreen() {
           {/* Bottle Picks Awaiting Review — restaurant picks not yet reviewed.
               Tapping one opens the same review flow as Your Restaurants. */}
           {awaitingReview.length > 0 ? (
-            <View style={styles.awaitingSection}>
+            <View style={styles.awaitingSection} onLayout={(e) => setAwaitingY(e.nativeEvent.layout.y)}>
               <Text style={styles.awaitingHeader}>Restaurant Wines Awaiting Review</Text>
               {awaitingReview.map((w) => (
                 <TouchableOpacity
@@ -901,6 +910,8 @@ const styles = StyleSheet.create({
   // common interaction.
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  // Tappable variant of the awaiting-review line (no underline, per house style).
+  summaryLink: { marginTop: 4 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   // Mic + Camera "Add" prompts above the filters.
   addIconsRow: { flexDirection: 'row', gap: spacing.xl, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
