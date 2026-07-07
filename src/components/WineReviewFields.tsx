@@ -40,6 +40,8 @@ interface Props {
   onSave: () => void;
   saveLabel?: string;
   savedLabel?: string;
+  // Render the primary save button in gold (border + text) rather than white.
+  goldSave?: boolean;
   onDelete?: () => void;
   deleteLabel?: string;
 }
@@ -56,7 +58,7 @@ export function WineReviewFields({
   review, onReview, personalNotes, onPersonalNotes,
   drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
-  saving, saved, onSave, saveLabel, savedLabel, onDelete, deleteLabel,
+  saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
   const currencySymbol = formatCurrency(0, currency, { decimals: 0 }).replace(/[\d.,\s]/g, '') || currency;
 
@@ -162,8 +164,8 @@ export function WineReviewFields({
       </View>
 
       {/* Save Review — primary action at the top of the button stack. */}
-      <TouchableOpacity style={[styles.saveButton, saved && styles.saveButtonSaved]} onPress={onSave} disabled={saving} activeOpacity={0.85}>
-        <Text style={[styles.saveButtonText, saved && styles.saveButtonTextSaved]}>
+      <TouchableOpacity style={[styles.saveButton, (saved || goldSave) && styles.saveButtonSaved]} onPress={onSave} disabled={saving} activeOpacity={0.85}>
+        <Text style={[styles.saveButtonText, (saved || goldSave) && styles.saveButtonTextSaved]}>
           {saving ? 'Saving…' : saved ? (savedLabel ?? 'Review Saved') : (saveLabel ?? 'Save Review')}
         </Text>
       </TouchableOpacity>

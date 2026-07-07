@@ -26,9 +26,13 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved: () => void;
+  // Optional OCR pre-fill so Scan / Upload land on this SAME screen (no wine
+  // intel card) with the wine identity already filled in — the only difference
+  // from Manual Input is where the details come from.
+  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null;
 }
 
-export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
+export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props) {
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { saveManual, update, chosenWines } = useChosenWines();
@@ -55,7 +59,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
 
   useEffect(() => {
     if (visible) {
-      setProducer(''); setWineName(''); setVintage(''); setRegion('');
+      setProducer(initial?.producer ?? '');
+      setWineName(initial?.wineName ?? '');
+      setVintage(initial?.vintage != null ? String(initial.vintage) : '');
+      setRegion(initial?.region ?? '');
       setDiscoveredAt(''); setListPrice(''); setTastingNote(''); setOtherObservations('');
       setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false);
     }
@@ -158,7 +165,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
           </TouchableOpacity>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
-            <Text style={styles.heading}>Add a Review</Text>
+            <Text style={styles.heading}>Add a Wine Review</Text>
             <Text style={styles.subheading}>Record a wine you drank — every field is editable.</Text>
 
             <View style={styles.divider} />
@@ -209,6 +216,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved }: Props) {
               onSave={handleSave}
               saveLabel="Add to Your Wine Reviews"
               savedLabel="Review Saved"
+              goldSave
             />
           </KeyboardAwareScrollView>
         </View>
