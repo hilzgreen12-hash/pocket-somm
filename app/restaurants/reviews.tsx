@@ -33,7 +33,7 @@ type RatingFilter = 'all' | '5' | '4plus' | '3plus';
 // 'toreview' = a restaurant added from a List result that has no ratings or
 // note yet; 'reviewed' = it carries review content.
 type ReviewStatusFilter = 'all' | 'toreview' | 'reviewed';
-type FilterField = 'date' | 'review' | 'location' | 'rating' | null;
+type FilterField = 'date' | 'favourite' | 'location' | 'rating' | null;
 
 // Year-month key + label for the Date filter — one entry per month that
 // has a review, e.g. "June 2026".
@@ -194,11 +194,12 @@ export default function RestaurantReviewsScreen() {
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<string>('all');         // 'all' | 'YYYY-MM'
-  const [reviewStatusFilter, setReviewStatusFilter] = useState<ReviewStatusFilter>('all');
+  const [favouriteFilter, setFavouriteFilter] = useState<'all' | 'fav'>('all');
   const [locationFilter, setLocationFilter] = useState<string>('All'); // 'All' | city | 'Unrecorded'
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [bottlePicksOpen, setBottlePicksOpen] = useState(false);
+  const [awaitingOpen, setAwaitingOpen] = useState(false);
 
   // Deep-link from the List results page (?openSession=<id>) — auto-open
   // that visit's review form once the archive has loaded, so the user lands
@@ -363,8 +364,7 @@ export default function RestaurantReviewsScreen() {
     const q = search.trim().toLowerCase();
     return reviewed.filter((item) => {
       if (dateFilter !== 'all' && monthKey(item.capturedAt) !== dateFilter) return false;
-      if (reviewStatusFilter === 'toreview' && restaurantReviewed(item)) return false;
-      if (reviewStatusFilter === 'reviewed' && !restaurantReviewed(item)) return false;
+      if (favouriteFilter === 'fav' && !item.isFavourite) return false;
       // Free-text search across restaurant name, location, and the wines
       // (bottle picks) chosen on that visit.
       if (q) {
@@ -392,7 +392,12 @@ export default function RestaurantReviewsScreen() {
       }
       return true;
     });
-  }, [reviewed, search, chosenWines, dateFilter, reviewStatusFilter, locationFilter, ratingFilter]);
+  }, [reviewed, search, chosenWines, dateFilter, favouriteFilter, locationFilter, ratingFilter]);
+
+  // Restaurants awaiting review — a name captured from a List scan with no
+  // ratings or note yet. Drives the summary link + its modal.
+  const awaitingRestaurants = useMemo(() => reviewed.filter((it) => !restaurantReviewed(it)), [reviewed]);
+  const reviewedCount = useMemo(() => filtered.filter((it) => restaurantReviewed(it)).length, [filtered]);
 
   // Always newest-first.
   const sorted = useMemo(() => {
@@ -412,29 +417,28 @@ export default function RestaurantReviewsScreen() {
 
   // Chip value labels.
   const dateChipLabel = dateFilter === 'all' ? 'All' : (availableMonths.find((m) => m.value === dateFilter)?.label ?? 'All');
-  const reviewChipLabel = reviewStatusFilter === 'all' ? 'All' : reviewStatusFilter === 'toreview' ? 'To review' : 'Reviewed';
+  const favouriteChipLabel = favouriteFilter === 'fav' ? 'Favourites' : 'All';
   const locationChipLabel = locationFilter === 'All' ? 'All' : locationFilter;
   const ratingChipLabel = ratingFilter === 'all' ? 'Any' : ratingFilter === '5' ? '5★' : ratingFilter === '4plus' ? '4★+' : '3★+';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'date') return { title: 'Filter by month', options: [{ value: 'all', label: 'All' }, ...availableMonths], selected: dateFilter, onSelect: setDateFilter };
-    if (field === 'review') return {
-      title: 'Review status',
+    if (field === 'favourite') return {
+      title: 'Favourites',
       options: [
-        { value: 'all', label: 'All' },
-        { value: 'toreview', label: 'To review' },
-        { value: 'reviewed', label: 'Reviewed' },
+        { value: 'all', label: 'All restaurants' },
+        { value: 'fav', label: 'Favourites only' },
       ],
-      selected: reviewStatusFilter,
-      onSelect: (v) => setReviewStatusFilter(v as ReviewStatusFilter),
+      selected: favouriteFilter,
+      onSelect: (v) => setFavouriteFilter(v as 'all' | 'fav'),
     };
     if (field === 'location') {
       const opts = [
-        { value: 'All', label: 'All locations' },
+        { value: 'All', label: 'All cities' },
         ...availableLocations.cities.map((c) => ({ value: c, label: c })),
         ...(availableLocations.hasUnrecorded ? [{ value: 'Unrecorded', label: 'Unrecorded' }] : []),
       ];
-      return { title: 'Filter by location', options: opts, selected: locationFilter, onSelect: setLocationFilter };
+      return { title: 'Filter by city', options: opts, selected: locationFilter, onSelect: setLocationFilter };
     }
     if (field === 'rating') return {
       title: 'Filter by rating',
@@ -493,6 +497,14 @@ export default function RestaurantReviewsScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>
+              {sorted.length} {sorted.length === 1 ? 'Restaurant' : 'Restaurants'} · {reviewedCount} {reviewedCount === 1 ? 'Review' : 'Reviews'}
+            </Text>
+            <TouchableOpacity onPress={() => setAwaitingOpen(true)} disabled={awaitingRestaurants.length === 0} activeOpacity={0.7}>
+              <Text style={[styles.summaryLink, awaitingRestaurants.length === 0 && { opacity: 0.5 }]}>View Restaurants Awaiting Review</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
@@ -502,12 +514,12 @@ export default function RestaurantReviewsScreen() {
               </View>
               <Text style={[styles.filterChipValue, dateFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateChipLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('review')}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Review Status</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'review' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Favourites</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, reviewStatusFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{reviewChipLabel}</Text>
+              <Text style={[styles.filterChipValue, favouriteFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favouriteChipLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('rating')}>
               <View style={styles.filterChipHeadingRow}>
@@ -518,7 +530,7 @@ export default function RestaurantReviewsScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Location</Text>
+                <Text style={styles.filterChipLabel}>City</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationChipLabel}</Text>
@@ -532,7 +544,7 @@ export default function RestaurantReviewsScreen() {
               style={styles.searchInput}
               value={search}
               onChangeText={setSearch}
-              placeholder="Search by Bottle Pick, Name, Location…"
+              placeholder="Search by City, Name, Bottles you drank…"
               placeholderTextColor={colors.textMuted}
               returnKeyType="search"
             />
@@ -709,6 +721,36 @@ export default function RestaurantReviewsScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Restaurants awaiting review — opened from the summary link. Tap one
+          to jump straight into its review. */}
+      <Modal visible={awaitingOpen} transparent animationType="fade" onRequestClose={() => setAwaitingOpen(false)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setAwaitingOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
+            <Text style={styles.dropdownTitle}>Restaurants awaiting review</Text>
+            {awaitingRestaurants.length === 0 ? (
+              <Text style={styles.awaitingEmpty}>Nothing awaiting — you're all caught up.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }}>
+                {awaitingRestaurants.map((item) => (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={styles.awaitingRow}
+                    onPress={() => { setAwaitingOpen(false); setEditingFromLink(false); setEditing(item); }}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.awaitingName} numberOfLines={1}>{item.restaurantName || 'Unnamed restaurant'}</Text>
+                    <Text style={styles.awaitingMeta} numberOfLines={1}>{[formatDate(item.capturedAt), item.city].filter(Boolean).join(' · ')}</Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setAwaitingOpen(false)}>
+              <Text style={styles.dropdownCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Off-screen branded share card. Mounted only during a share
           so layout work doesn't sit idle when nothing is queued. */}
       {restaurantSharePayload && (
@@ -781,11 +823,21 @@ const styles = StyleSheet.create({
   dropdownOptionCheck: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
   dropdownCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   dropdownCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // "Restaurants awaiting review" list rows.
+  awaitingEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
+  awaitingRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  awaitingName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  awaitingMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   sectionDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs },
   // Search bar beneath the filter chips.
-  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
-  searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text },
+  // Search bar — mirrors Your Wine Reviews: a light input, not a dark filled row.
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
+  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   searchClear: { fontSize: 15, color: colors.textMuted, paddingLeft: spacing.sm },
+  // Gold summary bar (mirrors Your Wine Reviews).
+  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  summaryLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textDecorationLine: 'underline', marginTop: 4 },
   bottlePicksLinkRow: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs },
   bottlePicksLink: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 0.5 },
   bottlePicksList: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md },

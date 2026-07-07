@@ -21,6 +21,7 @@ import { showAlert } from './AppAlert';
 import { useLabelStore } from '../stores/labelStore';
 import { WineReviewFields } from './WineReviewFields';
 import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
+import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -348,6 +349,16 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               {(wine.region || wine.grape) ? (
                 <Text style={styles.region}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
               ) : null}
+              {/* Date · where you drank it — a clean header stamp (kept out of
+                  the free-text notes below). */}
+              {(() => {
+                const loc = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean).join(', ');
+                const dateStr = wine.chosen_at
+                  ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                  : '';
+                const stamp = [dateStr, loc].filter(Boolean).join(' · ');
+                return stamp ? <Text style={styles.stampLine}>{stamp}</Text> : null;
+              })()}
             </View>
 
             <View style={styles.divider} />
@@ -474,6 +485,8 @@ const styles = StyleSheet.create({
   header: { alignItems: 'center', marginBottom: spacing.sm },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
+  // Date · location stamp beneath region/grape — the "where & when" of the review.
+  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
   grape: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: spacing.sm },

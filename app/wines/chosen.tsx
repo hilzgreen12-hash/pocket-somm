@@ -197,11 +197,15 @@ export default function ChosenWinesScreen() {
 
   async function resolvePrompt(review: boolean) {
     const wine = reviewPrompt;
-    if (dontShowPrompt) {
-      try { await AsyncStorage.setItem(promptKey, '1'); } catch { /* non-fatal */ }
-    }
     setReviewPrompt(null);
     if (review && wine) setEditingWine(wine);
+  }
+
+  // "Don't show me this again" — a direct action (no tick box): opt out
+  // permanently and dismiss.
+  async function dontShowPromptForever() {
+    try { await AsyncStorage.setItem(promptKey, '1'); } catch { /* non-fatal */ }
+    setReviewPrompt(null);
   }
 
   // Wish-list is a review-level flag on chosen_wines only — cellar-source
@@ -320,8 +324,8 @@ export default function ChosenWinesScreen() {
     if (field === 'type') return { title: 'Collection', options: PORTFOLIO_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
     if (field === 'location') {
       return {
-        title: 'Filter by location',
-        options: availableCities.map((c) => ({ value: c, label: c === 'All' ? 'All locations' : c })),
+        title: 'Filter by city',
+        options: availableCities.map((c) => ({ value: c, label: c === 'All' ? 'All cities' : c })),
         selected: locationFilter,
         onSelect: setLocationFilter,
       };
@@ -572,25 +576,14 @@ export default function ChosenWinesScreen() {
           <View style={styles.promptSheet}>
             <Text style={styles.promptTitle}>Wines you drank recently are awaiting your review</Text>
             {reviewPrompt ? (
-              <Text style={styles.promptBody}>
-                Your bottle pick from {reviewPrompt.restaurant_name?.trim() || 'your visit'} is waiting for your review —{' '}
-                <Text style={styles.promptWine}>{wineHeaderLine(reviewPrompt.producer, reviewPrompt.wine_name, reviewPrompt.vintage)}</Text>
-              </Text>
+              <Text style={styles.promptWineList}>{wineHeaderLine(reviewPrompt.producer, reviewPrompt.wine_name, reviewPrompt.vintage)}</Text>
             ) : null}
-            <TouchableOpacity style={styles.promptCheckRow} onPress={() => setDontShowPrompt((v) => !v)} activeOpacity={0.7}>
-              <View style={[styles.promptCheckbox, dontShowPrompt && styles.promptCheckboxOn]}>
-                {dontShowPrompt ? <Text style={styles.promptCheckTick}>✓</Text> : null}
-              </View>
-              <Text style={styles.promptCheckLabel}>Don't show me this again</Text>
+            <TouchableOpacity style={styles.promptReviewBtnFull} onPress={() => resolvePrompt(true)} activeOpacity={0.85}>
+              <Text style={styles.promptReviewText}>Review Wine</Text>
             </TouchableOpacity>
-            <View style={styles.promptActions}>
-              <TouchableOpacity onPress={() => resolvePrompt(false)}>
-                <Text style={styles.promptLater}>Remind me later</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.promptReviewBtn} onPress={() => resolvePrompt(true)}>
-                <Text style={styles.promptReviewText}>Review wine</Text>
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity style={styles.promptDontShow} onPress={dontShowPromptForever} activeOpacity={0.7}>
+              <Text style={styles.promptDontShowText}>Don't show me this again</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -689,7 +682,7 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Location</Text>
+                <Text style={styles.filterChipLabel}>City</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
               </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
@@ -878,6 +871,12 @@ const styles = StyleSheet.create({
   promptLater: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   promptReviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.lg },
   promptReviewText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Restyled awaiting-review prompt: wine name, then Review Wine, then a plain
+  // "Don't show me this again" link (no tick box).
+  promptWineList: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.lg, lineHeight: 22 },
+  promptReviewBtnFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  promptDontShow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
+  promptDontShowText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   // Bottle Picks Awaiting Review section.
   awaitingSection: { marginTop: spacing.xl },
   awaitingHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginBottom: spacing.sm },

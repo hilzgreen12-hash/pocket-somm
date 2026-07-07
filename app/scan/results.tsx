@@ -354,24 +354,18 @@ export default function ResultsScreen() {
           return;
         }
 
-        // Different occasion (or no scan-session info to compare) →
-        // append a dated "Selected at {place}" line to the existing
-        // review's other_observations, keeping their original tasting
-        // note, score and where/when intact. The new place lives in
-        // the dated entry rather than overwriting the existing
-        // restaurant_name/city so the original review context survives.
-        const places = [currentRestaurant.trim(), (cityValue ?? '').trim()]
-          .filter(Boolean)
-          .join(', ');
-        const selectionLine = places ? `Selected at ${places}.` : 'Selected again.';
-        const label = todayLabel();
+        // Different occasion (or no scan-session info to compare) → re-mark it
+        // as chosen without touching the review. We deliberately DON'T append a
+        // dated "Selected at {place}" line into Personal Notes any more — the
+        // where/when lives on the review's own date + location stamp, not in the
+        // free-text notes. The original review context is left intact.
         await updateChosen.mutateAsync({
           id: existing.id,
           input: {
             restaurantName: existing.restaurant_name ?? '',
             city: existing.city ?? '',
             tastingNote: existing.tasting_note ?? '',
-            otherObservations: appendDatedEntry(existing.other_observations, selectionLine, label),
+            otherObservations: existing.other_observations ?? '',
             userScore: existing.user_score,
             listPrice: existing.menu_price,
             isFavourite: existing.is_favourite,
