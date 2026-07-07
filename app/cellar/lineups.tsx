@@ -11,6 +11,7 @@ import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote,
 import { MicButton } from '../../src/components/MicButton';
 import { LineupShareCard } from '../../src/components/LineupShareCard';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
+import { captureCity } from '../../src/utils/captureCity';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
@@ -28,7 +29,7 @@ function monthKey(iso: string): string {
 }
 
 // A single lineup tile — resolves a fresh signed URL for its photo on mount.
-function LineupTile({ item, size, onPress, onToggleFav, onOpenNote }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void; onOpenNote: () => void }) {
+function LineupTile({ item, size, onPress, onToggleFav }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -37,6 +38,7 @@ function LineupTile({ item, size, onPress, onToggleFav, onOpenNote }: { item: Li
   }, [item.image_path]);
 
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+  const stamp = [date, item.city].filter(Boolean).join(' · ');
   return (
     <TouchableOpacity style={[styles.tile, { width: size }]} onPress={onPress} activeOpacity={0.8}>
       <View style={[styles.tileImageWrap, { width: size, height: size * 1.1 }]}>
@@ -45,19 +47,11 @@ function LineupTile({ item, size, onPress, onToggleFav, onOpenNote }: { item: Li
         <TouchableOpacity style={styles.favStar} onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={[styles.favStarText, item.is_favourite && styles.favStarActive]}>{item.is_favourite ? '★' : '☆'}</Text>
         </TouchableOpacity>
+        {item.note ? <View style={styles.noteDot} /> : null}
       </View>
-      {/* Date on the left, the note "letter" on the right — top-aligned with the
-          date, pulled in one notch from the right edge. */}
+      {/* Date · city stamp. Tap the tile to open the lineup (note, share, wines). */}
       <View style={styles.tileTopRow}>
-        <Text style={styles.tileDate} numberOfLines={1}>{item.is_favourite ? '★ ' : ''}{date}</Text>
-        {/* Hand-drawn gold envelope outline (matches the mic / bin motif), muted
-            until a note exists. Short press opens the note (read / record / type). */}
-        <TouchableOpacity onPress={onOpenNote} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7} style={styles.envelopeWrap}>
-          <View style={[styles.envelope, !item.note && styles.envelopeEmpty]}>
-            <View style={styles.envFlapLeft} />
-            <View style={styles.envFlapRight} />
-          </View>
-        </TouchableOpacity>
+        <Text style={styles.tileDate} numberOfLines={1}>{item.is_favourite ? '★ ' : ''}{stamp}</Text>
       </View>
       {item.bottle_count ? (
         <Text style={styles.tileCount}>{item.bottle_count} bottle{item.bottle_count === 1 ? '' : 's'}</Text>
@@ -98,7 +92,8 @@ export default function LineupLibraryScreen() {
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (result.canceled || !result.assets.length) return;
       setAdding(true);
-      await saveLineupArchive(userId, result.assets[0].uri, null);
+      const city = await captureCity();
+      await saveLineupArchive(userId, result.assets[0].uri, null, { city });
       qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
     } catch (err) {
       showAlert({ title: source === 'camera' ? 'Could not open camera' : 'Could not add the photo', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -345,7 +340,7 @@ export default function LineupLibraryScreen() {
           ) : (
             <ScrollView contentContainerStyle={styles.grid}>
               {filtered.map((item) => (
-                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => openViewer(item)} onToggleFav={() => toggleFav(item)} onOpenNote={() => openNote(item)} />
+                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onToggleFav={() => toggleFav(item)} />
               ))}
             </ScrollView>
           )}
@@ -516,6 +511,8 @@ const styles = StyleSheet.create({
   envFlapLeft: { position: 'absolute', top: 5.5, left: -0.5, width: 22, height: 1.5, backgroundColor: colors.gold, transform: [{ rotate: '30deg' }] },
   envFlapRight: { position: 'absolute', top: 5.5, left: 18.5, width: 22, height: 1.5, backgroundColor: colors.gold, transform: [{ rotate: '-30deg' }] },
   favStar: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  // Small gold dot marking a lineup that already has a note.
+  noteDot: { position: 'absolute', top: spacing.sm, left: spacing.sm, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.gold },
   favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
   favStarActive: { color: colors.gold },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },

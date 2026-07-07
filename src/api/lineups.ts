@@ -5,6 +5,18 @@ import { supabase } from './supabase';
 // covers the lineups/ subfolder). Records live in public.lineup_archives.
 const BUCKET = 'wine-labels';
 
+// One bottle in an archived lineup (migration 065). cellar_wine_id is set when
+// the bottle matched the user's cellar; archived = it was archived in this
+// session (i.e. it was theirs and they confirmed it).
+export interface LineupWine {
+  producer: string | null;
+  wine_name: string;
+  vintage: string | number | null;
+  cellar_wine_id: string | null;
+  archived: boolean;
+  count: number;
+}
+
 export interface LineupArchive {
   id: string;
   user_id: string;
@@ -15,6 +27,8 @@ export interface LineupArchive {
   is_favourite: boolean;
   note: string | null;
   note_updated_at: string | null;
+  wines: LineupWine[] | null;
+  city: string | null;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -53,6 +67,7 @@ export async function saveLineupArchive(
   userId: string,
   localUri: string,
   bottleCount: number | null = null,
+  opts?: { wines?: LineupWine[] | null; city?: string | null },
 ): Promise<LineupArchive> {
   const processed = await manipulateAsync(localUri, [{ resize: { width: 1200 } }], {
     compress: 0.7, format: SaveFormat.JPEG, base64: true,
@@ -70,7 +85,7 @@ export async function saveLineupArchive(
 
   const { data: row, error: insErr } = await supabase
     .from('lineup_archives')
-    .insert({ user_id: userId, image_path: path, bottle_count: bottleCount })
+    .insert({ user_id: userId, image_path: path, bottle_count: bottleCount, wines: opts?.wines ?? null, city: opts?.city ?? null })
     .select()
     .single();
   if (insErr) throw insErr;
@@ -86,6 +101,12 @@ export async function listLineupArchives(userId: string): Promise<LineupArchive[
     .order('archived_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as LineupArchive[];
+}
+
+export async function getLineupArchive(id: string): Promise<LineupArchive | null> {
+  const { data, error } = await supabase.from('lineup_archives').select('*').eq('id', id).maybeSingle();
+  if (error) throw error;
+  return (data as LineupArchive) ?? null;
 }
 
 export async function setLineupFavourite(id: string, isFavourite: boolean): Promise<void> {
