@@ -7,6 +7,7 @@ import { useCellar } from './useCellar';
 import { useChosenWines } from './useChosenWines';
 import { useScanHistory } from './useScanHistory';
 import { useChefLabelHistory, useChefPairingHistory } from './useChefHistory';
+import { evaluatePersonalityReadiness } from '../utils/personalityReadiness';
 
 export type PersonalityCategory = 'wine' | 'recipe';
 
@@ -55,27 +56,16 @@ export function usePersonalityPrompt(): PersonalityCategory | null {
     let cancelled = false;
 
     (async () => {
-      // Activity gates — same thresholds as the personality screen. Wine
-      // needs real engagement before a sketch reads as personal: a started
-      // cellar (6+ distinct wines) OR three separate List searches where a
-      // bottle was actually picked.
-      const distinctCellarWines = (wines ?? []).length;
-      const listPickSessions = new Set(
-        (chosenWines ?? [])
-          .filter((cw) => cw.source !== 'other' && cw.scan_session_id)
-          .map((cw) => cw.scan_session_id)
-      ).size;
-      const wineReady = distinctCellarWines >= 6 || listPickSessions >= 3;
-
-      const restaurantSignals = (archive ?? []).filter((a) =>
-        (a.restaurantName && a.restaurantName.trim()) ||
-        a.ratingOverall != null || a.ratingFood != null ||
-        (a.restaurantNote && a.restaurantNote.trim())
-      ).length;
-      const chefSignals = (chefLabelSessions?.length ?? 0) + (chefPairingSessions?.length ?? 0);
-      // Raised to match the wine bar — four real food-side engagements
-      // (rated/noted restaurants + saved recipes + pairings).
-      const foodieReady = restaurantSignals + chefSignals >= 4;
+      // Activity gate — shared with the personality screen (one source of truth
+      // in personalityReadiness). Requires volume + variety + activity spread
+      // over multiple days, so a sketch never fires off a first-session burst.
+      const { wineReady, foodieReady } = evaluatePersonalityReadiness({
+        wines: wines ?? [],
+        chosenWines: chosenWines ?? [],
+        archive: archive ?? [],
+        chefLabelSessions: chefLabelSessions ?? [],
+        chefPairingSessions: chefPairingSessions ?? [],
+      });
 
       const winePending = wineReady && !generated.wine;
       const foodiePending = foodieReady && !generated.recipe;

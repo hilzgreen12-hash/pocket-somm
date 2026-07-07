@@ -122,7 +122,7 @@ export default function ScanTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Scan restaurant wine lists for recommendations or scan wine bottle labels to generate wine intel and dive deeply into what's in the bottle.
+          Scan or upload a restaurant wine list for tailored recommendations, save and review bottles and restaurants. Scan or upload a wine label to generate intel and dive deeply into what's in the bottle.
         </Text>
         {/* Placeholder link — the "More About Scan" explainer is coming later. */}
         <TouchableOpacity onPress={() => {}} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="More About Scan">

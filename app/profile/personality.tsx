@@ -12,6 +12,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
+import { evaluatePersonalityReadiness } from '../../src/utils/personalityReadiness';
 import { generatePersonality } from '../../src/api/label';
 import { supabase } from '../../src/api/supabase';
 import { splitPersonality, personalityBlurb } from '../../src/utils/personalityText';
@@ -39,37 +40,25 @@ export default function PersonalityScreen() {
   const { sessions: chefLabelSessions } = useChefLabelHistory();
   const { sessions: chefPairingSessions } = useChefPairingHistory();
 
-  // Gate the auto-generate behind a minimum-activity bar so first-time users
-  // don't get a personality sketch invented from nothing.
-  // Wine: 6+ distinct cellar wines OR three separate List searches where a
-  // bottle was picked — enough real engagement for a personal sketch.
-  // Foodie: ≥4 total signals across rated/noted restaurants + saved recipes
-  // (chef sessions) + chef pairings (raised to match the wine bar). Anything
-  // with content from the user counts as one signal.
-  const hasEnoughData = (() => {
-    if (cat === 'wine') {
-      const distinctCellarWines = (wines ?? []).length;
-      const listPickSessions = new Set(
-        (chosenWines ?? [])
-          .filter((cw) => cw.source !== 'other' && cw.scan_session_id)
-          .map((cw) => cw.scan_session_id)
-      ).size;
-      return distinctCellarWines >= 6 || listPickSessions >= 3;
-    }
-    const restaurantSignals = (archive ?? []).filter((a) =>
-      (a.restaurantName && a.restaurantName.trim()) ||
-      a.ratingOverall != null || a.ratingFood != null ||
-      (a.restaurantNote && a.restaurantNote.trim())
-    ).length;
-    const labels = chefLabelSessions?.length ?? 0;
-    const pairings = chefPairingSessions?.length ?? 0;
-    return restaurantSignals + labels + pairings >= 4;
-  })();
+  // Gate the auto-generate behind the SHARED readiness bar (personalityReadiness)
+  // so first-time users don't get a sketch invented from a first-session burst.
+  // It requires volume + variety + activity spread across multiple days.
+  const { wineReady, foodieReady } = evaluatePersonalityReadiness({
+    wines: wines ?? [],
+    chosenWines: chosenWines ?? [],
+    archive: archive ?? [],
+    chefLabelSessions: chefLabelSessions ?? [],
+    chefPairingSessions: chefPairingSessions ?? [],
+  });
+  const hasEnoughData = cat === 'wine' ? wineReady : foodieReady;
 
   const [text, setText] = useState<string | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Vinster judged there isn't enough genuine signal yet to draw an authentic
+  // sketch (its server-side sufficiency gate) — hold the milestone.
+  const [notReady, setNotReady] = useState(false);
   const [publishState, setPublishState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const shareCardRef = useRef<View>(null);
 
@@ -107,7 +96,7 @@ export default function PersonalityScreen() {
   // has met the minimum activity bar — otherwise we'd invent a sketch from
   // thin air on someone's first session.
   useEffect(() => {
-    if (hydrated && !text && !loading && !error && hasEnoughData) {
+    if (hydrated && !text && !loading && !error && !notReady && hasEnoughData) {
       generate();
     }
   }, [hydrated, hasEnoughData]);
@@ -116,6 +105,7 @@ export default function PersonalityScreen() {
     if (!session?.user.id) return;
     setLoading(true);
     setError(null);
+    setNotReady(false);
     try {
       const wineData = cat === 'wine'
         ? [
@@ -158,6 +148,13 @@ export default function PersonalityScreen() {
         restaurants: restaurantData,
         recipes: recipeData,
       });
+      // Server-side sufficiency gate: Vinster declined to sketch from thin
+      // signal. Don't persist anything (no last_*_personality, no archive row,
+      // so the "your sketch is ready" popup never fires) — just hold.
+      if (result.ready === false || !result.text) {
+        setNotReady(true);
+        return;
+      }
       setText(result.text);
       setPublishState('idle');
       const now = new Date().toISOString();
@@ -277,6 +274,15 @@ export default function PersonalityScreen() {
             <TouchableOpacity style={styles.retryBtn} onPress={generate}>
               <Text style={styles.retryBtnText}>Try again</Text>
             </TouchableOpacity>
+          </View>
+        ) : notReady ? (
+          <View style={styles.center}>
+            <Text style={styles.errorTitle}>Vinster's still getting to know you</Text>
+            <Text style={styles.errorBody}>
+              {cat === 'wine'
+                ? "There isn't quite a clear enough pattern yet to sketch you honestly. Keep adding and reviewing wines — a real personality is worth the wait."
+                : "There isn't quite a clear enough pattern yet to sketch you honestly. Review a few restaurants and save some recipes you love — a real personality is worth the wait."}
+            </Text>
           </View>
         ) : !text && !hasEnoughData ? (
           <View style={styles.center}>
