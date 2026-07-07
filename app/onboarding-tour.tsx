@@ -24,7 +24,7 @@ const SLIDES: Slide[] = [
   {
     badge: 'Cellar',
     title: 'Save & Track',
-    body: 'Photograph your wine racks and fridges for in app storage that mirrors your own. Scan wine labels to input your collection while generating wine and market intel. Voice dictate wine reviews, keep a Label Library, and have all of your wine stats at your fingertips. Vinster can even show you where each bottle is hiding in your IRL cellar.',
+    body: 'Photograph your wine racks and fridges for in app storage that mirrors your own. Scan wine labels to input your collection while generating wine and market intel. Voice dictate wine reviews and have all of your wine stats at your fingertips. Vinster can even show you where each bottle is hiding in your IRL cellar.',
   },
   {
     badge: 'You',
