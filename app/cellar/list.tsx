@@ -834,7 +834,12 @@ export default function FullCellarListScreen() {
                   {subParts.length > 0 && <Text style={styles.rowDetail} numberOfLines={1}>{subParts.join(' · ')}</Text>}
                 </View>
                 <View style={styles.rowRight}>
-                  {w.critic_score != null && <Text style={styles.rowScore}>{w.critic_score} pts</Text>}
+                  {/* When sorting by Your Score, show the user's own score (white)
+                      so the sorted list is comparable at a glance — otherwise the
+                      gold critic score. */}
+                  {sortMode === 'your_desc' || sortMode === 'your_asc'
+                    ? (w.review_score != null ? <Text style={styles.rowScoreUser}>{w.review_score} pts</Text> : null)
+                    : (w.critic_score != null ? <Text style={styles.rowScore}>{w.critic_score} pts</Text> : null)}
                   {valueText && <Text style={styles.rowValue}>{valueText}</Text>}
                   <Text style={styles.rowQty}>{w.quantity}x{bottleSizeCl(w.bottle_size_ml ?? 750)}</Text>
                 </View>
@@ -1134,7 +1139,7 @@ const styles = StyleSheet.create({
   selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.lg, gap: spacing.sm },
   selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
   selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
-  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold },
   selectBarActions: { flexDirection: 'row', gap: spacing.sm },
   // Elegant, uniform action buttons — soft cream outline + cream text, no gold
   // and no separate destructive colour (Delete reads the same as the rest).
@@ -1154,6 +1159,8 @@ const styles = StyleSheet.create({
   rowRight: { alignItems: 'flex-end', gap: 2 },
   // Inter — score value
   rowScore: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.gold },
+  // User's own review score — white, shown when sorting by Your Score.
+  rowScoreUser: { fontSize: 13, fontFamily: fonts.bodyBold, color: '#FFFFFF' },
   // Inter — value read-out
   rowValue: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.text },
   // Inter — quantity caption
