@@ -176,10 +176,12 @@ export default function RacksScreen() {
     }
   }
 
-  // Unplaced Cellar Wines — bottles the user has added but not yet put into a
-  // rack/fridge. Newest-first (useCellar order), so freshly-added unplaced wines
-  // sit at the top, and a wine drops off this list the moment it's placed.
-  const unplacedWines = wines.filter((w) => !rackNameByWineId[w.id]);
+  // Loose bottles — wines the user has added but not yet put away ANYWHERE:
+  // neither in a rack/fridge nor filed under a Cellar List Location. Newest-first
+  // (useCellar order); a wine drops off the moment it's placed OR filed.
+  const locationWineIds = new Set<string>();
+  for (const loc of locations) for (const id of loc.wineIds) locationWineIds.add(id);
+  const unplacedWines = wines.filter((w) => !rackNameByWineId[w.id] && !locationWineIds.has(w.id));
 
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
@@ -278,7 +280,7 @@ export default function RacksScreen() {
 
           {unplacedWines.length > 0 && (
             <>
-              <Text style={styles.subHeader}>Unplaced Cellar Wines</Text>
+              <Text style={styles.subHeader}>Loose bottles</Text>
               <View style={styles.cellarListSection}>
                 {unplacedWines.map((w) => (
                   <TouchableOpacity
