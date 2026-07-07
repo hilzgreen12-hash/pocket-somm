@@ -63,6 +63,22 @@ export async function uploadLabelImage(userId: string, localUri: string, wineId:
   return path;
 }
 
+// Upload a home-storage-location's portrait photo to
+// wine-labels/{userId}/locations/{locationId}.jpg and return the stored path
+// to persist in storage_locations.photo_path. Same bucket as labels, so it
+// displays via labelSignedUrl / useLabelImageUrl unchanged.
+export async function uploadLocationPhoto(userId: string, localUri: string, locationId: string): Promise<string> {
+  const base64 = await processToBase64(localUri);
+  const bytes = base64ToBytes(base64);
+  const path = `${userId}/locations/${locationId}.jpg`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
+    contentType: 'image/jpeg',
+    upsert: true,
+  });
+  if (error) throw error;
+  return path;
+}
+
 // Time-limited signed URL for a stored label path. Generated per-view with
 // a short expiry so a user's label photos aren't reachable via a permanent
 // public link. createSignedUrl works whether the bucket is public or
