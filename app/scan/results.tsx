@@ -400,7 +400,7 @@ export default function ResultsScreen() {
       setChosenIndexes((prev) => new Set([...prev, i]));
       showAlert({
         title: 'Added to You · Your Restaurants',
-        body: "Saved to your List Bottles under You · Your Restaurants. Review it now while it's fresh, or later from the You tab — Vinster folds it into your vinous amour either way.",
+        body: "Saved to Wines You Drank under You · Your Restaurants. Review it now while it's fresh, or later from the You tab — Vinster folds it into your vinous amour either way.",
         showCloseX: true,
         buttons: [
           { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
@@ -820,7 +820,7 @@ export default function ResultsScreen() {
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? 'Added to Your Restaurants - List Bottles' : 'Add to Your Restaurants - List Bottles'}
+                      {chosenIndexes.has(i) ? 'Added to Your Restaurants – Wines You Drank' : 'Add to Your Restaurants – Wines You Drank'}
                     </Text>
                   </TouchableOpacity>
                 )}
