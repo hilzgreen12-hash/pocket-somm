@@ -168,11 +168,14 @@ export default function ArchiveNightScreen() {
 
       {stage === 'capture' ? (
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.lead}>
-            Finished some bottles? Photograph the lineup and Vinster will match each one to your
-            cellar so you can archive them in one go.
+          <Text style={styles.lead}>Drank some bottles?</Text>
+          <Text style={styles.leadBody}>
+            Photograph your lineup and Vinster will match which bottles came from your cellar. Confirm the selection to archive.
           </Text>
-          <Text style={styles.hint}>Stand up to 8 bottles up with their front labels facing the camera.</Text>
+          <Text style={styles.leadBody}>
+            All of your lineup photos are saved to Your Lineup Library in the You tab — you can comment on lineups and share them with friends.
+          </Text>
+          <Text style={styles.hint}>Photograph up to 8 bottles with their front labels facing the camera</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
             <Text style={styles.primaryBtnText}>Take a photo</Text>
           </TouchableOpacity>
@@ -360,6 +363,7 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingBottom: 60 },
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
+  leadBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.md },
   hint: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   hintSmall: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, marginBottom: spacing.md },
   preview: { width: '80%', height: 240, borderRadius: 12, backgroundColor: '#000' },

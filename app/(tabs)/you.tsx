@@ -40,6 +40,7 @@ export default function YouScreen() {
   );
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
+  const [lineupInfoOpen, setLineupInfoOpen] = useState(false);
   const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
@@ -203,11 +204,19 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Wine Reviews</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/labels')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Label Library</Text>
-        </TouchableOpacity>
+      </View>
+
+      <View style={styles.goldLine} />
+
+      <View style={styles.block}>
+        <View style={styles.sketchHeaderRow}>
+          <Text style={styles.sketchHeader}>Your Lineup Archive</Text>
+          <TouchableOpacity onPress={() => setLineupInfoOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.whatsThis}>what's this?</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/lineups')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Lineup Library</Text>
+          <Text style={styles.prefButtonText}>Your Lineup Archive</Text>
         </TouchableOpacity>
       </View>
 
@@ -386,6 +395,20 @@ export default function YouScreen() {
         </TouchableOpacity>
       </Modal>
 
+      <Modal visible={lineupInfoOpen} transparent animationType="fade" onRequestClose={() => setLineupInfoOpen(false)}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setLineupInfoOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
+            <Text style={styles.confirmTitle}>Your Lineup Archive</Text>
+            <Text style={styles.confirmBody}>
+              A photo diary of the bottles you drink. Start it from Archive a Night — photograph a lineup of up to 8 bottles and Vinster matches them to your cellar so you can archive them in one go — or by adding a lineup directly. Every lineup photo is kept here, where you can add a comment and share it with friends.
+            </Text>
+            <TouchableOpacity style={styles.confirmGoldBtn} onPress={() => setLineupInfoOpen(false)}>
+              <Text style={styles.confirmGoldBtnText}>Got it</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
         <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setCurrencyOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.currencySheet} onPress={() => {}}>
@@ -436,6 +459,7 @@ const styles = StyleSheet.create({
   // Italic blurb under the page heading — editorial intro, stays Cormorant.
   thanks: { fontSize: 18, fontFamily: fonts.headingItalic, color: '#FFFFFF', textAlign: 'center', lineHeight: 24, paddingHorizontal: spacing.md },
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
+  goldLine: { height: 1, backgroundColor: colors.gold, opacity: 0.55, marginVertical: spacing.md },
   block: { gap: 4 },
   // Section header label.
   blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },

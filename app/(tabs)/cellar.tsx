@@ -11,7 +11,7 @@ const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bot
 
 Build virtual racks and fridges that mirror your real storage, so you always know where a bottle is and what's ready to open.
 
-Dictate your wine reviews and view your label library while enjoying easy access to your full cellar stats. Truly a masterpiece in Cellar management.`;
+Dictate your wine reviews while enjoying easy access to your full cellar stats. Truly a masterpiece in Cellar management.`;
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -79,7 +79,7 @@ export default function CellarTab() {
 
       {/* Your Archive. "Archive a Night" photographs a bottle lineup, matches
           each to the cellar and bulk-archives them; Cellar Archive lists the
-          archived bottles. (Wine Reviews + Label Library now live in You.) */}
+          archived bottles. (Wine Reviews now live in You.) */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}>
           <Text style={styles.buttonText}>Archive a Night</Text>
