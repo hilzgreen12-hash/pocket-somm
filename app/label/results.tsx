@@ -406,6 +406,22 @@ export default function LabelResultsScreen() {
   // (which references `wine.wineName`) to re-render with a null wine,
   // crashing into the ErrorBoundary as "Something Went Wrong". The store
   // will be naturally replaced on the next label scan.
+  // Close every add with a confirmation that names the Cellar List (and the
+  // rack/location, where relevant). When the user lands somewhere other than
+  // the list (a rack), offer a link across to it.
+  function confirmSaved(body: string, includeListLink: boolean) {
+    showAlert({
+      title: 'Added to your cellar',
+      body,
+      buttons: includeListLink
+        ? [
+            { text: 'View in Full Cellar List', onPress: () => router.replace('/cellar/list') },
+            { text: 'Done', style: 'cancel' },
+          ]
+        : [{ text: 'Done', style: 'cancel' }],
+    });
+  }
+
   async function performSaveFlow(savedWineId: string, mode: 'new' | 'merge', baseQuantity: number) {
     if (pendingSlot) {
       // Soft warning when the bottle's size doesn't match the slot's
@@ -481,7 +497,9 @@ export default function LabelResultsScreen() {
       qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setAddingToCellar(false);
+      const locName = cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'your location';
       router.replace('/cellar/list');
+      confirmSaved(`${qty} bottle${qty === 1 ? '' : 's'} added to your Full Cellar List and filed under ${locName}.`, false);
       return;
     }
 
@@ -517,10 +535,11 @@ export default function LabelResultsScreen() {
             });
           } else {
             router.replace(`/cellar/rack/${selectedRackId}` as any);
+            confirmSaved(`${placed.length} bottle${placed.length === 1 ? '' : 's'} placed in ${rack.name} — and added to your Full Cellar List.`, true);
           }
           return;
         }
-        showAlert({ title: 'Rack full', body: 'There were no free slots, so this wine was saved to your Cellar List instead.' });
+        showAlert({ title: 'Rack full', body: 'There were no free slots, so this wine was saved to your Full Cellar List instead.' });
       }
     }
 
@@ -544,6 +563,7 @@ export default function LabelResultsScreen() {
     }
     setAddingToCellar(false);
     router.replace('/cellar/list');
+    confirmSaved(`${qty} bottle${qty === 1 ? '' : 's'} added to your Full Cellar List.`, false);
   }
 
   async function performNewEntry() {
@@ -1118,22 +1138,49 @@ export default function LabelResultsScreen() {
 
             {!pendingSlot && (
               <>
-                <View style={styles.fieldRow}>
-                  <View style={styles.fieldCol}>
-                    <Text style={styles.modalLabel}>Storage location</Text>
-                    <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('storage')} activeOpacity={0.7}>
-                      <Text style={styles.fieldSelectValue} numberOfLines={1}>{storageLabel}</Text>
-                      <Text style={styles.fieldSelectArrow}>▾</Text>
+                <Text style={styles.modalLabel}>Where should this live?</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storageChipsScroll} contentContainerStyle={styles.storageChips} keyboardShouldPersistTaps="handled">
+                  <TouchableOpacity
+                    style={[styles.storageChip, !selectedRackId && !selectedLocationId && styles.storageChipActive]}
+                    onPress={() => { setSelectedRackId(null); setSelectedLocationId(null); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.storageChipText, !selectedRackId && !selectedLocationId && styles.storageChipTextActive]}>Cellar List</Text>
+                  </TouchableOpacity>
+                  {racks.map((r) => (
+                    <TouchableOpacity
+                      key={r.id}
+                      style={[styles.storageChip, selectedRackId === r.id && styles.storageChipActive]}
+                      onPress={() => { setSelectedRackId(r.id); setSelectedLocationId(null); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.storageChipText, selectedRackId === r.id && styles.storageChipTextActive]} numberOfLines={1}>{r.name}</Text>
                     </TouchableOpacity>
-                  </View>
-                  <View style={styles.fieldCol}>
-                    <Text style={styles.modalLabel}>Bottle size</Text>
-                    <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('bottle')} activeOpacity={0.7}>
-                      <Text style={styles.fieldSelectValue} numberOfLines={1}>{customSizeMode ? (customSizeCl ? `${customSizeCl}cl` : 'Other') : bottleSizeLabel(bottleSizeMl)}</Text>
-                      <Text style={styles.fieldSelectArrow}>▾</Text>
+                  ))}
+                  {cellarLocations.map((l) => (
+                    <TouchableOpacity
+                      key={l.id}
+                      style={[styles.storageChip, selectedLocationId === l.id && styles.storageChipActive]}
+                      onPress={() => { setSelectedLocationId(l.id); setSelectedRackId(null); }}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={[styles.storageChipText, selectedLocationId === l.id && styles.storageChipTextActive]} numberOfLines={1}>{l.name}</Text>
                     </TouchableOpacity>
-                  </View>
-                </View>
+                  ))}
+                  <TouchableOpacity
+                    style={[styles.storageChip, styles.storageChipNew, selectedRackId === '__new__' && styles.storageChipActive]}
+                    onPress={() => { setSelectedRackId('__new__'); setSelectedLocationId(null); }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.storageChipText, styles.storageChipNewText, selectedRackId === '__new__' && styles.storageChipTextActive]}>+ New rack</Text>
+                  </TouchableOpacity>
+                </ScrollView>
+
+                <Text style={styles.modalLabel}>Bottle size</Text>
+                <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('bottle')} activeOpacity={0.7}>
+                  <Text style={styles.fieldSelectValue} numberOfLines={1}>{customSizeMode ? (customSizeCl ? `${customSizeCl}cl` : 'Other') : bottleSizeLabel(bottleSizeMl)}</Text>
+                  <Text style={styles.fieldSelectArrow}>▾</Text>
+                </TouchableOpacity>
 
                 {customSizeMode && (
                   <View style={styles.customSizeRow}>
@@ -1316,6 +1363,15 @@ const styles = StyleSheet.create({
   fieldRow: { flexDirection: 'row', gap: spacing.md },
   fieldCol: { flex: 1 },
   fieldSelect: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.md },
+  // "Where should this live?" destination chips — a visible one-tap choice.
+  storageChipsScroll: { flexGrow: 0, marginBottom: spacing.md },
+  storageChips: { flexDirection: 'row', gap: spacing.xs, paddingVertical: 2, paddingRight: spacing.sm },
+  storageChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: 7, backgroundColor: colors.surface, maxWidth: 190 },
+  storageChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.15)' },
+  storageChipText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
+  storageChipTextActive: { color: colors.gold },
+  storageChipNew: { borderStyle: 'dashed', borderColor: colors.gold },
+  storageChipNewText: { color: colors.gold },
   fieldSelectValue: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   fieldSelectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
   customSizeRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginTop: -spacing.xs, marginBottom: spacing.md },
