@@ -1,18 +1,15 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
-import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
-import { LabelThumb } from '../../src/components/LabelThumb';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineRack, CellarWine } from '../../src/types/wine';
@@ -20,10 +17,6 @@ import type { WineRack, CellarWine } from '../../src/types/wine';
 function bottleLabel(n: number) {
   if (n === 0) return 'Empty';
   return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
-}
-
-function formatCreatedDate(iso: string) {
-  return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
 // A compact carousel card for a rack/fridge. `wines` is one entry per occupied
@@ -51,16 +44,7 @@ export default function RacksScreen() {
   const { racks, isLoading, remove: removeRack } = useRacks();
   const { wines } = useCellar();
   const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
-  const qc = useQueryClient();
   const userId = session?.user.id;
-  // Bespoke Cellar List locations, so the "place wine" pop-up can offer them
-  // alongside racks/fridges — the same options the wine card's Add to Location
-  // gives.
-  const { data: locations = [] } = useQuery({
-    queryKey: ['cellar-locations', userId],
-    queryFn: () => fetchCellarLocations(userId!),
-    enabled: !!userId,
-  });
   // Home storage locations (non-grid, photo-a-space) — shown in the Other Home
   // Storage Locations carousel.
   const { data: storageLocations = [] } = useQuery({
@@ -71,57 +55,6 @@ export default function RacksScreen() {
   // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
   // that storage type (photograph vs manual layout).
   const [chooser, setChooser] = useState<'rack' | 'fridge' | null>(null);
-
-  // Long-press an Unplaced Cellar Wine → the SAME "Add to Location" pop-up the
-  // wine card offers: place in a rack/fridge (visual), or file under a Cellar
-  // List location (instant tag).
-  function placeUnplacedInRack(wineId: string, rackId: string) {
-    setPendingWineId(wineId);
-    setPendingAddMode(true);
-    router.push(`/cellar/rack/${rackId}` as any);
-  }
-  async function addUnplacedToLocation(wineId: string, locationId: string) {
-    try {
-      await addWinesToFilter(locationId, [wineId]);
-      qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
-      showAlert({ title: 'Added to location', body: `Filed under ${locations.find((l) => l.id === locationId)?.name ?? 'the location'}.` });
-    } catch (err) {
-      showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-  function handlePlaceUnplaced(wine: CellarWine) {
-    const buttons = [
-      ...racks.map((r) => ({ text: r.name, onPress: () => placeUnplacedInRack(wine.id, r.id) })),
-      ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addUnplacedToLocation(wine.id, l.id) })),
-    ];
-    if (buttons.length === 0) {
-      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge, or a Cellar List location first, then you can add wines to it.' });
-      return;
-    }
-    showAlert({
-      title: 'Add to Location',
-      body: 'Place it in a rack/fridge, or file it under a Cellar List location:',
-      buttons: [...buttons, { text: 'Cancel', style: 'cancel' as const }],
-    });
-  }
-
-  // The gold "Add to Location" link under each unplaced wine — lists just the
-  // user's Cellar List locations (mirrors the Location filter in Full Cellar
-  // List), filing the wine under the chosen one.
-  function handleAddToLocation(wine: CellarWine) {
-    if (locations.length === 0) {
-      showAlert({ title: 'No locations yet', body: 'Create a location in your Full Cellar List first, then you can file wines under it.' });
-      return;
-    }
-    showAlert({
-      title: 'Add to Location',
-      body: 'File this wine under one of your Cellar List locations:',
-      buttons: [
-        ...locations.map((l) => ({ text: l.name, onPress: () => addUnplacedToLocation(wine.id, l.id) })),
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
-  }
 
   function handleLongPressRack(rack: WineRack) {
     showAlert({
@@ -158,22 +91,6 @@ export default function RacksScreen() {
     list.push(wine);
     winesByRack[slot.rack_id] = list;
   }
-
-  // Reverse map: which rack each wine sits in (first match wins), for the
-  // "Recently Added" list.
-  const rackNameByWineId: Record<string, string> = {};
-  for (const rack of racks) {
-    for (const w of winesByRack[rack.id] ?? []) {
-      if (!rackNameByWineId[w.id]) rackNameByWineId[w.id] = rack.name;
-    }
-  }
-
-  // Loose bottles — wines the user has added but not yet put away ANYWHERE:
-  // neither in a rack/fridge nor filed under a Cellar List Location. Newest-first
-  // (useCellar order); a wine drops off the moment it's placed OR filed.
-  const locationWineIds = new Set<string>();
-  for (const loc of locations) for (const id of loc.wineIds) locationWineIds.add(id);
-  const unplacedWines = wines.filter((w) => !rackNameByWineId[w.id] && !locationWineIds.has(w.id) && !w.storage_location_id);
 
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
@@ -267,9 +184,12 @@ export default function RacksScreen() {
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
+          <Text style={styles.pageIntroLead}>Replicate your home storage in Vinster.</Text>
           <Text style={styles.pageIntro}>
-            Replicate your home wine storage in Vinster, whether you've got organised storage solutions or cases under the stairs Vinster will help you keep track of what's where.
+            Whether you've got organised storage solutions or cases under the stairs Vinster will help you keep track of what's where.
           </Text>
+
+          <View style={styles.divider} />
 
           {/* Wine Racks & Fridges — a horizontal carousel of racks/fridges with
               a permanent "+ Add" tile at the end. */}
@@ -277,7 +197,7 @@ export default function RacksScreen() {
           <Text style={styles.blockBlurb}>
             Add a wine rack or fridge by photographing or manually inputting it's layout. Once you have your grid set up you can input individual wines, multiples of the same wine, or lineups of up to 8 bottles at a time.
           </Text>
-          {racks.length > 0 && <Text style={styles.swipeHint}>Swipe to see all →</Text>}
+          {racks.length > 0 && <Text style={styles.swipeHint}>Swipe to see all, and add more →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
             {racks.map((rack) => (
               <RackCard
@@ -292,6 +212,8 @@ export default function RacksScreen() {
             </TouchableOpacity>
           </ScrollView>
 
+          <View style={styles.divider} />
+
           {/* Other Home Storage Locations — the user's own free-form home
               places (shed, under the bed…). A distinct concept from the Cellar
               List "Locations" filter, so those are NOT shown here. */}
@@ -299,7 +221,7 @@ export default function RacksScreen() {
           <Text style={styles.blockBlurb}>
             Add your own locations: In the Shed, Under the bed, etc.
           </Text>
-          {storageLocations.length > 0 && <Text style={styles.swipeHint}>Swipe to see all →</Text>}
+          {storageLocations.length > 0 && <Text style={styles.swipeHint}>Swipe to see all, and add more →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
             {storageLocations.map((loc) => (
               <TouchableOpacity
@@ -317,39 +239,6 @@ export default function RacksScreen() {
               <Text style={styles.addTilePlus}>+ Add</Text>
             </TouchableOpacity>
           </ScrollView>
-
-          {unplacedWines.length > 0 && (
-            <>
-              <Text style={styles.subHeader}>Loose bottles</Text>
-              <View style={styles.cellarListSection}>
-                {unplacedWines.map((w) => (
-                  <TouchableOpacity
-                    key={w.id}
-                    style={styles.recentRow}
-                    onPress={() => router.push(`/cellar/${w.id}`)}
-                    onLongPress={() => handlePlaceUnplaced(w)}
-                    delayLongPress={400}
-                    activeOpacity={0.7}
-                  >
-                    <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.recentThumb} />
-                    <View style={styles.recentMain}>
-                      <Text style={styles.recentName} numberOfLines={1}>
-                        {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
-                      </Text>
-                      <View style={styles.recentMetaRow}>
-                        <Text style={styles.recentMeta}>{formatCreatedDate(w.created_at)}</Text>
-                        <Text style={styles.recentMetaDot}>·</Text>
-                        <Text style={styles.recentMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
-                      </View>
-                      <TouchableOpacity onPress={() => handleAddToLocation(w)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                        <Text style={styles.addToLocationLink}>Add to Location</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </>
-          )}
         </ScrollView>
       )}
 
@@ -394,8 +283,9 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   // Cormorant — section header
   subHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  // One-line page intro beneath the header.
-  pageIntro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  // Two-line page intro beneath the header: a lead line then the detail.
+  pageIntroLead: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  pageIntro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 6, paddingBottom: spacing.md },
   // Left-aligned section subheader (Wine Racks & Fridges / Other Locations).
   blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 4 },
   blockBlurb: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
