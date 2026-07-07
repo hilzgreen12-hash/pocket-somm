@@ -79,13 +79,13 @@ export function RestaurantReviewModal({
   const [posting, setPosting] = useState(false);
   const shareCardRef = useRef<View>(null);
 
-  // --- Add a Bottle: attach a wine the user brought to this visit. Four ways
-  // in (Cellar / Upload / Scan / Manual), all landing on a confirm-details
-  // sheet, then saved as a source='other' bottle linked to this session. ---
+  // --- Add a Bottle: ONE flow, four ways in (Cellar / Upload / Scan / Manual),
+  // all landing on a confirm-details sheet. Whether it's a "List Bottle" (off
+  // the restaurant's list) or an "Off-List Bottle" (brought along) is INFERRED,
+  // not asked up front — a wine picked from your own cellar is one you brought;
+  // scanned/manual ones default to "off the list" with a single "I brought this"
+  // toggle on the confirm sheet to correct it. ---
   const [bottleChooserOpen, setBottleChooserOpen] = useState(false);
-  // Which bucket the in-flight add targets — a List Bottle (off the restaurant
-  // list) or an Off-List Bottle (brought to the visit).
-  const [bottleKind, setBottleKind] = useState<'list' | 'off'>('off');
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [cellarSearch, setCellarSearch] = useState('');
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -94,17 +94,19 @@ export function RestaurantReviewModal({
   const [cbWineName, setCbWineName] = useState('');
   const [cbRegion, setCbRegion] = useState('');
   const [cbVintage, setCbVintage] = useState('');
+  // "I brought this" — off the restaurant's list. Pre-set true for cellar picks.
+  const [cbBrought, setCbBrought] = useState(false);
 
-  function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }) {
+  function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }, brought: boolean) {
     setCbProducer(prefill.producer ?? '');
     setCbWineName(prefill.wineName ?? '');
     setCbRegion(prefill.region ?? '');
     setCbVintage(prefill.vintage != null ? String(prefill.vintage) : '');
+    setCbBrought(brought);
     setConfirmOpen(true);
   }
 
-  function openBottleChooser(kind: 'list' | 'off') { setBottleKind(kind); setBottleChooserOpen(true); }
-  function chooseManual() { setBottleChooserOpen(false); openConfirm({}); }
+  function chooseManual() { setBottleChooserOpen(false); openConfirm({}, false); }
   function chooseCellar() { setBottleChooserOpen(false); setCellarSearch(''); setCellarPickerOpen(true); }
 
   async function chooseFromImage(source: 'camera' | 'library') {
@@ -120,10 +122,10 @@ export function RestaurantReviewModal({
       try {
         const base64 = await prepareImageBase64(res.assets[0].uri);
         const details = await scanLabel(base64);
-        openConfirm({ producer: details.producer, wineName: details.wineName, region: details.region, vintage: details.vintage });
+        openConfirm({ producer: details.producer, wineName: details.wineName, region: details.region, vintage: details.vintage }, false);
       } catch {
         // OCR failed — still let them fill it in by hand on the confirm sheet.
-        openConfirm({});
+        openConfirm({}, false);
       }
     } catch (err) {
       showAlert({ title: source === 'camera' ? 'Could not open camera' : 'Could not open photos', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -156,7 +158,7 @@ export function RestaurantReviewModal({
         wineName: name,
         region: cbRegion.trim() || null,
         vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
-        source: bottleKind === 'list' ? 'restaurant' : 'other',
+        source: cbBrought ? 'other' : 'restaurant',
       });
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
@@ -272,13 +274,15 @@ export function RestaurantReviewModal({
   // and Off-List Bottles (brought along). Keep each wine's original index so
   // "Review this wine →" still targets the right chosen_wine.
   const indexedWines = (wines ?? []).map((w, i) => ({ ...w, _idx: i }));
-  const listBottles = indexedWines.filter((w) => w.source !== 'other');
-  const offListBottles = indexedWines.filter((w) => w.source === 'other');
   const renderBottle = (w: WineLine & { _idx: number }) => {
     const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
     return (
       <View key={w._idx} style={styles.wineRow}>
-        <Text style={styles.wineLine}>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}</Text>
+        <View style={styles.wineLineRow}>
+          <Text style={styles.wineLine}>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}</Text>
+          {/* Quiet "brought" tag — the list-vs-off-list nuance without the chore. */}
+          {w.source === 'other' ? <Text style={styles.broughtTag}>brought</Text> : null}
+        </View>
         {onReviewWine ? (
           <TouchableOpacity onPress={() => onReviewWine(w._idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
             <Text style={styles.wineReviewLink}>Review this wine →</Text>
@@ -328,24 +332,14 @@ export function RestaurantReviewModal({
 
             <View style={styles.divider} />
 
-            {/* Wines You Drank — split into List Bottles (chosen off the
-                restaurant's list) and Off-List Bottles (brought along). Each
-                bucket can be added to directly. */}
+            {/* Wines You Drank — one list. Whether each bottle was off the list
+                or brought along is shown as a quiet "brought" tag, not sorted
+                into separate buckets. One add flow infers which it is. */}
             <Text style={styles.sectionLabel}>Wines You Drank</Text>
-
-            <Text style={styles.bottleGroupLabel}>List Bottles</Text>
             <View style={styles.wineBlock}>
-              {listBottles.map(renderBottle)}
-              <TouchableOpacity style={styles.addBottleBtn} onPress={() => openBottleChooser('list')} activeOpacity={0.8}>
-                <Text style={styles.addBottleText}>+ Add a List Bottle</Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.bottleGroupLabel}>Off-List Bottles</Text>
-            <View style={styles.wineBlock}>
-              {offListBottles.map(renderBottle)}
-              <TouchableOpacity style={styles.addBottleBtn} onPress={() => openBottleChooser('off')} activeOpacity={0.8}>
-                <Text style={styles.addBottleText}>+ Add an Off-List Bottle</Text>
+              {indexedWines.map(renderBottle)}
+              <TouchableOpacity style={styles.addBottleBtn} onPress={() => setBottleChooserOpen(true)} activeOpacity={0.8}>
+                <Text style={styles.addBottleText}>+ Add a bottle</Text>
               </TouchableOpacity>
             </View>
 
@@ -416,8 +410,8 @@ export function RestaurantReviewModal({
             <View style={styles.bottleOverlay}>
               <TouchableOpacity style={styles.bottleBackdrop} activeOpacity={1} onPress={() => setBottleChooserOpen(false)} />
               <View style={styles.bottleSheet}>
-                <Text style={styles.bottleSheetTitle}>{bottleKind === 'list' ? 'Add a List Bottle' : 'Add an Off-List Bottle'}</Text>
-                <Text style={styles.bottleSheetBody}>{bottleKind === 'list' ? 'Log a wine you chose off the restaurant’s list.' : 'Log a wine you brought to this visit — e.g. from home.'}</Text>
+                <Text style={styles.bottleSheetTitle}>Add a bottle</Text>
+                <Text style={styles.bottleSheetBody}>Log a wine you drank at this visit — pick one from your cellar, or scan, upload, or type its label.</Text>
                 <TouchableOpacity style={styles.bottleOptBtn} onPress={chooseCellar} activeOpacity={0.85}><Text style={styles.bottleOptText}>Add Bottle From Cellar</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('library')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Upload a Wine Label</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('camera')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Scan a Label</Text></TouchableOpacity>
@@ -441,7 +435,7 @@ export function RestaurantReviewModal({
                     <TouchableOpacity
                       key={w.id}
                       style={styles.cellarRow}
-                      onPress={() => { setCellarPickerOpen(false); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }); }}
+                      onPress={() => { setCellarPickerOpen(false); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }, true); }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.cellarRowName} numberOfLines={1}>{w.wine_name}</Text>
@@ -468,6 +462,16 @@ export function RestaurantReviewModal({
                 <TextInput style={styles.bottleInput} value={cbRegion} onChangeText={setCbRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
                 <Text style={styles.bottleFieldLabel}>Vintage</Text>
                 <TextInput style={styles.bottleInput} value={cbVintage} onChangeText={setCbVintage} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
+                {/* Inferred by entry point (cellar = brought), correctable here. */}
+                <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setCbBrought((v) => !v)} activeOpacity={0.7}>
+                  <View style={[styles.broughtCheckbox, cbBrought && styles.broughtCheckboxOn]}>
+                    {cbBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
+                  </View>
+                  <View style={styles.broughtToggleTextWrap}>
+                    <Text style={styles.broughtToggleLabel}>I brought this</Text>
+                    <Text style={styles.broughtToggleHint}>Off the restaurant's list — e.g. from home or your cellar.</Text>
+                  </View>
+                </TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddBottle} disabled={bottleBusy}>
                   <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : 'Add to This Visit'}</Text>
                 </TouchableOpacity>
@@ -580,6 +584,15 @@ const styles = StyleSheet.create({
   ratingLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   wineBlock: { marginBottom: spacing.lg, gap: spacing.sm },
   wineRow: { gap: 2 },
+  wineLineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  broughtTag: { fontFamily: fonts.bodySemibold, fontSize: 10.5, color: colors.gold, letterSpacing: 0.4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
+  broughtToggleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
+  broughtCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
+  broughtCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
+  broughtCheckTick: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold },
+  broughtToggleTextWrap: { flex: 1 },
+  broughtToggleLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  broughtToggleHint: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   // Wine reference — gold italic, matching the wine reference style elsewhere.
   wineLine: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, lineHeight: 21 },
   wineReviewLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 2 },

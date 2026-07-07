@@ -339,9 +339,16 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         <View style={styles.sheet}>
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-              <Text style={styles.backText}>← Back</Text>
-            </TouchableOpacity>
+            {/* Top row: back (left) · Share (right) — Share matches the rest of
+                the app, sharing the same wine card as everywhere else. */}
+            <View style={styles.topRow}>
+              <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
+                <Text style={styles.backText}>← Back</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+                <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Header — same shape as the cellar wine card. No favourite star. */}
             <View style={styles.header}>
@@ -415,10 +422,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               onDiscoveredAt={setDiscoveredAt}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
-              onShareCommunity={handleShareToCommunity}
-              onShare={handleShare}
-              sharingCommunity={posting}
-              sharing={sharing}
               wishlistActive={wishlist}
               onWishlist={handleWishlistButton}
               onAddToCellar={handleAddToCellarFlow}
@@ -481,7 +484,9 @@ const styles = StyleSheet.create({
   // Gold text link below the buttons (Dive Deeper → Wine Knowledge).
   diveDeeperLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   diveDeeperLinkText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
-  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginBottom: spacing.md },
+  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   header: { alignItems: 'center', marginBottom: spacing.sm },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
