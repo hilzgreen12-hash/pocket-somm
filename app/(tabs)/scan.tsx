@@ -7,6 +7,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
+import { HelpButton } from '../../src/components/HelpButton';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -16,6 +17,10 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
+
+const SCAN_HELP = `Vinster filters wine lists to offer three recommendations tailored to your profile preferences and what it's learned about your tastes.
+
+Vinster is trained by wine professionals to weigh up what it discovers online regarding average critic scores, region specific vintage quality, value for money, and rarity.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
@@ -124,10 +129,7 @@ export default function ScanTab() {
         <Text style={styles.topBlurb}>
           Scan or upload a restaurant wine list for tailored recommendations, save and review bottles and restaurants. Scan or upload a wine label to generate intel and dive deeply into what's in the bottle.
         </Text>
-        {/* Placeholder link — the "More About Scan" explainer is coming later. */}
-        <TouchableOpacity onPress={() => {}} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="More About Scan">
-          <Text style={styles.moreAboutLink}>More About Scan</Text>
-        </TouchableOpacity>
+        <HelpButton label="More About Scan" title="How Scan works" body={SCAN_HELP} />
       </View>
 
       <View style={styles.divider} />
