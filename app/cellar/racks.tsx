@@ -186,15 +186,16 @@ export default function RacksScreen() {
     });
   }
 
-  // The "+ Add" tile in the Other Locations carousel. For now this only asks
-  // the grid question — the rest of the flow is intentionally not built yet.
+  // The "+ Add" tile in the Other Home Storage Locations carousel. Grid = yes →
+  // treat it like a rack and reuse the rack build flow. Grid = no → the bespoke
+  // photo-a-space flow (built separately).
   function handleAddLocationPrompt() {
     showAlert({
       title: 'New location',
       body: "Does this location have a horizontal & vertical grid layout you'd like to replicate?",
       buttons: [
-        { text: 'Yes', onPress: () => showAlert({ title: 'Coming soon', body: 'Setting this up is on the way — we\'ll have it ready for you shortly.' }) },
-        { text: 'No', onPress: () => showAlert({ title: 'Coming soon', body: 'Setting this up is on the way — we\'ll have it ready for you shortly.' }) },
+        { text: 'Yes', onPress: () => handleAddType('rack') },
+        { text: 'No', onPress: () => showAlert({ title: 'Coming soon', body: 'Photo-a-space locations are on the way — we\'ll have it ready for you shortly.' }) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
