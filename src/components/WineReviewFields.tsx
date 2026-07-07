@@ -1,7 +1,6 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MicButton } from './MicButton';
 import { formatCurrency } from '../constants/currency';
-import { COMMUNITY_ENABLED } from '../constants/features';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -23,16 +22,12 @@ interface Props {
   onReview: (s: string) => void;
   personalNotes: string;
   onPersonalNotes: (s: string) => void;
-  // Where the wine was had / discovered, and the user's own drinking window.
-  discoveredAt: string;
-  onDiscoveredAt: (s: string) => void;
+  // Legacy "discovered at" — no longer rendered (location covers it), kept
+  // optional so existing callers still type-check and round-trip their value.
+  discoveredAt?: string;
+  onDiscoveredAt?: (s: string) => void;
   drinkingWindow: string;
   onDrinkingWindow: (s: string) => void;
-  // Optional share actions.
-  onShareCommunity?: () => void;
-  onShare?: () => void;
-  sharingCommunity?: boolean;
-  sharing?: boolean;
   // Optional Wish List + Add to Cellar (hidden on cellar reviews).
   wishlistActive?: boolean;
   onWishlist?: () => void;
@@ -50,17 +45,16 @@ interface Props {
 }
 
 // The shared wine-review input body, used by every review surface (List
-// Review, Your Wine Reviews drill-through, Bottle Picks → Review Wine) so
-// they're exactly the same. Order: Your Score → Price Paid · Estimated
-// Value → Your Review → Personal Notes → Discovered at → Drinking Window →
-// Share → Wish List · Add to Cellar → Save. The parent owns state, save and
-// the surrounding card chrome (header, share card, etc.).
+// Review, Your Wine Reviews drill-through, restaurant Review Wine) so they're
+// exactly the same. Order: Your Score → Your Review → Personal Notes → Drinking
+// Window → Price Paid · Estimated Value → Save → Wish List · Add to Cellar →
+// Delete. Share lives in each modal's top-right header. The parent owns state,
+// save and the surrounding card chrome (header, share card, etc.).
 export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes,
-  discoveredAt, onDiscoveredAt, drinkingWindow, onDrinkingWindow,
-  onShareCommunity, onShare, sharingCommunity, sharing,
+  drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, onDelete, deleteLabel,
 }: Props) {
@@ -68,14 +62,21 @@ export function WineReviewFields({
 
   return (
     <>
-      {/* Discovered at — top of the card. */}
-      <Text style={styles.fieldLabel}>Discovered at</Text>
+      {/* Your Score — top of the card, styled like the other section headers. */}
+      <Text style={styles.sectionTitle}>Your Score</Text>
       <TextInput
-        style={styles.input}
-        value={discoveredAt}
-        onChangeText={onDiscoveredAt}
-        placeholder="Restaurant, home, friend's place…"
+        style={[styles.input, styles.scoreInput]}
+        value={score != null ? String(score) : ''}
+        onChangeText={(t) => {
+          const digits = t.replace(/[^0-9]/g, '').slice(0, 3);
+          if (digits === '') { onScore(null); return; }
+          const n = parseInt(digits, 10);
+          if (!isNaN(n)) onScore(Math.min(100, Math.max(0, n)));
+        }}
+        keyboardType="number-pad"
+        placeholder="e.g. 92"
         placeholderTextColor={colors.textMuted}
+        maxLength={3}
       />
 
       {/* Your Review */}
@@ -104,23 +105,6 @@ export function WineReviewFields({
         placeholder="Just for you — anything you'd rather keep private."
         placeholderTextColor={colors.textMuted}
         multiline numberOfLines={4} textAlignVertical="top"
-      />
-
-      {/* Your Score */}
-      <Text style={styles.fieldLabel}>Your Score</Text>
-      <TextInput
-        style={[styles.input, styles.scoreInput]}
-        value={score != null ? String(score) : ''}
-        onChangeText={(t) => {
-          const digits = t.replace(/[^0-9]/g, '').slice(0, 3);
-          if (digits === '') { onScore(null); return; }
-          const n = parseInt(digits, 10);
-          if (!isNaN(n)) onScore(Math.min(100, Math.max(0, n)));
-        }}
-        keyboardType="number-pad"
-        placeholder="e.g. 92"
-        placeholderTextColor={colors.textMuted}
-        maxLength={3}
       />
 
       {/* Drinking Window — the user's own call. */}
@@ -184,21 +168,8 @@ export function WineReviewFields({
         </Text>
       </TouchableOpacity>
 
-      {/* Share */}
-      {(onShareCommunity || onShare) ? (
-        <View style={styles.shareRow}>
-          {onShareCommunity ? (
-            <TouchableOpacity style={[styles.shareBtn, (!COMMUNITY_ENABLED || sharingCommunity) && styles.btnDisabled]} onPress={onShareCommunity} disabled={!COMMUNITY_ENABLED || sharingCommunity} activeOpacity={0.8}>
-              <Text style={styles.shareBtnText}>{!COMMUNITY_ENABLED ? 'Share to Community (coming soon)' : sharingCommunity ? 'Sharing…' : 'Share to Community'}</Text>
-            </TouchableOpacity>
-          ) : null}
-          {onShare ? (
-            <TouchableOpacity style={[styles.shareBtn, sharing && styles.btnDisabled]} onPress={onShare} disabled={sharing} activeOpacity={0.8}>
-              <Text style={styles.shareBtnText}>{sharing ? 'Preparing…' : 'Share'}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
+      {/* Share now lives in the modal's top-right corner (like the rest of the
+          app), not here — see each review modal's header. */}
 
       {/* Add to Cellar · Wish List (gold; omitted on cellar reviews). */}
       {(onWishlist || onAddToCellar) ? (
