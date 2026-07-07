@@ -177,7 +177,7 @@ export default function LabelResultsScreen() {
           .filter((n): n is string => !!n),
       ),
     );
-    if (rackNames.length === 0) return 'currently unplaced';
+    if (rackNames.length === 0) return 'not yet in a rack';
     if (rackNames.length === 1) return `in your ${rackNames[0]} rack`;
     return `across your ${rackNames.slice(0, -1).join(', ')} and ${rackNames[rackNames.length - 1]} racks`;
   }
