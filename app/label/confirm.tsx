@@ -230,11 +230,19 @@ export default function LabelConfirmScreen() {
       if (free.length < requested) {
         showAlert({
           title: 'Placed what fit',
-          body: `Only ${free.length} of ${requested} bottles fit from here — the rest weren't placed.`,
+          body: `Only ${free.length} of ${requested} bottles fit from here — the rest weren't placed. What did fit is in your Full Cellar List.`,
           buttons: [{ text: 'OK', onPress: () => router.replace(`/cellar/rack/${rackId}`) }],
         });
       } else {
         router.replace(`/cellar/rack/${rackId}`);
+        showAlert({
+          title: 'Added to your cellar',
+          body: `${free.length} bottle${free.length === 1 ? '' : 's'} placed in your rack — and added to your Full Cellar List.`,
+          buttons: [
+            { text: 'View in Full Cellar List', onPress: () => router.replace('/cellar/list') },
+            { text: 'Done', style: 'cancel' },
+          ],
+        });
       }
     } catch (err) {
       showAlert({ title: 'Could not place wine', body: err instanceof Error ? err.message : 'Please try again.' });

@@ -522,6 +522,11 @@ export default function RackGridScreen() {
       await assignSlots(rid, [{ row, col }], wine.id);
       qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      showAlert({
+        title: 'Placed in this rack',
+        body: `${wine.wine_name} is already in your Full Cellar List — it's now mapped to a slot here too.`,
+        buttons: [{ text: 'Done', style: 'cancel' }],
+      });
     } catch (err) {
       showAlert({ title: 'Could not place wine', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -637,12 +642,15 @@ export default function RackGridScreen() {
         showAlert({
           title: 'Your bottle has been added',
           body: placed === 1
-            ? `Added to ${rack?.name ?? 'your rack'}.`
-            : `${placed} bottles added to ${rack?.name ?? 'your rack'}.`,
-          buttons: [{ text: 'OK' }],
+            ? `Added to ${rack?.name ?? 'your rack'} — and in your Full Cellar List.`
+            : `${placed} bottles added to ${rack?.name ?? 'your rack'} — and in your Full Cellar List.`,
+          buttons: [
+            { text: 'View in Full Cellar List', onPress: () => router.replace('/cellar/list') },
+            { text: 'Done', style: 'cancel' },
+          ],
         });
       } else {
-        setSavedMsg(placed === 1 ? 'Wine saved to rack' : `${placed} bottles saved to rack`);
+        setSavedMsg(placed === 1 ? 'Saved to rack & Cellar List' : `${placed} bottles saved to rack & Cellar List`);
       }
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
