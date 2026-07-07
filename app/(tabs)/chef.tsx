@@ -90,7 +90,7 @@ export default function ChefTab() {
           Tell Vinster what you're cooking and it'll offer you a wine. What you're drinking and it'll generate original, chef-inspired recipes tailored to your tastes. Keep, organise, and share your recipes in Your Cookbook.
         </Text>
         <Text style={styles.prefsBlurb}>
-          Vinster will use your preferences in the{' '}
+          Vinster will use your preferences in{' '}
           <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You</Text>
           {' '}to guide its results.
         </Text>

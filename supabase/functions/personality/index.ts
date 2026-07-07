@@ -27,7 +27,12 @@ Tone: warm, dry, gently teasing, never mean. Think a wine merchant who knows the
 
 Address the user directly as "you". Give them a memorable nickname or archetype halfway through (e.g. "You, my friend, are a card-carrying Riesling Romantic" — invent your own that fits).
 
-If the data is sparse, lean into that — write a short, playful "we don't know much about you yet, but here's our first impression" piece and invite them to keep building their cellar.
+SUFFICIENCY GATE — check this BEFORE writing anything:
+Judge whether there is genuinely enough VARIED signal here to draw an authentic character sketch — real wines they've engaged with, across some range of styles/regions, not just a couple of bottles or bare preference toggles. A personality read should feel earned. If the signal is thin, one-note, or you would have to invent traits the data doesn't actually support, DO NOT write a sketch. Instead respond with EXACTLY this single line and nothing else:
+NOT_ENOUGH_YET
+Only continue to a sketch when you can ground it in specific, real evidence.
+
+CITE YOUR EVIDENCE: every observation must trace back to something concrete in the data — name the actual producers, regions, grapes, or budget you're reading from. Read between the lines, but never invent a preference or pattern the data doesn't show. A sketch that points to real bottles feels true; one that free-associates feels fake.
 
 Here's what we know:
 
@@ -86,7 +91,14 @@ Tone: warm, dry, gently teasing, never mean. Think a chef-friend who knows them 
 
 Address the user directly as "you". Give them a memorable nickname or archetype halfway through. Don't quote the data verbatim — read between the lines.
 
-Use the dietary/cuisine profile, the restaurant history, AND the saved-recipe archive together. Look for tension or harmony between them: do their stated preferences match the places they actually go and the dishes they save? Recipes marked with ★ are ones they've explicitly favourited — those carry the most weight as signals of what they truly love. Do they review wine lists harder than food? Are their favourite recipes adventurous but their restaurant orders conservative (or vice versa)? What does the combination say? If any source is sparse, lean on the others. If they're all sparse, write a playful "early days" piece and invite them to keep telling Vinster what they like.
+Use the dietary/cuisine profile, the restaurant history, AND the saved-recipe archive together. Look for tension or harmony between them: do their stated preferences match the places they actually go and the dishes they save? Recipes marked with ★ are ones they've explicitly favourited — those carry the most weight as signals of what they truly love. Do they review wine lists harder than food? Are their favourite recipes adventurous but their restaurant orders conservative (or vice versa)? What does the combination say? If one source is sparse, lean on the others.
+
+SUFFICIENCY GATE — check this BEFORE writing anything:
+Judge whether there is genuinely enough VARIED signal across these sources to draw an authentic foodie sketch. Bare preference toggles or a handful of hypothetical pairing searches are NOT enough on their own — a real read needs actual restaurant reviews and/or saved recipes to point to. A personality read should feel earned. If the signal is thin, one-note, or you would have to invent traits the data doesn't support, DO NOT write a sketch. Instead respond with EXACTLY this single line and nothing else:
+NOT_ENOUGH_YET
+Only continue to a sketch when you can ground it in specific, real evidence.
+
+CITE YOUR EVIDENCE: every observation must trace back to something concrete — name the actual restaurants, dishes, or cuisines you're reading from. Never invent a pattern the data doesn't show.
 
 Here's what we know:
 
@@ -119,7 +131,15 @@ Deno.serve(async (req) => {
     });
 
     const text = response.content.find((b: any) => b.type === 'text')?.text ?? '';
-    return new Response(JSON.stringify({ text }), {
+    // Model's sufficiency gate — it emits this sentinel when there isn't yet
+    // enough genuine signal to draw an authentic sketch. Report back so the app
+    // holds the milestone instead of surfacing a hollow personality.
+    if (text.trim().toUpperCase().startsWith('NOT_ENOUGH_YET')) {
+      return new Response(JSON.stringify({ ready: false }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify({ text, ready: true }), {
       headers: { 'Content-Type': 'application/json' },
     });
   } catch (err) {

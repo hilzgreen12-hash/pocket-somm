@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
@@ -17,6 +17,12 @@ import { fonts } from '../src/constants/fonts';
 function ackKey(category: 'wine' | 'recipe') {
   return `vinster_personality_acked_${category}`;
 }
+
+// Cap how many times the "you've earned a sketch — generate it?" nudge appears
+// before we stop pestering (the user can still find it in the You tab). Keeps a
+// milestone feeling like one, not a recurring ask.
+const NUDGE_CAP = 3;
+const NUDGE_COUNT_KEY = 'vinster_personality_nudge_shows';
 
 // --- Tile motifs ----------------------------------------------------------
 // Each motif is a small geometric mark drawn with bordered Views so the
@@ -152,6 +158,25 @@ export default function HomeScreen() {
   // next app-open until they generate it.
   const personalityCategory = usePersonalityPrompt();
   const [promptDismissed, setPromptDismissed] = useState(false);
+  // Persisted cap: after NUDGE_CAP appearances we stop nudging entirely.
+  const [nudgeSuppressed, setNudgeSuppressed] = useState(false);
+  const nudgeBumpedRef = useRef(false);
+  useEffect(() => {
+    (async () => {
+      const n = parseInt((await AsyncStorage.getItem(NUDGE_COUNT_KEY)) ?? '0', 10) || 0;
+      if (n >= NUDGE_CAP) setNudgeSuppressed(true);
+    })();
+  }, []);
+  // Count this appearance once per mount when the nudge first becomes eligible.
+  useEffect(() => {
+    if (!personalityCategory || promptDismissed || nudgeSuppressed || nudgeBumpedRef.current) return;
+    nudgeBumpedRef.current = true;
+    (async () => {
+      const n = (parseInt((await AsyncStorage.getItem(NUDGE_COUNT_KEY)) ?? '0', 10) || 0) + 1;
+      await AsyncStorage.setItem(NUDGE_COUNT_KEY, String(n));
+      if (n >= NUDGE_CAP) setNudgeSuppressed(true);
+    })();
+  }, [personalityCategory, promptDismissed, nudgeSuppressed]);
 
   // "Your personality is ready" popup — fires when Vinster has generated
   // a sketch the user hasn't viewed yet (or has generated a NEW sketch
@@ -177,9 +202,12 @@ export default function HomeScreen() {
     setReadyPopupVisible(false);
     router.push(`/profile/personality?category=${featured.category}` as any);
   }
-  function handleDismissReady() {
-    // Local-state dismiss only — leaves the AsyncStorage ack untouched so
-    // the popup reappears the next time the user lands on home.
+  async function handleDismissReady() {
+    // Show the "your sketch is ready" popup ONCE per sketch — acknowledge it on
+    // dismiss too (not just on view), so it doesn't re-fire on every home focus.
+    if (featured?.at) {
+      try { await AsyncStorage.setItem(ackKey(featured.category), featured.at); } catch { /* non-fatal */ }
+    }
     setReadyPopupVisible(false);
   }
 
@@ -256,7 +284,7 @@ export default function HomeScreen() {
       </Modal>
 
       <PersonalityPromptModal
-        visible={!!personalityCategory && !promptDismissed}
+        visible={!!personalityCategory && !promptDismissed && !nudgeSuppressed}
         category={personalityCategory ?? 'wine'}
         onGenerate={() => {
           setPromptDismissed(true);
