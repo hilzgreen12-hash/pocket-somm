@@ -133,6 +133,9 @@ export default function ChosenWinesScreen() {
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
+  // (null for Manual Input). Keeps all three on the same review input screen.
+  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null>(null);
   // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
   // chosen path takes over (manual reuses the existing AddChosenWineModal;
   // scan + upload feed into the label flow with context=reviews).
@@ -485,43 +488,38 @@ export default function ChosenWinesScreen() {
     }
   }
 
-  function handleChooseScan() {
-    setChooserOpen(false);
-    router.push('/label/camera?context=reviews');
-  }
-
   function handleChooseManual() {
     setChooserOpen(false);
+    setAddInitial(null);
     setAddOpen(true);
   }
 
-  // Gallery path — pick a photo, run it through the same OCR pipeline the
-  // camera uses, then hand control to /label/confirm exactly as a live
-  // capture would. Errors land on confirm so the user can edit details by
-  // hand if scanLabel failed.
-  async function handleChooseUpload() {
-    setChooserOpen(false);
+  // Scan / Upload both OCR a label and then open the SAME Add-a-Review modal as
+  // Manual (pre-filled) — no wine intel card, no /label detour.
+  async function handleChooseScan() { setChooserOpen(false); void ocrThenReview('camera'); }
+  async function handleChooseUpload() { setChooserOpen(false); void ocrThenReview('library'); }
+
+  async function ocrThenReview(source: 'camera' | 'library') {
     try {
-      if (!(await ensureMediaPermission('library'))) return;
-      const picked = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 1,
-      });
+      if (!(await ensureMediaPermission(source))) return;
+      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
+      const picked = source === 'camera'
+        ? await ImagePicker.launchCameraAsync(opts)
+        : await ImagePicker.launchImageLibraryAsync(opts);
       if (picked.canceled || !picked.assets?.[0]) return;
       const uri = picked.assets[0].uri;
       setUploading(true);
       try {
         const base64 = await prepareImageBase64(uri);
-        setImage(uri, base64);
         const details = await scanLabel(base64);
-        setWineDetails(details);
-        router.push('/label/confirm?context=reviews');
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to scan label');
-        router.push('/label/confirm?context=reviews');
+        setAddInitial({ producer: details.producer, wineName: details.wineName, vintage: details.vintage, region: details.region });
+      } catch {
+        // OCR failed — still open the review input so the user can type it in.
+        setAddInitial(null);
       } finally {
         setUploading(false);
       }
+      setAddOpen(true);
     } catch (err) {
       showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -545,8 +543,9 @@ export default function ChosenWinesScreen() {
 
       <AddChosenWineModal
         visible={addOpen}
-        onClose={() => setAddOpen(false)}
-        onSaved={() => setAddOpen(false)}
+        initial={addInitial}
+        onClose={() => { setAddOpen(false); setAddInitial(null); }}
+        onSaved={() => { setAddOpen(false); setAddInitial(null); }}
       />
 
       {/* "+ Add" chooser — Scan / Upload run the same label recognise+confirm
