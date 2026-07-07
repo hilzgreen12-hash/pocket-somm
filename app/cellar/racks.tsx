@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getSlotAssignments } from '../../src/api/racks';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
+import { fetchStorageLocations } from '../../src/api/storageLocations';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -58,6 +59,13 @@ export default function RacksScreen() {
   const { data: locations = [] } = useQuery({
     queryKey: ['cellar-locations', userId],
     queryFn: () => fetchCellarLocations(userId!),
+    enabled: !!userId,
+  });
+  // Home storage locations (non-grid, photo-a-space) — shown in the Other Home
+  // Storage Locations carousel.
+  const { data: storageLocations = [] } = useQuery({
+    queryKey: ['storage-locations', userId],
+    queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
   // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
@@ -165,7 +173,7 @@ export default function RacksScreen() {
   // (useCellar order); a wine drops off the moment it's placed OR filed.
   const locationWineIds = new Set<string>();
   for (const loc of locations) for (const id of loc.wineIds) locationWineIds.add(id);
-  const unplacedWines = wines.filter((w) => !rackNameByWineId[w.id] && !locationWineIds.has(w.id));
+  const unplacedWines = wines.filter((w) => !rackNameByWineId[w.id] && !locationWineIds.has(w.id) && !w.storage_location_id);
 
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
@@ -195,7 +203,7 @@ export default function RacksScreen() {
       body: "Does this location have a horizontal & vertical grid layout you'd like to replicate?",
       buttons: [
         { text: 'Yes', onPress: () => handleAddType('rack') },
-        { text: 'No', onPress: () => showAlert({ title: 'Coming soon', body: 'Photo-a-space locations are on the way — we\'ll have it ready for you shortly.' }) },
+        { text: 'No', onPress: () => router.push('/cellar/storage-location/new' as any) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
@@ -286,13 +294,25 @@ export default function RacksScreen() {
 
           {/* Other Home Storage Locations — the user's own free-form home
               places (shed, under the bed…). A distinct concept from the Cellar
-              List "Locations" filter, so those are NOT shown here. Just the
-              permanent "+ Add" tile until this feature is built out. */}
+              List "Locations" filter, so those are NOT shown here. */}
           <Text style={styles.blockHeader}>Other Home Storage Locations</Text>
           <Text style={styles.blockBlurb}>
             Add your own locations: In the Shed, Under the bed, etc.
           </Text>
+          {storageLocations.length > 0 && <Text style={styles.swipeHint}>Swipe to see all →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+            {storageLocations.map((loc) => (
+              <TouchableOpacity
+                key={loc.id}
+                style={styles.storageCard}
+                onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.storageCardType}>Location</Text>
+                <Text style={styles.storageCardName} numberOfLines={2}>{loc.name}</Text>
+                <Text style={styles.storageCardCount}>{bottleLabel(loc.wineCount ?? 0)}</Text>
+              </TouchableOpacity>
+            ))}
             <TouchableOpacity style={styles.addTile} onPress={handleAddLocationPrompt} activeOpacity={0.85}>
               <Text style={styles.addTilePlus}>+ Add</Text>
             </TouchableOpacity>

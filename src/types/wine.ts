@@ -184,6 +184,11 @@ export interface CellarWine {
   tasting_notes: string | null;
   grape_variety: string | null;
   label_image_path: string | null;
+  // Migration 064. The home-storage location (non-grid, e.g. "the shed") this
+  // wine physically lives in, if any. Distinct from rack placement and from the
+  // Cellar List "Locations" filter. Optional (nullable column, DB-defaulted) so
+  // wine-insert call sites don't all need to set it.
+  storage_location_id?: string | null;
   user_notes: string | null;
   // Migration 043. The user's WRITTEN REVIEW — sharable to community
   // and outside the app. Distinct from user_notes (Personal Notes,
@@ -220,6 +225,18 @@ export interface CellarWine {
   bottle_size_ml: number;
   created_at: string;
   updated_at: string;
+}
+
+// Home storage location (migration 064) — a non-grid space the user photographs
+// and fills with a loose list of wines (via cellar_wines.storage_location_id).
+export interface StorageLocation {
+  id: string;
+  user_id: string;
+  name: string;
+  photo_path: string | null;
+  created_at: string;
+  // Convenience count of wines filed here, when the query provides it.
+  wineCount?: number;
 }
 
 // Rack types

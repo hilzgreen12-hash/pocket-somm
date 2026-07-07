@@ -94,7 +94,7 @@ export default function LabelResultsScreen() {
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
-  const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType } = useRackStore();
+  const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
@@ -423,6 +423,24 @@ export default function LabelResultsScreen() {
   }
 
   async function performSaveFlow(savedWineId: string, mode: 'new' | 'merge', baseQuantity: number) {
+    // Home storage location: the label flow was entered from a location's "add
+    // a wine" button (context 'add-location' — the gate makes a stale pending id
+    // harmless on any other flow). File the saved wine in and return to it.
+    if (pendingStorageLocationId && context === 'add-location') {
+      const locQty = Math.max(1, bottleCount);
+      await updateWine.mutateAsync({
+        id: savedWineId,
+        updates: { quantity: mode === 'merge' ? baseQuantity + locQty : locQty, storage_location_id: pendingStorageLocationId },
+      });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines', pendingStorageLocationId] });
+      qc.invalidateQueries({ queryKey: ['storage-locations', session?.user.id] });
+      const dest = pendingStorageLocationId;
+      setPendingStorageLocationId(null);
+      setAddingToCellar(false);
+      router.replace(`/cellar/storage-location/${dest}` as any);
+      return;
+    }
     if (pendingSlot) {
       // Soft warning when the bottle's size doesn't match the slot's
       // expected size. Fires once before placement runs; user can
@@ -1136,7 +1154,7 @@ export default function LabelResultsScreen() {
               </>
             )}
 
-            {!pendingSlot && (
+            {!pendingSlot && !pendingStorageLocationId && (
               <>
                 <Text style={styles.modalLabel}>Where should this live?</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storageChipsScroll} contentContainerStyle={styles.storageChips} keyboardShouldPersistTaps="handled">
