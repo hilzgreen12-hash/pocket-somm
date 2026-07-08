@@ -3,8 +3,10 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { router, useLocalSearchParams } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
+import { useAuth } from '../../src/hooks/useAuth';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { showAlert } from '../../src/components/AppAlert';
 import { RecipeShareCard } from '../../src/components/RecipeShareCard';
@@ -25,6 +27,7 @@ import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
 //   - Saved cookbook: ?sessionId=X reads from useChefLabelHistory
 export default function RecipeFullScreen() {
   const { index, sessionId } = useLocalSearchParams<{ index?: string; sessionId?: string }>();
+  const { session } = useAuth();
   const { wineDetailsConfirmed, pairings: freshPairings } = useLabelStore();
   const { sessions: labelSessions } = useChefLabelHistory();
   const shareCardRef = useRef<View>(null);
@@ -59,7 +62,7 @@ export default function RecipeFullScreen() {
       const Print = require('expo-print');
       const { uri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: pairing.dishName, UTI: 'com.adobe.pdf' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), mimeType: 'application/pdf' });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

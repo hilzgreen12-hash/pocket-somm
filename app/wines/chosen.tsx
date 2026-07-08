@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -471,11 +472,7 @@ export default function ChosenWinesScreen() {
       await new Promise((r) => setTimeout(r, 250));
       if (reviewShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(reviewShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: 'Share my wine review',
-          UTI: 'public.png',
-        });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
         return;
       }
       // Plain-text fallback — same shape as the previous behaviour so

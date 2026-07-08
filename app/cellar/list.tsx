@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Share } from 'react-native';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -512,7 +513,7 @@ export default function FullCellarListScreen() {
       await new Promise((r) => setTimeout(r, 300));
       if (shareListRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareListRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share my cellar list', UTI: 'public.png' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
         return;
       }
       // Plain-text fallback for devices without share-sheet support.

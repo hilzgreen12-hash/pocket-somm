@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../../src/hooks/useAuth';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, type LineupWine } from '../../../src/api/lineups';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
 import { AddChosenWineModal } from '../../../src/components/AddChosenWineModal';
@@ -17,6 +19,7 @@ import { fonts } from '../../../src/constants/fonts';
 export default function LineupDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const { session } = useAuth();
 
   const { data: lineup, isLoading } = useQuery({
     queryKey: ['lineup', id],
@@ -96,7 +99,7 @@ export default function LineupDetailScreen() {
       await new Promise((r) => setTimeout(r, 150));
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share this lineup', UTI: 'public.png' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
       }
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });

@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
@@ -242,7 +243,7 @@ export function RestaurantReviewModal({
       const restaurant = restaurantName || 'Restaurant visit';
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: `Share ${restaurant}`, UTI: 'public.png' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
         return;
       }
       // Plain-text fallback for devices without share-sheet support.

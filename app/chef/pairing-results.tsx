@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, Share } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
@@ -141,7 +142,7 @@ export default function PairingResultsScreen() {
       await new Promise((r) => setTimeout(r, 60)); // one paint before snapshot
       if (shareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share your wine pairing', UTI: 'public.png' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
         return;
       }
       await Share.share({ message: `My Vinster wine pairing for ${titleCase(dish)}${VINSTER_TEXT_SHARE_FOOTER}` });
