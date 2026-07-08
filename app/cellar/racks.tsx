@@ -219,7 +219,7 @@ export default function RacksScreen() {
               List "Locations" filter, so those are NOT shown here. */}
           <Text style={styles.blockHeader}>Other Home Storage Locations</Text>
           <Text style={styles.blockBlurb}>
-            Add your own locations: In the Shed, Under the bed, etc.
+            Add bespoke locations: In the shed, under the bed…
           </Text>
           {storageLocations.length > 0 && <Text style={styles.swipeHint}>Swipe to see all, and add more →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>

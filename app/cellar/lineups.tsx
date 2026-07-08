@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput, useWindowDimensions } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { router } from 'expo-router';
@@ -243,7 +244,7 @@ export default function LineupLibraryScreen() {
       await new Promise((r) => setTimeout(r, 150)); // let the photo settle after load
       if (shareCardRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareCardRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: 'Share this lineup', UTI: 'public.png' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
       }
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });

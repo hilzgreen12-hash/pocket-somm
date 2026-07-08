@@ -6,6 +6,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -220,11 +221,7 @@ export default function PersonalityScreen() {
           result: 'tmpfile',
         });
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, {
-            mimeType: 'image/png',
-            dialogTitle: heading,
-            UTI: 'public.png',
-          });
+          await shareResult(uri, { sharerName: sharerNameFrom(session) });
           return;
         }
       }

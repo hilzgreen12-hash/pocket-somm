@@ -8,6 +8,7 @@ import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useScanHistory, cacheScanLocally } from '../../src/hooks/useScanHistory';
@@ -530,11 +531,7 @@ export default function ResultsScreen() {
           result: 'tmpfile',
         });
         if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(uri, {
-            mimeType: 'image/png',
-            dialogTitle: 'Share Vinster recommendations',
-            UTI: 'public.png',
-          });
+          await shareResult(uri, { sharerName: sharerNameFrom(session) });
           return;
         }
       }

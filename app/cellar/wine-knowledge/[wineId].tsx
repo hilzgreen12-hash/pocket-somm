@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCellar, useWishList } from '../../../src/hooks/useCellar';
+import { useAuth } from '../../../src/hooks/useAuth';
 import { getWineKnowledge } from '../../../src/api/label';
 import { WineKnowledgeShareCard } from '../../../src/components/WineKnowledgeShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../../src/constants/share';
@@ -22,6 +24,7 @@ export default function WineKnowledgeScreen() {
   }>();
   const { wines, updateWine } = useCellar();
   const { wines: wishlistWines } = useWishList();
+  const { session } = useAuth();
   const cellarWine = wines.find((w) => w.id === params.wineId) ?? wishlistWines.find((w) => w.id === params.wineId) ?? null;
 
   const info = {
@@ -100,11 +103,7 @@ export default function WineKnowledgeScreen() {
       await new Promise((r) => setTimeout(r, 250));
       if (shareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: 'Share wine knowledge',
-          UTI: 'public.png',
-        });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
         return;
       }
       // Plain-text fallback for devices without share-sheet support.

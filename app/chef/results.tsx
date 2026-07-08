@@ -17,6 +17,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
 
 function PairingCard({
@@ -259,11 +260,7 @@ export default function ChefResultsScreen() {
       const Print = require('expo-print');
       const { uri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
       if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(uri, {
-          mimeType: 'application/pdf',
-          dialogTitle: `Share ${pairing.dishName}`,
-          UTI: 'com.adobe.pdf',
-        });
+        await shareResult(uri, { sharerName: sharerNameFrom(session), mimeType: 'application/pdf' });
       } else {
         showAlert({ title: 'Sharing unavailable', body: 'This device cannot open the share sheet.' });
       }

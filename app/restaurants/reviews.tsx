@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Sharing from 'expo-sharing';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useScanHistory } from '../../src/hooks/useScanHistory';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -121,11 +122,7 @@ export default function RestaurantReviewsScreen() {
       await new Promise((r) => setTimeout(r, 250));
       if (restaurantShareRef.current && (await Sharing.isAvailableAsync())) {
         const uri = await captureRef(restaurantShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await Sharing.shareAsync(uri, {
-          mimeType: 'image/png',
-          dialogTitle: `Share ${restaurant}`,
-          UTI: 'public.png',
-        });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
         return;
       }
 
