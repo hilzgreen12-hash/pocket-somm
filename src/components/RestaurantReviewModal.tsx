@@ -483,7 +483,7 @@ export function RestaurantReviewModal({
           <RestaurantReviewShareCard
             ref={shareCardRef}
             restaurantName={restaurantName || 'Restaurant visit'}
-            city={city?.trim() || null}
+            city={cityValue.trim() || null}
             date={date ?? null}
             ratingOverall={overall}
             ratingFood={food}
