@@ -428,6 +428,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               saving={saving || update.isPending}
               onSave={handleSave}
               saveLabel="Save Review"
+              goldSave
               onDelete={handleDelete}
               deleteLabel={remove.isPending ? 'Deleting…' : 'Delete this review'}
             />
@@ -489,7 +490,7 @@ const styles = StyleSheet.create({
   topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   header: { alignItems: 'center', marginBottom: spacing.sm },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
+  region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: 2 },
   // Date · location stamp beneath region/grape — the "where & when" of the review.
   stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
   grape: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 2 },

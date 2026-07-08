@@ -56,7 +56,7 @@ export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes,
-  drinkingWindow, onDrinkingWindow,
+  discoveredAt, onDiscoveredAt, drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
@@ -79,6 +79,16 @@ export function WineReviewFields({
         placeholder="e.g. 92"
         placeholderTextColor={colors.textMuted}
         maxLength={3}
+      />
+
+      {/* Discovered At — below the score, above the review. */}
+      <Text style={styles.fieldLabel}>Discovered At</Text>
+      <TextInput
+        style={styles.input}
+        value={discoveredAt ?? ''}
+        onChangeText={onDiscoveredAt}
+        placeholder="Restaurant, home, friend's place…"
+        placeholderTextColor={colors.textMuted}
       />
 
       {/* Your Review */}
@@ -222,9 +232,11 @@ const styles = StyleSheet.create({
   actionPairRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   pairBtn: { flex: 1, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   goldBtn: { borderWidth: 1, borderColor: colors.gold },
-  goldBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center' },
+  // Button text reduced to the refined "Drinking Window — your call" label
+  // treatment: small, uppercase, letter-spaced (rather than big heading text).
+  goldBtnText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, textAlign: 'center', textTransform: 'uppercase', letterSpacing: 0.5 },
   saveButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.sm },
-  saveButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.4 },
+  saveButtonText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 0.5 },
   // After a successful save the button turns gold and reads "Review Saved".
   saveButtonSaved: { borderColor: colors.gold },
   saveButtonTextSaved: { color: colors.gold },
