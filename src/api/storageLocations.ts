@@ -11,18 +11,24 @@ const LIST_COLS = 'id, user_id, name, photo_path, created_at';
 export async function fetchStorageLocations(userId: string): Promise<StorageLocation[]> {
   const { data, error } = await supabase
     .from('storage_locations')
-    .select(`${LIST_COLS}, cellar_wines(count)`)
+    // Pull the (non-archived) wines' quantities so the card shows a real BOTTLE
+    // count — the old embedded count(*) counted rows and included archived wines.
+    .select(`${LIST_COLS}, cellar_wines(quantity, archived_at)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((r: any) => ({
-    id: r.id,
-    user_id: r.user_id,
-    name: r.name,
-    photo_path: r.photo_path,
-    created_at: r.created_at,
-    wineCount: Array.isArray(r.cellar_wines) ? (r.cellar_wines[0]?.count ?? 0) : 0,
-  }));
+  return (data ?? []).map((r: any) => {
+    const wines: Array<{ quantity?: number | null; archived_at?: string | null }> = Array.isArray(r.cellar_wines) ? r.cellar_wines : [];
+    const wineCount = wines.filter((w) => !w.archived_at).reduce((sum, w) => sum + (w.quantity ?? 1), 0);
+    return {
+      id: r.id,
+      user_id: r.user_id,
+      name: r.name,
+      photo_path: r.photo_path,
+      created_at: r.created_at,
+      wineCount,
+    };
+  });
 }
 
 export async function fetchStorageLocation(id: string): Promise<StorageLocation | null> {
@@ -56,8 +62,14 @@ export async function renameStorageLocation(id: string, name: string): Promise<v
 }
 
 export async function deleteStorageLocation(id: string): Promise<void> {
+  // Grab the photo path before deleting the row so we can clean up Storage too.
+  const { data } = await supabase.from('storage_locations').select('photo_path').eq('id', id).maybeSingle();
   const { error } = await supabase.from('storage_locations').delete().eq('id', id);
   if (error) throw error;
+  const path = (data as { photo_path?: string | null } | null)?.photo_path;
+  if (path) {
+    try { await supabase.storage.from('wine-labels').remove([path]); } catch { /* best-effort cleanup */ }
+  }
 }
 
 // Wines physically filed into this location (newest first).

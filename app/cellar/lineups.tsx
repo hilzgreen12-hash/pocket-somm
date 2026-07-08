@@ -212,7 +212,7 @@ export default function LineupLibraryScreen() {
   // Share the lineup as a branded image (photo + date stamp + note). Resolves a
   // fresh signed URL, mounts the off-screen card, and snapshots it once the
   // photo has loaded (captureAndShareLineup, fired by the card's onImageReady).
-  const [shareData, setShareData] = useState<{ url: string; date: string; note: string } | null>(null);
+  const [shareData, setShareData] = useState<{ url: string; date: string; note: string; location?: string | null } | null>(null);
   const [sharingNote, setSharingNote] = useState(false);
   const shareCardRef = useRef<View>(null);
   const capturedRef = useRef(false);
@@ -228,6 +228,7 @@ export default function LineupLibraryScreen() {
         url,
         date: new Date(noteTarget.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }),
         note: noteDraft.trim() || (noteTarget.note ?? ''),
+        location: noteTarget.city ?? null,
       });
     } catch (err) {
       setSharingNote(false);
@@ -425,6 +426,7 @@ export default function LineupLibraryScreen() {
             ref={shareCardRef}
             imageUrl={shareData.url}
             date={shareData.date}
+            location={shareData.location}
             note={shareData.note}
             onImageReady={captureAndShareLineup}
           />

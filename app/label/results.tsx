@@ -996,7 +996,7 @@ export default function LabelResultsScreen() {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/(tabs)/cellar')}>
+          <TouchableOpacity style={styles.discardButton} onPress={() => { setPendingStorageLocationId(null); router.replace('/(tabs)/cellar'); }}>
             <Text style={styles.discardText}>Discard</Text>
           </TouchableOpacity>
         </>
@@ -1154,7 +1154,10 @@ export default function LabelResultsScreen() {
               </>
             )}
 
-            {!pendingSlot && !pendingStorageLocationId && (
+            {/* Destination picker: hidden only when we're actually filing into a
+                home storage location (context gate), so a stale
+                pendingStorageLocationId can never hide it on a normal add. */}
+            {!pendingSlot && context !== 'add-location' && (
               <>
                 <Text style={styles.modalLabel}>Where should this live?</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.storageChipsScroll} contentContainerStyle={styles.storageChips} keyboardShouldPersistTaps="handled">
@@ -1250,6 +1253,18 @@ export default function LabelResultsScreen() {
                     </View>
                   </>
                 )}
+              </>
+            )}
+
+            {/* Home storage location: destination is fixed (the location), but a
+                bottle count still matters — e.g. photographing a whole case. */}
+            {context === 'add-location' && (
+              <>
+                <Text style={styles.modalLabel}>Number of bottles</Text>
+                <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('count')} activeOpacity={0.7}>
+                  <Text style={styles.fieldSelectValue}>{bottleCount}</Text>
+                  <Text style={styles.fieldSelectArrow}>▾</Text>
+                </TouchableOpacity>
               </>
             )}
 
