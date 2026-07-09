@@ -1,10 +1,12 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Link, router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../src/api/supabase';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../../src/services/googleAuth';
+import { signInWithApple, isAppleAuthAvailable, isAppleSignInCancelled } from '../../src/services/appleAuth';
 import { colors, typography, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -16,6 +18,22 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => { isAppleAuthAvailable().then(setAppleAvailable); }, []);
+
+  async function handleApple() {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithApple();
+      router.replace('/');
+    } catch (e) {
+      if (!isAppleSignInCancelled(e)) setError(e instanceof Error ? e.message : 'Could not sign in with Apple.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleGoogle() {
     setError('');
@@ -151,6 +169,16 @@ export default function SignUp() {
         <Text style={styles.googleText}>Continue with Google</Text>
       </TouchableOpacity>
 
+      {Platform.OS === 'ios' && appleAvailable ? (
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+          cornerRadius={8}
+          style={styles.appleButton}
+          onPress={handleApple}
+        />
+      ) : null}
+
       <Link href="/(auth)/sign-in" style={styles.link}>
         Already have an account? Sign in
       </Link>
@@ -196,6 +224,7 @@ const styles = StyleSheet.create({
   googleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: spacing.md, marginTop: spacing.xs },
   googleG: { fontFamily: fonts.headingBold, fontSize: 17, color: '#FFFFFF' },
   googleText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
+  appleButton: { height: 50, marginTop: spacing.sm },
   button: {
     borderWidth: 1,
     borderColor: colors.gold,
