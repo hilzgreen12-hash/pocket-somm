@@ -44,7 +44,7 @@ export default function LineupDetailScreen() {
   // Review a wine from the lineup — opens the same Add-a-Review modal, pre-filled.
   const [reviewWine, setReviewWine] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null } | null>(null);
 
-  // Branded share (photo + date + note), mirroring Your Lineup Archive.
+  // Branded share (photo + date + note), mirroring Your Lineup Library.
   const [shareData, setShareData] = useState<{ url: string; date: string; note: string } | null>(null);
   const [sharing, setSharing] = useState(false);
   const shareCardRef = useRef<View>(null);

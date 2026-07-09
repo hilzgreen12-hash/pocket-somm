@@ -210,13 +210,16 @@ export default function YouScreen() {
 
       <View style={styles.block}>
         <View style={styles.sketchHeaderRow}>
-          <Text style={styles.sketchHeader}>Your Lineup Archive</Text>
+          <Text style={styles.sketchHeader}>Your Library</Text>
           <TouchableOpacity onPress={() => setLineupInfoOpen(true)} activeOpacity={0.7}>
             <Text style={styles.whatsThis}>what's this?</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/lineups')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Lineup Archive</Text>
+          <Text style={styles.prefButtonText}>Your Lineup Library</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/labels')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Label Library</Text>
         </TouchableOpacity>
       </View>
 
@@ -398,9 +401,9 @@ export default function YouScreen() {
       <Modal visible={lineupInfoOpen} transparent animationType="fade" onRequestClose={() => setLineupInfoOpen(false)}>
         <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setLineupInfoOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>Your Lineup Archive</Text>
+            <Text style={styles.confirmTitle}>Your Library</Text>
             <Text style={styles.confirmBody}>
-              A photo diary of the bottles you drink. Start it from Archive a Night — photograph a lineup of up to 8 bottles and Vinster matches them to your cellar so you can archive them in one go — or by adding a lineup directly. Every lineup photo is kept here, where you can add a comment and share it with friends.
+              Your Library keeps two photo collections. Your Lineup Library is a diary of the bottles you drink — photograph a lineup (via Archive a Night or by adding one) to note and share it. Your Label Library saves individual wine labels you scan, each stamped with the date and place, so you can revisit a wine's intel and your review any time.
             </Text>
             <TouchableOpacity style={styles.confirmGoldBtn} onPress={() => setLineupInfoOpen(false)}>
               <Text style={styles.confirmGoldBtnText}>Got it</Text>
