@@ -4,6 +4,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Link, router } from 'expo-router';
 import * as Linking from 'expo-linking';
 import { supabase } from '../../src/api/supabase';
+import { signInWithGoogle, isGoogleSignInCancelled } from '../../src/services/googleAuth';
 import { colors, typography, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -15,6 +16,19 @@ export default function SignUp() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [confirmed, setConfirmed] = useState(false);
+
+  async function handleGoogle() {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithGoogle();
+      router.replace('/');
+    } catch (e) {
+      if (!isGoogleSignInCancelled(e)) setError(e instanceof Error ? e.message : 'Could not sign in with Google.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSignUp() {
     setError('');
@@ -126,6 +140,17 @@ export default function SignUp() {
         <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
       </TouchableOpacity>
 
+      <View style={styles.orRow}>
+        <View style={styles.orLine} />
+        <Text style={styles.orText}>or</Text>
+        <View style={styles.orLine} />
+      </View>
+
+      <TouchableOpacity style={styles.googleButton} onPress={handleGoogle} disabled={loading} activeOpacity={0.85}>
+        <Text style={styles.googleG}>G</Text>
+        <Text style={styles.googleText}>Continue with Google</Text>
+      </TouchableOpacity>
+
       <Link href="/(auth)/sign-in" style={styles.link}>
         Already have an account? Sign in
       </Link>
@@ -165,6 +190,12 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: 'transparent',
   },
+  orRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.lg, marginBottom: spacing.sm },
+  orLine: { flex: 1, height: 1, backgroundColor: 'rgba(255,255,255,0.15)' },
+  orText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
+  googleButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderColor: 'rgba(255,255,255,0.5)', borderRadius: 8, padding: spacing.md, marginTop: spacing.xs },
+  googleG: { fontFamily: fonts.headingBold, fontSize: 17, color: '#FFFFFF' },
+  googleText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
   button: {
     borderWidth: 1,
     borderColor: colors.gold,
