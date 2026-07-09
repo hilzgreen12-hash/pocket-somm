@@ -284,10 +284,10 @@ const styles = StyleSheet.create({
   // Cormorant — section header
   subHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   // Two-line page intro beneath the header: a lead line then the detail.
-  pageIntroLead: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  pageIntro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 6, paddingBottom: spacing.md },
+  pageIntroLead: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  pageIntro: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 6, paddingBottom: spacing.md },
   // Left-aligned section subheader (Wine Racks & Fridges / Other Locations).
-  blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 4 },
+  blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 4 },
   blockBlurb: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   // "Swipe to see all →" — matches the Full Cellar List filter hint.
   swipeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
   addButtonGoldText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   // New-user intro blurb, shown when no racks exist yet.
   introBlurb: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg },
-  divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  divider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.sm },
   cellarListSection: { paddingHorizontal: spacing.xl },
   fullListButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Cormorant — button text
