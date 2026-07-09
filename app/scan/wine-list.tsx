@@ -190,10 +190,10 @@ export default function WineListScreen() {
         if (!result.canceled && result.assets.length > 0) {
           setPreferences(buildPreferences());
           if (result.assets.length === 1) {
-            setImage(result.assets[0].uri);
+            setImage(result.assets[0].uri, 'upload');
             router.push('/scan/preview');
           } else {
-            setImageUris(result.assets.map((a) => a.uri));
+            setImageUris(result.assets.map((a) => a.uri), 'upload');
             router.push('/scan/extracting');
           }
         }
