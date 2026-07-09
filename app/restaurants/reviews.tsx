@@ -291,12 +291,10 @@ export default function RestaurantReviewsScreen() {
     return { chosenBySession: bySession, chosenByRestaurant: byRestaurant };
   }, [chosenWines]);
 
-  function findChosenForVisit(item: ScanArchiveItem): ChosenWine[] {
-    // Prefer the precise FK lookup if any wines were saved with this
-    // session_id. Skips the fuzzy fallback entirely in that case.
-    const linked = chosenBySession.get(item.id);
-    if (linked && linked.length > 0) return linked;
-
+  // Null-session (legacy / unlinked) bottles that plausibly belong to this
+  // visit — matched by restaurant name + city, and by time proximity so a
+  // restaurant's separate visits don't all claim the same loose bottle.
+  function fallbackForVisit(item: ScanArchiveItem): ChosenWine[] {
     const key = normName(item.restaurantName);
     if (!key) return [];
     const candidates = chosenByRestaurant.get(key) ?? [];
@@ -309,17 +307,34 @@ export default function RestaurantReviewsScreen() {
     });
     const pool = sameCity.length > 0 ? sameCity : candidates;
     const visitTime = new Date(item.capturedAt).getTime();
+    const DAY = 24 * 60 * 60 * 1000;
+    // Everything within ~a day of the visit belongs to it; otherwise fall back
+    // to the single closest so a lone legacy bottle still shows somewhere.
+    const near = pool.filter((c) => Math.abs(new Date(c.chosen_at).getTime() - visitTime) <= DAY);
+    if (near.length > 0) return near;
     let closest: ChosenWine | null = null;
     let closestDelta = Infinity;
     for (const c of pool) {
-      const t = new Date(c.chosen_at).getTime();
-      const delta = Math.abs(t - visitTime);
-      if (delta < closestDelta) {
-        closestDelta = delta;
-        closest = c;
-      }
+      const delta = Math.abs(new Date(c.chosen_at).getTime() - visitTime);
+      if (delta < closestDelta) { closestDelta = delta; closest = c; }
     }
     return closest ? [closest] : [];
+  }
+
+  // A visit's bottles = FK-linked rows (definitely this visit) MERGED with any
+  // matching null-session legacy bottles. Merging — rather than the old
+  // either/or — is what stops an added bottle (which sets the session FK) from
+  // hiding a previously-shown list pick that was never FK-linked.
+  function findChosenForVisit(item: ScanArchiveItem): ChosenWine[] {
+    const linked = chosenBySession.get(item.id) ?? [];
+    const seen = new Set(linked.map((c) => c.id));
+    const merged = [...linked];
+    for (const c of fallbackForVisit(item)) {
+      if (!seen.has(c.id)) { merged.push(c); seen.add(c.id); }
+    }
+    // Chronological — the order they were drunk/added.
+    merged.sort((a, b) => new Date(a.chosen_at).getTime() - new Date(b.chosen_at).getTime());
+    return merged;
   }
 
   const reviewed = archive.filter((a) => (a.restaurantName && a.restaurantName.trim()) || (a.restaurantNote && a.restaurantNote.trim()));

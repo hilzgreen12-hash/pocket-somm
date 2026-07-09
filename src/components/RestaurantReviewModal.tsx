@@ -11,6 +11,7 @@ import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
 import { addSessionBottle } from '../api/chosenWines';
+import { archiveCellarWine } from '../api/cellar';
 import { prepareImageBase64, scanLabel } from '../api/label';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { useCellar } from '../hooks/useCellar';
@@ -97,6 +98,9 @@ export function RestaurantReviewModal({
   const [cbVintage, setCbVintage] = useState('');
   // "I brought this" — off the restaurant's list. Pre-set true for cellar picks.
   const [cbBrought, setCbBrought] = useState(false);
+  // Set when this bottle was picked from the cellar, so after adding we can
+  // offer to move that cellar wine to the archive. Null for scan/upload/manual.
+  const [cbCellarWineId, setCbCellarWineId] = useState<string | null>(null);
 
   function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }, brought: boolean) {
     setCbProducer(prefill.producer ?? '');
@@ -107,11 +111,12 @@ export function RestaurantReviewModal({
     setConfirmOpen(true);
   }
 
-  function chooseManual() { setBottleChooserOpen(false); openConfirm({}, false); }
+  function chooseManual() { setBottleChooserOpen(false); setCbCellarWineId(null); openConfirm({}, false); }
   function chooseCellar() { setBottleChooserOpen(false); setCellarSearch(''); setCellarPickerOpen(true); }
 
   async function chooseFromImage(source: 'camera' | 'library') {
     setBottleChooserOpen(false);
+    setCbCellarWineId(null);
     if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
     try {
       const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
@@ -164,6 +169,27 @@ export function RestaurantReviewModal({
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       setConfirmOpen(false);
+      // Added from the cellar → offer to move that bottle to the archive (it's
+      // been drunk, after all). Capture the id before clearing state.
+      const cellarId = cbCellarWineId;
+      setCbCellarWineId(null);
+      if (cellarId) {
+        showAlert({
+          title: 'Move to your archive?',
+          body: 'Would you like Vinster to move this wine from your cellar list to your archive?',
+          buttons: [
+            { text: 'Keep in cellar', style: 'cancel' },
+            {
+              text: 'Move to archive',
+              onPress: () => {
+                archiveCellarWine(cellarId)
+                  .then(() => qc.invalidateQueries({ queryKey: ['cellar', session.user.id] }))
+                  .catch((e) => showAlert({ title: 'Could not archive', body: e instanceof Error ? e.message : 'Please try again.' }));
+              },
+            },
+          ],
+        });
+      }
     } catch (err) {
       showAlert({ title: 'Could not add bottle', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -281,8 +307,11 @@ export function RestaurantReviewModal({
       <View key={w._idx} style={styles.wineRow}>
         <View style={styles.wineLineRow}>
           <Text style={styles.wineLine}>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}</Text>
-          {/* Quiet "brought" tag — the list-vs-off-list nuance without the chore. */}
-          {w.source === 'other' ? <Text style={styles.broughtTag}>brought</Text> : null}
+          {/* Quiet origin tag: "brought" (off-list) vs "From List" (chosen off
+              the restaurant's list) — the nuance without the chore. */}
+          {w.source === 'other'
+            ? <Text style={styles.broughtTag}>brought</Text>
+            : <Text style={styles.fromListTag}>From List</Text>}
         </View>
         {onReviewWine ? (
           <TouchableOpacity onPress={() => onReviewWine(w._idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
@@ -417,7 +446,7 @@ export function RestaurantReviewModal({
                     <TouchableOpacity
                       key={w.id}
                       style={styles.cellarRow}
-                      onPress={() => { setCellarPickerOpen(false); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }, true); }}
+                      onPress={() => { setCellarPickerOpen(false); setCbCellarWineId(w.id); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }, true); }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.cellarRowName} numberOfLines={1}>{w.wine_name}</Text>
@@ -568,6 +597,9 @@ const styles = StyleSheet.create({
   wineRow: { gap: 2 },
   wineLineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
   broughtTag: { fontFamily: fonts.bodySemibold, fontSize: 10.5, color: colors.gold, letterSpacing: 0.4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
+  // "From List" — same bubble treatment as "brought", for wines chosen off the
+  // restaurant's list.
+  fromListTag: { fontFamily: fonts.bodySemibold, fontSize: 10.5, color: colors.gold, letterSpacing: 0.4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
   broughtToggleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
   broughtCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   broughtCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
