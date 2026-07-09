@@ -22,6 +22,7 @@ import { showAlert } from './AppAlert';
 import { useLabelStore } from '../stores/labelStore';
 import { WineReviewFields } from './WineReviewFields';
 import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
+import { captureCity } from '../utils/captureCity';
 import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -44,7 +45,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [tastingNote, setTastingNote] = useState('');      // Your Review
   const [personalNotes, setPersonalNotes] = useState('');  // Personal Notes (other_observations)
   const [purchasePrice, setPurchasePrice] = useState('');
-  const [discoveredAt, setDiscoveredAt] = useState('');
+  const [locCity, setLocCity] = useState('');
+  const [locName, setLocName] = useState('');
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
@@ -65,7 +67,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
       setTastingNote(wine.tasting_note ?? '');
       setPersonalNotes(wine.other_observations ?? '');
       setPurchasePrice(wine.purchase_price != null ? String(wine.purchase_price) : '');
-      setDiscoveredAt([wine.restaurant_name, wine.city].filter(Boolean).join(', '));
+      setLocCity(wine.city ?? '');
+      setLocName(wine.restaurant_name ?? '');
+      // Prefill the city from GPS when the review has none yet.
+      if (!wine.city) captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
       setDrinkingWindow(wine.user_drinking_window ?? '');
       setEstimatedValue(wine.estimated_value ?? null);
       setEstimatedValueAt(wine.estimated_value_at ?? null);
@@ -111,13 +116,11 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     if (!wine) return;
     const parsed = purchasePrice.trim() ? parseFloat(purchasePrice.trim()) : NaN;
     const validPrice = Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-    // "Discovered at" is one field; split it back into restaurant + city.
-    const { restaurantName, city } = splitLocationString(discoveredAt.trim());
     await update.mutateAsync({
       id: wine.id,
       input: {
-        restaurantName,
-        city,
+        restaurantName: locName.trim(),
+        city: locCity.trim(),
         tastingNote,
         otherObservations: personalNotes,
         userScore,
@@ -419,8 +422,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               onReview={setTastingNote}
               personalNotes={personalNotes}
               onPersonalNotes={setPersonalNotes}
-              discoveredAt={discoveredAt}
-              onDiscoveredAt={setDiscoveredAt}
+              city={locCity}
+              onCity={setLocCity}
+              locationName={locName}
+              onLocationName={setLocName}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
               wishlistActive={wishlist}

@@ -13,6 +13,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
 import { splitLocationString } from '../services/reviewSync';
+import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { ChosenWine } from '../types/wine';
@@ -45,7 +46,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props
   const [vintage, setVintage] = useState('');
   const [region, setRegion] = useState('');
   // Combined "Discovered at" (restaurant + city), split on save.
-  const [discoveredAt, setDiscoveredAt] = useState('');
+  const [locCity, setLocCity] = useState('');
+  const [locName, setLocName] = useState('');
   const [listPrice, setListPrice] = useState('');
   const [tastingNote, setTastingNote] = useState('');
   const [otherObservations, setOtherObservations] = useState('');
@@ -63,8 +65,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props
       setWineName(initial?.wineName ?? '');
       setVintage(initial?.vintage != null ? String(initial.vintage) : '');
       setRegion(initial?.region ?? '');
-      setDiscoveredAt(''); setListPrice(''); setTastingNote(''); setOtherObservations('');
+      setLocCity(''); setLocName(''); setListPrice(''); setTastingNote(''); setOtherObservations('');
       setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false);
+      // Prefill the city from GPS for a fresh review.
+      captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
     }
   }, [visible]);
 
@@ -98,7 +102,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props
     const parsedVintage = trimmedVintage ? parseInt(trimmedVintage, 10) : NaN;
     const vintageNum = Number.isFinite(parsedVintage) ? parsedVintage : null;
     const dw = drinkingWindow.trim() || null;
-    const { restaurantName, city } = splitLocationString(discoveredAt.trim());
+    const restaurantName = locName.trim();
+    const city = locCity.trim();
     try {
       if (mode === 'create' || !existing) {
         await saveManual.mutateAsync({
@@ -207,8 +212,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props
               onReview={edited(setTastingNote)}
               personalNotes={otherObservations}
               onPersonalNotes={edited(setOtherObservations)}
-              discoveredAt={discoveredAt}
-              onDiscoveredAt={edited(setDiscoveredAt)}
+              city={locCity}
+              onCity={edited(setLocCity)}
+              locationName={locName}
+              onLocationName={edited(setLocName)}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}
