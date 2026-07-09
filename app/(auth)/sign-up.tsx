@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import * as AppleAuthentication from 'expo-apple-authentication';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Link, router } from 'expo-router';
 import * as Linking from 'expo-linking';
@@ -173,13 +172,9 @@ export default function SignUp() {
           </TouchableOpacity>
 
           {Platform.OS === 'ios' && appleAvailable ? (
-            <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-              cornerRadius={8}
-              style={styles.appleButton}
-              onPress={handleApple}
-            />
+            <TouchableOpacity style={styles.appleButton} onPress={handleApple} activeOpacity={0.85}>
+              <Text style={styles.googleText}>Continue with Apple</Text>
+            </TouchableOpacity>
           ) : null}
         </>
       )}
