@@ -1,5 +1,6 @@
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MicButton } from './MicButton';
+import { showAlert } from './AppAlert';
 import { formatCurrency } from '../constants/currency';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -22,10 +23,12 @@ interface Props {
   onReview: (s: string) => void;
   personalNotes: string;
   onPersonalNotes: (s: string) => void;
-  // Legacy "discovered at" — no longer rendered (location covers it), kept
-  // optional so existing callers still type-check and round-trip their value.
-  discoveredAt?: string;
-  onDiscoveredAt?: (s: string) => void;
+  // Location — an editable city (Vinster GPS-prefills it via the callers) plus a
+  // place name (restaurant / home / other). A city is required to save.
+  city: string;
+  onCity: (s: string) => void;
+  locationName: string;
+  onLocationName: (s: string) => void;
   drinkingWindow: string;
   onDrinkingWindow: (s: string) => void;
   // Optional Wish List + Add to Cellar (hidden on cellar reviews).
@@ -56,7 +59,7 @@ export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes,
-  discoveredAt, onDiscoveredAt, drinkingWindow, onDrinkingWindow,
+  city, onCity, locationName, onLocationName, drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
@@ -81,15 +84,28 @@ export function WineReviewFields({
         maxLength={3}
       />
 
-      {/* Discovered At — below the score, above the review. */}
-      <Text style={styles.fieldLabel}>Discovered At</Text>
-      <TextInput
-        style={styles.input}
-        value={discoveredAt ?? ''}
-        onChangeText={onDiscoveredAt}
-        placeholder="Restaurant, home, friend's place…"
-        placeholderTextColor={colors.textMuted}
-      />
+      {/* Location — a pin, the (GPS-prefilled) editable city, and a place name.
+          Sits below the score, above the review. */}
+      <Text style={styles.fieldLabel}>Location</Text>
+      <View style={styles.locRow}>
+        <Text style={styles.locPin}>📍</Text>
+        <View style={styles.locFields}>
+          <TextInput
+            style={styles.locInput}
+            value={city}
+            onChangeText={onCity}
+            placeholder="City"
+            placeholderTextColor={colors.textMuted}
+          />
+          <TextInput
+            style={[styles.locInput, styles.locInputSecond]}
+            value={locationName}
+            onChangeText={onLocationName}
+            placeholder="Restaurant, home, other… (optional)"
+            placeholderTextColor={colors.textMuted}
+          />
+        </View>
+      </View>
 
       {/* Your Review */}
       <View style={styles.dictateRow}>
@@ -174,7 +190,15 @@ export function WineReviewFields({
       </View>
 
       {/* Save Review — primary action at the top of the button stack. */}
-      <TouchableOpacity style={[styles.saveButton, (saved || goldSave) && styles.saveButtonSaved]} onPress={onSave} disabled={saving} activeOpacity={0.85}>
+      <TouchableOpacity
+        style={[styles.saveButton, (saved || goldSave) && styles.saveButtonSaved]}
+        onPress={() => {
+          if (!city.trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
+          onSave();
+        }}
+        disabled={saving}
+        activeOpacity={0.85}
+      >
         <Text style={[styles.saveButtonText, (saved || goldSave) && styles.saveButtonTextSaved]}>
           {saving ? 'Saving…' : saved ? (savedLabel ?? 'Review Saved') : (saveLabel ?? 'Save Review')}
         </Text>
@@ -211,6 +235,12 @@ export function WineReviewFields({
 const styles = StyleSheet.create({
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
+  // Location row: 📍 pin + stacked city / place-name inputs.
+  locRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
+  locPin: { fontSize: 18, marginTop: 8 },
+  locFields: { flex: 1, gap: spacing.sm },
+  locInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  locInputSecond: {},
   scoreInput: { width: 96 },
   noteInput: { minHeight: 90 },
   pairRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xs },

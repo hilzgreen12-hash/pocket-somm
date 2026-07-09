@@ -13,6 +13,7 @@ import { useAuth } from '../hooks/useAuth';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
+import { captureCity } from '../utils/captureCity';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
@@ -47,7 +48,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   const [personalNotes, setPersonalNotes] = useState('');
   const [score, setScore] = useState<string>('');
   const [reviewDate, setReviewDate] = useState('');
-  const [reviewLocation, setReviewLocation] = useState('');
+  const [locCity, setLocCity] = useState('');
+  const [locName, setLocName] = useState('');
   const [pricePaid, setPricePaid] = useState('');
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [saving, setSaving] = useState(false);
@@ -64,7 +66,13 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     setPersonalNotes(wine.user_notes ?? '');
     setScore(wine.review_score != null ? String(wine.review_score) : '');
     setReviewDate(wine.review_date ?? todayISO());
-    setReviewLocation(wine.review_location ?? '');
+    {
+      // review_location is one free-text field; split it into place + city.
+      const { restaurantName: seedName, city: seedCity } = splitLocationString(wine.review_location);
+      if (seedCity) { setLocName(seedName); setLocCity(seedCity); }
+      else { setLocName(''); setLocCity(seedName); }
+      if (!wine.review_location) captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
+    }
     setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
     setDrinkingWindow(wine.user_drinking_window ?? '');
     setSaved(false);
@@ -82,7 +90,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
       }
       parsedScore = Math.round(n);
     }
-    const locationTrim = reviewLocation.trim();
+    const locationTrim = [locName.trim(), locCity.trim()].filter(Boolean).join(', ');
     const dateTrim = reviewDate.trim();
     const parsedPrice = pricePaid.trim() ? parseFloat(pricePaid.trim()) : NaN;
     const priceValue = Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
@@ -271,8 +279,10 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
               onReview={(v) => { setReviewNote(v); setSaved(false); }}
               personalNotes={personalNotes}
               onPersonalNotes={(v) => { setPersonalNotes(v); setSaved(false); }}
-              discoveredAt={reviewLocation}
-              onDiscoveredAt={(v) => { setReviewLocation(v); setSaved(false); }}
+              city={locCity}
+              onCity={(v) => { setLocCity(v); setSaved(false); }}
+              locationName={locName}
+              onLocationName={(v) => { setLocName(v); setSaved(false); }}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
               saving={saving || updateWine.isPending}
@@ -302,7 +312,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
             tastingNote={reviewNote}
             otherObservations={null}
             date={reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
-            location={reviewLocation || null}
+            location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ') || null}
             isFavourite={wine.is_favourite}
           />
         </View>
