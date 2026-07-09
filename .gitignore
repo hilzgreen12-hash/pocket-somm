@@ -39,6 +39,10 @@ yarn-error.*
 .env
 .env*.local
 
+# Google Play service-account key for `eas submit --platform android` — secret,
+# never commit. Download from Play Console and save at the repo root.
+google-play-service-account.json
+
 # typescript
 *.tsbuildinfo
 
