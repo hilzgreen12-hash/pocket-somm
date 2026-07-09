@@ -307,14 +307,15 @@ export default function FullCellarListScreen() {
     setLocModal({ open: true, stage: 'choose', wineIds: [...selectedIds] });
   }
 
-  // "Add a Lineup" from the Cellar List — a lineup is placed into a rack, so we
-  // pick which rack first (racks only for now), then hand off to the rack's
-  // slot/orientation setup via ?lineup=1.
+  // "Add a Lineup" from the Cellar List — a lineup is placed into a grid, so we
+  // pick which rack or fridge first, then hand off to its slot/orientation
+  // setup via ?lineup=1.
   function startLineup() {
     setAddWineOpen(false);
-    const lineupRacks = racks.filter((r) => r.storage_type === 'rack');
+    // Racks AND fridges both hold lineups (same grid detail screen).
+    const lineupRacks = racks.filter((r) => r.storage_type === 'rack' || r.storage_type === 'fridge');
     if (lineupRacks.length === 0) {
-      showAlert({ title: 'No racks yet', body: 'Create a wine rack first, then you can add a lineup straight into it.' });
+      showAlert({ title: 'No racks or fridges yet', body: 'Create a wine rack or fridge first, then you can add a lineup straight into it.' });
       return;
     }
     if (lineupRacks.length === 1) {
@@ -323,7 +324,7 @@ export default function FullCellarListScreen() {
     }
     showAlert({
       title: 'Add a Lineup',
-      body: 'Which rack?',
+      body: "Add wine lineups to wine racks or fridges — select which one you're adding this lineup to below.",
       buttons: [
         ...lineupRacks.map((r) => ({ text: r.name, onPress: () => router.push(`/cellar/rack/${r.id}?lineup=1` as any) })),
         { text: 'Cancel', style: 'cancel' as const },

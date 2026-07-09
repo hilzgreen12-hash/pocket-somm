@@ -92,6 +92,15 @@ export default function RacksScreen() {
     winesByRack[slot.rack_id] = list;
   }
 
+  // Whole-screen tally, mirroring the Full Cellar List summary ("X wines · X
+  // bottles"): every bottle across every home storage container — racks,
+  // fridges (one placed slot = one bottle) and other locations (summed
+  // quantities) — and how many containers there are in total.
+  const rackBottles = Object.values(winesByRack).reduce((sum, list) => sum + list.length, 0);
+  const locationBottles = storageLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
+  const totalBottles = rackBottles + locationBottles;
+  const totalLocations = racks.length + storageLocations.length;
+
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
     setChooser(type);
@@ -188,6 +197,12 @@ export default function RacksScreen() {
           <Text style={styles.pageIntro}>
             Whether you've got organised storage solutions or cases under the stairs Vinster will help you keep track of what's where.
           </Text>
+
+          {totalLocations > 0 && (
+            <Text style={styles.homeSummary}>
+              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} in {totalLocations} {totalLocations === 1 ? 'Home Storage Location' : 'Home Storage Locations'}
+            </Text>
+          )}
 
           <View style={styles.divider} />
 
@@ -286,6 +301,9 @@ const styles = StyleSheet.create({
   // Two-line page intro beneath the header: a lead line then the detail.
   pageIntroLead: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   pageIntro: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 6, paddingBottom: spacing.md },
+  // Gold whole-screen tally under the blurb — same treatment as the Full
+  // Cellar List summary ("X wines · X bottles").
+  homeSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.xs },
   // Left-aligned section subheader (Wine Racks & Fridges / Other Locations).
   blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 4 },
   blockBlurb: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },

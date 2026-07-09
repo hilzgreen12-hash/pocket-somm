@@ -91,7 +91,7 @@ type Stage = 'reading' | 'recommending' | 'error';
 
 export default function ExtractingScreen() {
   useKeepAwake();
-  const { imageUri, imageUris, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
+  const { imageUri, imageUris, imageSource, preferences, setExtractedWines, setRecommendation, setError } = useScanStore();
   const { preferences: userProfile } = usePreferences();
   const [stage, setStage] = useState<Stage>('reading');
   const [errorDetail, setErrorDetail] = useState('');
@@ -116,7 +116,7 @@ export default function ExtractingScreen() {
         // allSettled so one bad image (timeout, parse failure on a
         // dense page) doesn't sink the whole batch; we surface a
         // generic error only when every image failed.
-        const results = await Promise.allSettled(imageUris.map(extractWineList));
+        const results = await Promise.allSettled(imageUris.map((u) => extractWineList(u, { source: imageSource })));
         const fulfilled: ExtractedWine[] = [];
         const failures: string[] = [];
         for (const r of results) {
@@ -137,7 +137,7 @@ export default function ExtractingScreen() {
           return true;
         });
       } else {
-        wines = await extractWineList(imageUri!);
+        wines = await extractWineList(imageUri!, { source: imageSource });
       }
 
       if (!token.active) return;
