@@ -1,11 +1,17 @@
-import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Crypto from 'expo-crypto';
-import { supabase } from '../api/supabase';
+// Sign in with Apple is temporarily DISABLED for this release. The native
+// module (expo-apple-authentication) is removed to avoid a CocoaPods build
+// conflict on iOS, and the buttons are hidden via SOCIAL_SIGN_IN_ENABLED.
+//
+// To RE-ENABLE (once device-tested + the Supabase Apple provider is set up):
+//   1. npm install expo-apple-authentication
+//   2. app.json: add "expo-apple-authentication" to plugins and
+//      ios.usesAppleSignIn: true
+//   3. Restore the real implementation from git history (hashed-nonce flow via
+//      expo-crypto -> AppleAuthentication.signInAsync -> signInWithIdToken).
+//   4. Flip SOCIAL_SIGN_IN_ENABLED in src/constants/features.ts.
 
-// Whether Sign in with Apple is usable (iOS 13+; false on Android/simulator w/o
-// an Apple account). Callers hide the button when this is false.
 export async function isAppleAuthAvailable(): Promise<boolean> {
-  try { return await AppleAuthentication.isAvailableAsync(); } catch { return false; }
+  return false;
 }
 
 export function isAppleSignInCancelled(err: unknown): boolean {
@@ -13,24 +19,6 @@ export function isAppleSignInCancelled(err: unknown): boolean {
   return e?.code === 'ERR_REQUEST_CANCELED' || e?.code === 'ERR_CANCELED';
 }
 
-// Native Sign in with Apple → exchange the identity token for a Supabase
-// session. Uses a hashed nonce (Apple embeds it in the token; Supabase re-hashes
-// the raw nonce we pass and compares) so the flow can't be replayed.
 export async function signInWithApple(): Promise<void> {
-  const rawNonce = Crypto.randomUUID();
-  const hashedNonce = await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, rawNonce);
-  const credential = await AppleAuthentication.signInAsync({
-    requestedScopes: [
-      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
-      AppleAuthentication.AppleAuthenticationScope.EMAIL,
-    ],
-    nonce: hashedNonce,
-  });
-  if (!credential.identityToken) throw new Error('Apple sign-in did not return an identity token.');
-  const { error } = await supabase.auth.signInWithIdToken({
-    provider: 'apple',
-    token: credential.identityToken,
-    nonce: rawNonce,
-  });
-  if (error) throw error;
+  throw new Error('Sign in with Apple is not available in this build.');
 }
