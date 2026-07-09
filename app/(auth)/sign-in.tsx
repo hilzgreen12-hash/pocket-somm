@@ -6,6 +6,7 @@ import { Link, router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../../src/services/googleAuth';
 import { signInWithApple, isAppleAuthAvailable, isAppleSignInCancelled } from '../../src/services/appleAuth';
+import { SOCIAL_SIGN_IN_ENABLED } from '../../src/constants/features';
 import { colors, typography, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -110,26 +111,30 @@ export default function SignIn() {
         <Text style={styles.buttonText}>{loading ? 'Signing in…' : 'Sign In'}</Text>
       </TouchableOpacity>
 
-      <View style={styles.orRow}>
-        <View style={styles.orLine} />
-        <Text style={styles.orText}>or</Text>
-        <View style={styles.orLine} />
-      </View>
+      {SOCIAL_SIGN_IN_ENABLED && (
+        <>
+          <View style={styles.orRow}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>or</Text>
+            <View style={styles.orLine} />
+          </View>
 
-      <TouchableOpacity style={styles.googleButton} onPress={handleGoogle} disabled={loading} activeOpacity={0.85}>
-        <Text style={styles.googleG}>G</Text>
-        <Text style={styles.googleText}>Continue with Google</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.googleButton} onPress={handleGoogle} disabled={loading} activeOpacity={0.85}>
+            <Text style={styles.googleG}>G</Text>
+            <Text style={styles.googleText}>Continue with Google</Text>
+          </TouchableOpacity>
 
-      {Platform.OS === 'ios' && appleAvailable ? (
-        <AppleAuthentication.AppleAuthenticationButton
-          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
-          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-          cornerRadius={8}
-          style={styles.appleButton}
-          onPress={handleApple}
-        />
-      ) : null}
+          {Platform.OS === 'ios' && appleAvailable ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={8}
+              style={styles.appleButton}
+              onPress={handleApple}
+            />
+          ) : null}
+        </>
+      )}
 
       <TouchableOpacity style={styles.guestButton} onPress={() => router.replace('/(tabs)/scan')}>
         <Text style={styles.guestText}>Continue without account</Text>

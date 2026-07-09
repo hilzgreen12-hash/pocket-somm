@@ -7,6 +7,7 @@ import * as Linking from 'expo-linking';
 import { supabase } from '../../src/api/supabase';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../../src/services/googleAuth';
 import { signInWithApple, isAppleAuthAvailable, isAppleSignInCancelled } from '../../src/services/appleAuth';
+import { SOCIAL_SIGN_IN_ENABLED } from '../../src/constants/features';
 import { colors, typography, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -158,26 +159,30 @@ export default function SignUp() {
         <Text style={styles.buttonText}>{loading ? 'Creating account…' : 'Create Account'}</Text>
       </TouchableOpacity>
 
-      <View style={styles.orRow}>
-        <View style={styles.orLine} />
-        <Text style={styles.orText}>or</Text>
-        <View style={styles.orLine} />
-      </View>
+      {SOCIAL_SIGN_IN_ENABLED && (
+        <>
+          <View style={styles.orRow}>
+            <View style={styles.orLine} />
+            <Text style={styles.orText}>or</Text>
+            <View style={styles.orLine} />
+          </View>
 
-      <TouchableOpacity style={styles.googleButton} onPress={handleGoogle} disabled={loading} activeOpacity={0.85}>
-        <Text style={styles.googleG}>G</Text>
-        <Text style={styles.googleText}>Continue with Google</Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.googleButton} onPress={handleGoogle} disabled={loading} activeOpacity={0.85}>
+            <Text style={styles.googleG}>G</Text>
+            <Text style={styles.googleText}>Continue with Google</Text>
+          </TouchableOpacity>
 
-      {Platform.OS === 'ios' && appleAvailable ? (
-        <AppleAuthentication.AppleAuthenticationButton
-          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
-          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
-          cornerRadius={8}
-          style={styles.appleButton}
-          onPress={handleApple}
-        />
-      ) : null}
+          {Platform.OS === 'ios' && appleAvailable ? (
+            <AppleAuthentication.AppleAuthenticationButton
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_UP}
+              buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+              cornerRadius={8}
+              style={styles.appleButton}
+              onPress={handleApple}
+            />
+          ) : null}
+        </>
+      )}
 
       <Link href="/(auth)/sign-in" style={styles.link}>
         Already have an account? Sign in
