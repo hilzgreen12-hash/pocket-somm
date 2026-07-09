@@ -3,16 +3,19 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { router } from 'expo-router';
+import { useLabels } from '../../src/hooks/useLabels';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { findMatchingChosenWine } from '../../src/api/chosenWines';
+import { generateWineIntel } from '../../src/services/pricing';
 import { showAlert } from '../../src/components/AppAlert';
 import { LabelThumb } from '../../src/components/LabelThumb';
-import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
-import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
-import type { LibraryFilter } from '../../src/api/libraryFilters';
-import type { CellarWine } from '../../src/types/wine';
+import { wineHeaderLine } from '../../src/utils/wineHeader';
+import type { CellarWine, LibraryLabel, WineDetailsComplete, WineIntelligence } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -32,29 +35,81 @@ const FAV_OPTIONS: { value: FavFilter; label: string }[] = [
 
 type FilterField = 'view' | 'fav' | null;
 
+function formatStamp(label: LibraryLabel): string {
+  const date = new Date(label.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const place = [label.captured_place, label.captured_city].filter(Boolean).join(', ');
+  return place ? `${date} · ${place}` : date;
+}
+
+// Build a WineDetailsComplete identity from a label row, for intel + review.
+function detailsFromLabel(label: LibraryLabel): WineDetailsComplete {
+  return {
+    producer: label.producer ?? '',
+    region: label.region ?? '',
+    wineName: label.wine_name,
+    vintage: label.vintage != null ? String(label.vintage) : '',
+  };
+}
+
+// A cellar wine already carries generated intel in its columns — snapshot it so
+// a "Select from Cellar" label can show View Wine Intel without regenerating.
+function intelFromCellar(w: CellarWine): WineIntelligence {
+  return {
+    criticScore: w.critic_score,
+    criticScoreNote: w.critic_score_note,
+    drinkingWindowFrom: w.drinking_window_from,
+    drinkingWindowTo: w.drinking_window_to,
+    drinkingWindowStatus: (w.drinking_window_status as WineIntelligence['drinkingWindowStatus']) ?? 'unknown',
+    grapeVariety: w.grape_variety,
+    tastingNotes: w.tasting_notes ?? '',
+    estimatedValue: w.estimated_value,
+    valueSource: (w.estimated_value_source as WineIntelligence['valueSource']) ?? null,
+  };
+}
+
 export default function MyLabelsScreen() {
-  useAuth();
-  const { wines, isLoading, updateWine } = useCellar();
+  const { session } = useAuth();
+  const userId = session?.user.id;
+  const { labels, isLoading, remove, setFavourite, create } = useLabels();
+  const { wines: cellarWines } = useCellar();
+  const { preferences } = usePreferences();
+  const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { width } = useWindowDimensions();
 
-  // Toggle a label as a Library favourite (distinct from a favourite wine).
-  async function toggleLabelFav(w: CellarWine) {
+  const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
+  const [favFilter, setFavFilter] = useState<FavFilter>('all');
+  const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [selectCellarOpen, setSelectCellarOpen] = useState(false);
+  const [scanningLabel, setScanningLabel] = useState(false);
+  const [generatingIntel, setGeneratingIntel] = useState(false);
+
+  const { setImage, setWineDetails, setError } = useLabelStore();
+
+  const shown = useMemo(() => {
+    if (favFilter === 'fav') return labels.filter((l) => l.is_favourite);
+    return labels;
+  }, [labels, favFilter]);
+
+  // Cellar wines that have a label photo — the pool for "Select from Cellar".
+  const cellarWithPhotos = useMemo(() => cellarWines.filter((w) => w.label_image_path), [cellarWines]);
+
+  async function toggleFav(label: LibraryLabel) {
     try {
-      await updateWine.mutateAsync({ id: w.id, updates: { label_favourite: !w.label_favourite } });
+      await setFavourite.mutateAsync({ id: label.id, value: !label.is_favourite });
     } catch (err) {
       showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
-  const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
-  const [favFilter, setFavFilter] = useState<FavFilter>('all');
-  const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+  // +Add · Scan Label — run the Scan Wine Label intel flow; the intel card
+  // offers "Add label to Label Library?" on the result.
+  function handleScan() {
+    setAddOpen(false);
+    router.push('/label/camera?context=intel');
+  }
 
-  // "+ Add" a label — reuses the standard scan/upload-a-wine path, so the new
-  // label is a full cellar wine (with its photo) and gets note/share for free.
-  const { setImage, setWineDetails, setError } = useLabelStore();
-  const [addOpen, setAddOpen] = useState(false);
-  const [scanningLabel, setScanningLabel] = useState(false);
+  // +Add · Upload a Photo — same intel flow, seeded from a gallery image.
   async function handleUpload() {
     setAddOpen(false);
     if (!(await ensureMediaPermission('library'))) return;
@@ -72,65 +127,97 @@ export default function MyLabelsScreen() {
     } finally {
       setScanningLabel(false);
     }
-    router.push('/label/confirm');
+    router.push('/label/confirm?context=intel');
   }
 
-  // Bespoke user-created filters.
-  const { filters: customFilters, create, setItems, rename, remove } = useLibraryFilters('label');
-  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
-  const [filterModalOpen, setFilterModalOpen] = useState(false);
-  const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
-  const [savingFilter, setSavingFilter] = useState(false);
-
-  // Most-recently-added first (useCellar already orders by created_at desc),
-  // limited to wines that actually have a label photo.
-  const labels = useMemo(() => {
-    let list = wines.filter((w) => w.label_image_path);
-    if (favFilter === 'fav') list = list.filter((w) => w.label_favourite);
-    if (activeCustomId) {
-      const f = customFilters.find((cf) => cf.id === activeCustomId);
-      const ids = new Set(f?.itemIds ?? []);
-      list = list.filter((w) => ids.has(w.id));
+  // +Add · Select from Cellar — copy an existing cellar wine's label (photo +
+  // identity + its intel snapshot) into the library. References the cellar
+  // photo path directly (no re-upload).
+  async function addFromCellar(w: CellarWine) {
+    setSelectCellarOpen(false);
+    try {
+      await create.mutateAsync({
+        imagePath: w.label_image_path,
+        producer: w.producer,
+        wineName: w.wine_name,
+        vintage: w.vintage,
+        region: w.region,
+        intel: intelFromCellar(w),
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not add label', body: err instanceof Error ? err.message : 'Please try again.' });
     }
-    return list;
-  }, [wines, favFilter, activeCustomId, customFilters]);
+  }
 
-  function applyCustom(id: string) { setActiveCustomId((prev) => (prev === id ? null : id)); }
-  function openCreateFilter() { setEditingFilter(null); setFilterModalOpen(true); }
-  function openFilterOptions(f: LibraryFilter) {
+  // Tap a label → View Wine Intel · View/Edit-or-Create Review · Remove.
+  async function onTapLabel(label: LibraryLabel) {
+    const header = wineHeaderLine(label.producer, label.wine_name, label.vintage) || 'This label';
+    let existingId: string | null = null;
+    try {
+      if (userId) {
+        const match = await findMatchingChosenWine(userId, { producer: label.producer, wineName: label.wine_name ?? '', vintage: label.vintage });
+        existingId = match?.id ?? null;
+      }
+    } catch { /* fall back to Create a Review */ }
     showAlert({
-      title: f.name,
-      body: 'Edit this filter’s name and labels, or delete it. Your labels stay in the library either way.',
+      title: header,
+      body: formatStamp(label),
       buttons: [
-        { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
-        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); remove.mutate(f.id); } },
+        { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
+        { text: existingId ? 'View or Edit Your Review' : 'Create a Review', onPress: () => goToReview(existingId, label) },
+        { text: 'Remove from Library', style: 'destructive', onPress: () => confirmRemove(label) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
-  async function saveFilter(name: string, ids: string[]) {
-    setSavingFilter(true);
+
+  function goToReview(existingId: string | null, label: LibraryLabel) {
+    if (existingId) { router.push(`/wines/chosen?openReview=${existingId}`); return; }
+    const q = [
+      'seedAdd=1',
+      `sp=${encodeURIComponent(label.producer ?? '')}`,
+      `sw=${encodeURIComponent(label.wine_name ?? '')}`,
+      `sv=${encodeURIComponent(label.vintage != null ? String(label.vintage) : '')}`,
+      `sr=${encodeURIComponent(label.region ?? '')}`,
+    ].join('&');
+    router.push(`/wines/chosen?${q}`);
+  }
+
+  async function handleViewIntel(label: LibraryLabel) {
+    const details = detailsFromLabel(label);
+    const ls = useLabelStore.getState();
+    if (label.intel) {
+      ls.setWineDetailsConfirmed(details);
+      ls.setIntelligence(label.intel);
+      useLastIntelStore.getState().setLast(details, label.intel);
+      router.push('/label/results?context=intel');
+      return;
+    }
+    // No snapshot (review / older label) — regenerate on demand.
+    setGeneratingIntel(true);
     try {
-      if (editingFilter) {
-        await rename.mutateAsync({ filterId: editingFilter.id, name });
-        await setItems.mutateAsync({ filterId: editingFilter.id, itemIds: ids });
-      } else {
-        await create.mutateAsync({ name, itemIds: ids });
-      }
-      setFilterModalOpen(false);
-      setEditingFilter(null);
+      const intel = await generateWineIntel(details, currency);
+      ls.setWineDetailsConfirmed(details);
+      ls.setIntelligence(intel);
+      useLastIntelStore.getState().setLast(details, intel);
+      router.push('/label/results?context=intel');
     } catch (err) {
-      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
-      setSavingFilter(false);
+      setGeneratingIntel(false);
     }
   }
-  // Items offered in the create/edit sheet — every wine that has a label photo.
-  const filterItems = useMemo(() => wines.filter((w) => w.label_image_path).map((w) => ({
-    id: w.id,
-    label: w.wine_name,
-    sublabel: [w.producer, w.vintage].filter(Boolean).join(' · ') || undefined,
-  })), [wines]);
+
+  function confirmRemove(label: LibraryLabel) {
+    showAlert({
+      title: 'Remove from Library?',
+      body: `${wineHeaderLine(label.producer, label.wine_name, label.vintage)}\n\nThis removes the label from Your Label Library. Your cellar wine and any review stay put.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(label.id) },
+      ],
+    });
+  }
 
   const cols = VIEW_COLS[viewMode];
   const gap = spacing.sm;
@@ -141,12 +228,8 @@ export default function MyLabelsScreen() {
   const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All labels';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
-    if (field === 'view') {
-      return { title: 'View', options: VIEW_OPTIONS, selected: viewMode, onSelect: (v) => setViewMode(v as ViewMode) };
-    }
-    if (field === 'fav') {
-      return { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v) => setFavFilter(v as FavFilter) };
-    }
+    if (field === 'view') return { title: 'View', options: VIEW_OPTIONS, selected: viewMode, onSelect: (v) => setViewMode(v as ViewMode) };
+    if (field === 'fav') return { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v) => setFavFilter(v as FavFilter) };
     return null;
   }
   const activeDropdown = dropdownConfig(openDropdown);
@@ -158,8 +241,6 @@ export default function MyLabelsScreen() {
       </View>
     );
   }
-
-  const hasAnyPhotos = wines.some((w) => w.label_image_path);
 
   return (
     <View style={styles.container}>
@@ -173,15 +254,14 @@ export default function MyLabelsScreen() {
         </TouchableOpacity>
       </View>
 
-      {!hasAnyPhotos ? (
+      {labels.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No labels yet</Text>
-          <Text style={styles.emptyBody}>Scan or photograph a wine and its label appears here.</Text>
+          <Text style={styles.emptyBody}>Scan a wine label — or tap + Add — and it's saved here, date and location stamped.</Text>
         </View>
       ) : (
         <>
-          {/* Default ordering + filter carousel — mirrors the Full Cellar List. */}
-          <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
+          <Text style={styles.filterHint}>Listed by Recency · Tap a label for intel & your review</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -202,59 +282,41 @@ export default function MyLabelsScreen() {
               </View>
               <Text style={[styles.filterChipValue, favFilter === 'fav' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favLabel}</Text>
             </TouchableOpacity>
-            {customFilters.map((f) => (
-              <TouchableOpacity
-                key={f.id}
-                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
-                onPress={() => applyCustom(f.id)}
-                onLongPress={() => openFilterOptions(f)}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
-              <Text style={styles.customChipAddText}>+ Add</Text>
-            </TouchableOpacity>
           </ScrollView>
 
-          {labels.length === 0 ? (
+          {shown.length === 0 ? (
             <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No labels match</Text>
-              <Text style={styles.emptyBody}>Try clearing the Favourites filter to see all your labels.</Text>
+              <Text style={styles.emptyTitle}>No favourites yet</Text>
+              <Text style={styles.emptyBody}>Tap the star on a label (in Enlarge view) to keep it here.</Text>
             </View>
           ) : (
             <ScrollView style={styles.listScroll} contentContainerStyle={styles.grid}>
-              {labels.map((w) => (
+              {shown.map((label) => (
                 <TouchableOpacity
-                  key={w.id}
+                  key={label.id}
                   style={[styles.tile, { width: tileWidth, marginRight: gap, marginBottom: gap }]}
-                  onPress={() => router.push(`/cellar/${w.id}`)}
+                  onPress={() => onTapLabel(label)}
                   activeOpacity={0.7}
                 >
                   <View style={{ width: tileWidth, height: tileHeight }}>
                     <LabelThumb
-                      path={w.label_image_path}
-                      fallbackText={w.wine_name}
+                      path={label.label_image_path}
+                      fallbackText={label.wine_name}
                       style={{ width: tileWidth, height: tileHeight }}
                     />
-                    {/* Star selector — only on the large (Enlarge) view; a
-                        thumbnail is too small to tap. Sets a favourite LABEL,
-                        separate from a favourite wine. */}
                     {viewMode === 'enlarge' && (
                       <TouchableOpacity
                         style={styles.favStar}
-                        onPress={() => toggleLabelFav(w)}
+                        onPress={() => toggleFav(label)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.favStarText, w.label_favourite && styles.favStarActive]}>{w.label_favourite ? '★' : '☆'}</Text>
+                        <Text style={[styles.favStarText, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
                       </TouchableOpacity>
                     )}
                   </View>
                   <Text style={styles.caption} numberOfLines={1}>
-                    {w.label_favourite ? '★ ' : ''}{w.wine_name}
+                    {label.is_favourite ? '★ ' : ''}{label.wine_name ?? label.producer ?? 'Wine label'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -263,6 +325,7 @@ export default function MyLabelsScreen() {
         </>
       )}
 
+      {/* View / Favourites dropdown */}
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
@@ -292,31 +355,20 @@ export default function MyLabelsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <LibraryFilterModal
-        visible={filterModalOpen}
-        title={editingFilter ? 'Edit filter' : 'New filter'}
-        itemNoun="labels"
-        items={filterItems}
-        initialName={editingFilter?.name}
-        initialSelected={editingFilter?.itemIds}
-        saving={savingFilter}
-        onSave={saveFilter}
-        onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
-      />
-
-      {/* Add a label — scan or upload a wine photo. Runs the same path as any
-          scanned wine, so it lands in the cellar (and this library) with note
-          and share available on the wine card. */}
+      {/* +Add chooser — Scan / Upload / Select from Cellar */}
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
             <Text style={styles.modalTitle}>Add a label</Text>
-            <Text style={styles.addBody}>Scan a wine label or upload a photo — Vinster reads the details and it joins your cellar and this library.</Text>
-            <TouchableOpacity style={styles.addBtn} onPress={() => { setAddOpen(false); router.push('/label/camera'); }} activeOpacity={0.85}>
+            <Text style={styles.addBody}>Scan or upload a wine label, or pull one in from your cellar. Each is saved with the date and place.</Text>
+            <TouchableOpacity style={styles.addBtn} onPress={handleScan} activeOpacity={0.85}>
               <Text style={styles.addBtnText}>Scan Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.addBtn, { marginTop: spacing.sm }]} onPress={handleUpload} activeOpacity={0.85}>
               <Text style={styles.addBtnText}>Upload a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addBtn, { marginTop: spacing.sm }]} onPress={() => { setAddOpen(false); setSelectCellarOpen(true); }} activeOpacity={0.85}>
+              <Text style={styles.addBtnText}>Select from Cellar</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setAddOpen(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
@@ -325,10 +377,37 @@ export default function MyLabelsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {scanningLabel && (
+      {/* Select from Cellar — cellar wines that have a label photo */}
+      <Modal visible={selectCellarOpen} transparent animationType="fade" onRequestClose={() => setSelectCellarOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSelectCellarOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={[styles.modalSheet, styles.cellarSheet]} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Select from Cellar</Text>
+            {cellarWithPhotos.length === 0 ? (
+              <Text style={styles.addBody}>None of your cellar wines have a label photo yet.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 380 }}>
+                {cellarWithPhotos.map((w) => (
+                  <TouchableOpacity key={w.id} style={styles.cellarRow} onPress={() => addFromCellar(w)} activeOpacity={0.7}>
+                    <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.cellarThumb} radius={4} frame={3} />
+                    <View style={styles.cellarRowText}>
+                      <Text style={styles.cellarWineName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                      {w.region ? <Text style={styles.cellarRegion} numberOfLines={1}>{w.region}</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity onPress={() => setSelectCellarOpen(false)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {(scanningLabel || generatingIntel) && (
         <View style={styles.scanningOverlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.scanningText}>Reading the label…</Text>
+          <Text style={styles.scanningText}>{scanningLabel ? 'Reading the label…' : 'Loading wine intel…'}</Text>
         </View>
       )}
     </View>
@@ -340,10 +419,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
-  headerSpacer: { width: 40 },
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  // Filter hint + carousel — mirrors app/cellar/list.tsx.
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
@@ -352,17 +429,10 @@ const styles = StyleSheet.create({
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
-  // Bespoke custom-filter pills + the "+ Add" pill.
-  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 160 },
-  customChipActive: { borderColor: colors.gold },
-  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
-  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
-  customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   listScroll: { flex: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
   caption: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.text, marginTop: spacing.xs, alignSelf: 'stretch' },
-  // Favourite-label star, top-right of the enlarged image.
   favStar: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   favStarText: { fontSize: 24, color: '#FFFFFF', lineHeight: 26 },
   favStarActive: { color: colors.gold },
@@ -371,6 +441,7 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  cellarSheet: { maxHeight: '80%' },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
@@ -379,10 +450,15 @@ const styles = StyleSheet.create({
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   modalCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   modalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  // "Add a label" chooser — mirrors the Cellar List add-wine sheet.
   addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Select-from-Cellar rows.
+  cellarRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  cellarThumb: { width: 40, height: 52 },
+  cellarRowText: { flex: 1 },
+  cellarWineName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  cellarRegion: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   scanningOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   scanningText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
 });

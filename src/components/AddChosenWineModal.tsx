@@ -11,6 +11,7 @@ import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
+import { uploadLabelImage } from '../api/labelPhotos';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
 import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
@@ -31,9 +32,14 @@ interface Props {
   // intel card) with the wine identity already filled in — the only difference
   // from Manual Input is where the details come from.
   initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null;
+  // Local image uri of the scanned/uploaded label (Scan / Upload review flow).
+  // When present and the review is newly CREATED, we upload it and stamp
+  // chosen_wines.label_image_path so the review card shows the label photo —
+  // exactly like a cellar wine card. Null for Manual Input.
+  labelImageUri?: string | null;
 }
 
-export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props) {
+export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri }: Props) {
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { saveManual, update, chosenWines } = useChosenWines();
@@ -106,7 +112,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props
     const city = locCity.trim();
     try {
       if (mode === 'create' || !existing) {
-        await saveManual.mutateAsync({
+        const row = await saveManual.mutateAsync({
           wineName, producer, region, vintage: vintageNum,
           restaurantName, city, listPrice: price, currency,
           tastingNote, otherObservations, userScore, isFavourite,
@@ -116,6 +122,16 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial }: Props
           // not under You · Your Restaurants · Bottle Picks.
           source: 'other',
         });
+        // Scan / Upload review — attach the scanned label photo to the new row
+        // so its review card shows the label, like a cellar wine. Best-effort:
+        // a failed upload never blocks the save (the review is already stored).
+        if (labelImageUri && row?.id) {
+          try {
+            const path = await uploadLabelImage(session.user.id, labelImageUri, row.id);
+            await patchChosenWine(row.id, { label_image_path: path });
+            qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+          } catch { /* non-fatal — review saved without a photo */ }
+        }
       } else {
         const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
         if (mode === 'update') {

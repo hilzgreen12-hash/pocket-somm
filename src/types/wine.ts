@@ -341,6 +341,29 @@ export interface ChosenWine {
   reviewed_at: string | null;
   // The user's own drinking-window opinion (migration 048) — free text.
   user_drinking_window: string | null;
+  // Label photo for the review (migration 067). Stored in the wine-labels
+  // bucket (<user>/<chosenId>.jpg) and displayed via LabelThumb, exactly
+  // like cellar_wines.label_image_path. Captured when a review is created
+  // via Scan / Upload on Your Wine Reviews. Null for manual / legacy rows.
+  label_image_path: string | null;
+}
+
+// A Your Label Library entry (migration 066). A standalone photo record that
+// can exist without a cellar or review row — see 066_labels.sql. `intel` is a
+// captured WineIntelligence snapshot (null when unknown at capture time).
+export interface LibraryLabel {
+  id: string;
+  user_id: string;
+  label_image_path: string | null;
+  producer: string | null;
+  wine_name: string | null;
+  vintage: number | null;
+  region: string | null;
+  intel: WineIntelligence | null;
+  captured_city: string | null;
+  captured_place: string | null;
+  is_favourite: boolean;
+  created_at: string;
 }
 
 // Cached "Dive Deeper" editorial profiles stored on cellar_wines.wine_knowledge.
