@@ -59,6 +59,10 @@ export async function valueWine(
 
   // Headline value: real WS market average when matched, else Claude estimate.
   const useWs = wsMatched && pricing.averageMarketPrice != null;
+  // Critic score: prefer Wine-Searcher's real aggregated ws-score directly (we
+  // pay for it — surface it, don't just anchor Claude to it). Fall back to
+  // Claude's estimated consensus only when WS has no score for this wine.
+  const useWsScore = wsScore != null;
 
   return {
     estimatedValue: useWs ? pricing.averageMarketPrice : intel.estimatedValue,
@@ -66,8 +70,9 @@ export async function valueWine(
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
     currency: useWs ? pricing.currency : currency,
     valueSource: useWs ? 'wine-searcher' : 'vinster',
-    criticScore: intel.criticScore,
-    criticScoreNote: intel.criticScoreNote ?? null,
+    criticScore: useWsScore ? wsScore : intel.criticScore,
+    // A real WS aggregated score is authoritative — no "why it's missing" note.
+    criticScoreNote: useWsScore ? null : (intel.criticScoreNote ?? null),
     drinkingWindowFrom: intel.drinkingWindowFrom ?? null,
     drinkingWindowTo: intel.drinkingWindowTo ?? null,
     drinkingWindowStatus: intel.drinkingWindowStatus ?? 'unknown',
@@ -99,8 +104,15 @@ export async function generateWineIntel(
   // Headline value: real WS market average (already in the user's currency)
   // when matched, else Claude's estimate.
   const useWs = wsMatched && pricing.averageMarketPrice != null;
+  // Critic score: prefer Wine-Searcher's real aggregated ws-score directly (we
+  // pay for it — surface it, don't just anchor Claude to it). Fall back to
+  // Claude's estimated consensus only when WS has no score for this wine.
+  const useWsScore = wsScore != null;
   return {
     ...intel,
+    criticScore: useWsScore ? wsScore : intel.criticScore,
+    // A real WS aggregated score is authoritative — no "why it's missing" note.
+    criticScoreNote: useWsScore ? null : (intel.criticScoreNote ?? null),
     estimatedValue: useWs ? pricing.averageMarketPrice : intel.estimatedValue,
     estimatedValueLow: useWs ? pricing.minPrice : (intel.estimatedValueLow ?? null),
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),

@@ -103,6 +103,13 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         estimated_value: intel.estimatedValue ?? null,
         estimated_value_currency: currency,
         estimated_value_at: intel.estimatedValue != null ? at : null,
+        // generateWineIntel is Wine-Searcher-first, so intel.criticScore is the
+        // real WS aggregated score when WS has one. Persist it too — otherwise
+        // the review's critic score stays null even though we just fetched a
+        // real one. Only overwrite when we actually got a score.
+        ...(intel.criticScore != null
+          ? { critic_score: intel.criticScore, critic_score_note: intel.criticScoreNote ?? null }
+          : {}),
       });
       qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
     } catch (err) {
