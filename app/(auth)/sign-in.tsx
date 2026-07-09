@@ -1,9 +1,11 @@
-import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { useEffect, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import * as AppleAuthentication from 'expo-apple-authentication';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { Link, router } from 'expo-router';
 import { supabase } from '../../src/api/supabase';
 import { signInWithGoogle, isGoogleSignInCancelled } from '../../src/services/googleAuth';
+import { signInWithApple, isAppleAuthAvailable, isAppleSignInCancelled } from '../../src/services/appleAuth';
 import { colors, typography, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -13,6 +15,21 @@ export default function SignIn() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [appleAvailable, setAppleAvailable] = useState(false);
+  useEffect(() => { isAppleAuthAvailable().then(setAppleAvailable); }, []);
+
+  async function handleApple() {
+    setError('');
+    setLoading(true);
+    try {
+      await signInWithApple();
+      router.replace('/');
+    } catch (e) {
+      if (!isAppleSignInCancelled(e)) setError(e instanceof Error ? e.message : 'Could not sign in with Apple.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleGoogle() {
     setError('');
@@ -103,6 +120,16 @@ export default function SignIn() {
         <Text style={styles.googleG}>G</Text>
         <Text style={styles.googleText}>Continue with Google</Text>
       </TouchableOpacity>
+
+      {Platform.OS === 'ios' && appleAvailable ? (
+        <AppleAuthentication.AppleAuthenticationButton
+          buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
+          buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.WHITE}
+          cornerRadius={8}
+          style={styles.appleButton}
+          onPress={handleApple}
+        />
+      ) : null}
 
       <TouchableOpacity style={styles.guestButton} onPress={() => router.replace('/(tabs)/scan')}>
         <Text style={styles.guestText}>Continue without account</Text>
@@ -206,6 +233,7 @@ const styles = StyleSheet.create({
   },
   googleG: { fontFamily: fonts.headingBold, fontSize: 17, color: '#FFFFFF' },
   googleText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
+  appleButton: { height: 50, marginTop: spacing.sm },
   guestButton: {
     padding: spacing.md,
     alignItems: 'center',

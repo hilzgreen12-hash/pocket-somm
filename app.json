@@ -16,6 +16,7 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.vinster.app",
       "buildNumber": "2",
+      "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
@@ -76,7 +77,8 @@
         {
           "iosUrlScheme": "com.googleusercontent.apps.876379327160-dtd9hsbuvab09nfpe7ov6t70fesq4g4a"
         }
-      ]
+      ],
+      "expo-apple-authentication"
     ],
     "extra": {
       "router": {},
