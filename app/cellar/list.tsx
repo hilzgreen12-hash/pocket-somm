@@ -22,6 +22,7 @@ import { LabelThumb } from '../../src/components/LabelThumb';
 import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import { CellarListShareCard } from '../../src/components/CellarListShareCard';
+import { buildCellarListHtml } from '../../src/utils/cellarListHtml';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
@@ -506,29 +507,32 @@ export default function FullCellarListScreen() {
     const filterSummary = bits.length ? bits.join(' · ') : null;
     const title = isArchiveView ? 'My Archive' : 'My Cellar';
 
-    setListSharePayload({ title, items, wineCount: filtered.length, bottleCount: totalBottles, filterSummary });
     setSharingList(true);
     try {
-      // One paint to let the off-screen card mount with the new props.
-      await new Promise((r) => setTimeout(r, 300));
-      if (shareListRef.current && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(shareListRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
-        return;
-      }
-      // Plain-text fallback for devices without share-sheet support.
-      const lines = items.map((w) => {
-        const identity = [wineHeaderLine(w.producer, w.wineName, null), w.region, w.vintage]
-          .filter((p) => p && String(p).trim().length > 0)
-          .join(' · ');
-        return `• ${identity} — ${w.quantity} × ${w.format}`;
+      // Share the cellar list as a PDF — crisp at any length and paginates,
+      // where a single tall PNG scaled down blurry. expo-print lazy-required
+      // for build safety.
+      const Print = require('expo-print');
+      const { uri } = await Print.printToFileAsync({
+        html: buildCellarListHtml({ title, items, wineCount: filtered.length, bottleCount: totalBottles, filterSummary }),
       });
-      await Share.share({
-        message: `${title} (${filtered.length} ${filtered.length === 1 ? 'wine' : 'wines'} · ${totalBottles} ${totalBottles === 1 ? 'bottle' : 'bottles'})\n\n${lines.join('\n')}${VINSTER_TEXT_SHARE_FOOTER}`,
-        title,
-      });
+      await shareResult(uri, { sharerName: sharerNameFrom(session), mimeType: 'application/pdf' });
     } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+      // Plain-text fallback if PDF/printing or the share sheet isn't available.
+      try {
+        const lines = items.map((w) => {
+          const identity = [wineHeaderLine(w.producer, w.wineName, null), w.region, w.vintage]
+            .filter((p) => p && String(p).trim().length > 0)
+            .join(' · ');
+          return `• ${identity} — ${w.quantity} × ${w.format}`;
+        });
+        await Share.share({
+          message: `${title} (${filtered.length} ${filtered.length === 1 ? 'wine' : 'wines'} · ${totalBottles} ${totalBottles === 1 ? 'bottle' : 'bottles'})\n\n${lines.join('\n')}${VINSTER_TEXT_SHARE_FOOTER}`,
+          title,
+        });
+      } catch {
+        showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+      }
     } finally {
       setSharingList(false);
       setListSharePayload(null);
