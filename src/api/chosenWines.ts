@@ -278,6 +278,8 @@ export async function patchChosenWine(
     wishlist: boolean;
     user_drinking_window: string | null;
     label_image_path: string | null;
+    critic_score: number | null;
+    critic_score_note: string | null;
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
