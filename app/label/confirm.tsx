@@ -153,7 +153,11 @@ export default function LabelConfirmScreen() {
       // Persist as the "last result" so the Cellar tab's View last result link
       // survives an app restart (separate from the transient label store).
       useLastIntelStore.getState().setLast(confirmed, intel);
-      router.replace(`/label/results${contextQuery}`);
+      // Mark a FRESH Scan Wine Label result (only the intel flow) so the intel
+      // card can offer "Add label to Label Library?" exactly once — and never
+      // on a later "View last result" revisit (which pushes without fresh=1).
+      const freshFlag = context === 'intel' ? '&fresh=1' : '';
+      router.replace(`/label/results${contextQuery}${freshFlag}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wine details');
       showAlert({ title: 'Error', body: 'Could not load wine details. Please try again.' });

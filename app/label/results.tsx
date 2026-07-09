@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
@@ -8,6 +8,9 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
+import { useLabels } from '../../src/hooks/useLabels';
+import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
+import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
@@ -71,7 +74,7 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context } = useLocalSearchParams<{ context?: string }>();
+  const { context, fresh } = useLocalSearchParams<{ context?: string; fresh?: string }>();
   const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
   // a review, so the action area collapses to a single "Review this Wine"
@@ -94,6 +97,7 @@ export default function LabelResultsScreen() {
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
+  const { create: createLabel } = useLabels();
   const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
@@ -195,6 +199,40 @@ export default function LabelResultsScreen() {
   useEffect(() => {
     if (isAddFlow) setAddingToCellar(true);
   }, [isAddFlow]);
+
+  // Popup A — a fresh Scan Wine Label intel result offers to keep the label in
+  // Your Label Library. Fires exactly once (guarded ref), and only when there's
+  // an actual photo to save (manual-input intel has no imageUri → no prompt;
+  // "View last result" pushes without fresh=1 → no prompt).
+  const libraryPromptShown = useRef(false);
+  useEffect(() => {
+    if (libraryPromptShown.current) return;
+    if (!isIntelOnlyFlow || fresh !== '1') return;
+    const imageUri = useLabelStore.getState().imageUri;
+    const w = useLabelStore.getState().wineDetailsConfirmed;
+    if (!imageUri || !w) return;
+    libraryPromptShown.current = true;
+    const intelSnapshot = useLabelStore.getState().intelligence;
+    promptAddToLabelLibrary(() => {
+      void (async () => {
+        try {
+          const city = await captureCity();
+          await createLabel.mutateAsync({
+            imageUri,
+            producer: w.producer,
+            wineName: w.wineName,
+            vintage: w.vintage,
+            region: w.region,
+            intel: intelSnapshot,
+            city,
+          });
+        } catch (err) {
+          showAlert({ title: 'Could not save label', body: err instanceof Error ? err.message : 'Please try again.' });
+        }
+      })();
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isIntelOnlyFlow, fresh]);
 
   // The Add flow legitimately has no intel; every other flow needs it.
   if (!wineDetailsConfirmed || (!intelligence && !isAddFlow)) {

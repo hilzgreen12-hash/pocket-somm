@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
@@ -18,6 +18,10 @@ import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { useLabels } from '../../src/hooks/useLabels';
+import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
+import { captureCity } from '../../src/utils/captureCity';
+import { LabelThumb } from '../../src/components/LabelThumb';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity } from '../../src/utils/city';
@@ -130,6 +134,7 @@ type ReviewItem =
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
+  const { create: createLabel } = useLabels();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
@@ -137,6 +142,9 @@ export default function ChosenWinesScreen() {
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
   // (null for Manual Input). Keeps all three on the same review input screen.
   const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null>(null);
+  // Local uri of a scanned/uploaded label, retained through the Add-a-Review
+  // modal so the new review can carry its label photo (Part 3). Null for Manual.
+  const [pendingReviewLabelUri, setPendingReviewLabelUri] = useState<string | null>(null);
   // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
   // chosen path takes over (manual reuses the existing AddChosenWineModal;
   // scan + upload feed into the label flow with context=reviews).
@@ -205,6 +213,31 @@ export default function ChosenWinesScreen() {
     setReviewPrompt(null);
     if (review && wine) setEditingWine(wine);
   }
+
+  // Deep-link params from Your Label Library's click-into-a-label popup:
+  //   ?openReview=<id>          → open that review for viewing/editing
+  //   ?seedAdd=1&sp&sw&sv&sr    → open a fresh review seeded with the identity
+  // Handled once per distinct param set so re-renders don't reopen the modal.
+  const params = useLocalSearchParams<{ openReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string }>();
+  const handledParamRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (params.openReview) {
+      const key = `open:${params.openReview}`;
+      if (handledParamRef.current === key) return;
+      const match = chosenWines.find((w) => w.id === params.openReview);
+      if (match) { handledParamRef.current = key; setEditingWine(match); }
+      return;
+    }
+    if (params.seedAdd === '1') {
+      const key = `add:${params.sp}|${params.sw}|${params.sv}`;
+      if (handledParamRef.current === key) return;
+      handledParamRef.current = key;
+      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null });
+      setPendingReviewLabelUri(null);
+      setAddOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.openReview, params.seedAdd, params.sp, params.sw, params.sv, params.sr, chosenWines]);
 
   // "Don't show me this again" — a direct action (no tick box): opt out
   // permanently and dismiss.
@@ -363,6 +396,18 @@ export default function ChosenWinesScreen() {
     return null;
   }
 
+  // Label photo for a review card, shown like a cellar wine card. Cellar
+  // reviews carry it directly; chosen reviews use their own captured photo
+  // (migration 067) and fall back to a matching cellar wine's photo by
+  // identity. Null → the card stays text-only (no empty frame).
+  function labelPathFor(item: ReviewItem): string | null {
+    if (item.source === 'cellar') return (item.wine as CellarWine).label_image_path ?? null;
+    const own = (item.wine as ChosenWine).label_image_path;
+    if (own) return own;
+    const key = wineIdentityKey(item.wine.producer, item.wine.wine_name, item.wine.vintage);
+    return cellarByIdentity.get(key)?.label_image_path ?? null;
+  }
+
   // Long-press a review to delete it. A restaurant review is its own
   // chosen_wines row, so it's deleted outright. A cellar review lives on
   // the cellar_wines row, so we only clear the review fields — the bottle
@@ -497,6 +542,7 @@ export default function ChosenWinesScreen() {
   function handleChooseManual() {
     setChooserOpen(false);
     setAddInitial(null);
+    setPendingReviewLabelUri(null);
     setAddOpen(true);
   }
 
@@ -504,6 +550,26 @@ export default function ChosenWinesScreen() {
   // Manual (pre-filled) — no wine intel card, no /label detour.
   async function handleChooseScan() { setChooserOpen(false); void ocrThenReview('camera'); }
   async function handleChooseUpload() { setChooserOpen(false); void ocrThenReview('library'); }
+
+  // Save a scanned/uploaded review label to Your Label Library — best-effort.
+  async function addScannedLabelToLibrary(
+    uri: string,
+    ocr: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null,
+  ) {
+    try {
+      const city = await captureCity();
+      await createLabel.mutateAsync({
+        imageUri: uri,
+        producer: ocr?.producer,
+        wineName: ocr?.wineName,
+        vintage: ocr?.vintage,
+        region: ocr?.region,
+        city,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not save label', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   async function ocrThenReview(source: 'camera' | 'library') {
     try {
@@ -514,18 +580,27 @@ export default function ChosenWinesScreen() {
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (picked.canceled || !picked.assets?.[0]) return;
       const uri = picked.assets[0].uri;
+      let ocr: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null = null;
       setUploading(true);
       try {
         const base64 = await prepareImageBase64(uri);
         const details = await scanLabel(base64);
-        setAddInitial({ producer: details.producer, wineName: details.wineName, vintage: details.vintage, region: details.region });
+        ocr = { producer: details.producer, wineName: details.wineName, vintage: details.vintage, region: details.region };
       } catch {
         // OCR failed — still open the review input so the user can type it in.
-        setAddInitial(null);
+        ocr = null;
       } finally {
         setUploading(false);
       }
-      setAddOpen(true);
+      setAddInitial(ocr);
+      setPendingReviewLabelUri(uri);
+      // Ask whether to keep the label in Your Label Library, THEN open the
+      // review input either way (sequenced so the alert never sits under the
+      // fullscreen review modal).
+      promptAddToLabelLibrary(
+        () => { void addScannedLabelToLibrary(uri, ocr); setAddOpen(true); },
+        () => setAddOpen(true),
+      );
     } catch (err) {
       showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -550,8 +625,9 @@ export default function ChosenWinesScreen() {
       <AddChosenWineModal
         visible={addOpen}
         initial={addInitial}
-        onClose={() => { setAddOpen(false); setAddInitial(null); }}
-        onSaved={() => { setAddOpen(false); setAddInitial(null); }}
+        labelImageUri={pendingReviewLabelUri}
+        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); }}
+        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); }}
       />
 
       {/* "+ Add" chooser — Scan / Upload run the same label recognise+confirm
@@ -742,6 +818,7 @@ export default function ChosenWinesScreen() {
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
               const note = addedNote(item);
+              const thumbPath = labelPathFor(item);
               return (
                 <TouchableOpacity
                   key={`${item.source}-${w.id}`}
@@ -751,41 +828,47 @@ export default function ChosenWinesScreen() {
                   delayLongPress={400}
                   activeOpacity={0.7}
                 >
-                  <View style={styles.cardCompactRow}>
-                    <Text style={styles.wineNameCompact} numberOfLines={2}>
-                      {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
-                    </Text>
-                    <View style={styles.scoreCluster}>
-                      <View style={styles.scoreLine}>
-                        {isChosen && (item.wine as ChosenWine).is_favourite ? (
-                          <Text style={styles.favouriteStar}>★</Text>
-                        ) : null}
-                        {item.score != null && (
-                          <Text style={styles.scoreCompact}>{item.score}</Text>
-                        )}
+                  <View style={styles.cardCompactOuter}>
+                    {thumbPath ? (
+                      <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
+                    ) : null}
+                    <View style={styles.cardCompactBody}>
+                      <View style={styles.cardCompactRow}>
+                        <Text style={styles.wineNameCompact} numberOfLines={2}>
+                          {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
+                        </Text>
+                        <View style={styles.scoreCluster}>
+                          <View style={styles.scoreLine}>
+                            {isChosen && (item.wine as ChosenWine).is_favourite ? (
+                              <Text style={styles.favouriteStar}>★</Text>
+                            ) : null}
+                            {item.score != null && (
+                              <Text style={styles.scoreCompact}>{item.score}</Text>
+                            )}
+                          </View>
+                        </View>
                       </View>
+                      {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
+                      <View style={styles.cardCompactMetaRow}>
+                        <Text style={styles.metaText}>{formatDate(item.date)}</Text>
+                        {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
+                        {isChosen && formatListPrice(item.wine as ChosenWine) ? (
+                          <Text style={styles.metaText}> · {formatListPrice(item.wine as ChosenWine)}</Text>
+                        ) : null}
+                        {/* No visible "Restaurant" / "Cellar" suffix here —
+                            the user found it redundant. Internally each
+                            review still carries item.source which drives
+                            the filter chips, sort logic, share routing
+                            and the long-press delete prompt, so this
+                            cosmetic removal doesn't disturb behaviour. */}
+                      </View>
+                      {note ? (
+                        <Text style={styles.addedNote}>
+                          You added this to your {note.kind} on {formatDate(note.date)}
+                        </Text>
+                      ) : null}
                     </View>
                   </View>
-                  {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
-                  <View style={styles.cardCompactMetaRow}>
-                    <Text style={styles.metaText}>{formatDate(item.date)}</Text>
-                    {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
-                    {isChosen && formatListPrice(item.wine as ChosenWine) ? (
-                      <Text style={styles.metaText}> · {formatListPrice(item.wine as ChosenWine)}</Text>
-                    ) : null}
-                    {/* No visible "Restaurant" / "Cellar" suffix here —
-                        the user found it redundant. Internally each
-                        review still carries item.source which drives
-                        the filter chips, sort logic, share routing
-                        and the long-press delete prompt (see line ~156
-                        and the filter chip group above), so this
-                        cosmetic removal doesn't disturb behaviour. */}
-                  </View>
-                  {note ? (
-                    <Text style={styles.addedNote}>
-                      You added this to your {note.kind} on {formatDate(note.date)}
-                    </Text>
-                  ) : null}
                 </TouchableOpacity>
               );
             })
@@ -903,6 +986,11 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
   cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  // When a review has a label photo it sits as a small framed thumbnail to the
+  // left of the text (like a cellar wine card); text-only otherwise.
+  cardCompactOuter: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  cardCompactBody: { flex: 1 },
+  reviewThumb: { width: 46, height: 60 },
   cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   wineNameCompact: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
