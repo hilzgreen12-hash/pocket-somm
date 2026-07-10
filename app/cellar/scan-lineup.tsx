@@ -12,6 +12,7 @@ import { useLineupStore } from '../../src/stores/lineupStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { detectLineup, type DetectedBottle } from '../../src/api/label';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
+import { findCellarWineByIdentity } from '../../src/api/cellar';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import type { CellarWine } from '../../src/types/wine';
@@ -299,8 +300,9 @@ export default function ScanLineupScreen() {
         const slots = free.slice(cursor, cursor + count);
         if (slots.length === 0) break; // rack full
         // Already in the cellar? Add these bottles to that line's count and
-        // reuse it (no duplicate line). Otherwise create a new minimal wine.
-        const match = findCellarMatch(b);
+        // reuse it (no duplicate line). Check the live cache first, then the DB
+        // directly — so a momentarily-stale cache can't slip a duplicate through.
+        const match = findCellarMatch(b) ?? await findCellarWineByIdentity(userId, { producer: b.producer, wineName: b.wineName, vintage: b.vintage });
         let targetId: string;
         if (match) {
           targetId = match.id;
