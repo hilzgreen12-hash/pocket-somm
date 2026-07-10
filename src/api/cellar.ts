@@ -105,11 +105,18 @@ export async function repairRackedWines(userId: string): Promise<number> {
 }
 
 export async function archiveCellarWine(id: string): Promise<void> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('cellar_wines')
     .update({ archived_at: new Date().toISOString() })
-    .eq('id', id);
+    .eq('id', id)
+    .select('id');
   if (error) throw error;
+  // A stale / expired session (e.g. right after switching accounts) makes RLS
+  // match zero rows and return NO error — so the update silently does nothing.
+  // Treat "affected nothing" as a failure so the UI can't falsely report success.
+  if (!data || data.length === 0) {
+    throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
+  }
 }
 
 export async function getArchivedWines(userId: string): Promise<CellarWine[]> {
@@ -192,8 +199,50 @@ export async function findMatchingWishlistWine(
 }
 
 export async function deleteCellarWine(id: string): Promise<void> {
-  const { error } = await supabase.from('cellar_wines').delete().eq('id', id);
+  const { data, error } = await supabase.from('cellar_wines').delete().eq('id', id).select('id');
   if (error) throw error;
+  // Verify a row was ACTUALLY deleted. Supabase returns success with zero rows
+  // deleted (and no error) when RLS matches nothing — e.g. a stale/expired
+  // session after switching accounts. Without this check that silent no-op
+  // reads as success, the list optimistically clears, and the wine survives in
+  // the database (the "deleted wines that came back" bug).
+  if (!data || data.length === 0) {
+    throw new Error('That wine could not be deleted — please pull to refresh (you may need to sign in again).');
+  }
+}
+
+// Find an ACTIVE (non-archived, non-wishlist) cellar wine matching a
+// producer+name identity, straight from the DB (not a possibly-stale client
+// cache) — so re-adding a wine merges into its existing line instead of
+// creating a duplicate, even if the cache is momentarily wrong.
+export async function findCellarWineByIdentity(
+  userId: string,
+  identity: { producer: string | null; wineName: string | null; vintage?: string | number | null },
+): Promise<CellarWine | null> {
+  const { data, error } = await supabase
+    .from('cellar_wines')
+    .select('*')
+    .eq('user_id', userId)
+    .is('archived_at', null)
+    .eq('is_wishlist', false);
+  if (error) throw error;
+  const list = (data ?? []) as CellarWine[];
+  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+  const p = norm(identity.producer);
+  const n = norm(identity.wineName);
+  const v = identity.vintage != null ? String(identity.vintage).trim() : '';
+  const matches = list.filter((w) => {
+    const wp = norm(w.producer);
+    const wn = norm(w.wine_name);
+    const producerHit = !!p && (wp === p || wn === p);
+    const nameHit = !!n && (wn === n || wp === n);
+    return producerHit || nameHit;
+  });
+  if (v) {
+    const exact = matches.find((w) => (w.vintage ?? '').toString().trim() === v);
+    if (exact) return exact;
+  }
+  return matches[0] ?? null;
 }
 
 export async function shareCellar(ownerId: string, email: string): Promise<void> {
