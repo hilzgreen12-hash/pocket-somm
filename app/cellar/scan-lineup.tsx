@@ -10,7 +10,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLineupStore } from '../../src/stores/lineupStore';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
+import { detectLineup, type DetectedBottle } from '../../src/api/label';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -25,17 +25,6 @@ type Stage = 'capture' | 'analyzing' | 'review';
 const FRIDGE_TIP_KEY = 'vinster_hide_fridge_lineup_tip';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-
-// Rotate a photo 180°. Rack bottles are stored neck-forward, so a rack photo is
-// upside down — reading (and the cropped label thumbnails) come out far better
-// when the image is turned upright BEFORE analysis. Falls back to the original
-// on any failure so a manipulation error never blocks the scan.
-async function rotate180(uri: string): Promise<string> {
-  try {
-    const r = await ImageManipulator.manipulateAsync(uri, [{ rotate: 180 }], { format: ImageManipulator.SaveFormat.JPEG });
-    return r.uri;
-  } catch { return uri; }
-}
 
 // Walk the rack grid from (startRow,startCol) in the given orientation, skipping
 // occupied slots, collecting up to `count` FREE positions. Vertical runs down a
@@ -143,10 +132,22 @@ export default function ScanLineupScreen() {
   async function analyze(uri: string, flip = false) {
     setStage('analyzing');
     try {
-      // Turn the image upright BEFORE reading (and store THAT image), so both
-      // the detection and the cropped label thumbnails come out right way up.
-      const workUri = flip ? await rotate180(uri) : uri;
-      const base64 = await prepareImageBase64(workUri);
+      // Normalise to ONE upright, EXIF-baked image used for BOTH detection and
+      // the cropped label thumbnails. Keeping them the same image is what stops
+      // the crops coming out sideways: the resize bakes the photo's EXIF
+      // orientation into the pixels, so Claude's bounding boxes and the crop
+      // share a coordinate space. `flip` adds the 180° turn for neck-forward
+      // rack shots (applied before the resize).
+      const actions = flip
+        ? [{ rotate: 180 as const }, { resize: { width: 1600 } }]
+        : [{ resize: { width: 1600 } }];
+      const prepped = await ImageManipulator.manipulateAsync(
+        uri, actions,
+        { compress: 0.85, format: ImageManipulator.SaveFormat.JPEG, base64: true },
+      );
+      const workUri = prepped.uri;
+      const base64 = prepped.base64;
+      if (!base64) throw new Error('Could not process the photo.');
       const { bottles } = await detectLineup(base64);
       // Cap raw detections at 8, then batch identical bottles (same producer +
       // name + vintage) into one row carrying a quantity, so a lineup with two
