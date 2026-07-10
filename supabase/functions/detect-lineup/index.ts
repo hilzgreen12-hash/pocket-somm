@@ -21,6 +21,8 @@ Deno.serve(async (req) => {
               type: 'text',
               text: `This photo shows a lineup of wine bottles (usually 1–8) that someone has just drunk and wants to remove from their cellar. Identify EACH bottle you can read.
 
+The photo may be rotated or upside down (bottles are often stored neck-forward in a rack, so a straight photo of the rack comes out inverted). Read every label regardless of its orientation, and never skip a bottle just because its label is rotated.
+
 For each bottle return:
 - producer: the producer / château / domaine (may equal wine_name if not separate)
 - wineName: the wine or cuvée name (e.g. "Barolo Albe", "Château Margaux")

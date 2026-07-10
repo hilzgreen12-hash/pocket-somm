@@ -26,6 +26,17 @@ const FRIDGE_TIP_KEY = 'vinster_hide_fridge_lineup_tip';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
+// Rotate a photo 180°. Rack bottles are stored neck-forward, so a rack photo is
+// upside down — reading (and the cropped label thumbnails) come out far better
+// when the image is turned upright BEFORE analysis. Falls back to the original
+// on any failure so a manipulation error never blocks the scan.
+async function rotate180(uri: string): Promise<string> {
+  try {
+    const r = await ImageManipulator.manipulateAsync(uri, [{ rotate: 180 }], { format: ImageManipulator.SaveFormat.JPEG });
+    return r.uri;
+  } catch { return uri; }
+}
+
 // Walk the rack grid from (startRow,startCol) in the given orientation, skipping
 // occupied slots, collecting up to `count` FREE positions. Vertical runs down a
 // column then to the next; Horizontal runs across a row then to the next. The
@@ -90,6 +101,11 @@ export default function ScanLineupScreen() {
   // Quick batch confirm: each row is ticked once reviewed/edited; "Add Bottles"
   // unlocks when all are ticked.
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
+  // Original (unrotated) capture, kept so the Flip toggle can re-read the other
+  // way up. `flipped` = we rotated the photo 180° before analysis (auto for rack
+  // placement, where bottles sit neck-forward = upside down).
+  const [rawUri, setRawUri] = useState<string | null>(null);
+  const [flipped, setFlipped] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750 });
 
@@ -104,16 +120,33 @@ export default function ScanLineupScreen() {
         ? await ImagePicker.launchCameraAsync(opts)
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (result.canceled || !result.assets.length) return;
-      await analyze(result.assets[0].uri);
+      const uri = result.assets[0].uri;
+      setRawUri(uri);
+      // Rack bottles are stored neck-forward, so the photo is upside down —
+      // auto-rotate before reading. Fridges often stand upright, so not those.
+      const doFlip = isRackPlacement && !isFridge;
+      setFlipped(doFlip);
+      await analyze(uri, doFlip);
     } catch (err) {
       showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
-  async function analyze(uri: string) {
+  // Re-read the photo the other way up (undo/redo the 180° rotation).
+  function handleFlip() {
+    if (!rawUri) return;
+    const nf = !flipped;
+    setFlipped(nf);
+    void analyze(rawUri, nf);
+  }
+
+  async function analyze(uri: string, flip = false) {
     setStage('analyzing');
     try {
-      const base64 = await prepareImageBase64(uri);
+      // Turn the image upright BEFORE reading (and store THAT image), so both
+      // the detection and the cropped label thumbnails come out right way up.
+      const workUri = flip ? await rotate180(uri) : uri;
+      const base64 = await prepareImageBase64(workUri);
       const { bottles } = await detectLineup(base64);
       // Cap raw detections at 8, then batch identical bottles (same producer +
       // name + vintage) into one row carrying a quantity, so a lineup with two
@@ -138,7 +171,9 @@ export default function ScanLineupScreen() {
       }
       const result = batched;
       setConfirmed(new Set());
-      setLineup(result, uri);
+      // Store the rotated image so the rack's cropped label thumbnails (and the
+      // preview) are upright too — the boxes were detected on this same image.
+      setLineup(result, workUri);
       setStage('review');
     } catch (err) {
       showAlert({ title: 'Could not read the photo', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -429,6 +464,12 @@ export default function ScanLineupScreen() {
                 <Text style={styles.primaryBtnText}>
                   {placing ? 'Placing…' : `Add ${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}`}
                 </Text>
+              </TouchableOpacity>
+              {flipped ? (
+                <Text style={styles.hint}>Vinster turned your rack photo upright (bottles sit neck‑forward), so labels read the right way up. Wrong? Flip it back.</Text>
+              ) : null}
+              <TouchableOpacity style={styles.secondaryBtn} onPress={handleFlip} disabled={!rawUri || placing} activeOpacity={0.85}>
+                <Text style={styles.secondaryBtnText}>{flipped ? 'Flip back & re‑read' : 'Labels upside down? Flip & re‑read'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
                 <Text style={styles.secondaryBtnText}>Retake</Text>
