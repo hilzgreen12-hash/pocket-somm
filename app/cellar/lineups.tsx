@@ -8,7 +8,7 @@ import { captureRef } from 'react-native-view-shot';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
-import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote, saveLineupArchive, type LineupArchive } from '../../src/api/lineups';
+import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote, saveLineupArchive, deleteLineupArchive, type LineupArchive } from '../../src/api/lineups';
 import { MicButton } from '../../src/components/MicButton';
 import { LineupShareCard } from '../../src/components/LineupShareCard';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -30,7 +30,7 @@ function monthKey(iso: string): string {
 }
 
 // A single lineup tile — resolves a fresh signed URL for its photo on mount.
-function LineupTile({ item, size, onPress, onToggleFav }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void }) {
+function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void; onLongPress: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -41,7 +41,7 @@ function LineupTile({ item, size, onPress, onToggleFav }: { item: LineupArchive;
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const stamp = [date, item.city].filter(Boolean).join(' · ');
   return (
-    <TouchableOpacity style={[styles.tile, { width: size }]} onPress={onPress} activeOpacity={0.8}>
+    <TouchableOpacity style={[styles.tile, { width: size }]} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.8}>
       <View style={[styles.tileImageWrap, { width: size, height: size * 1.1 }]}>
         {url ? <Image source={{ uri: url }} style={{ width: size, height: size * 1.1 }} resizeMode="cover" />
              : <ActivityIndicator color={colors.gold} />}
@@ -180,6 +180,30 @@ export default function LineupLibraryScreen() {
     }
   }
 
+  // Long-press a tile to delete the lineup (photo + record).
+  function confirmDeleteLineup(item: LineupArchive) {
+    const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    showAlert({
+      title: 'Delete this lineup?',
+      body: `This permanently removes the lineup photo from ${date} and its note. This can't be undone.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete lineup',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLineupArchive(item.id);
+              qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+      ],
+    });
+  }
+
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   async function openViewer(item: LineupArchive) {
@@ -311,6 +335,7 @@ export default function LineupLibraryScreen() {
           <Text style={styles.lineupSummary}>
             {filtered.length} {filtered.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
           </Text>
+          <View style={styles.summaryDivider} />
           <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
             <TouchableOpacity style={[styles.filterChip, favFilter !== 'all' && styles.filterChipActive]} onPress={() => setOpenDropdown('fav')}>
@@ -352,7 +377,7 @@ export default function LineupLibraryScreen() {
           ) : (
             <ScrollView contentContainerStyle={styles.grid}>
               {filtered.map((item) => (
-                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onToggleFav={() => toggleFav(item)} />
+                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onToggleFav={() => toggleFav(item)} onLongPress={() => confirmDeleteLineup(item)} />
               ))}
             </ScrollView>
           )}
@@ -496,6 +521,7 @@ const styles = StyleSheet.create({
   blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   // Gold whole-library tally, same treatment as the Full Cellar List summary.
   lineupSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md },
+  summaryDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: spacing.md },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
