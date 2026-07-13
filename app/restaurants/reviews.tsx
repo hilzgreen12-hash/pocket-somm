@@ -9,6 +9,10 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { createManualRestaurantSession } from '../../src/api/restaurantSessions';
+import { generateWineIntel } from '../../src/services/pricing';
+import { useLabelStore } from '../../src/stores/labelStore';
+import { useLastIntelStore } from '../../src/stores/lastIntelStore';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { StarRating } from '../../src/components/StarRating';
 import { ShareIcon } from '../../src/components/ShareIcon';
@@ -290,6 +294,38 @@ export default function RestaurantReviewsScreen() {
     }
     return { chosenBySession: bySession, chosenByRestaurant: byRestaurant };
   }, [chosenWines]);
+
+  const { preferences } = usePreferences();
+  const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
+  const [genIntel, setGenIntel] = useState(false);
+
+  // Generate + show Wine Intel for a wine tapped in the restaurant modal. Same
+  // pattern as the Label Library: fill the label store, stash it as the last
+  // result, and open the intel card.
+  async function viewWineIntel(cw: ChosenWine) {
+    const details = {
+      producer: cw.producer ?? '',
+      region: cw.region ?? '',
+      wineName: cw.wine_name || null,
+      vintage: cw.vintage != null ? String(cw.vintage) : 'NV',
+    };
+    setGenIntel(true);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const intel = await generateWineIntel(details as any, currency);
+      const ls = useLabelStore.getState();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ls.setWineDetailsConfirmed(details as any);
+      ls.setIntelligence(intel);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      useLastIntelStore.getState().setLast(details as any, intel);
+      router.push('/label/results?context=intel');
+    } catch (err) {
+      showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setGenIntel(false);
+    }
+  }
 
   // Null-session (legacy / unlinked) bottles that plausibly belong to this
   // visit — matched by restaurant name + city, and by time proximity so a
@@ -645,7 +681,7 @@ export default function RestaurantReviewsScreen() {
                             onPress={() => setEditingWine(cw)}
                             activeOpacity={0.7}
                           >
-                            <Text style={styles.wineLine} numberOfLines={1}>Bottle Pick: {wineLine}</Text>
+                            <Text style={styles.wineLine} numberOfLines={1}>{cw.source === 'other' ? 'Brought' : 'List Pick'}: {wineLine}</Text>
                             {cw.user_score != null ? (
                               <Text style={styles.wineScore}>{cw.user_score}/100</Text>
                             ) : null}
@@ -683,15 +719,27 @@ export default function RestaurantReviewsScreen() {
             vintage: cw.vintage,
             userScore: cw.user_score,
             source: cw.source,
+            reviewed: !!((cw.tasting_note && cw.tasting_note.trim()) || (cw.other_observations && cw.other_observations.trim()) || cw.user_score != null),
           }))}
           onReviewWine={(i) => {
             const cw = findChosenForVisit(editing)[i];
             if (cw) { closeRestaurantReview(); setEditingWine(cw); }
           }}
+          onViewIntel={(i) => {
+            const cw = findChosenForVisit(editing)[i];
+            if (cw) { closeRestaurantReview(); void viewWineIntel(cw); }
+          }}
           onClose={closeRestaurantReview}
           onSaved={() => { manualSavedRef.current = true; closeRestaurantReview(); }}
         />
       )}
+
+      {genIntel ? (
+        <View style={styles.intelOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.intelOverlayText}>Loading wine intel…</Text>
+        </View>
+      ) : null}
 
       <EditChosenWineModal
         wine={editingWine}
@@ -788,6 +836,8 @@ export default function RestaurantReviewsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, width: 50, textAlign: 'right' },
