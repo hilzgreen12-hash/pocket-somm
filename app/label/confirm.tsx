@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
+import { showAddedToCellar } from '../../src/utils/addCellarConfirm';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -239,14 +240,10 @@ export default function LabelConfirmScreen() {
         });
       } else {
         router.replace(`/cellar/rack/${rackId}`);
-        showAlert({
-          title: 'Added to your cellar',
-          body: `${free.length} bottle${free.length === 1 ? '' : 's'} placed in your rack — and added to your Full Cellar List.`,
-          buttons: [
-            { text: 'View in Full Cellar List', onPress: () => router.replace('/cellar/list') },
-            { text: 'Done', style: 'cancel' },
-          ],
-        });
+        void showAddedToCellar(
+          `${free.length} bottle${free.length === 1 ? '' : 's'} placed in your rack — and added to your Full Cellar List.`,
+          () => router.replace('/cellar/list'),
+        );
       }
     } catch (err) {
       showAlert({ title: 'Could not place wine', body: err instanceof Error ? err.message : 'Please try again.' });

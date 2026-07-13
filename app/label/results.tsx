@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
+import { showAddedToCellar } from '../../src/utils/addCellarConfirm';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -448,16 +449,7 @@ export default function LabelResultsScreen() {
   // rack/location, where relevant). When the user lands somewhere other than
   // the list (a rack), offer a link across to it.
   function confirmSaved(body: string, includeListLink: boolean) {
-    showAlert({
-      title: 'Added to your cellar',
-      body,
-      buttons: includeListLink
-        ? [
-            { text: 'View in Full Cellar List', onPress: () => router.replace('/cellar/list') },
-            { text: 'Done', style: 'cancel' },
-          ]
-        : [{ text: 'Done', style: 'cancel' }],
-    });
+    void showAddedToCellar(body, includeListLink ? () => router.replace('/cellar/list') : undefined);
   }
 
   async function performSaveFlow(savedWineId: string, mode: 'new' | 'merge', baseQuantity: number) {
