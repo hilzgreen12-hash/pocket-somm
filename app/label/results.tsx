@@ -99,7 +99,7 @@ export default function LabelResultsScreen() {
   const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
   const { create: createLabel } = useLabels();
-  const { pendingSlot, setPendingSlot, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId } = useRackStore();
+  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
@@ -499,15 +499,23 @@ export default function LabelResultsScreen() {
       // User came in from a specific empty rack slot. Place the requested
       // number of bottles from that slot — skipping any occupied slots in
       // the path — and set the wine's quantity to match what was placed.
-      const requested = Math.max(1, parseInt(placeCount, 10) || 1);
-      const allSlots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, requested, placeOrientation, pendingSlot.largeFormatCols);
       const occupied = new Set(
         pendingRackSlots.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`),
       );
-      const freeSlots = allSlots.filter((s) => !occupied.has(`${s.row},${s.col}`));
-      // The tapped slot is empty by definition; fall back to it if a race
-      // somehow leaves nothing free.
-      const placed = freeSlots.length > 0 ? freeSlots : allSlots.slice(0, 1);
+      let placed: Array<{ row: number; col: number }>;
+      if (pendingSlots && pendingSlots.length > 0) {
+        // Multi-slot: the user hand-picked exactly these slots — fill each one,
+        // skipping any that got occupied since they were selected.
+        const free = pendingSlots.filter((s) => !occupied.has(`${s.row},${s.col}`));
+        placed = free.length > 0 ? free : pendingSlots.slice(0, 1);
+      } else {
+        const requested = Math.max(1, parseInt(placeCount, 10) || 1);
+        const allSlots = computeSlots(pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols, requested, placeOrientation, pendingSlot.largeFormatCols);
+        const freeSlots = allSlots.filter((s) => !occupied.has(`${s.row},${s.col}`));
+        // The tapped slot is empty by definition; fall back to it if a race
+        // somehow leaves nothing free.
+        placed = freeSlots.length > 0 ? freeSlots : allSlots.slice(0, 1);
+      }
       await assignSlots(pendingSlot.rackId, placed, savedWineId);
       const targetQuantity = mode === 'new' ? placed.length : baseQuantity + placed.length;
       if (targetQuantity !== baseQuantity) {
@@ -516,6 +524,7 @@ export default function LabelResultsScreen() {
       qc.invalidateQueries({ queryKey: ['rack-slots', pendingSlot.rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       setPendingSlot(null);
+      setPendingSlots(null);
       setAddingToCellar(false);
       // Camera/confirm now use router.replace so the stack is short by the
       // time we land here. A clean router.replace keeps the back-stack tidy.

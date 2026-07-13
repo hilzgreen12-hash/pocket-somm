@@ -64,7 +64,7 @@ export default function RackGridScreen() {
   const { width, height } = useWindowDimensions();
   const qc = useQueryClient();
 
-  const { pendingSlot, setPendingSlot, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
+  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
   const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(rackId);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -118,6 +118,10 @@ export default function RackGridScreen() {
   // and the upload-in-progress spinner it can open.
   const { setImage, setWineDetails, setError: setLabelError } = useLabelStore();
   const [slotChooser, setSlotChooser] = useState<{ row: number; col: number } | null>(null);
+  // Multi-slot placement: long-press an empty slot to start selecting a set of
+  // slots, then place the SAME wine into all of them. Keys are "row,col".
+  const [multiSlots, setMultiSlots] = useState<Set<string>>(new Set());
+  const multiSelectMode = multiSlots.size > 0;
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
   // "Add a Lineup" setup: pick the start slot + orientation before scanning.
@@ -441,7 +445,53 @@ export default function RackGridScreen() {
     return { fontSize, lineHeight: fontSize + 2, maxChars: Math.max(10, Math.floor(size / 3.5)) };
   }
 
+  // Long-press a slot: an occupied slot opens its action sheet (add-more /
+  // move / archive); an empty slot starts (or extends) a multi-slot selection.
+  function onLongPressSlot(row: number, col: number) {
+    if (lineupSetup || moving) return;
+    const slot = slotMap[`${row},${col}`];
+    if (slot?.cellar_wine_id) { pickUpSlot(row, col); return; }
+    setMultiSlots((prev) => {
+      const next = new Set(prev);
+      next.add(`${row},${col}`);
+      return next;
+    });
+  }
+
+  function toggleMultiSlot(row: number, col: number) {
+    const slot = slotMap[`${row},${col}`];
+    if (slot?.cellar_wine_id) return; // can only multi-select empty slots
+    setMultiSlots((prev) => {
+      const next = new Set(prev);
+      const key = `${row},${col}`;
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  // "Place a wine" from the multi-select bar: freeze the chosen slots into the
+  // store (pendingSlots drives the placement screens) and open the source chooser.
+  function placeIntoSelected() {
+    if (!rack || multiSlots.size === 0) return;
+    const slots = Array.from(multiSlots)
+      .map((k) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; })
+      .sort((a, b) => (a.row - b.row) || (a.col - b.col));
+    const first = slots[0];
+    setPendingSlot({ rackId, row: first.row, col: first.col, rows: rack.rows, cols: rack.cols, largeFormatCols: rack.large_format_cols, largeFormatBottleSizeMl: rack.large_format_bottle_size_ml });
+    setPendingSlots(slots);
+    setMultiSlots(new Set());
+    setSlotChooser(first);
+  }
+
+  function cancelMultiSelect() {
+    setMultiSlots(new Set());
+    setPendingSlots(null);
+  }
+
   function openSlot(row: number, col: number) {
+    // Multi-select in progress: taps toggle empty slots in/out of the set
+    // rather than opening or navigating.
+    if (multiSelectMode) { toggleMultiSlot(row, col); return; }
     // Lineup setup: the user is choosing the starting slot for "Add a Lineup".
     // Only an empty slot can be the start; record it + the orientation, then go
     // to scan/upload — which places the whole lineup from here.
@@ -514,17 +564,19 @@ export default function RackGridScreen() {
     router.push('/label/confirm?context=place');
   }
 
-  // Place an EXISTING cellar wine (chosen in the picker) straight into the slot.
+  // Place an EXISTING cellar wine (chosen in the picker) straight into the
+  // tapped slot — or into every slot the user hand-picked in multi-select.
   async function placeExistingWine(wine: CellarWine) {
     if (!pendingSlot) return;
     const { rackId: rid, row, col } = pendingSlot;
+    const targets = pendingSlots && pendingSlots.length > 0 ? pendingSlots : [{ row, col }];
     try {
-      await assignSlots(rid, [{ row, col }], wine.id);
+      await assignSlots(rid, targets, wine.id);
       qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       showAlert({
-        title: 'Placed in this rack',
-        body: `${wine.wine_name} is already in your Full Cellar List — it's now mapped to a slot here too.`,
+        title: targets.length > 1 ? `Placed in ${targets.length} slots` : 'Placed in this rack',
+        body: `${wine.wine_name} is already in your Full Cellar List — it's now mapped to ${targets.length > 1 ? `${targets.length} slots` : 'a slot'} here too.`,
         buttons: [{ text: 'Done', style: 'cancel' }],
       });
     } catch (err) {
@@ -532,6 +584,7 @@ export default function RackGridScreen() {
     } finally {
       setCellarPickerOpen(false);
       setPendingSlot(null);
+      setPendingSlots(null);
     }
   }
 
@@ -1096,6 +1149,7 @@ export default function RackGridScreen() {
             const isHighlighted = !!wine && highlightedIds.has(wine.id);
             const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
             const isMovingSource = !!moving && moving.sourceRackId === rackId && moving.row === rowDef.rowIndex && moving.col === col;
+            const isMultiSelected = multiSlots.has(`${rowDef.rowIndex},${col}`);
             return (
               <TouchableOpacity
                 key={col}
@@ -1106,9 +1160,10 @@ export default function RackGridScreen() {
                   isHighlighted && styles.slotHighlightRing,
                   isDimmed && styles.slotDimmed,
                   isMovingSource && styles.slotMovingSource,
+                  isMultiSelected && styles.slotMultiSelected,
                 ]}
                 onPress={() => openSlot(rowDef.rowIndex, col)}
-                onLongPress={() => pickUpSlot(rowDef.rowIndex, col)}
+                onLongPress={() => onLongPressSlot(rowDef.rowIndex, col)}
                 delayLongPress={400}
                 activeOpacity={0.8}
               >
@@ -1122,7 +1177,7 @@ export default function RackGridScreen() {
                     fallbackFontSize={fallbackFont}
                   />
                 ) : (
-                  <Text style={styles.slotPlus}>+</Text>
+                  <Text style={[styles.slotPlus, isMultiSelected && styles.slotPlusSelected]}>{isMultiSelected ? '✓' : '+'}</Text>
                 )}
               </TouchableOpacity>
             );
@@ -1423,15 +1478,33 @@ export default function RackGridScreen() {
       </KeyboardAwareScrollView>
 
 
+      {/* Multi-slot selection bar — floats above the grid while the user is
+          hand-picking a set of empty slots to fill with one wine. */}
+      {multiSelectMode ? (
+        <View style={styles.multiBar} pointerEvents="box-none">
+          <View style={styles.multiBarInner}>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap more empty slots</Text>
+            <View style={styles.multiBarBtns}>
+              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelMultiSelect} activeOpacity={0.8}>
+                <Text style={styles.multiBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.multiBarPlace} onPress={placeIntoSelected} activeOpacity={0.8}>
+                <Text style={styles.multiBarPlaceText}>Place a wine →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation
           only shown if > 1 bottle. Skips already-occupied slots so we don't
           stomp an existing wine in the path. */}
-      {/* Empty-slot chooser — how to fill the tapped slot. */}
-      <Modal visible={slotChooser !== null} transparent animationType="fade" onRequestClose={() => { setSlotChooser(null); setPendingSlot(null); }}>
-        <TouchableOpacity style={styles.slotChooserOverlay} activeOpacity={1} onPress={() => { setSlotChooser(null); setPendingSlot(null); }}>
+      {/* Empty-slot chooser — how to fill the tapped slot (or the selected set). */}
+      <Modal visible={slotChooser !== null} transparent animationType="fade" onRequestClose={() => { setSlotChooser(null); setPendingSlot(null); setPendingSlots(null); }}>
+        <TouchableOpacity style={styles.slotChooserOverlay} activeOpacity={1} onPress={() => { setSlotChooser(null); setPendingSlot(null); setPendingSlots(null); }}>
           <TouchableOpacity activeOpacity={1} style={styles.slotChooserSheet} onPress={() => {}}>
-            <Text style={styles.slotChooserTitle}>Add a wine to this slot</Text>
+            <Text style={styles.slotChooserTitle}>{(pendingSlots?.length ?? 0) > 1 ? `Add a wine to ${pendingSlots!.length} slots` : 'Add a wine to this slot'}</Text>
             <TouchableOpacity style={styles.slotChooserBtn} onPress={() => { setSlotChooser(null); router.push('/label/camera?context=place'); }} activeOpacity={0.8}>
               <Text style={styles.slotChooserBtnText}>Scan a Label</Text>
             </TouchableOpacity>
@@ -1444,7 +1517,7 @@ export default function RackGridScreen() {
             <TouchableOpacity style={styles.slotChooserBtn} onPress={() => { setSlotChooser(null); router.push('/label/confirm?manual=1&context=place'); }} activeOpacity={0.8}>
               <Text style={styles.slotChooserBtnText}>Manual Input</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.slotChooserCancel} onPress={() => { setSlotChooser(null); setPendingSlot(null); }}>
+            <TouchableOpacity style={styles.slotChooserCancel} onPress={() => { setSlotChooser(null); setPendingSlot(null); setPendingSlots(null); }}>
               <Text style={styles.slotChooserCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
@@ -1453,7 +1526,7 @@ export default function RackGridScreen() {
 
       <CellarWinePicker
         visible={cellarPickerOpen}
-        onClose={() => { setCellarPickerOpen(false); setPendingSlot(null); }}
+        onClose={() => { setCellarPickerOpen(false); setPendingSlot(null); setPendingSlots(null); }}
         onSelect={placeExistingWine}
       />
 
@@ -1994,6 +2067,16 @@ const styles = StyleSheet.create({
   slotTextHighlighted: { color: '#FFFFFF' },
   // Inter — slot plus glyph
   slotPlus: { fontSize: 16, color: 'rgba(87,47,43,0.40)', fontFamily: fonts.bodyRegular },
+  slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
+  slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
+  multiBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.md },
+  multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
+  multiBarText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.text, textAlign: 'center' },
+  multiBarBtns: { flexDirection: 'row', gap: spacing.sm },
+  multiBarCancel: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  multiBarCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
+  multiBarPlace: { flex: 2, backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  multiBarPlaceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.surface },
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   // Inter — hint
   rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, lineHeight: 20 },
