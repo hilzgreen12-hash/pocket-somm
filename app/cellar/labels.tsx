@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, useWindowDimensions } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Image, useWindowDimensions } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { router } from 'expo-router';
 import { useLabels } from '../../src/hooks/useLabels';
@@ -14,6 +16,9 @@ import { findMatchingChosenWine } from '../../src/api/chosenWines';
 import { generateWineIntel } from '../../src/services/pricing';
 import { showAlert } from '../../src/components/AppAlert';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { LabelShareCard } from '../../src/components/LabelShareCard';
+import { labelSignedUrl } from '../../src/api/labelPhotos';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import type { CellarWine, LibraryLabel, WineDetailsComplete, WineIntelligence } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
@@ -83,6 +88,13 @@ export default function MyLabelsScreen() {
   const [selectCellarOpen, setSelectCellarOpen] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [generatingIntel, setGeneratingIntel] = useState(false);
+  // Share-thumbnail flow: the label being shared, its optional note, the
+  // resolved signed URL for the off-screen branded card, and the capture ref.
+  const [shareLabel, setShareLabel] = useState<LibraryLabel | null>(null);
+  const [shareNote, setShareNote] = useState('');
+  const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const shareRef = useRef<View>(null);
 
   const { setImage, setWineDetails, setError } = useLabelStore();
 
@@ -165,6 +177,7 @@ export default function MyLabelsScreen() {
       buttons: [
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
         { text: existingId ? 'View or Edit Your Review' : 'Create a Review', onPress: () => goToReview(existingId, label) },
+        { text: 'Share Thumbnail', onPress: () => { setShareNote(''); setShareLabel(label); } },
         { text: 'Remove from Library', style: 'destructive', onPress: () => confirmRemove(label) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -217,6 +230,31 @@ export default function MyLabelsScreen() {
         { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(label.id) },
       ],
     });
+  }
+
+  // Capture the branded LabelShareCard (with the label photo, name, stamp and
+  // the user's note) and hand it to the native share sheet.
+  async function doShareThumbnail() {
+    const label = shareLabel;
+    if (!label) return;
+    setSharing(true);
+    try {
+      const url = await labelSignedUrl(label.label_image_path);
+      // Prefetch so the remote image is cached and paints before the snapshot.
+      if (url) { try { await Image.prefetch(url); } catch { /* non-fatal */ } }
+      setShareImageUrl(url);
+      await new Promise((r) => setTimeout(r, 450));
+      if (shareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharing(false);
+      setShareLabel(null);
+      setShareImageUrl(null);
+    }
   }
 
   const cols = VIEW_COLS[viewMode];
@@ -404,10 +442,47 @@ export default function MyLabelsScreen() {
         </TouchableOpacity>
       </Modal>
 
-      {(scanningLabel || generatingIntel) && (
+      {/* Share thumbnail — add an optional note, then share the branded card */}
+      <Modal visible={!!shareLabel && !sharing} transparent animationType="fade" onRequestClose={() => setShareLabel(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShareLabel(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Share label</Text>
+            <Text style={styles.addBody}>Share this label — with its name and date — as a Vinster card. Add a note if you like.</Text>
+            <TextInput
+              style={styles.noteInput}
+              value={shareNote}
+              onChangeText={setShareNote}
+              placeholder="Add a note (optional)"
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
+            <TouchableOpacity style={styles.addBtn} onPress={doShareThumbnail} activeOpacity={0.85}>
+              <Text style={styles.addBtnText}>Share</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShareLabel(null)} style={styles.modalCancel}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Off-screen branded card, mounted only while a share is in flight. */}
+      {sharing && shareLabel ? (
+        <View style={styles.shareCardWrap} pointerEvents="none">
+          <LabelShareCard
+            ref={shareRef}
+            imageUrl={shareImageUrl}
+            wineName={wineHeaderLine(shareLabel.producer, shareLabel.wine_name, shareLabel.vintage) || (shareLabel.wine_name ?? 'Wine label')}
+            stamp={formatStamp(shareLabel)}
+            note={shareNote}
+          />
+        </View>
+      ) : null}
+
+      {(scanningLabel || generatingIntel || sharing) && (
         <View style={styles.scanningOverlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.scanningText}>{scanningLabel ? 'Reading the label…' : 'Loading wine intel…'}</Text>
+          <Text style={styles.scanningText}>{scanningLabel ? 'Reading the label…' : sharing ? 'Preparing your card…' : 'Loading wine intel…'}</Text>
         </View>
       )}
     </View>
@@ -421,6 +496,9 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
+  // Share-note input + the off-screen (position-only, no opacity) card wrapper.
+  noteInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, padding: spacing.md, minHeight: 90, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', textAlignVertical: 'top', marginBottom: spacing.md },
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
