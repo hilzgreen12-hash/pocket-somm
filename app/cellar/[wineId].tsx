@@ -145,6 +145,10 @@ export default function CellarWineDetail() {
     queryFn: () => fetchCellarLocations(session!.user.id),
     enabled: !!session?.user.id,
   });
+  // Cellar List "Location" filters this wine is filed under. Without this the
+  // card only checked rack placement, so a wine filed ONLY in a Location kept
+  // showing "Add to Location" as if it had none.
+  const wineLocations = locations.filter((l) => l.wineIds?.includes(wineId ?? ''));
   // The location whose membership a pending add/remove applies to.
   const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
   const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
@@ -193,13 +197,19 @@ export default function CellarWineDetail() {
   // True while a first-open auto-generation is running — drives the full-screen
   // "generating" tracker so the card only ever appears finished.
   const [autoGenerating, setAutoGenerating] = useState(false);
+  // True only when a first-open auto-generation genuinely produced NO intel —
+  // so the "couldn't generate" prompt fires for a real miss, not the brief
+  // window while the cache refetches the freshly-generated values.
+  const [autoGenFailed, setAutoGenFailed] = useState(false);
   useEffect(() => {
     if (!wine || isWishlist || isArchived || refreshingValue) return;
     const ungenerated = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
     if (ungenerated && autoGenRef.current !== wine.id) {
       autoGenRef.current = wine.id;
       setAutoGenerating(true);
-      handleRefreshEstimate().finally(() => setAutoGenerating(false));
+      handleRefreshEstimate()
+        .then((produced) => setAutoGenFailed(!produced))
+        .finally(() => setAutoGenerating(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, isWishlist, isArchived]);
@@ -209,7 +219,7 @@ export default function CellarWineDetail() {
   // misspelt or the producer/name are in the wrong fields — so prompt the user
   // to check and edit. Dismissible; resets per wine.
   const [noIntelDismissed, setNoIntelDismissed] = useState(false);
-  useEffect(() => { setNoIntelDismissed(false); }, [wine?.id]);
+  useEffect(() => { setNoIntelDismissed(false); setAutoGenFailed(false); }, [wine?.id]);
 
   const [reviewExpanded, setReviewExpanded] = useState(false);
   // The review is now edited only through the canonical EditCellarReviewModal,
@@ -788,8 +798,8 @@ export default function CellarWineDetail() {
     }
   }
 
-  async function handleRefreshEstimate() {
-    if (!wine) return;
+  async function handleRefreshEstimate(): Promise<boolean> {
+    if (!wine) return false;
     setRefreshingValue(true);
     const currency = preferences?.defaultCurrency ?? 'GBP';
     try {
@@ -829,8 +839,13 @@ export default function CellarWineDetail() {
           purchase_price_currency: wine.purchase_price != null ? wine.purchase_price_currency : (v.currency ?? null),
         },
       });
+      // Whether intel actually came back — used to decide if the "couldn't
+      // generate" prompt is warranted (vs a false flash while the cache
+      // refetches the freshly-saved values).
+      return v.criticScore != null || v.estimatedValue != null;
     } catch {
       showAlert({ title: 'Could not refresh', body: 'Vinster couldn\'t generate an estimate right now. Please try again.' });
+      return false;
     } finally {
       setRefreshingValue(false);
     }
@@ -1268,7 +1283,7 @@ export default function CellarWineDetail() {
       <NoIntelPrompt
         visible={
           !!wine && !isWishlist && !isArchived && !autoGenerating && !refreshingValue &&
-          autoGenRef.current === wine.id && wine.critic_score == null && wine.estimated_value == null &&
+          autoGenRef.current === wine.id && autoGenFailed && wine.critic_score == null && wine.estimated_value == null &&
           !noIntelDismissed
         }
         onDismiss={() => setNoIntelDismissed(true)}
@@ -1390,7 +1405,10 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>{count} bottle{count === 1 ? '' : 's'} in {rack.name} →</Text>
             </TouchableOpacity>
           ))}
-          {wineRacks.length === 0 && !isArchived && !isWishlist && (
+          {wineLocations.map((l) => (
+            <Text key={l.id} style={styles.statAction}>In {l.name}</Text>
+          ))}
+          {wineRacks.length === 0 && wineLocations.length === 0 && !isArchived && !isWishlist && (
             <TouchableOpacity onPress={handleAddToLocation}>
               <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>
