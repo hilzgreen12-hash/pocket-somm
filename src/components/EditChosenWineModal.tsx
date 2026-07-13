@@ -13,7 +13,7 @@ import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
-import { patchChosenWine } from '../api/chosenWines';
+import { patchChosenWine, clearChosenReview } from '../api/chosenWines';
 import { addCellarWine } from '../api/cellar';
 import { generateWineIntel } from '../services/pricing';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
@@ -305,30 +305,44 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   function handleDelete() {
     if (!wine) return;
     const label = wine.vintage ? `${wine.vintage} ${wine.wine_name}` : wine.wine_name;
+    // A restaurant bottle pick (linked to a scan session) should return to
+    // "awaiting review" — clear the review content but keep the pick. A
+    // standalone review has no such home, so it's removed outright.
+    const isBottlePick = !!wine.scan_session_id;
     showAlert({
       title: 'Delete review?',
-      body: `${label}\n\nThis permanently removes your review.`,
+      body: isBottlePick
+        ? `${label}\n\nThis clears your review — the bottle stays in Your Restaurants, awaiting your review.`
+        : `${label}\n\nThis permanently removes your review.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete review', style: 'destructive', onPress: () => {
-            remove.mutate(wine.id, {
-              onSuccess: async () => {
-                // Also clear the same review off the matching cellar wine card
-                // (the review is shared between the two surfaces).
-                if (session?.user.id) {
-                  try {
-                    await clearReviewOnCellar(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage });
-                    qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-                    qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-                  } catch { /* non-fatal — the review row is already gone */ }
-                }
-                onSaved(); onClose();
-              },
-              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
-            });
-          } },
+        { text: 'Delete review', style: 'destructive', onPress: () => { void doDelete(isBottlePick); } },
       ],
     });
+  }
+
+  async function doDelete(isBottlePick: boolean) {
+    if (!wine) return;
+    try {
+      if (isBottlePick) {
+        await clearChosenReview(wine.id);
+      } else {
+        await remove.mutateAsync(wine.id);
+      }
+      // Also clear the same review off the matching cellar wine card (the
+      // review is shared between the two surfaces).
+      if (session?.user.id) {
+        try {
+          await clearReviewOnCellar(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage });
+          qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+          qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+        } catch { /* non-fatal */ }
+      }
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
+      onSaved(); onClose();
+    } catch (err) {
+      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   if (!wine) return null;

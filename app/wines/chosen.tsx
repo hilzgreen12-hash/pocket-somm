@@ -6,7 +6,9 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
+import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { clearChosenReview } from '../../src/api/chosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
@@ -135,6 +137,7 @@ export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
   const { create: createLabel } = useLabels();
+  const qc = useQueryClient();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
@@ -419,23 +422,24 @@ export default function ChosenWinesScreen() {
       title: 'Could not delete',
       body: err instanceof Error ? err.message : 'Please try again.',
     });
+    const isCellar = item.source === 'cellar';
+    // A restaurant bottle pick (linked to a scan session) returns to "awaiting
+    // review" — clear its review, keep the pick. A standalone review is removed.
+    const isBottlePick = !isCellar && !!(item.wine as ChosenWine).scan_session_id;
     showAlert({
       title: 'Delete review?',
-      // Restaurant and Other reviews both delete from chosen_wines —
-      // no inventory side-effect. Cellar reviews only clear the review
-      // fields, leaving the bottle in the rack.
-      body: item.source === 'cellar'
+      body: isCellar
         ? `${label}\n\nThis clears your review — the bottle stays in your cellar.`
-        : `${label}\n\nThis permanently removes your review.`,
+        : isBottlePick
+          ? `${label}\n\nThis clears your review — the bottle stays in Your Restaurants, awaiting review.`
+          : `${label}\n\nThis permanently removes your review.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete review',
           style: 'destructive',
           onPress: () => {
-            if (item.source !== 'cellar') {
-              remove.mutate(item.wine.id, { onError });
-            } else {
+            if (isCellar) {
               updateWine.mutate(
                 {
                   id: item.wine.id,
@@ -443,6 +447,12 @@ export default function ChosenWinesScreen() {
                 },
                 { onError },
               );
+            } else if (isBottlePick) {
+              clearChosenReview(item.wine.id)
+                .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] }))
+                .catch(onError);
+            } else {
+              remove.mutate(item.wine.id, { onError });
             }
           },
         },

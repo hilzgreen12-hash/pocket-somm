@@ -186,8 +186,27 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
 }
 
 export async function deleteChosenWine(id: string): Promise<void> {
-  const { error } = await supabase.from('chosen_wines').delete().eq('id', id);
+  const { data, error } = await supabase.from('chosen_wines').delete().eq('id', id).select('id');
   if (error) throw new Error(error.message);
+  // Verify a row was actually removed — a stale/expired session makes RLS match
+  // zero rows and return no error, which would otherwise read as a fake success.
+  if (!data || data.length === 0) {
+    throw new Error('That review could not be deleted — please pull to refresh (you may need to sign in again).');
+  }
+}
+
+// Clear the review CONTENT off a chosen wine without deleting the row — so a
+// restaurant bottle pick returns to "awaiting review" instead of vanishing.
+export async function clearChosenReview(id: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('chosen_wines')
+    .update({ tasting_note: null, other_observations: null, user_score: null })
+    .eq('id', id)
+    .select('id');
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('That review could not be cleared — please pull to refresh (you may need to sign in again).');
+  }
 }
 
 export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
