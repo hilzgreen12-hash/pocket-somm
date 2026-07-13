@@ -12,7 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
 import { addSessionBottle } from '../api/chosenWines';
 import { archiveCellarWine } from '../api/cellar';
-import { prepareImageBase64, scanLabel } from '../api/label';
+import { prepareImageBase64, detectLineup } from '../api/label';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
@@ -106,6 +106,12 @@ export function RestaurantReviewModal({
   // Set when this bottle was picked from the cellar, so after adding we can
   // offer to move that cellar wine to the archive. Null for scan/upload/manual.
   const [cbCellarWineId, setCbCellarWineId] = useState<string | null>(null);
+  // Multi-bottle add: a photo with several bottles opens a tick-list to confirm
+  // which to add (mirrors the rack lineup flow).
+  const [multiOpen, setMultiOpen] = useState(false);
+  const [multiBottles, setMultiBottles] = useState<{ producer: string | null; wineName: string | null; vintage: string | number | null; region: string | null }[]>([]);
+  const [multiChecked, setMultiChecked] = useState<Set<number>>(new Set());
+  const [multiBrought, setMultiBrought] = useState(false);
 
   function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }, brought: boolean) {
     setCbProducer(prefill.producer ?? '');
@@ -132,10 +138,22 @@ export function RestaurantReviewModal({
       setBottleBusy(true);
       try {
         const base64 = await prepareImageBase64(res.assets[0].uri);
-        const details = await scanLabel(base64);
-        openConfirm({ producer: details.producer, wineName: details.wineName, region: details.region, vintage: details.vintage }, false);
+        const { bottles } = await detectLineup(base64);
+        const detected = (bottles ?? []).slice(0, 8);
+        if (detected.length >= 2) {
+          // Several bottles → tick-list to confirm which to add.
+          setMultiBottles(detected.map((b) => ({ producer: b.producer, wineName: b.wineName, vintage: b.vintage, region: b.region ?? null })));
+          setMultiChecked(new Set(detected.map((_, i) => i)));
+          setMultiBrought(false);
+          setMultiOpen(true);
+        } else if (detected.length === 1) {
+          const b = detected[0];
+          openConfirm({ producer: b.producer, wineName: b.wineName, region: b.region, vintage: b.vintage }, false);
+        } else {
+          openConfirm({}, false);
+        }
       } catch {
-        // OCR failed — still let them fill it in by hand on the confirm sheet.
+        // Detection failed — still let them fill it in by hand.
         openConfirm({}, false);
       }
     } catch (err) {
@@ -152,6 +170,40 @@ export function RestaurantReviewModal({
       : cellarWines;
     return list.slice(0, 50);
   }, [cellarWines, cellarSearch]);
+
+  function toggleMultiCheck(i: number) {
+    setMultiChecked((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; });
+  }
+
+  async function handleAddMulti() {
+    if (bottleBusy) return;
+    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to add bottles to a visit.' }); return; }
+    const picked = multiBottles.filter((_, i) => multiChecked.has(i));
+    if (picked.length === 0) { showAlert({ title: 'Nothing selected', body: 'Tick at least one bottle to add.' }); return; }
+    setBottleBusy(true);
+    try {
+      for (const b of picked) {
+        const vint = b.vintage != null ? String(b.vintage).trim() : '';
+        await addSessionBottle(session.user.id, {
+          sessionId,
+          restaurantName: restaurantName.trim() || null,
+          city: cityValue.trim() || null,
+          producer: b.producer?.trim() || null,
+          wineName: (b.wineName || b.producer || 'Wine').trim(),
+          region: b.region?.trim() || null,
+          vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
+          source: multiBrought ? 'other' : 'restaurant',
+        });
+      }
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      setMultiOpen(false);
+    } catch (err) {
+      showAlert({ title: 'Could not add bottles', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setBottleBusy(false);
+    }
+  }
 
   async function handleAddBottle() {
     if (bottleBusy) return;
@@ -507,6 +559,44 @@ export function RestaurantReviewModal({
             </View>
           )}
 
+          {/* Multi-bottle confirm — a tick-list for a photo with several bottles. */}
+          {multiOpen && (
+            <View style={styles.confirmSheetOverlay}>
+              <View style={styles.bottleBackdrop} />
+              <KeyboardAwareScrollView style={styles.confirmScroll} contentContainerStyle={styles.confirmContent} keyboardShouldPersistTaps="handled">
+                <View style={styles.bottleSheet}>
+                  <Text style={styles.bottleSheetTitle}>Confirm bottles</Text>
+                  <Text style={styles.bottleSheetBody}>Vinster read {multiBottles.length} bottles — tick the ones to add to this visit.</Text>
+                  {multiBottles.map((b, i) => {
+                    const on = multiChecked.has(i);
+                    const line = [b.producer, b.wineName, b.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ') || 'Unreadable bottle';
+                    return (
+                      <TouchableOpacity key={i} style={styles.multiRow} onPress={() => toggleMultiCheck(i)} activeOpacity={0.7}>
+                        <View style={[styles.broughtCheckbox, on && styles.broughtCheckboxOn]}>
+                          {on ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
+                        </View>
+                        <Text style={styles.multiRowText} numberOfLines={2}>{line}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                  {/* Batch origin — brought vs ordered, applies to all ticked. */}
+                  <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setMultiBrought(true)} activeOpacity={0.7}>
+                    <View style={[styles.broughtCheckbox, multiBrought && styles.broughtCheckboxOn]}>{multiBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}</View>
+                    <Text style={styles.broughtToggleLabel}>I brought these</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setMultiBrought(false)} activeOpacity={0.7}>
+                    <View style={[styles.broughtCheckbox, !multiBrought && styles.broughtCheckboxOn]}>{!multiBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}</View>
+                    <Text style={styles.broughtToggleLabel}>I ordered these</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddMulti} disabled={bottleBusy}>
+                    <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : `Add ${multiChecked.size} ${multiChecked.size === 1 ? 'Bottle' : 'Bottles'}`}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.bottleCancel} onPress={() => setMultiOpen(false)} disabled={bottleBusy}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+                </View>
+              </KeyboardAwareScrollView>
+            </View>
+          )}
+
           {/* OCR spinner while reading a scanned / uploaded label. */}
           {bottleBusy && !confirmOpen && (
             <View style={styles.bottleOverlay}>
@@ -670,6 +760,9 @@ const styles = StyleSheet.create({
   confirmSheetOverlay: { ...StyleSheet.absoluteFillObject },
   confirmScroll: { flex: 1 },
   confirmContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: 40 },
+  // Multi-bottle tick-list rows.
+  multiRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  multiRowText: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   bottleBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   bottleSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460, maxHeight: '82%' },
   bottleSheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
