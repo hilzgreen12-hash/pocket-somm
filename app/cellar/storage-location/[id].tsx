@@ -3,8 +3,10 @@ import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image,
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation } from '../../../src/api/storageLocations';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, assignWineToStorageLocation } from '../../../src/api/storageLocations';
+import { archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
+import { clearWineFromRacks } from '../../../src/api/racks';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
@@ -38,11 +40,17 @@ function bottleLabel(n: number) {
 
 export default function StorageLocationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  const qc = useQueryClient();
   const { setPendingStorageLocationId } = useRackStore();
   const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
   const [uploading, setUploading] = useState(false);
+  // Multi-select — long-press a wine to select, then bulk archive / delete /
+  // remove-from-location. Mirrors the Full Cellar List select-mode.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
 
   const { data: location, isLoading } = useQuery({
     queryKey: ['storage-location', id],
@@ -122,6 +130,81 @@ export default function StorageLocationScreen() {
     });
   }
 
+  function enterSelect(wineId: string) { setSelectMode(true); setSelectedIds(new Set([wineId])); }
+  function toggleSelected(wineId: string) {
+    setSelectedIds((prev) => { const next = new Set(prev); next.has(wineId) ? next.delete(wineId) : next.add(wineId); return next; });
+  }
+  function exitSelect() { setSelectMode(false); setSelectedIds(new Set()); }
+
+  function invalidateAfterBulk() {
+    qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+    qc.invalidateQueries({ queryKey: ['storage-location', id] });
+    qc.invalidateQueries({ queryKey: ['storage-locations'] });
+    qc.invalidateQueries({ queryKey: ['cellar'] });
+    qc.invalidateQueries({ queryKey: ['cellar-archive'] });
+    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    qc.invalidateQueries({ queryKey: ['rack-slots'] });
+  }
+
+  // Run a per-wine action across the selection, tolerating a mid-way failure:
+  // successfully-processed wines drop out of the selection so a retry only
+  // touches the remainder.
+  async function runBulk(verb: string, action: (wineId: string) => Promise<void>) {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setBusy(true);
+    const done: string[] = [];
+    try {
+      for (const wid of ids) { await action(wid); done.push(wid); }
+      invalidateAfterBulk();
+      exitSelect();
+    } catch (err) {
+      invalidateAfterBulk();
+      if (done.length) setSelectedIds((prev) => { const next = new Set(prev); done.forEach((wid) => next.delete(wid)); return next; });
+      showAlert({
+        title: done.length ? `${verb} some, then hit a snag` : `Could not ${verb.toLowerCase()}`,
+        body: `${done.length ? `${done.length} of ${ids.length} done. The rest are still selected — try again. ` : ''}${err instanceof Error ? err.message : 'Please try again.'}`,
+      });
+    } finally { setBusy(false); }
+  }
+
+  function confirmArchiveSelected() {
+    const n = selectedIds.size;
+    if (n === 0) return;
+    showAlert({
+      title: `Archive ${n} wine${n === 1 ? '' : 's'}?`,
+      body: 'They move to Your Archive and leave this location. Your reviews and history stay.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => { await clearWineFromRacks(wid); await archiveCellarWine(wid); }) },
+      ],
+    });
+  }
+  function confirmDeleteSelected() {
+    const n = selectedIds.size;
+    if (n === 0) return;
+    showAlert({
+      title: `Delete ${n} wine${n === 1 ? '' : 's'}?`,
+      body: "Permanently remove them from your records. This can't be undone.",
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete (permanent)', style: 'destructive', onPress: () => runBulk('Deleted', async (wid) => { await clearWineFromRacks(wid); await deleteCellarWine(wid); }) },
+      ],
+    });
+  }
+  function confirmRemoveSelected() {
+    const n = selectedIds.size;
+    if (n === 0) return;
+    showAlert({
+      title: `Remove ${n} wine${n === 1 ? '' : 's'} from ${location?.name ?? 'this location'}?`,
+      body: 'They stay in your cellar as loose bottles — this only takes them out of this location.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove from location', onPress: () => runBulk('Removed', (wid) => assignWineToStorageLocation(wid, null)) },
+      ],
+    });
+  }
+
   if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>;
   }
@@ -146,7 +229,7 @@ export default function StorageLocationScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
         ) : null}
@@ -200,13 +283,22 @@ export default function StorageLocationScreen() {
           <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a label or a case to start filling it.' : 'No wines match your search.'}</Text>
         ) : (
           <View style={styles.listSection}>
-            {filtered.map((w) => (
+            {filtered.map((w) => {
+              const isSelected = selectedIds.has(w.id);
+              return (
               <TouchableOpacity
                 key={w.id}
-                style={styles.wineRow}
-                onPress={() => router.push(`/cellar/${w.id}` as any)}
+                style={[styles.wineRow, isSelected && styles.wineRowSelected]}
+                onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}` as any); }}
+                onLongPress={() => { if (!selectMode) enterSelect(w.id); }}
+                delayLongPress={400}
                 activeOpacity={0.7}
               >
+                {selectMode ? (
+                  <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
+                    {isSelected ? <Text style={styles.checkboxTick}>✓</Text> : null}
+                  </View>
+                ) : null}
                 <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} />
                 <View style={styles.wineMain}>
                   <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
@@ -217,10 +309,34 @@ export default function StorageLocationScreen() {
                   </View>
                 </View>
               </TouchableOpacity>
-            ))}
+              );
+            })}
           </View>
         )}
       </KeyboardAwareScrollView>
+
+      {/* Multi-select action bar — floats at the bottom while selecting. */}
+      {selectMode && (
+        <View style={styles.selectBar}>
+          <View style={styles.selectBarTop}>
+            <Text style={styles.selectBarCount}>{selectedIds.size} selected</Text>
+            <TouchableOpacity onPress={exitSelect} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.selectBarCancel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.selectBarActions}>
+            <TouchableOpacity style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]} disabled={selectedIds.size === 0 || busy} onPress={confirmArchiveSelected}>
+              <Text style={styles.selectActionText}>Archive</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]} disabled={selectedIds.size === 0 || busy} onPress={confirmRemoveSelected}>
+              <Text style={styles.selectActionText}>Remove from Location</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.selectAction, (selectedIds.size === 0 || busy) && styles.selectActionDisabled]} disabled={selectedIds.size === 0 || busy} onPress={confirmDeleteSelected}>
+              <Text style={styles.selectActionText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       {uploading && (
         <View style={styles.uploadingOverlay} pointerEvents="auto">
@@ -259,6 +375,18 @@ const styles = StyleSheet.create({
   emptyList: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl, lineHeight: 20 },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  wineRowSelected: { backgroundColor: 'rgba(224,184,74,0.16)' },
+  checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  checkboxOn: { backgroundColor: colors.gold },
+  checkboxTick: { fontSize: 13, color: colors.surface, fontFamily: fonts.headingBold },
+  selectBar: { position: 'absolute', left: 0, right: 0, bottom: 0, backgroundColor: colors.surface, borderTopWidth: 1, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xl, gap: spacing.sm },
+  selectBarTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xs },
+  selectBarCount: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold },
+  selectBarCancel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold },
+  selectBarActions: { flexDirection: 'row', gap: spacing.sm },
+  selectAction: { flex: 1, borderWidth: 1, borderColor: 'rgba(244,235,224,0.30)', backgroundColor: 'rgba(255,255,255,0.04)', borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: 4, alignItems: 'center', justifyContent: 'center' },
+  selectActionDisabled: { opacity: 0.4 },
+  selectActionText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.cream, textAlign: 'center', letterSpacing: 0.3 },
   thumb: { width: 34, height: 44 },
   wineMain: { flex: 1 },
   wineName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
