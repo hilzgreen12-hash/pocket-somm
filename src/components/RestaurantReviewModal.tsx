@@ -34,6 +34,8 @@ interface WineLine {
   // 'other' = brought to the visit (Off-List); anything else = chosen off the
   // restaurant's list (List Bottle). Undefined from legacy callers → List.
   source?: string | null;
+  // Whether this wine already carries a review (drives Add vs View/Edit).
+  reviewed?: boolean;
 }
 
 interface Props {
@@ -52,6 +54,9 @@ interface Props {
   // Opens the per-wine review (ChosenWineModal) for the picked wine at this
   // index. Wired by the results screen; absent when there's nothing to link.
   onReviewWine?: (index: number) => void;
+  // Opens Wine Intel for the wine at this index (parent closes the modal and
+  // navigates — same reason onReviewWine is a callback, not done inline).
+  onViewIntel?: (index: number) => void;
   onClose: () => void;
   // Reports the saved name + city back so callers (e.g. the List results
   // card) can reflect edits without refetching.
@@ -60,7 +65,7 @@ interface Props {
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
-  city, date, wines, onReviewWine, onClose, onSaved,
+  city, date, wines, onReviewWine, onViewIntel, onClose, onSaved,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -301,24 +306,28 @@ export function RestaurantReviewModal({
   // and Off-List Bottles (brought along). Keep each wine's original index so
   // "Review this wine →" still targets the right chosen_wine.
   const indexedWines = (wines ?? []).map((w, i) => ({ ...w, _idx: i }));
+
+  // Tap a wine → choose to review it (add or view/edit) or see its Wine Intel.
+  function openWinePopup(w: WineLine & { _idx: number }) {
+    const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
+    const buttons: { text: string; style?: 'cancel'; onPress?: () => void }[] = [];
+    if (onReviewWine) buttons.push({ text: w.reviewed ? 'View / Edit Review' : 'Add Review', onPress: () => onReviewWine(w._idx) });
+    if (onViewIntel) buttons.push({ text: 'View Wine Intel', onPress: () => onViewIntel(w._idx) });
+    buttons.push({ text: 'Cancel', style: 'cancel' });
+    showAlert({ title: line || 'This wine', body: w.source === 'other' ? 'Brought to this visit.' : 'Chosen off the list.', buttons });
+  }
+
   const renderBottle = (w: WineLine & { _idx: number }) => {
     const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
+    // Origin ("Brought" / "List Pick") now reads as a prefix on the wine line
+    // itself — no longer a separate bubble after it.
+    const origin = w.source === 'other' ? 'Brought' : 'List Pick';
     return (
-      <View key={w._idx} style={styles.wineRow}>
-        <View style={styles.wineLineRow}>
-          <Text style={styles.wineLine}>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}</Text>
-          {/* Quiet origin tag: "brought" (off-list) vs "From List" (chosen off
-              the restaurant's list) — the nuance without the chore. */}
-          {w.source === 'other'
-            ? <Text style={styles.broughtTag}>brought</Text>
-            : <Text style={styles.fromListTag}>From List</Text>}
-        </View>
-        {onReviewWine ? (
-          <TouchableOpacity onPress={() => onReviewWine(w._idx)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-            <Text style={styles.wineReviewLink}>Review this wine →</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <TouchableOpacity key={w._idx} style={styles.wineRow} onPress={() => openWinePopup(w)} activeOpacity={0.7}>
+        <Text style={styles.wineLine} numberOfLines={2}>
+          <Text style={styles.wineOrigin}>{origin}: </Text>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}
+        </Text>
+      </TouchableOpacity>
     );
   };
 
@@ -459,35 +468,42 @@ export function RestaurantReviewModal({
             </View>
           )}
 
-          {/* Confirm wine details — the shared last step for every add path. */}
+          {/* Confirm wine details — the shared last step for every add path.
+              Wrapped in a keyboard-aware scroll so the inputs lift above the
+              keyboard instead of being covered. */}
           {confirmOpen && (
-            <View style={styles.bottleOverlay}>
+            <View style={styles.confirmSheetOverlay}>
               <View style={styles.bottleBackdrop} />
-              <View style={styles.bottleSheet}>
-                <Text style={styles.bottleSheetTitle}>Confirm wine details</Text>
-                <Text style={styles.bottleFieldLabel}>Producer</Text>
-                <TextInput style={styles.bottleInput} value={cbProducer} onChangeText={setCbProducer} placeholder="Producer" placeholderTextColor={colors.textMuted} />
-                <Text style={styles.bottleFieldLabel}>Wine name</Text>
-                <TextInput style={styles.bottleInput} value={cbWineName} onChangeText={setCbWineName} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
-                <Text style={styles.bottleFieldLabel}>Region</Text>
-                <TextInput style={styles.bottleInput} value={cbRegion} onChangeText={setCbRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
-                <Text style={styles.bottleFieldLabel}>Vintage</Text>
-                <TextInput style={styles.bottleInput} value={cbVintage} onChangeText={setCbVintage} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
-                {/* Inferred by entry point (cellar = brought), correctable here. */}
-                <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setCbBrought((v) => !v)} activeOpacity={0.7}>
-                  <View style={[styles.broughtCheckbox, cbBrought && styles.broughtCheckboxOn]}>
-                    {cbBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
-                  </View>
-                  <View style={styles.broughtToggleTextWrap}>
+              <KeyboardAwareScrollView style={styles.confirmScroll} contentContainerStyle={styles.confirmContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+                <View style={styles.bottleSheet}>
+                  <Text style={styles.bottleSheetTitle}>Confirm wine details</Text>
+                  <Text style={styles.bottleFieldLabel}>Producer</Text>
+                  <TextInput style={styles.bottleInput} value={cbProducer} onChangeText={setCbProducer} placeholder="Producer" placeholderTextColor={colors.textMuted} />
+                  <Text style={styles.bottleFieldLabel}>Wine name</Text>
+                  <TextInput style={styles.bottleInput} value={cbWineName} onChangeText={setCbWineName} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
+                  <Text style={styles.bottleFieldLabel}>Region</Text>
+                  <TextInput style={styles.bottleInput} value={cbRegion} onChangeText={setCbRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
+                  <Text style={styles.bottleFieldLabel}>Vintage</Text>
+                  <TextInput style={styles.bottleInput} value={cbVintage} onChangeText={setCbVintage} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
+                  {/* Origin — two mutually-exclusive ticks (brought vs ordered). */}
+                  <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setCbBrought(true)} activeOpacity={0.7}>
+                    <View style={[styles.broughtCheckbox, cbBrought && styles.broughtCheckboxOn]}>
+                      {cbBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
+                    </View>
                     <Text style={styles.broughtToggleLabel}>I brought this</Text>
-                    <Text style={styles.broughtToggleHint}>Off the restaurant's list — e.g. from home or your cellar.</Text>
-                  </View>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddBottle} disabled={bottleBusy}>
-                  <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : 'Add to This Visit'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.bottleCancel} onPress={() => setConfirmOpen(false)} disabled={bottleBusy}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
-              </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setCbBrought(false)} activeOpacity={0.7}>
+                    <View style={[styles.broughtCheckbox, !cbBrought && styles.broughtCheckboxOn]}>
+                      {!cbBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
+                    </View>
+                    <Text style={styles.broughtToggleLabel}>I ordered this</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddBottle} disabled={bottleBusy}>
+                    <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : 'Add to This Visit'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.bottleCancel} onPress={() => setConfirmOpen(false)} disabled={bottleBusy}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+                </View>
+              </KeyboardAwareScrollView>
             </View>
           )}
 
@@ -600,7 +616,7 @@ const styles = StyleSheet.create({
   // "From List" — same bubble treatment as "brought", for wines chosen off the
   // restaurant's list.
   fromListTag: { fontFamily: fonts.bodySemibold, fontSize: 10.5, color: colors.gold, letterSpacing: 0.4, textTransform: 'uppercase', borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', borderRadius: 999, paddingHorizontal: 8, paddingVertical: 1, overflow: 'hidden' },
-  broughtToggleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
+  broughtToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.xs },
   broughtCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', marginTop: 1 },
   broughtCheckboxOn: { backgroundColor: 'rgba(224,184,74,0.18)' },
   broughtCheckTick: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold },
@@ -609,6 +625,8 @@ const styles = StyleSheet.create({
   broughtToggleHint: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   // Wine reference — gold italic, matching the wine reference style elsewhere.
   wineLine: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, lineHeight: 21 },
+  // Origin prefix ("Brought:" / "List Pick:") — gold, non-italic to stand apart.
+  wineOrigin: { fontFamily: fonts.bodySemibold, color: colors.gold },
   wineReviewLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 2 },
   // "Add a Bottle" — dashed gold affordance under the bottle list.
   addBottleBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
@@ -647,6 +665,11 @@ const styles = StyleSheet.create({
   // --- Add-a-Bottle overlays (rendered inside this full-screen modal, not as
   // nested RN Modals, which misbehave on Android). ---
   bottleOverlay: { ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  // Confirm-details sheet: a keyboard-aware scroll fills the overlay and centres
+  // the sheet, lifting it above the keyboard when a field is focused.
+  confirmSheetOverlay: { ...StyleSheet.absoluteFillObject },
+  confirmScroll: { flex: 1 },
+  confirmContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: 40 },
   bottleBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   bottleSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460, maxHeight: '82%' },
   bottleSheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
