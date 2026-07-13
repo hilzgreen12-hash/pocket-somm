@@ -111,7 +111,8 @@ export function RestaurantReviewModal({
   const [multiOpen, setMultiOpen] = useState(false);
   const [multiBottles, setMultiBottles] = useState<{ producer: string | null; wineName: string | null; vintage: string | number | null; region: string | null }[]>([]);
   const [multiChecked, setMultiChecked] = useState<Set<number>>(new Set());
-  const [multiBrought, setMultiBrought] = useState(false);
+  // Per-wine origin — indices in the set were "brought"; the rest are list picks.
+  const [multiBrought, setMultiBrought] = useState<Set<number>>(new Set());
 
   function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }, brought: boolean) {
     setCbProducer(prefill.producer ?? '');
@@ -144,7 +145,7 @@ export function RestaurantReviewModal({
           // Several bottles → tick-list to confirm which to add.
           setMultiBottles(detected.map((b) => ({ producer: b.producer, wineName: b.wineName, vintage: b.vintage, region: b.region ?? null })));
           setMultiChecked(new Set(detected.map((_, i) => i)));
-          setMultiBrought(false);
+          setMultiBrought(new Set()); // default all to "list pick"
           setMultiOpen(true);
         } else if (detected.length === 1) {
           const b = detected[0];
@@ -178,11 +179,12 @@ export function RestaurantReviewModal({
   async function handleAddMulti() {
     if (bottleBusy) return;
     if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to add bottles to a visit.' }); return; }
-    const picked = multiBottles.filter((_, i) => multiChecked.has(i));
-    if (picked.length === 0) { showAlert({ title: 'Nothing selected', body: 'Tick at least one bottle to add.' }); return; }
+    if (multiChecked.size === 0) { showAlert({ title: 'Nothing selected', body: 'Tick at least one bottle to add.' }); return; }
     setBottleBusy(true);
     try {
-      for (const b of picked) {
+      for (let i = 0; i < multiBottles.length; i++) {
+        if (!multiChecked.has(i)) continue;
+        const b = multiBottles[i];
         const vint = b.vintage != null ? String(b.vintage).trim() : '';
         await addSessionBottle(session.user.id, {
           sessionId,
@@ -192,7 +194,7 @@ export function RestaurantReviewModal({
           wineName: (b.wineName || b.producer || 'Wine').trim(),
           region: b.region?.trim() || null,
           vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
-          source: multiBrought ? 'other' : 'restaurant',
+          source: multiBrought.has(i) ? 'other' : 'restaurant',
         });
       }
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
@@ -566,28 +568,32 @@ export function RestaurantReviewModal({
               <KeyboardAwareScrollView style={styles.confirmScroll} contentContainerStyle={styles.confirmContent} keyboardShouldPersistTaps="handled">
                 <View style={styles.bottleSheet}>
                   <Text style={styles.bottleSheetTitle}>Confirm bottles</Text>
-                  <Text style={styles.bottleSheetBody}>Vinster read {multiBottles.length} bottles — tick the ones to add to this visit.</Text>
+                  <Text style={styles.bottleSheetBody}>Vinster read {multiBottles.length} bottles — tick the ones to add, and set each as List Pick or Brought.</Text>
                   {multiBottles.map((b, i) => {
                     const on = multiChecked.has(i);
+                    const brought = multiBrought.has(i);
                     const line = [b.producer, b.wineName, b.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ') || 'Unreadable bottle';
                     return (
-                      <TouchableOpacity key={i} style={styles.multiRow} onPress={() => toggleMultiCheck(i)} activeOpacity={0.7}>
-                        <View style={[styles.broughtCheckbox, on && styles.broughtCheckboxOn]}>
-                          {on ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
+                      <View key={i} style={styles.multiRow}>
+                        <TouchableOpacity onPress={() => toggleMultiCheck(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                          <View style={[styles.broughtCheckbox, on && styles.broughtCheckboxOn]}>
+                            {on ? <Text style={styles.broughtCheckTick}>✓</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                        <View style={styles.multiRowMain}>
+                          <Text style={styles.multiRowText} numberOfLines={2}>{line}</Text>
+                          <View style={styles.originToggleRow}>
+                            <TouchableOpacity onPress={() => setMultiBrought((prev) => { const n = new Set(prev); n.delete(i); return n; })} style={[styles.originChip, !brought && styles.originChipActive]} activeOpacity={0.7}>
+                              <Text style={[styles.originChipText, !brought && styles.originChipTextActive]}>List Pick</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => setMultiBrought((prev) => { const n = new Set(prev); n.add(i); return n; })} style={[styles.originChip, brought && styles.originChipActive]} activeOpacity={0.7}>
+                              <Text style={[styles.originChipText, brought && styles.originChipTextActive]}>Brought</Text>
+                            </TouchableOpacity>
+                          </View>
                         </View>
-                        <Text style={styles.multiRowText} numberOfLines={2}>{line}</Text>
-                      </TouchableOpacity>
+                      </View>
                     );
                   })}
-                  {/* Batch origin — brought vs ordered, applies to all ticked. */}
-                  <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setMultiBrought(true)} activeOpacity={0.7}>
-                    <View style={[styles.broughtCheckbox, multiBrought && styles.broughtCheckboxOn]}>{multiBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}</View>
-                    <Text style={styles.broughtToggleLabel}>I brought these</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.broughtToggleRow} onPress={() => setMultiBrought(false)} activeOpacity={0.7}>
-                    <View style={[styles.broughtCheckbox, !multiBrought && styles.broughtCheckboxOn]}>{!multiBrought ? <Text style={styles.broughtCheckTick}>✓</Text> : null}</View>
-                    <Text style={styles.broughtToggleLabel}>I ordered these</Text>
-                  </TouchableOpacity>
                   <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddMulti} disabled={bottleBusy}>
                     <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : `Add ${multiChecked.size} ${multiChecked.size === 1 ? 'Bottle' : 'Bottles'}`}</Text>
                   </TouchableOpacity>
@@ -761,8 +767,15 @@ const styles = StyleSheet.create({
   confirmScroll: { flex: 1 },
   confirmContent: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: 40 },
   // Multi-bottle tick-list rows.
-  multiRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  multiRowText: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  multiRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  multiRowMain: { flex: 1, gap: spacing.xs },
+  multiRowText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  // Per-wine "List Pick / Brought" toggle chips.
+  originToggleRow: { flexDirection: 'row', gap: spacing.sm, marginTop: 2 },
+  originChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 999, paddingVertical: 4, paddingHorizontal: spacing.md },
+  originChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
+  originChipText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted },
+  originChipTextActive: { color: colors.gold },
   bottleBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   bottleSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460, maxHeight: '82%' },
   bottleSheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
