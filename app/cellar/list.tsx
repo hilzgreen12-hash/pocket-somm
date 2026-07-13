@@ -16,6 +16,7 @@ import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { archiveCellarWine, deleteCellarWine } from '../../src/api/cellar';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
+import { fetchStorageLocations } from '../../src/api/storageLocations';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -113,6 +114,16 @@ export default function FullCellarListScreen() {
     enabled: !!userId,
   });
   function refetchLocations() { qc.invalidateQueries({ queryKey: ['cellar-locations', userId] }); }
+
+  // Home Storage locations (storage_locations, migration 064) — also offered as
+  // Location filter options so a wine filed in one is filterable here. This
+  // query refetches (react-query, refetch-on-mount) whenever a new Home Storage
+  // location is added, so the filter list stays current automatically.
+  const { data: storageLocations = [] } = useQuery({
+    queryKey: ['storage-locations', userId],
+    queryFn: () => fetchStorageLocations(userId!),
+    enabled: !!userId,
+  });
 
   // Long-press a bespoke Location chip in the filter → manage it, mirroring the
   // rack filter menu: Add/Remove Wines · Rename Filter · Delete.
@@ -453,6 +464,8 @@ export default function FullCellarListScreen() {
       } else if (locationFilter.startsWith('loc:')) {
         const loc = locations.find((l) => l.id === locationFilter.slice(4));
         if (!loc || !loc.wineIds.includes(w.id)) return false;
+      } else if (locationFilter.startsWith('sloc:')) {
+        if (w.storage_location_id !== locationFilter.slice(5)) return false;
       } else if (wineToRackId[w.id] !== locationFilter) {
         return false;
       }
@@ -559,10 +572,11 @@ export default function FullCellarListScreen() {
     const opts: { value: string; label: string }[] = [{ value: 'All', label: 'All locations' }];
     for (const r of racks) opts.push({ value: r.id, label: r.name });
     for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
+    for (const s of storageLocations) opts.push({ value: `sloc:${s.id}`, label: s.name });
     opts.push({ value: 'Unassigned', label: 'Not in a rack' });
     opts.push({ value: '__add__', label: '＋ Add Location' });
     return opts;
-  }, [racks, locations]);
+  }, [racks, locations, storageLocations]);
 
   const locationLabel = locationFilter === 'All'
     ? 'All'
