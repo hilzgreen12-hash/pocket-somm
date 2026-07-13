@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
@@ -218,7 +219,7 @@ export default function ArchiveNightScreen() {
           <Text style={styles.hint}>Archiving…</Text>
         </View>
       ) : stage === 'done' ? (
-        <ScrollView contentContainerStyle={styles.doneContent} keyboardShouldPersistTaps="handled">
+        <KeyboardAwareScrollView contentContainerStyle={styles.doneContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
           <Text style={styles.doneTitle}>Night Archived</Text>
           <Text style={styles.doneCount}>
             {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive.{' '}
@@ -286,7 +287,7 @@ export default function ArchiveNightScreen() {
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>Done</Text>
           </TouchableOpacity>
-        </ScrollView>
+        </KeyboardAwareScrollView>
       ) : (
         // review
         <ScrollView contentContainerStyle={styles.content}>

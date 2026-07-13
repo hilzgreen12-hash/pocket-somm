@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator, ScrollView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
@@ -70,7 +71,7 @@ export default function NewStorageLocationScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
+      <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         <Text style={styles.notice}>Vinster only accepts portrait images for Other Home Storage Locations.</Text>
 
         {photoUri ? (
@@ -103,7 +104,7 @@ export default function NewStorageLocationScreen() {
         <TouchableOpacity style={[styles.saveBtn, saving && styles.btnDisabled]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
           {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>Create Location</Text>}
         </TouchableOpacity>
-      </ScrollView>
+      </KeyboardAwareScrollView>
     </View>
   );
 }
