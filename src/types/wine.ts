@@ -189,6 +189,10 @@ export interface CellarWine {
   // Cellar List "Locations" filter. Optional (nullable column, DB-defaulted) so
   // wine-insert call sites don't all need to set it.
   storage_location_id?: string | null;
+  // Migration 069. The case (single-wine OWC or a mixed case) this wine is
+  // boxed in, within its storage location. Optional/nullable — loose bottles
+  // have no case.
+  case_id?: string | null;
   user_notes: string | null;
   // Migration 043. The user's WRITTEN REVIEW — sharable to community
   // and outside the app. Distinct from user_notes (Personal Notes,
@@ -237,6 +241,18 @@ export interface StorageLocation {
   created_at: string;
   // Convenience count of wines filed here, when the query provides it.
   wineCount?: number;
+}
+
+// A case of bottles boxed together inside a storage location (migration 069).
+// kind='single' → many bottles of one wine; kind='mixed' → different wines.
+export interface StorageCase {
+  id: string;
+  user_id: string;
+  storage_location_id: string | null;
+  name: string;
+  kind: 'single' | 'mixed';
+  note: string | null;
+  created_at: string;
 }
 
 // Rack types
