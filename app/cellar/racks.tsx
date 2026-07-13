@@ -200,7 +200,7 @@ export default function RacksScreen() {
 
           {totalLocations > 0 && (
             <Text style={styles.homeSummary}>
-              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} in {totalLocations} {totalLocations === 1 ? 'Home Storage Location' : 'Home Storage Locations'}
+              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
             </Text>
           )}
 

@@ -21,7 +21,6 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { useLabels } from '../../src/hooks/useLabels';
-import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -604,13 +603,11 @@ export default function ChosenWinesScreen() {
       }
       setAddInitial(ocr);
       setPendingReviewLabelUri(uri);
-      // Ask whether to keep the label in Your Label Library, THEN open the
-      // review input either way (sequenced so the alert never sits under the
-      // fullscreen review modal).
-      promptAddToLabelLibrary(
-        () => { void addScannedLabelToLibrary(uri, ocr); setAddOpen(true); },
-        () => setAddOpen(true),
-      );
+      // A scanned/uploaded review label is automatically kept in Your Label
+      // Library (best-effort), and its photo also rides along onto the review
+      // (see AddChosenWineModal's labelImageUri). Then open the review input.
+      void addScannedLabelToLibrary(uri, ocr);
+      setAddOpen(true);
     } catch (err) {
       showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });
     }
