@@ -268,6 +268,13 @@ export default function LineupLibraryScreen() {
     ? { title: 'Month enjoyed', options: monthOptions, selected: monthFilter, onSelect: (v: string) => setMonthFilter(v) }
     : null;
 
+  // Whole-library tally shown in gold under the header, mirroring the Full
+  // Cellar List summary. Prefer the stored bottle_count, else sum the wines.
+  const lineupBottles = filtered.reduce(
+    (sum, l) => sum + (l.bottle_count ?? (l.wines?.reduce((s, w) => s + (w.count ?? 1), 0) ?? 0)),
+    0,
+  );
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -301,6 +308,9 @@ export default function LineupLibraryScreen() {
         </View>
       ) : (
         <>
+          <Text style={styles.lineupSummary}>
+            {filtered.length} {filtered.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
+          </Text>
           <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
             <TouchableOpacity style={[styles.filterChip, favFilter !== 'all' && styles.filterChipActive]} onPress={() => setOpenDropdown('fav')}>
@@ -484,6 +494,8 @@ const styles = StyleSheet.create({
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
+  // Gold whole-library tally, same treatment as the Full Cellar List summary.
+  lineupSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
