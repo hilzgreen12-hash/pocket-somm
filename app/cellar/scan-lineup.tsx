@@ -10,7 +10,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useLineupStore } from '../../src/stores/lineupStore';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { detectLineup, type DetectedBottle } from '../../src/api/label';
+import { detectLineup, prepareImageBase64, scanLabel, type DetectedBottle } from '../../src/api/label';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { findCellarWineByIdentity } from '../../src/api/cellar';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
@@ -128,7 +128,8 @@ export default function ScanLineupScreen() {
   const [rawUri, setRawUri] = useState<string | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1 });
+  const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1, overrideImageUri: null as string | null });
+  const [scanningEdit, setScanningEdit] = useState(false);
 
   // If the store already holds a lineup (we've returned mid-flow after
   // onboarding a wine), open straight onto the review list.
@@ -239,6 +240,7 @@ export default function ScanLineupScreen() {
       vintage: b.vintage ?? '',
       bottleSizeMl: b.bottleSizeMl ?? 750,
       quantity: b.quantity ?? 1,
+      overrideImageUri: b.overrideImageUri ?? null,
     });
     setEditIndex(i);
   }
@@ -251,10 +253,41 @@ export default function ScanLineupScreen() {
       vintage: editDraft.vintage.trim() || null,
       bottleSizeMl: editDraft.bottleSizeMl,
       quantity: Math.max(1, editDraft.quantity),
+      overrideImageUri: editDraft.overrideImageUri,
     });
     setConfirmed((prev) => new Set(prev).add(editIndex));
     setEditIndex(null);
   }
+  // Re-scan a single wine's label from the edit sheet — re-reads the details and
+  // captures a fresh photo that overrides the (often small) lineup crop.
+  async function handleScanInEdit() {
+    try {
+      const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      const uri = res.assets[0].uri;
+      setScanningEdit(true);
+      try {
+        const base64 = await prepareImageBase64(uri);
+        const details = await scanLabel(base64);
+        setEditDraft((d) => ({
+          ...d,
+          producer: details.producer ?? d.producer,
+          wineName: details.wineName ?? d.wineName,
+          region: details.region ?? d.region,
+          vintage: details.vintage ?? d.vintage,
+          overrideImageUri: uri,
+        }));
+      } catch {
+        // OCR failed — still keep the fresh photo as the override.
+        setEditDraft((d) => ({ ...d, overrideImageUri: uri }));
+      } finally {
+        setScanningEdit(false);
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   function toggleConfirm(i: number) {
     setConfirmed((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; });
   }
@@ -388,9 +421,15 @@ export default function ScanLineupScreen() {
           targetId = saved.id;
         }
         await assignSlots(originRackId, slots, targetId);
-        // Thumbnail: reuse the matched wine's existing label if it has one;
-        // otherwise crop this bottle out of the lineup photo. Non-fatal.
-        if (!match?.label_image_path && b.box && imageUri && imgDims) {
+        // Thumbnail: a re-scanned label (edit sheet) wins; else reuse the
+        // matched wine's existing label; else crop this bottle from the lineup
+        // photo. Non-fatal.
+        if (b.overrideImageUri) {
+          try {
+            const path = await uploadLabelImage(userId, b.overrideImageUri, targetId);
+            await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
+          } catch { /* non-fatal — placed without the re-scanned photo */ }
+        } else if (!match?.label_image_path && b.box && imageUri && imgDims) {
           try {
             const { x, y, w, h } = b.box;
             // Pad the (tight, label-focused) box a little so the thumbnail keeps
@@ -608,7 +647,11 @@ export default function ScanLineupScreen() {
                 <Text style={styles.qtyBtnText}>+</Text>
               </TouchableOpacity>
             </View>
-            <TouchableOpacity style={[styles.primaryBtn, { marginTop: spacing.lg }]} onPress={confirmEdit} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.secondaryBtn, { marginTop: spacing.lg }]} onPress={handleScanInEdit} disabled={scanningEdit} activeOpacity={0.85}>
+              <Text style={styles.secondaryBtnText}>{scanningEdit ? 'Reading…' : 'Scan Wine Label'}</Text>
+            </TouchableOpacity>
+            {editDraft.overrideImageUri ? <Text style={styles.editHintCaptured}>New label photo captured — it will replace the lineup crop.</Text> : null}
+            <TouchableOpacity style={[styles.primaryBtn, { marginTop: spacing.sm }]} onPress={confirmEdit} activeOpacity={0.85}>
               <Text style={styles.primaryBtnText}>Confirm</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.editDiscard} onPress={() => setEditIndex(null)}>
@@ -675,6 +718,7 @@ const styles = StyleSheet.create({
   qtyBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   qtyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold, lineHeight: 26 },
   qtyValue: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, minWidth: 32, textAlign: 'center' },
+  editHintCaptured: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, textAlign: 'center', marginTop: spacing.sm },
   editAddLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   // Rack-placement review: per-row remove toggle (legacy, unused now).
   rowRemoved: { opacity: 0.4 },

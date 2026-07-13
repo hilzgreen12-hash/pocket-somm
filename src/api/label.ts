@@ -130,6 +130,9 @@ export interface DetectedBottle {
   // Bottle format in millilitres (default 750). Editable per row in the rack
   // lineup review; seeds the cellar wine's bottle_size_ml on placement.
   bottleSizeMl?: number;
+  // Client-only: a re-scanned label photo (from the lineup edit sheet) that
+  // overrides the crop taken from the lineup photo when the wine is placed.
+  overrideImageUri?: string | null;
 }
 export async function detectLineup(base64Image: string): Promise<{ bottles: DetectedBottle[] }> {
   return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
