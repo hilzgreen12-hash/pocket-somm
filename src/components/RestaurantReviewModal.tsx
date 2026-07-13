@@ -57,6 +57,8 @@ interface Props {
   // Opens Wine Intel for the wine at this index (parent closes the modal and
   // navigates — same reason onReviewWine is a callback, not done inline).
   onViewIntel?: (index: number) => void;
+  // Permanently delete the wine at this index from the visit.
+  onDeleteWine?: (index: number) => void;
   onClose: () => void;
   // Reports the saved name + city back so callers (e.g. the List results
   // card) can reflect edits without refetching.
@@ -65,7 +67,7 @@ interface Props {
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
-  city, date, wines, onReviewWine, onViewIntel, onClose, onSaved,
+  city, date, wines, onReviewWine, onViewIntel, onDeleteWine, onClose, onSaved,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -364,9 +366,10 @@ export function RestaurantReviewModal({
   // Tap a wine → choose to review it (add or view/edit) or see its Wine Intel.
   function openWinePopup(w: WineLine & { _idx: number }) {
     const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
-    const buttons: { text: string; style?: 'cancel'; onPress?: () => void }[] = [];
+    const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
     if (onReviewWine) buttons.push({ text: w.reviewed ? 'View / Edit Review' : 'Add Review', onPress: () => onReviewWine(w._idx) });
     if (onViewIntel) buttons.push({ text: 'View Wine Intel', onPress: () => onViewIntel(w._idx) });
+    if (onDeleteWine) buttons.push({ text: 'Delete Wine', style: 'destructive', onPress: () => onDeleteWine(w._idx) });
     buttons.push({ text: 'Cancel', style: 'cancel' });
     showAlert({ title: line || 'This wine', body: w.source === 'other' ? 'Brought to this visit.' : 'Chosen off the list.', buttons });
   }
