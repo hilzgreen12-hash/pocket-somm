@@ -1,8 +1,13 @@
 import { useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation } from '../../../src/api/storageLocations';
+import { prepareImageBase64, scanLabel } from '../../../src/api/label';
+import { useLabelStore } from '../../../src/stores/labelStore';
+import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useLabelImageUrl } from '../../../src/hooks/useLabelImageUrl';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
@@ -34,8 +39,10 @@ function bottleLabel(n: number) {
 export default function StorageLocationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { setPendingStorageLocationId } = useRackStore();
+  const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
+  const [uploading, setUploading] = useState(false);
 
   const { data: location, isLoading } = useQuery({
     queryKey: ['storage-location', id],
@@ -62,12 +69,38 @@ export default function StorageLocationScreen() {
     });
   }, [wines, search, maturity]);
 
-  // Both add buttons run the same label-scan (OCR) flow, filing the saved wine
-  // into this location. "Case" just means the user will set a higher quantity.
-  function addWine() {
+  // All add paths file the saved wine into THIS location (context=add-location,
+  // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.
+  function handleScan() {
     if (!id) return;
     setPendingStorageLocationId(id);
     router.push('/label/camera?context=add-location' as any);
+  }
+  function handleManual() {
+    if (!id) return;
+    setPendingStorageLocationId(id);
+    useLabelStore.getState().reset();
+    router.push('/label/confirm?manual=1&context=add-location' as any);
+  }
+  async function handleUpload() {
+    if (!id) return;
+    if (!(await ensureMediaPermission('library'))) return;
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (res.canceled || !res.assets[0]) return;
+    setPendingStorageLocationId(id);
+    setUploading(true);
+    try {
+      const uri = res.assets[0].uri;
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+      router.push('/label/confirm?context=add-location' as any);
+    } catch (err) {
+      showAlert({ title: 'Could not read label', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setUploading(false);
+    }
   }
 
   function handleLongPressHeader() {
@@ -113,19 +146,25 @@ export default function StorageLocationScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={{ paddingBottom: 90 }}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
         ) : null}
 
-        {/* Add a wine — OCR label scan, filed straight into this location. */}
-        <View style={styles.addRow}>
-          <TouchableOpacity style={styles.addBtn} onPress={addWine} activeOpacity={0.85}>
-            <Text style={styles.addBtnText}>Photograph a wine label</Text>
+        {/* Add a wine — filed straight into this location. Scan (wine or case),
+            upload a photo, or enter by hand. */}
+        <View style={styles.addSection}>
+          <TouchableOpacity style={styles.addBtn} onPress={handleScan} activeOpacity={0.85}>
+            <Text style={styles.addBtnText}>Scan a Wine or Case Label</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary]} onPress={addWine} activeOpacity={0.85}>
-            <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Photograph a case</Text>
-          </TouchableOpacity>
+          <View style={styles.addRow}>
+            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={handleUpload} activeOpacity={0.85}>
+              <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Upload Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={handleManual} activeOpacity={0.85}>
+              <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Manual Input</Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <Text style={styles.listHeader}>List</Text>
@@ -181,7 +220,14 @@ export default function StorageLocationScreen() {
             ))}
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
+
+      {uploading && (
+        <View style={styles.uploadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.uploadingText}>Reading the label…</Text>
+        </View>
+      )}
     </View>
   );
 }
@@ -194,8 +240,9 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   areaPhoto: { width: '100%', height: 360, backgroundColor: colors.surface },
-  addRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  addBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  addSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
+  addRow: { flexDirection: 'row', gap: spacing.sm },
+  addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   addBtnSecondary: { borderColor: '#FFFFFF' },
   addBtnText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
   addBtnTextSecondary: { color: '#FFFFFF' },
@@ -218,4 +265,6 @@ const styles = StyleSheet.create({
   wineMetaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
   wineMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, flexShrink: 1 },
   wineMetaDot: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  uploadingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
 });
