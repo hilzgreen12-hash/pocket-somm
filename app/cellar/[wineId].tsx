@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
 import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
+import { useLabels } from '../../src/hooks/useLabels';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
@@ -99,6 +100,7 @@ export default function CellarWineDetail() {
   const cameFromWishlist = from === 'wishlist';
   const { session } = useAuth();
   const { wines, updateWine, isLoading: cellarLoading } = useCellar();
+  const { create: createLabelMut } = useLabels();
   const { wines: wishlistWines, isLoading: wishlistLoading, deleteWine: deleteWishlistWine } = useWishList();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
@@ -302,17 +304,38 @@ export default function CellarWineDetail() {
     });
   }
 
-  // Long-press on the thumbnail → change or remove the label photo.
+  // Long-press on the thumbnail → change, save to Label Library, or remove.
   function handlePhotoMenu() {
     showAlert({
       title: 'Label photo',
-      body: 'Change or remove this label photo.',
+      body: 'Change this label photo, save it to your Label Library, or remove it.',
       buttons: [
         { text: 'Change photo', onPress: () => void handleAddPhoto() },
+        { text: 'Add to Label Library', onPress: () => void handleAddToLabelLibrary() },
         { text: 'Delete photo', style: 'destructive', onPress: () => void handleDeletePhoto() },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  // Copy this wine's label into Your Label Library — references the existing
+  // stored photo (no re-upload) and carries the identity across; the label row's
+  // created_at gives it the date stamp.
+  async function handleAddToLabelLibrary() {
+    if (!wine || !wine.label_image_path) return;
+    try {
+      await createLabelMut.mutateAsync({
+        imagePath: wine.label_image_path,
+        producer: wine.producer,
+        wineName: wine.wine_name,
+        vintage: wine.vintage,
+        region: wine.region,
+        place: wine.review_location ?? null,
+      });
+      showAlert({ title: 'Added to Label Library', body: 'This label is now in Your Label Library, date-stamped.' });
+    } catch (err) {
+      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   async function handleDeletePhoto() {

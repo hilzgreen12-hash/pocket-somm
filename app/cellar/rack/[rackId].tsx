@@ -399,6 +399,8 @@ export default function RackGridScreen() {
       new Date(b.wine.created_at).getTime() - new Date(a.wine.created_at).getTime()
     );
   }, [slots]);
+  // Total bottles = occupied slots (each slot is one bottle).
+  const rackBottleCount = useMemo(() => winesInRack.reduce((sum, w) => sum + w.count, 0), [winesInRack]);
 
   // Order for the filter wine-picker: wines already in the filter (when the
   // editor opened) first, then the rest — each group keeps the recency order
@@ -1235,6 +1237,11 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Gold tally — distinct wines vs total bottles in this rack/fridge. */}
+      <Text style={styles.rackSummary}>
+        {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'}
+      </Text>
+
       {lineupSetup && (
         <View style={styles.lineupBanner}>
           <Text style={styles.lineupBannerTitle}>
@@ -2068,6 +2075,7 @@ const styles = StyleSheet.create({
   // Inter — slot plus glyph
   slotPlus: { fontSize: 16, color: 'rgba(87,47,43,0.40)', fontFamily: fonts.bodyRegular },
   slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
+  rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingTop: spacing.sm },
   slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
   multiBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.md },
   multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },

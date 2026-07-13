@@ -125,6 +125,22 @@ export async function setLineupNote(id: string, note: string | null): Promise<vo
   if (error) throw error;
 }
 
+// Delete a lineup from the library — removes its photo from Storage (best
+// effort) and the archive row. Verifies a row was actually removed so a stale
+// session can't read as a fake success.
+export async function deleteLineupArchive(id: string): Promise<void> {
+  const { data: row } = await supabase.from('lineup_archives').select('image_path').eq('id', id).maybeSingle();
+  const { data, error } = await supabase.from('lineup_archives').delete().eq('id', id).select('id');
+  if (error) throw new Error(error.message);
+  if (!data || data.length === 0) {
+    throw new Error('That lineup could not be deleted — please pull to refresh (you may need to sign in again).');
+  }
+  const path = (row as { image_path?: string | null } | null)?.image_path;
+  if (path) {
+    try { await supabase.storage.from(BUCKET).remove([path]); } catch { /* best-effort cleanup */ }
+  }
+}
+
 export async function lineupSignedUrl(path: string | null | undefined, expiresIn = 3600): Promise<string | null> {
   if (!path) return null;
   const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, expiresIn);
