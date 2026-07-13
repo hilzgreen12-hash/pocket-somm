@@ -33,6 +33,11 @@ interface RackStore {
   detectedRows: number;
   detectedCols: number;
   pendingSlot: PendingSlot | null;
+  // Explicit set of slots the user hand-picked (multi-slot placement). When
+  // present, the placement screens fill EXACTLY these slots with the one wine
+  // instead of computing a run from a single start slot. pendingSlot still
+  // holds the first of them (so the rack-id / grid-size fields are available).
+  pendingSlots: Array<{ row: number; col: number }> | null;
   pendingWineId: string | null;
   pendingStorageType: 'rack' | 'fridge';
   pendingMove: PendingMove | null;
@@ -50,6 +55,7 @@ interface RackStore {
   setImage: (uri: string) => void;
   setDetected: (rows: number, cols: number) => void;
   setPendingSlot: (slot: PendingSlot | null) => void;
+  setPendingSlots: (slots: Array<{ row: number; col: number }> | null) => void;
   setPendingWineId: (id: string | null) => void;
   setPendingStorageType: (type: 'rack' | 'fridge') => void;
   setPendingAddMode: (v: boolean) => void;
@@ -63,6 +69,7 @@ export const useRackStore = create<RackStore>((set) => ({
   detectedRows: 4,
   detectedCols: 6,
   pendingSlot: null,
+  pendingSlots: null,
   pendingWineId: null,
   pendingStorageType: 'rack',
   pendingAddMode: false,
@@ -71,6 +78,7 @@ export const useRackStore = create<RackStore>((set) => ({
   setImage: (uri) => set({ imageUri: uri }),
   setDetected: (rows, cols) => set({ detectedRows: rows, detectedCols: cols }),
   setPendingSlot: (slot) => set({ pendingSlot: slot }),
+  setPendingSlots: (slots) => set({ pendingSlots: slots }),
   setPendingWineId: (id) => set({ pendingWineId: id }),
   setPendingStorageType: (type) => set({ pendingStorageType: type }),
   setPendingAddMode: (v) => set({ pendingAddMode: v }),

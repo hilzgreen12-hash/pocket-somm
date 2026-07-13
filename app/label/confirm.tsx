@@ -67,7 +67,8 @@ export default function LabelConfirmScreen() {
   const { preferences } = usePreferences();
   // Rack-placement context: when the user reached here by tapping an empty rack
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
-  const { pendingSlot, setPendingSlot } = useRackStore();
+  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots } = useRackStore();
+  const isMultiSlot = (pendingSlots?.length ?? 0) > 1;
   const { addWine, updateWine } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -128,7 +129,7 @@ export default function LabelConfirmScreen() {
           ? (pendingSlot.largeFormatBottleSizeMl ?? confirmed.bottleSizeMl ?? 1500)
           : (confirmed.bottleSizeMl ?? 750),
       );
-      setPlaceCount('1');
+      setPlaceCount(isMultiSlot ? String(pendingSlots!.length) : '1');
       setPlaceOrientation('Vertical');
       setPlaceModalOpen(true);
       return;
@@ -179,10 +180,13 @@ export default function LabelConfirmScreen() {
     try {
       const existing = await getRackSlots(pendingSlot.rackId);
       const occupied = new Set(existing.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
-      const free = computeFreeSlots(
-        pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols,
-        requested, placeOrientation, occupied, pendingSlot.largeFormatCols,
-      );
+      const free = isMultiSlot
+        // Multi-slot: fill exactly the hand-picked slots, skipping any now taken.
+        ? pendingSlots!.filter((s) => !occupied.has(`${s.row},${s.col}`))
+        : computeFreeSlots(
+            pendingSlot.row, pendingSlot.col, pendingSlot.rows, pendingSlot.cols,
+            requested, placeOrientation, occupied, pendingSlot.largeFormatCols,
+          );
       if (free.length === 0) {
         showAlert({ title: 'No room here', body: 'There are no free slots from this position in that direction. Try the other orientation or a different slot.' });
         setPlacing(false);
@@ -231,6 +235,7 @@ export default function LabelConfirmScreen() {
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setPendingSlot(null);
+      setPendingSlots(null);
       setPlaceModalOpen(false);
       if (free.length < requested) {
         showAlert({
@@ -349,30 +354,40 @@ export default function LabelConfirmScreen() {
           <Text style={styles.placeTitle}>Confirm placement</Text>
           <Text style={styles.label}>Bottle format</Text>
           <BottleSizePicker value={placeFormat} onChange={setPlaceFormat} />
-          <Text style={[styles.label, { marginTop: spacing.md }]}>Number of bottles</Text>
-          <TextInput
-            style={styles.input}
-            value={placeCount}
-            onChangeText={setPlaceCount}
-            keyboardType="number-pad"
-            placeholder="1"
-            placeholderTextColor={colors.textMuted}
-          />
-          <Text style={styles.label}>Fill direction</Text>
-          <View style={styles.orientRow}>
-            <TouchableOpacity
-              style={[styles.orientBtn, placeOrientation === 'Vertical' && styles.orientBtnOn]}
-              onPress={() => setPlaceOrientation('Vertical')}
-            >
-              <Text style={[styles.orientText, placeOrientation === 'Vertical' && styles.orientTextOn]}>Vertical ↓</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.orientBtn, placeOrientation === 'Horizontal' && styles.orientBtnOn]}
-              onPress={() => setPlaceOrientation('Horizontal')}
-            >
-              <Text style={[styles.orientText, placeOrientation === 'Horizontal' && styles.orientTextOn]}>Horizontal →</Text>
-            </TouchableOpacity>
-          </View>
+          {isMultiSlot ? (
+            // Multi-slot: the count and direction are already fixed by the
+            // slots the user hand-picked — just confirm the one wine goes in all.
+            <Text style={[styles.placeNote, { marginTop: spacing.md }]}>
+              Placing this wine in the {pendingSlots!.length} slots you selected.
+            </Text>
+          ) : (
+            <>
+              <Text style={[styles.label, { marginTop: spacing.md }]}>Number of bottles</Text>
+              <TextInput
+                style={styles.input}
+                value={placeCount}
+                onChangeText={setPlaceCount}
+                keyboardType="number-pad"
+                placeholder="1"
+                placeholderTextColor={colors.textMuted}
+              />
+              <Text style={styles.label}>Fill direction</Text>
+              <View style={styles.orientRow}>
+                <TouchableOpacity
+                  style={[styles.orientBtn, placeOrientation === 'Vertical' && styles.orientBtnOn]}
+                  onPress={() => setPlaceOrientation('Vertical')}
+                >
+                  <Text style={[styles.orientText, placeOrientation === 'Vertical' && styles.orientTextOn]}>Vertical ↓</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.orientBtn, placeOrientation === 'Horizontal' && styles.orientBtnOn]}
+                  onPress={() => setPlaceOrientation('Horizontal')}
+                >
+                  <Text style={[styles.orientText, placeOrientation === 'Horizontal' && styles.orientTextOn]}>Horizontal →</Text>
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
           <TouchableOpacity
             style={[styles.button, placing && styles.buttonDisabled]}
             onPress={handlePlaceConfirm}
@@ -453,6 +468,7 @@ const styles = StyleSheet.create({
   placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },
   placeSheet: { backgroundColor: colors.background, borderRadius: 18, padding: spacing.xl },
   placeTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  placeNote: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.gold, textAlign: 'center', lineHeight: 21, marginBottom: spacing.sm },
   orientRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
   orientBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
   orientBtnOn: { borderColor: colors.gold },
