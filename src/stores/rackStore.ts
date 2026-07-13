@@ -45,6 +45,10 @@ interface RackStore {
   // wine" button, so the saved wine gets filed into that location (via
   // cellar_wines.storage_location_id) instead of a rack/loose.
   pendingStorageLocationId: string | null;
+  // Set when the add flow was entered via "Add a wine to this case" on a
+  // storage location — the saved wine is filed straight into this existing
+  // case (migration 069) instead of prompting for a new one.
+  pendingCaseId: string | null;
   // True when the user entered the rack placement flow via "+ Add bottles"
   // on the wine card. The placement modal uses this to INCREMENT the
   // wine's quantity rather than overwrite it (the default behaviour for
@@ -61,6 +65,7 @@ interface RackStore {
   setPendingAddMode: (v: boolean) => void;
   setPendingMove: (m: PendingMove | null) => void;
   setPendingStorageLocationId: (id: string | null) => void;
+  setPendingCaseId: (id: string | null) => void;
   reset: () => void;
 }
 
@@ -75,6 +80,7 @@ export const useRackStore = create<RackStore>((set) => ({
   pendingAddMode: false,
   pendingMove: null,
   pendingStorageLocationId: null,
+  pendingCaseId: null,
   setImage: (uri) => set({ imageUri: uri }),
   setDetected: (rows, cols) => set({ detectedRows: rows, detectedCols: cols }),
   setPendingSlot: (slot) => set({ pendingSlot: slot }),
@@ -84,6 +90,7 @@ export const useRackStore = create<RackStore>((set) => ({
   setPendingAddMode: (v) => set({ pendingAddMode: v }),
   setPendingMove: (m) => set({ pendingMove: m }),
   setPendingStorageLocationId: (id) => set({ pendingStorageLocationId: id }),
+  setPendingCaseId: (id) => set({ pendingCaseId: id }),
   // Resets only the rack-detection transients (image, rows, cols). pendingSlot,
   // pendingWineId and pendingStorageType are cross-flow signals that should
   // persist until their consumer clears them — clearing them here breaks the

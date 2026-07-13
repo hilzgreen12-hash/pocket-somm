@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, assignWineToStorageLocation } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, assignWineToStorageLocation, fetchStorageLocationCases, updateStorageCase, deleteStorageCase } from '../../../src/api/storageLocations';
+import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
@@ -15,6 +16,7 @@ import { useRackStore } from '../../../src/stores/rackStore';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
+import { MicButton } from '../../../src/components/MicButton';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
@@ -41,7 +43,7 @@ function bottleLabel(n: number) {
 export default function StorageLocationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
-  const { setPendingStorageLocationId } = useRackStore();
+  const { setPendingStorageLocationId, setPendingCaseId } = useRackStore();
   const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
@@ -62,6 +64,11 @@ export default function StorageLocationScreen() {
     queryFn: () => fetchStorageLocationWines(id!),
     enabled: !!id,
   });
+  const { data: cases = [] } = useQuery({
+    queryKey: ['storage-location-cases', id],
+    queryFn: () => fetchStorageLocationCases(id!),
+    enabled: !!id,
+  });
   const photoUrl = useLabelImageUrl(location?.photo_path ?? null);
 
   const filtered = useMemo(() => {
@@ -79,23 +86,28 @@ export default function StorageLocationScreen() {
 
   // All add paths file the saved wine into THIS location (context=add-location,
   // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.
-  function handleScan() {
+  // caseId non-null routes the add into an existing case (the mixed-case loop);
+  // a normal add clears it so no stale case is inherited.
+  function handleScan(caseId: string | null = null) {
     if (!id) return;
     setPendingStorageLocationId(id);
+    setPendingCaseId(caseId);
     router.push('/label/camera?context=add-location' as any);
   }
-  function handleManual() {
+  function handleManual(caseId: string | null = null) {
     if (!id) return;
     setPendingStorageLocationId(id);
+    setPendingCaseId(caseId);
     useLabelStore.getState().reset();
     router.push('/label/confirm?manual=1&context=add-location' as any);
   }
-  async function handleUpload() {
+  async function handleUpload(caseId: string | null = null) {
     if (!id) return;
     if (!(await ensureMediaPermission('library'))) return;
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     setPendingStorageLocationId(id);
+    setPendingCaseId(caseId);
     setUploading(true);
     try {
       const uri = res.assets[0].uri;
@@ -205,6 +217,94 @@ export default function StorageLocationScreen() {
     });
   }
 
+  // ---- Cases ----
+  const [caseEdit, setCaseEdit] = useState<StorageCase | null>(null);
+  const [caseEditName, setCaseEditName] = useState('');
+  const [caseEditNote, setCaseEditNote] = useState('');
+
+  function invalidateCases() {
+    qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
+    qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+  }
+  function openAddToCase(c: StorageCase) {
+    showAlert({
+      title: `Add a wine to ${c.name}`,
+      body: c.kind === 'mixed' ? 'Add another wine to this mixed case.' : 'Add more bottles of this wine.',
+      buttons: [
+        { text: 'Scan a Label', onPress: () => handleScan(c.id) },
+        { text: 'Upload Photo', onPress: () => handleUpload(c.id) },
+        { text: 'Manual Input', onPress: () => handleManual(c.id) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function confirmDissolveCase(c: StorageCase) {
+    showAlert({
+      title: `Dissolve ${c.name}?`,
+      body: 'The bottles stay in this location as loose wines — this only removes the case grouping.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Dissolve', style: 'destructive', onPress: async () => {
+          try { await deleteStorageCase(c.id); invalidateCases(); }
+          catch (err) { showAlert({ title: 'Could not dissolve', body: err instanceof Error ? err.message : 'Please try again.' }); }
+        } },
+      ],
+    });
+  }
+  function openCaseMenu(c: StorageCase) {
+    showAlert({
+      title: c.name,
+      body: c.note || 'Manage this case.',
+      buttons: [
+        { text: 'Add a wine to this case', onPress: () => openAddToCase(c) },
+        { text: 'Edit name & note', onPress: () => { setCaseEditName(c.name); setCaseEditNote(c.note ?? ''); setCaseEdit(c); } },
+        { text: 'Dissolve case', style: 'destructive', onPress: () => confirmDissolveCase(c) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  async function saveCaseEdit() {
+    if (!caseEdit) return;
+    try {
+      await updateStorageCase(caseEdit.id, { name: caseEditName, note: caseEditNote });
+      invalidateCases();
+      setCaseEdit(null);
+    } catch (err) { showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' }); }
+  }
+
+  // Wines split into their cases + the loose remainder (search/maturity applied).
+  const caseGroups = cases
+    .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) }))
+    .filter((g) => g.wines.length > 0);
+  const looseFiltered = filtered.filter((w) => !w.case_id);
+
+  const renderWine = (w: CellarWine) => {
+    const isSelected = selectedIds.has(w.id);
+    return (
+      <TouchableOpacity
+        key={w.id}
+        style={[styles.wineRow, isSelected && styles.wineRowSelected]}
+        onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}` as any); }}
+        onLongPress={() => { if (!selectMode) enterSelect(w.id); }}
+        delayLongPress={400}
+        activeOpacity={0.7}
+      >
+        {selectMode ? (
+          <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>{isSelected ? <Text style={styles.checkboxTick}>✓</Text> : null}</View>
+        ) : null}
+        <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} />
+        <View style={styles.wineMain}>
+          <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+          <View style={styles.wineMetaRow}>
+            {w.region ? <Text style={styles.wineMeta} numberOfLines={1}>{w.region}</Text> : null}
+            {w.region ? <Text style={styles.wineMetaDot}>·</Text> : null}
+            <Text style={styles.wineMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
   if (isLoading) {
     return <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>;
   }
@@ -237,14 +337,14 @@ export default function StorageLocationScreen() {
         {/* Add a wine — filed straight into this location. Scan (wine or case),
             upload a photo, or enter by hand. */}
         <View style={styles.addSection}>
-          <TouchableOpacity style={styles.addBtn} onPress={handleScan} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => handleScan()} activeOpacity={0.85}>
             <Text style={styles.addBtnText}>Scan a Wine or Case Label</Text>
           </TouchableOpacity>
           <View style={styles.addRow}>
-            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={handleUpload} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={() => handleUpload()} activeOpacity={0.85}>
               <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Upload Photo</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={handleManual} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={() => handleManual()} activeOpacity={0.85}>
               <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Manual Input</Text>
             </TouchableOpacity>
           </View>
@@ -283,34 +383,33 @@ export default function StorageLocationScreen() {
           <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a label or a case to start filling it.' : 'No wines match your search.'}</Text>
         ) : (
           <View style={styles.listSection}>
-            {filtered.map((w) => {
-              const isSelected = selectedIds.has(w.id);
-              return (
-              <TouchableOpacity
-                key={w.id}
-                style={[styles.wineRow, isSelected && styles.wineRowSelected]}
-                onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}` as any); }}
-                onLongPress={() => { if (!selectMode) enterSelect(w.id); }}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                {selectMode ? (
-                  <View style={[styles.checkbox, isSelected && styles.checkboxOn]}>
-                    {isSelected ? <Text style={styles.checkboxTick}>✓</Text> : null}
+            {caseGroups.map((g) => (
+              <View key={g.box.id} style={styles.caseGroup}>
+                <TouchableOpacity
+                  style={styles.caseHeader}
+                  onPress={() => { if (!selectMode) openAddToCase(g.box); }}
+                  onLongPress={() => { if (!selectMode) openCaseMenu(g.box); }}
+                  delayLongPress={350}
+                  activeOpacity={0.75}
+                >
+                  <View style={{ flex: 1 }}>
+                    <View style={styles.caseTitleRow}>
+                      <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
+                      <View style={styles.caseChip}><Text style={styles.caseChipText}>{g.box.kind === 'mixed' ? 'Mixed case' : 'Case'}</Text></View>
+                    </View>
+                    {g.box.note ? <Text style={styles.caseNoteText} numberOfLines={2}>{g.box.note}</Text> : null}
                   </View>
-                ) : null}
-                <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} />
-                <View style={styles.wineMain}>
-                  <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-                  <View style={styles.wineMetaRow}>
-                    {w.region ? <Text style={styles.wineMeta} numberOfLines={1}>{w.region}</Text> : null}
-                    {w.region ? <Text style={styles.wineMetaDot}>·</Text> : null}
-                    <Text style={styles.wineMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-              );
-            })}
+                  {!selectMode ? <Text style={styles.caseAdd}>+ Add</Text> : null}
+                </TouchableOpacity>
+                {g.wines.map(renderWine)}
+              </View>
+            ))}
+            {looseFiltered.length > 0 ? (
+              <>
+                {caseGroups.length > 0 ? <Text style={styles.looseHeader}>Loose bottles</Text> : null}
+                {looseFiltered.map(renderWine)}
+              </>
+            ) : null}
           </View>
         )}
       </KeyboardAwareScrollView>
@@ -337,6 +436,30 @@ export default function StorageLocationScreen() {
           </View>
         </View>
       )}
+
+      {/* Edit a case's name + note */}
+      <Modal visible={caseEdit !== null} transparent animationType="fade" onRequestClose={() => setCaseEdit(null)}>
+        <View style={styles.caseModalOverlay}>
+          <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+            <View style={styles.caseModalSheet}>
+              <Text style={styles.caseModalTitle}>Edit case</Text>
+              <Text style={styles.caseModalLabel}>Name</Text>
+              <TextInput style={styles.caseModalInput} value={caseEditName} onChangeText={setCaseEditName} placeholder="Case name" placeholderTextColor={colors.textSubtle} />
+              <Text style={styles.caseModalLabel}>Note</Text>
+              <View style={styles.caseModalNoteRow}>
+                <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={caseEditNote} onChangeText={setCaseEditNote} placeholder="Ie. in the back next to the Petrus" placeholderTextColor={colors.textSubtle} multiline />
+                <MicButton value={caseEditNote} onChangeText={setCaseEditNote} onClear={() => setCaseEditNote('')} />
+              </View>
+              <TouchableOpacity style={styles.caseModalSave} onPress={saveCaseEdit} activeOpacity={0.85}>
+                <Text style={styles.caseModalSaveText}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.caseModalCancel} onPress={() => setCaseEdit(null)}>
+                <Text style={styles.caseModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAwareScrollView>
+        </View>
+      </Modal>
 
       {uploading && (
         <View style={styles.uploadingOverlay} pointerEvents="auto">
@@ -376,6 +499,27 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineRowSelected: { backgroundColor: 'rgba(224,184,74,0.16)' },
+  caseGroup: { marginBottom: spacing.md, borderWidth: 1, borderColor: 'rgba(224,184,74,0.30)', borderRadius: 12, overflow: 'hidden' },
+  caseHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: 'rgba(224,184,74,0.10)' },
+  caseTitleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  caseName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
+  caseChip: { borderWidth: 1, borderColor: colors.gold, borderRadius: 999, paddingVertical: 2, paddingHorizontal: 8 },
+  caseChipText: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.gold, letterSpacing: 0.3 },
+  caseNoteText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 3 },
+  caseAdd: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  looseHeader: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.sm, marginBottom: spacing.xs },
+  caseModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center' },
+  caseModalScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
+  caseModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
+  caseModalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  caseModalLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs, marginTop: spacing.sm },
+  caseModalInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  caseModalNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
+  caseModalNoteInput: { flex: 1, minHeight: 44, textAlignVertical: 'top' },
+  caseModalSave: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
+  caseModalSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.surface },
+  caseModalCancel: { alignItems: 'center', paddingTop: spacing.md },
+  caseModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   checkboxOn: { backgroundColor: colors.gold },
   checkboxTick: { fontSize: 13, color: colors.surface, fontFamily: fonts.headingBold },

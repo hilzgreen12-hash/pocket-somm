@@ -16,6 +16,8 @@ import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
+import { createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
+import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -99,7 +101,7 @@ export default function LabelResultsScreen() {
   const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
   const { create: createLabel } = useLabels();
-  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId } = useRackStore();
+  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId, pendingCaseId, setPendingCaseId } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
@@ -142,6 +144,11 @@ export default function LabelResultsScreen() {
     Math.max(1, useLabelStore.getState().wineDetailsConfirmed?.quantity ?? 1)
   );
   const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count'>(null);
+  // Case storage (add-to-location flow, migration 069). 'loose' files the wine
+  // straight into the location; 'single'/'mixed' also box it in a named case.
+  const [storageKind, setStorageKind] = useState<'loose' | 'single' | 'mixed'>('loose');
+  const [caseName, setCaseName] = useState('');
+  const [caseNote, setCaseNote] = useState('');
   const [customSizeMode, setCustomSizeMode] = useState(false);
   const [customSizeCl, setCustomSizeCl] = useState('');
 
@@ -462,11 +469,29 @@ export default function LabelResultsScreen() {
         id: savedWineId,
         updates: { quantity: mode === 'merge' ? baseQuantity + locQty : locQty, storage_location_id: pendingStorageLocationId },
       });
+      // Case boxing: attach to the case we were told to (the "add another to
+      // this case" loop) or create a fresh one from the storage-kind choice.
+      // Non-fatal — a failure still leaves the wine filed loose in the location.
+      try {
+        if (pendingCaseId) {
+          await assignWineToCase(savedWineId, pendingCaseId);
+        } else if (storageKind !== 'loose' && session?.user.id) {
+          const created = await createStorageCase(session.user.id, {
+            storageLocationId: pendingStorageLocationId,
+            name: caseName,
+            kind: storageKind,
+            note: caseNote,
+          });
+          await assignWineToCase(savedWineId, created.id);
+        }
+      } catch { /* wine is still filed in the location */ }
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines', pendingStorageLocationId] });
+      qc.invalidateQueries({ queryKey: ['storage-location-cases', pendingStorageLocationId] });
       qc.invalidateQueries({ queryKey: ['storage-locations', session?.user.id] });
       const dest = pendingStorageLocationId;
       setPendingStorageLocationId(null);
+      setPendingCaseId(null);
       setAddingToCellar(false);
       router.replace(`/cellar/storage-location/${dest}` as any);
       return;
@@ -1305,6 +1330,67 @@ export default function LabelResultsScreen() {
                   <Text style={styles.fieldSelectValue}>{bottleCount}</Text>
                   <Text style={styles.fieldSelectArrow}>▾</Text>
                 </TouchableOpacity>
+
+                {pendingCaseId ? (
+                  <Text style={styles.caseAddingNote}>Adding to your open case.</Text>
+                ) : (
+                  <>
+                    <Text style={styles.modalLabel}>How is this wine stored?</Text>
+                    <View style={styles.caseKindRow}>
+                      {([
+                        { k: 'loose', label: 'Loose' },
+                        { k: 'single', label: 'In a case' },
+                        { k: 'mixed', label: 'Mixed case' },
+                      ] as const).map((opt) => (
+                        <TouchableOpacity
+                          key={opt.k}
+                          style={[styles.caseKindBtn, storageKind === opt.k && styles.caseKindBtnOn]}
+                          onPress={() => setStorageKind(opt.k)}
+                          activeOpacity={0.8}
+                        >
+                          <Text style={[styles.caseKindText, storageKind === opt.k && styles.caseKindTextOn]}>{opt.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    {storageKind !== 'loose' && (
+                      <>
+                        <Text style={styles.caseHelp}>
+                          {storageKind === 'single'
+                            ? 'A case of this one wine — its bottles are boxed together.'
+                            : 'A box of different wines. Save this one, then add the rest to the same case from the location.'}
+                        </Text>
+                        <Text style={styles.modalLabel}>Case name</Text>
+                        <TextInput
+                          style={styles.caseInput}
+                          value={caseName}
+                          onChangeText={setCaseName}
+                          placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. OWC'}
+                          placeholderTextColor={colors.textSubtle}
+                        />
+                        <View style={styles.caseSuggestRow}>
+                          {(storageKind === 'mixed' ? ['Mixed Burgundy', 'New World Whites'] : ['OWC', 'Meyney Case']).map((s) => (
+                            <TouchableOpacity key={s} style={styles.caseSuggestChip} onPress={() => setCaseName(s)} activeOpacity={0.7}>
+                              <Text style={styles.caseSuggestText}>{s}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                        <Text style={styles.modalLabel}>Note <Text style={styles.modalLabelHint}>(optional)</Text></Text>
+                        <View style={styles.caseNoteRow}>
+                          <TextInput
+                            style={[styles.caseInput, styles.caseNoteInput]}
+                            value={caseNote}
+                            onChangeText={setCaseNote}
+                            placeholder="Ie. in the back next to the Petrus"
+                            placeholderTextColor={colors.textSubtle}
+                            multiline
+                          />
+                          <MicButton value={caseNote} onChangeText={setCaseNote} onClear={() => setCaseNote('')} />
+                        </View>
+                      </>
+                    )}
+                  </>
+                )}
               </>
             )}
 
@@ -1469,6 +1555,19 @@ const styles = StyleSheet.create({
   modalLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Lower-case bracketed hint inside an uppercase label, e.g. "(adjust for accuracy)".
   modalLabelHint: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 },
+  caseAddingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.md },
+  caseKindRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  caseKindBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.surface },
+  caseKindBtnOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },
+  caseKindText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
+  caseKindTextOn: { color: colors.gold },
+  caseHelp: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, lineHeight: 17, marginBottom: spacing.sm },
+  caseInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, marginBottom: spacing.sm },
+  caseSuggestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
+  caseSuggestChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 999, paddingVertical: 5, paddingHorizontal: spacing.md },
+  caseSuggestText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold },
+  caseNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
+  caseNoteInput: { flex: 1, minHeight: 44, marginBottom: 0, textAlignVertical: 'top' },
   button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center' },
   buttonDisabled: { opacity: 0.6 },
   buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },

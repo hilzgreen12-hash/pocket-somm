@@ -145,6 +145,15 @@ export default function LabelConfirmScreen() {
       return;
     }
 
+    // Home storage location add: the wine is being filed into a location (and
+    // maybe a case) — generating Wine Intel here is both unwanted and often
+    // wrong for a case label, so skip straight to the add card.
+    if (context === 'add-location') {
+      setIntelligence(null);
+      router.replace('/label/results?context=add-location');
+      return;
+    }
+
     setLoading(true);
     try {
       // generateWineIntel queries Wine-Searcher first (real market price +
