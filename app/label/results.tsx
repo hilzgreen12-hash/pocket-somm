@@ -75,7 +75,7 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh } = useLocalSearchParams<{ context?: string; fresh?: string }>();
+  const { context, fresh, backTo } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string }>();
   const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
   // a review, so the action area collapses to a single "Review this Wine"
@@ -870,7 +870,8 @@ export default function LabelResultsScreen() {
       <TouchableOpacity
         style={styles.backRow}
         onPress={() => router.replace(
-          isWishlistFlow ? '/cellar/wishlist'
+          backTo ? (decodeURIComponent(backTo) as any)
+          : isWishlistFlow ? '/cellar/wishlist'
           : isReviewsFlow ? '/wines/chosen'
           : isLineupFlow ? '/cellar/scan-lineup'
           : '/(tabs)/cellar'
@@ -1002,7 +1003,7 @@ export default function LabelResultsScreen() {
         // Cellar tab "Generate Wine Intel" — view-only. No Add to Cellar action
         // (deliberately removed when the add-a-wine routes were simplified);
         // this flow exists purely to surface the intel card.
-        <TouchableOpacity style={styles.discardButton} onPress={() => router.replace('/(tabs)/cellar')}>
+        <TouchableOpacity style={styles.discardButton} onPress={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/cellar')}>
           <Text style={styles.discardText}>Discard</Text>
         </TouchableOpacity>
       ) : (

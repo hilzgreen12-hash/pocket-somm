@@ -302,7 +302,7 @@ export default function RestaurantReviewsScreen() {
   // Generate + show Wine Intel for a wine tapped in the restaurant modal. Same
   // pattern as the Label Library: fill the label store, stash it as the last
   // result, and open the intel card.
-  async function viewWineIntel(cw: ChosenWine) {
+  async function viewWineIntel(cw: ChosenWine, returnToSession?: string) {
     const details = {
       producer: cw.producer ?? '',
       region: cw.region ?? '',
@@ -319,7 +319,10 @@ export default function RestaurantReviewsScreen() {
       ls.setIntelligence(intel);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       useLastIntelStore.getState().setLast(details as any, intel);
-      router.push('/label/results?context=intel');
+      // Route the intel screen's Back to reopen THIS restaurant visit (a modal,
+      // so we reopen it via the ?openSession deep link) instead of the cellar.
+      const backTo = returnToSession ? `&backTo=${encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`)}` : '';
+      router.push(`/label/results?context=intel${backTo}` as any);
     } catch (err) {
       showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -727,7 +730,10 @@ export default function RestaurantReviewsScreen() {
           }}
           onViewIntel={(i) => {
             const cw = findChosenForVisit(editing)[i];
-            if (cw) { closeRestaurantReview(); void viewWineIntel(cw); }
+            const visitId = editing.id;
+            // Close the modal WITHOUT the link-back (we navigate to intel next),
+            // and pass this visit so intel's Back returns here.
+            if (cw) { setEditing(null); setEditingFromLink(false); void viewWineIntel(cw, visitId); }
           }}
           onClose={closeRestaurantReview}
           onSaved={() => { manualSavedRef.current = true; closeRestaurantReview(); }}
