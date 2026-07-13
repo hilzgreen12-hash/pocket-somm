@@ -10,8 +10,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
-import { addSessionBottle } from '../api/chosenWines';
+import { addSessionBottle, patchChosenWine } from '../api/chosenWines';
 import { archiveCellarWine } from '../api/cellar';
+import { uploadLabelImage } from '../api/labelPhotos';
 import { prepareImageBase64, detectLineup } from '../api/label';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { useCellar } from '../hooks/useCellar';
@@ -108,6 +109,9 @@ export function RestaurantReviewModal({
   // Set when this bottle was picked from the cellar, so after adding we can
   // offer to move that cellar wine to the archive. Null for scan/upload/manual.
   const [cbCellarWineId, setCbCellarWineId] = useState<string | null>(null);
+  // Local uri of a scanned/uploaded label for a SINGLE bottle — saved onto the
+  // review row so its card shows the photo, like a cellar wine card.
+  const [cbImageUri, setCbImageUri] = useState<string | null>(null);
   // Multi-bottle add: a photo with several bottles opens a tick-list to confirm
   // which to add (mirrors the rack lineup flow).
   const [multiOpen, setMultiOpen] = useState(false);
@@ -125,7 +129,7 @@ export function RestaurantReviewModal({
     setConfirmOpen(true);
   }
 
-  function chooseManual() { setBottleChooserOpen(false); setCbCellarWineId(null); openConfirm({}, false); }
+  function chooseManual() { setBottleChooserOpen(false); setCbCellarWineId(null); setCbImageUri(null); openConfirm({}, false); }
   function chooseCellar() { setBottleChooserOpen(false); setCellarSearch(''); setCellarPickerOpen(true); }
 
   async function chooseFromImage(source: 'camera' | 'library') {
@@ -139,24 +143,30 @@ export function RestaurantReviewModal({
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (res.canceled || !res.assets.length) return;
       setBottleBusy(true);
+      const uri = res.assets[0].uri;
       try {
-        const base64 = await prepareImageBase64(res.assets[0].uri);
+        const base64 = await prepareImageBase64(uri);
         const { bottles } = await detectLineup(base64);
         const detected = (bottles ?? []).slice(0, 8);
         if (detected.length >= 2) {
-          // Several bottles → tick-list to confirm which to add.
+          // Several bottles → tick-list. A group photo isn't a single label, so
+          // no per-wine photo in that case.
+          setCbImageUri(null);
           setMultiBottles(detected.map((b) => ({ producer: b.producer, wineName: b.wineName, vintage: b.vintage, region: b.region ?? null })));
           setMultiChecked(new Set(detected.map((_, i) => i)));
           setMultiBrought(new Set()); // default all to "list pick"
           setMultiOpen(true);
         } else if (detected.length === 1) {
           const b = detected[0];
+          setCbImageUri(uri); // save this label onto the review card
           openConfirm({ producer: b.producer, wineName: b.wineName, region: b.region, vintage: b.vintage }, false);
         } else {
+          setCbImageUri(uri);
           openConfirm({}, false);
         }
       } catch {
-        // Detection failed — still let them fill it in by hand.
+        // Detection failed — still keep the photo and let them fill it in.
+        setCbImageUri(uri);
         openConfirm({}, false);
       }
     } catch (err) {
@@ -217,7 +227,7 @@ export function RestaurantReviewModal({
     setBottleBusy(true);
     try {
       const vint = cbVintage.trim();
-      await addSessionBottle(session.user.id, {
+      const row = await addSessionBottle(session.user.id, {
         sessionId,
         restaurantName: restaurantName.trim() || null,
         city: cityValue.trim() || null,
@@ -227,6 +237,14 @@ export function RestaurantReviewModal({
         vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
         source: cbBrought ? 'other' : 'restaurant',
       });
+      // Save the scanned/uploaded label onto the review card (best-effort).
+      if (cbImageUri && row?.id) {
+        try {
+          const path = await uploadLabelImage(session.user.id, cbImageUri, row.id);
+          await patchChosenWine(row.id, { label_image_path: path });
+        } catch { /* non-fatal — review saved without a photo */ }
+      }
+      setCbImageUri(null);
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       setConfirmOpen(false);
@@ -512,7 +530,7 @@ export function RestaurantReviewModal({
                     <TouchableOpacity
                       key={w.id}
                       style={styles.cellarRow}
-                      onPress={() => { setCellarPickerOpen(false); setCbCellarWineId(w.id); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }, true); }}
+                      onPress={() => { setCellarPickerOpen(false); setCbCellarWineId(w.id); setCbImageUri(null); openConfirm({ producer: w.producer, wineName: w.wine_name, region: w.region, vintage: w.vintage }, true); }}
                       activeOpacity={0.7}
                     >
                       <Text style={styles.cellarRowName} numberOfLines={1}>{w.wine_name}</Text>

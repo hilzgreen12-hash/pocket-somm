@@ -1,10 +1,14 @@
 import { useState, useEffect, useRef } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share,
+  StyleSheet, Keyboard, Share, Image,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
+import { uploadLabelImage } from '../api/labelPhotos';
+import { LabelThumb } from './LabelThumb';
+import { ensureMediaPermission } from '../utils/mediaPermissions';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
@@ -57,6 +61,14 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [sharing, setSharing] = useState(false);
   const [posting, setPosting] = useState(false);
   const [removeWishlistOpen, setRemoveWishlistOpen] = useState(false);
+  // Edit-identity sheet (name / vintage / region + thumbnail).
+  const [identityEditOpen, setIdentityEditOpen] = useState(false);
+  const [editProducer, setEditProducer] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editVintage, setEditVintage] = useState('');
+  const [editRegion, setEditRegion] = useState('');
+  const [editImageUri, setEditImageUri] = useState<string | null>(null);
+  const [savingIdentity, setSavingIdentity] = useState(false);
   const shareCardRef = useRef<View>(null);
 
   const currency = (wine?.currency ?? 'GBP').toUpperCase();
@@ -345,6 +357,52 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     }
   }
 
+  // Edit the wine's identity (name / vintage / region) and its label photo.
+  function openIdentityEdit() {
+    if (!wine) return;
+    setEditProducer(wine.producer ?? '');
+    setEditName(wine.wine_name ?? '');
+    setEditVintage(wine.vintage != null ? String(wine.vintage) : '');
+    setEditRegion(wine.region ?? '');
+    setEditImageUri(null);
+    setIdentityEditOpen(true);
+  }
+
+  async function pickIdentityPhoto(source: 'camera' | 'library') {
+    if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
+    const res = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (res.canceled || !res.assets[0]) return;
+    setEditImageUri(res.assets[0].uri);
+  }
+
+  async function saveIdentity() {
+    if (!wine || !session?.user.id) return;
+    if (!editName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name.' }); return; }
+    setSavingIdentity(true);
+    try {
+      const vt = editVintage.trim();
+      const vintageNum = vt && Number.isFinite(Number(vt)) ? Math.trunc(Number(vt)) : null;
+      let labelPath: string | undefined;
+      if (editImageUri) labelPath = await uploadLabelImage(session.user.id, editImageUri, wine.id);
+      await patchChosenWine(wine.id, {
+        producer: editProducer.trim() || null,
+        wine_name: editName.trim(),
+        region: editRegion.trim() || null,
+        vintage: vintageNum,
+        ...(labelPath ? { label_image_path: labelPath } : {}),
+      });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      setIdentityEditOpen(false);
+      onSaved();
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingIdentity(false);
+    }
+  }
+
   if (!wine) return null;
 
   // Header mirrors the cellar card: producer · wine name · vintage, then
@@ -370,9 +428,14 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Text style={styles.backText}>← Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-                <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
-              </TouchableOpacity>
+              <View style={styles.topRight}>
+                <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
+                  <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={openIdentityEdit} hitSlop={{ top: 6, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
+                  <Text style={styles.topEditText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
             {/* Header — same shape as the cellar wine card. No favourite star. */}
@@ -483,6 +546,53 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         </TouchableOpacity>
       </Modal>
 
+      {/* Edit the wine's identity + label photo */}
+      <Modal visible={identityEditOpen} transparent animationType="fade" onRequestClose={() => setIdentityEditOpen(false)}>
+        <View style={styles.confirmOverlay}>
+          <KeyboardAwareScrollView contentContainerStyle={styles.editScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+            <View style={styles.editSheet}>
+              <Text style={styles.confirmTitle}>Edit wine</Text>
+
+              <Text style={styles.editLabel}>Producer</Text>
+              <TextInput style={styles.editInput} value={editProducer} onChangeText={setEditProducer} placeholder="Producer" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Wine name</Text>
+              <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="Wine name" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Vintage</Text>
+              <TextInput style={styles.editInput} value={editVintage} onChangeText={(t) => setEditVintage(t.replace(/[^0-9]/g, '').slice(0, 4))} placeholder="e.g. 2019" placeholderTextColor={colors.textSubtle} keyboardType="number-pad" maxLength={4} />
+
+              <Text style={styles.editLabel}>Region</Text>
+              <TextInput style={styles.editInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Photo</Text>
+              <View style={styles.editThumbRow}>
+                {editImageUri ? (
+                  <Image source={{ uri: editImageUri }} style={styles.editThumb} />
+                ) : (
+                  <LabelThumb path={wine.label_image_path ?? null} fallbackText={wine.wine_name} style={styles.editThumb} radius={6} frame={0} />
+                )}
+                <View style={styles.editPhotoBtns}>
+                  <TouchableOpacity style={styles.editPhotoBtn} onPress={() => pickIdentityPhoto('camera')}>
+                    <Text style={styles.editPhotoBtnText}>Take Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.editPhotoBtn} onPress={() => pickIdentityPhoto('library')}>
+                    <Text style={styles.editPhotoBtnText}>Upload</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity style={[styles.confirmButton, savingIdentity && styles.btnDisabled]} onPress={saveIdentity} disabled={savingIdentity}>
+                <Text style={styles.confirmButtonText}>{savingIdentity ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmCancel} onPress={() => setIdentityEditOpen(false)} disabled={savingIdentity}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAwareScrollView>
+        </View>
+      </Modal>
+
       {sharing && (
         <View style={styles.shareCardWrap} pointerEvents="none">
           <WineReviewShareCard
@@ -567,4 +677,15 @@ const styles = StyleSheet.create({
   confirmCancel: { alignItems: 'center', paddingTop: spacing.xs },
   confirmCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
+  topRight: { alignItems: 'flex-end', gap: 2 },
+  topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  editScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
+  editSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  editLabel: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs, marginTop: spacing.sm },
+  editInput: { backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text },
+  editThumbRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  editThumb: { width: 72, height: 96 },
+  editPhotoBtns: { flex: 1, gap: spacing.sm },
+  editPhotoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  editPhotoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
 });

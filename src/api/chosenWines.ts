@@ -94,8 +94,8 @@ export async function addSessionBottle(userId: string, input: {
   // 'restaurant' = a List Bottle (chosen off the restaurant's list);
   // 'other' = an Off-List Bottle (brought to the visit, e.g. from home).
   source: 'restaurant' | 'other';
-}): Promise<void> {
-  const { error } = await supabase.from('chosen_wines').insert({
+}): Promise<ChosenWine> {
+  const { data, error } = await supabase.from('chosen_wines').insert({
     user_id: userId,
     scan_session_id: input.sessionId,
     wine_name: input.wineName.trim(),
@@ -105,8 +105,9 @@ export async function addSessionBottle(userId: string, input: {
     restaurant_name: input.restaurantName?.trim() || null,
     city: input.city?.trim() || null,
     source: input.source,
-  });
+  }).select().single();
   if (error) throw new Error(error.message);
+  return data as ChosenWine;
 }
 
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<ChosenWine> {
@@ -299,6 +300,10 @@ export async function patchChosenWine(
     label_image_path: string | null;
     critic_score: number | null;
     critic_score_note: string | null;
+    wine_name: string;
+    producer: string | null;
+    region: string | null;
+    vintage: number | null;
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
