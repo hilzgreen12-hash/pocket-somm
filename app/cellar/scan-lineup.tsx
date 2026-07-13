@@ -56,6 +56,37 @@ function computeFreeSlots(
   return result;
 }
 
+// Place ONE wine's bottles as a line running PERPENDICULAR to the lineup axis,
+// from the wine's own position. A horizontal lineup (wines across columns)
+// stacks each wine's bottles DOWN its column; a vertical lineup (wines down
+// rows) runs each wine's bottles ACROSS its row. Skips occupied slots, stops at
+// the grid edge.
+function computeWineLine(
+  wineIndex: number, startRow: number, startCol: number,
+  rows: number, cols: number, quantity: number,
+  lineupOrient: 'Vertical' | 'Horizontal', occupied: Set<string>,
+): Array<{ row: number; col: number }> {
+  const result: Array<{ row: number; col: number }> = [];
+  if (lineupOrient === 'Horizontal') {
+    const col = startCol + wineIndex;
+    if (col < 0 || col >= cols) return result;
+    let row = startRow;
+    while (result.length < quantity && row >= 0 && row < rows) {
+      if (!occupied.has(`${row},${col}`)) result.push({ row, col });
+      row++;
+    }
+  } else {
+    const row = startRow + wineIndex;
+    if (row < 0 || row >= rows) return result;
+    let col = startCol;
+    while (result.length < quantity && col >= 0 && col < cols) {
+      if (!occupied.has(`${row},${col}`)) result.push({ row, col });
+      col++;
+    }
+  }
+  return result;
+}
+
 export default function ScanLineupScreen() {
   const { wines: cellarWines, addWine, updateWine } = useCellar();
   const { racks } = useRacks();
@@ -97,7 +128,7 @@ export default function ScanLineupScreen() {
   const [rawUri, setRawUri] = useState<string | null>(null);
   const [flipped, setFlipped] = useState(false);
   const [editIndex, setEditIndex] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750 });
+  const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1 });
 
   // If the store already holds a lineup (we've returned mid-flow after
   // onboarding a wine), open straight onto the review list.
@@ -207,6 +238,7 @@ export default function ScanLineupScreen() {
       region: b.region ?? '',
       vintage: b.vintage ?? '',
       bottleSizeMl: b.bottleSizeMl ?? 750,
+      quantity: b.quantity ?? 1,
     });
     setEditIndex(i);
   }
@@ -218,6 +250,7 @@ export default function ScanLineupScreen() {
       region: editDraft.region.trim() || null,
       vintage: editDraft.vintage.trim() || null,
       bottleSizeMl: editDraft.bottleSizeMl,
+      quantity: Math.max(1, editDraft.quantity),
     });
     setConfirmed((prev) => new Set(prev).add(editIndex));
     setEditIndex(null);
@@ -283,7 +316,13 @@ export default function ScanLineupScreen() {
       const existing = await getRackSlots(originRackId);
       const occupied = new Set(existing.filter((s) => s.cellar_wine_id).map((s) => `${s.row_index},${s.col_index}`));
       const total = kept.reduce((sum, b) => sum + (b.quantity ?? 1), 0);
-      const free = computeFreeSlots(startSlot.row, startSlot.col, rack.rows, rack.cols, total, orientation, occupied, rack.large_format_cols);
+      // Large-format band (row -1) is a single row → keep the simple linear
+      // fill. Standard rows use per-wine perpendicular placement so a wine's
+      // multiple bottles stack perpendicular to the lineup axis.
+      const useLinear = startSlot.row === -1;
+      const linearFree = useLinear
+        ? computeFreeSlots(startSlot.row, startSlot.col, rack.rows, rack.cols, total, orientation, occupied, rack.large_format_cols)
+        : [];
       // Original lineup image dimensions, for cropping per-bottle thumbnails.
       let imgDims: { width: number; height: number } | null = null;
       if (imageUri) {
@@ -295,10 +334,19 @@ export default function ScanLineupScreen() {
       // match.quantity — accumulate the bumps per cellar id so the count rises
       // by the true number of bottles placed, not just one.
       const bumps = new Map<string, number>();
-      for (const b of kept) {
+      for (let wi = 0; wi < kept.length; wi++) {
+        const b = kept[wi];
         const count = b.quantity ?? 1;
-        const slots = free.slice(cursor, cursor + count);
-        if (slots.length === 0) break; // rack full
+        let slots: Array<{ row: number; col: number }>;
+        if (useLinear) {
+          slots = linearFree.slice(cursor, cursor + count);
+          cursor += slots.length;
+          if (slots.length === 0) break; // band full
+        } else {
+          slots = computeWineLine(wi, startSlot.row, startSlot.col, rack.rows, rack.cols, count, orientation, occupied);
+          slots.forEach((s) => occupied.add(`${s.row},${s.col}`));
+          if (slots.length === 0) continue; // this wine's line is off-grid/full
+        }
         // Already in the cellar? Add these bottles to that line's count and
         // reuse it (no duplicate line). Check the live cache first, then the DB
         // directly — so a momentarily-stale cache can't slip a duplicate through.
@@ -367,9 +415,7 @@ export default function ScanLineupScreen() {
             }
           } catch { /* non-fatal — placed without a thumbnail */ }
         }
-        cursor += slots.length;
         placedCount += slots.length;
-        if (slots.length < count) break; // ran out mid-wine
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', originRackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -436,7 +482,7 @@ export default function ScanLineupScreen() {
                 ) : null}
               </View>
               <Text style={styles.summaryLine}>{totalBottles} {totalBottles === 1 ? 'bottle' : 'bottles'} / {lineupWines.length} {lineupWines.length === 1 ? 'wine' : 'wines'}</Text>
-              <Text style={styles.hint}>Tick each wine to confirm, or Edit to fix a read. Duplicates of the same wine are grouped. They fill the rack from your chosen slot, running {orientation.toLowerCase()}.</Text>
+              <Text style={styles.hint}>Tick each wine to confirm, or Edit to fix a read or set how many bottles. Wines run {orientation.toLowerCase()} from your start slot; each wine's extra bottles run {orientation === 'Horizontal' ? 'down its column' : 'across its row'}.</Text>
               {lineupWines.map((b, i) => {
                 const isOn = confirmed.has(i);
                 const name = [b.producer, b.wineName].filter(Boolean).join(' ') || 'Unreadable bottle';
@@ -448,8 +494,9 @@ export default function ScanLineupScreen() {
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>
                         {b.vintage ? `${b.vintage} ` : ''}{name}
-                        <Text style={styles.formatTag}>  {b.quantity ?? 1}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
+                        <Text style={styles.formatTag}>  {bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
                       </Text>
+                      <Text style={styles.bottleLine}>{b.quantity ?? 1} {(b.quantity ?? 1) === 1 ? 'bottle' : 'bottles'} · {orientation === 'Horizontal' ? 'Vertically' : 'Horizontally'}</Text>
                       {!b.confident && !isOn ? <Text style={styles.unconfident}>Low-confidence read — check it</Text> : null}
                     </View>
                     <TouchableOpacity onPress={() => openEdit(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -551,6 +598,16 @@ export default function ScanLineupScreen() {
             <TextInput style={styles.editInput} value={editDraft.vintage} onChangeText={(t) => setEditDraft((d) => ({ ...d, vintage: t }))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} />
             <Text style={styles.editFieldLabel}>Format</Text>
             <BottleSizePicker value={editDraft.bottleSizeMl} onChange={(ml) => setEditDraft((d) => ({ ...d, bottleSizeMl: ml }))} />
+            <Text style={styles.editFieldLabel}>Bottles ({orientation === 'Horizontal' ? 'stacked down' : 'across'} from this wine)</Text>
+            <View style={styles.qtyRow}>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => setEditDraft((d) => ({ ...d, quantity: Math.max(1, d.quantity - 1) }))} activeOpacity={0.7}>
+                <Text style={styles.qtyBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.qtyValue}>{editDraft.quantity}</Text>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => setEditDraft((d) => ({ ...d, quantity: Math.min(20, d.quantity + 1) }))} activeOpacity={0.7}>
+                <Text style={styles.qtyBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
             <TouchableOpacity style={[styles.primaryBtn, { marginTop: spacing.lg }]} onPress={confirmEdit} activeOpacity={0.85}>
               <Text style={styles.primaryBtnText}>Confirm</Text>
             </TouchableOpacity>
@@ -611,6 +668,13 @@ const styles = StyleSheet.create({
   // Batched-bottle count shown after the region, e.g. "×2 bottles".
   qtyTag: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   unconfident: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.gold, marginTop: 2 },
+  // "X bottles · Vertically/Horizontally" under each lineup wine.
+  bottleLine: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  // Quantity stepper in the lineup edit sheet.
+  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xs },
+  qtyBtn: { width: 42, height: 42, borderRadius: 21, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  qtyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold, lineHeight: 26 },
+  qtyValue: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, minWidth: 32, textAlign: 'center' },
   editAddLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   // Rack-placement review: per-row remove toggle (legacy, unused now).
   rowRemoved: { opacity: 0.4 },
