@@ -186,7 +186,7 @@ export default function RestaurantReviewsScreen() {
       ],
     });
   }
-  const { chosenWines } = useChosenWines();
+  const { chosenWines, remove } = useChosenWines();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
   // True when the review form was auto-opened via the ?openSession deep link
@@ -328,6 +328,33 @@ export default function RestaurantReviewsScreen() {
     } finally {
       setGenIntel(false);
     }
+  }
+
+  // Long-press a wine on a restaurant card (or the Delete option in the review
+  // modal): edit it, or permanently delete it from the visit.
+  function onLongPressCardWine(cw: ChosenWine) {
+    showAlert({
+      title: wineHeaderLine(cw.producer, cw.wine_name, cw.vintage) || 'This wine',
+      buttons: [
+        { text: 'Edit Wine', onPress: () => setEditingWine(cw) },
+        { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteWine(cw) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function confirmDeleteWine(cw: ChosenWine) {
+    showAlert({
+      title: 'Delete wine?',
+      body: `${wineHeaderLine(cw.producer, cw.wine_name, cw.vintage)}\n\nThis permanently removes it from this visit.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => remove.mutate(cw.id, { onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }) }),
+        },
+      ],
+    });
   }
 
   // Null-session (legacy / unlinked) bottles that plausibly belong to this
@@ -682,6 +709,8 @@ export default function RestaurantReviewsScreen() {
                             key={cw.id}
                             style={styles.wineRow}
                             onPress={() => setEditingWine(cw)}
+                            onLongPress={() => onLongPressCardWine(cw)}
+                            delayLongPress={400}
                             activeOpacity={0.7}
                           >
                             <Text style={styles.wineLine} numberOfLines={1}>{cw.source === 'other' ? 'Brought' : 'List Pick'}: {wineLine}</Text>
@@ -734,6 +763,10 @@ export default function RestaurantReviewsScreen() {
             // Close the modal WITHOUT the link-back (we navigate to intel next),
             // and pass this visit so intel's Back returns here.
             if (cw) { setEditing(null); setEditingFromLink(false); void viewWineIntel(cw, visitId); }
+          }}
+          onDeleteWine={(i) => {
+            const cw = findChosenForVisit(editing)[i];
+            if (cw) confirmDeleteWine(cw);
           }}
           onClose={closeRestaurantReview}
           onSaved={() => { manualSavedRef.current = true; closeRestaurantReview(); }}
