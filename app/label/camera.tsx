@@ -14,10 +14,11 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
 export default function LabelCameraScreen() {
-  const { context } = useLocalSearchParams<{ context?: string }>();
-  // Forward any context (wishlist / reviews / …) to downstream label
+  const { context, backTo } = useLocalSearchParams<{ context?: string; backTo?: string }>();
+  // Forward any context (wishlist / reviews / …) + an optional backTo (where the
+  // intel screen's Back should land, e.g. the Label Library) to downstream label
   // screens so the back button + post-save routing know where to land.
-  const contextQuery = context ? `?context=${context}` : '';
+  const contextQuery = context ? `?context=${context}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);

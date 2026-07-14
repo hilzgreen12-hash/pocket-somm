@@ -200,8 +200,16 @@ export default function ChosenWinesScreen() {
   const [reviewPrompt, setReviewPrompt] = useState<ChosenWine | null>(null);
   const [dontShowPrompt, setDontShowPrompt] = useState(false);
   const promptShownRef = useRef(false);
+  // Deep-link params from Your Label Library's click-into-a-label popup (see
+  // below). Read up here so the on-open review nudge can bow out when we've
+  // arrived to open/create a specific review rather than for a plain visit.
+  const params = useLocalSearchParams<{ openReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string }>();
+  const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
+    // Don't nudge when arriving from the Label Library to view/create a review —
+    // that prompt is only for a plain visit to Your Wine Reviews.
+    if (cameViaLabelLink) { promptShownRef.current = true; return; }
     promptShownRef.current = true;
     const first = awaitingReview[0];
     AsyncStorage.getItem(promptKey)
@@ -216,11 +224,11 @@ export default function ChosenWinesScreen() {
     if (review && wine) setEditingWine(wine);
   }
 
-  // Deep-link params from Your Label Library's click-into-a-label popup:
+  // Deep-link params (declared above) from Your Label Library's click-into-a-
+  // label popup:
   //   ?openReview=<id>          → open that review for viewing/editing
   //   ?seedAdd=1&sp&sw&sv&sr    → open a fresh review seeded with the identity
   // Handled once per distinct param set so re-renders don't reopen the modal.
-  const params = useLocalSearchParams<{ openReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string }>();
   const handledParamRef = useRef<string | null>(null);
   useEffect(() => {
     if (params.openReview) {
