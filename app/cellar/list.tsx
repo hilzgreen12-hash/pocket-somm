@@ -10,6 +10,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { updateCellarIntelBatch, isMissingIntel } from '../../src/services/bulkIntel';
+import { IntelProgress } from '../../src/components/IntelProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
@@ -98,6 +101,9 @@ export default function FullCellarListScreen() {
   const qc = useQueryClient();
 
   const userId = session?.user.id;
+  const { preferences } = usePreferences();
+  const [intelUpdating, setIntelUpdating] = useState(false);
+  const [intelProgress, setIntelProgress] = useState({ done: 0, total: 0 });
 
   // One-time, gentle backfill so wines added before entry-time maturity
   // generation (and never opened) still get a drinking window — otherwise the
@@ -501,6 +507,25 @@ export default function FullCellarListScreen() {
   });
 
   const totalBottles = filtered.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  // Wines shown that have no critic score / pricing downloaded yet.
+  const winesMissingIntel = filtered.filter(isMissingIntel);
+
+  // "Update all" — refresh critic score + pricing for every missing-intel wine,
+  // showing the same percentage calculator as Cellar Stats. No reviews written.
+  async function handleUpdateAllIntel() {
+    if (winesMissingIntel.length === 0 || intelUpdating) return;
+    const currency = preferences?.defaultCurrency ?? 'GBP';
+    setIntelUpdating(true);
+    setIntelProgress({ done: 0, total: winesMissingIntel.length });
+    try {
+      await updateCellarIntelBatch(winesMissingIntel, currency, (done, total) => setIntelProgress({ done, total }));
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+    } catch {
+      showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
+    } finally {
+      setIntelUpdating(false);
+    }
+  }
 
   async function handleShareList() {
     if (sharingList || sorted.length === 0) return;
@@ -717,7 +742,21 @@ export default function FullCellarListScreen() {
         <Text style={styles.summaryText}>
           {filtered.length} {filtered.length === 1 ? 'wine' : 'wines'} · {totalBottles} {totalBottles === 1 ? 'bottle' : 'bottles'}
         </Text>
+        {/* Wines with no critic score / pricing yet — one tap values them all. */}
+        {winesMissingIntel.length > 0 ? (
+          <TouchableOpacity onPress={handleUpdateAllIntel} activeOpacity={0.7} style={styles.missingIntelBtn}>
+            <Text style={styles.missingIntelText}>
+              {winesMissingIntel.length} {winesMissingIntel.length === 1 ? 'wine' : 'wines'} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      {/* Full-screen percentage calculator while intel updates — the same one
+          Cellar Stats uses. Back is blocked so a mid-batch dismiss can't strand it. */}
+      <Modal visible={intelUpdating} animationType="fade" onRequestClose={() => {}}>
+        <IntelProgress done={intelProgress.done} total={intelProgress.total} />
+      </Modal>
 
       {/* Filter row — Sort first so the most common interaction (changing
           order) is closest to the user's thumb. Rack / Country / Colour
@@ -1123,6 +1162,9 @@ const styles = StyleSheet.create({
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — summary read-out
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  missingIntelBtn: { marginTop: 4 },
+  missingIntelText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
+  missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — hint
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   // Interaction hint shown under the Full Cellar List header.

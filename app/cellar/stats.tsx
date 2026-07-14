@@ -7,6 +7,8 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
 import { generateWineIntel } from '../../src/services/pricing';
+import { isMissingIntel } from '../../src/services/bulkIntel';
+import { IntelProgress } from '../../src/components/IntelProgress';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -88,6 +90,8 @@ export default function CellarStatsScreen() {
   // even after an update, which reads like the update did nothing.
   const winesNotYetValued = winesNeedingEstimate.filter((w) => !w.estimated_value_at);
   const winesUnvaluable = winesNeedingEstimate.filter((w) => !!w.estimated_value_at);
+  // "Missing intel" = never valued (no critic score / pricing downloaded yet).
+  const winesMissingIntel = wines.filter(isMissingIntel);
   const lastEstimateAt = useMemo(() => {
     let latest: string | null = null;
     for (const w of wines) {
@@ -188,6 +192,20 @@ export default function CellarStatsScreen() {
     }
   }
 
+  // "Update all" on the missing-intel line — refresh critic score + pricing for
+  // every wine that has never been valued (no Vinster review generated).
+  async function handleUpdateMissingIntel() {
+    if (winesMissingIntel.length === 0) return;
+    setCalculating(true);
+    try {
+      await processBatch(winesMissingIntel);
+    } catch {
+      showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
+    } finally {
+      setCalculating(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -197,15 +215,7 @@ export default function CellarStatsScreen() {
   }
 
   if (calculating) {
-    const pctVal = calcProgress.total === 0 ? 0 : Math.round((calcProgress.done / calcProgress.total) * 100);
-    return (
-      <View style={styles.center}>
-        <Text style={styles.calcTitle}>Valuing your cellar…</Text>
-        <Text style={styles.calcSubtitle}>This can take up to a minute.</Text>
-        <Text style={styles.calcPercent}>{pctVal}%</Text>
-        <Text style={styles.calcCount}>{calcProgress.done} of {calcProgress.total}</Text>
-      </View>
-    );
+    return <IntelProgress done={calcProgress.done} total={calcProgress.total} title="Valuing your cellar…" />;
   }
 
   return (
@@ -246,6 +256,15 @@ export default function CellarStatsScreen() {
               <Text style={styles.statLabel}>Bottles</Text>
             </View>
           </View>
+
+          {/* Wines with no critic score / pricing yet — one tap values them all. */}
+          {winesMissingIntel.length > 0 ? (
+            <TouchableOpacity style={styles.missingIntelRow} onPress={handleUpdateMissingIntel} activeOpacity={0.7}>
+              <Text style={styles.missingIntelText}>
+                {winesMissingIntel.length} {winesMissingIntel.length === 1 ? 'wine' : 'wines'} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
+              </Text>
+            </TouchableOpacity>
+          ) : null}
 
           {/* Value block */}
           <View style={styles.section}>
@@ -392,6 +411,9 @@ const styles = StyleSheet.create({
   emptyBannerTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.text },
   // Inter — empty banner body
   emptyBannerBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20 },
+  missingIntelRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
+  missingIntelText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.lg },
   // Inter — stat value read-out
