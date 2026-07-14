@@ -67,6 +67,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [editName, setEditName] = useState('');
   const [editVintage, setEditVintage] = useState('');
   const [editRegion, setEditRegion] = useState('');
+  const [editRestaurant, setEditRestaurant] = useState('');
+  const [editCity, setEditCity] = useState('');
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const shareCardRef = useRef<View>(null);
@@ -364,6 +366,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     setEditName(wine.wine_name ?? '');
     setEditVintage(wine.vintage != null ? String(wine.vintage) : '');
     setEditRegion(wine.region ?? '');
+    setEditRestaurant(wine.restaurant_name ?? '');
+    setEditCity(wine.city ?? '');
     setEditImageUri(null);
     setIdentityEditOpen(true);
   }
@@ -391,8 +395,14 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         wine_name: editName.trim(),
         region: editRegion.trim() || null,
         vintage: vintageNum,
+        restaurant_name: editRestaurant.trim() || null,
+        city: editCity.trim() || null,
         ...(labelPath ? { label_image_path: labelPath } : {}),
       });
+      // Keep the (hidden) location state in step so a later "Save Review"
+      // writes the edited restaurant/city, not the pre-edit values.
+      setLocName(editRestaurant.trim());
+      setLocCity(editCity.trim());
       qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       setIdentityEditOpen(false);
       onSaved();
@@ -438,22 +448,29 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               </View>
             </View>
 
-            {/* Header — same shape as the cellar wine card. No favourite star. */}
-            <View style={styles.header}>
-              <Text style={styles.headerLine}>{headerLine}</Text>
-              {(wine.region || wine.grape) ? (
-                <Text style={styles.region}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
+            {/* Header — mirrors the cellar wine card: label thumbnail on the
+                left (when the wine has a scanned/uploaded photo) with the
+                identity beside it. No favourite star. */}
+            <View style={[styles.header, wine.label_image_path ? styles.headerWithThumb : null]}>
+              {wine.label_image_path ? (
+                <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
               ) : null}
-              {/* Date · where you drank it — a clean header stamp (kept out of
-                  the free-text notes below). */}
-              {(() => {
-                const loc = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean).join(', ');
-                const dateStr = wine.chosen_at
-                  ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                  : '';
-                const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                return stamp ? <Text style={styles.stampLine}>{stamp}</Text> : null;
-              })()}
+              <View style={wine.label_image_path ? styles.headerTextCol : undefined}>
+                <Text style={[styles.headerLine, wine.label_image_path ? styles.headerLineLeft : null]}>{headerLine}</Text>
+                {(wine.region || wine.grape) ? (
+                  <Text style={[styles.region, wine.label_image_path ? styles.regionLeft : null]}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
+                ) : null}
+                {/* Date · where you drank it — a clean header stamp (kept out of
+                    the free-text notes below). */}
+                {(() => {
+                  const loc = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean).join(', ');
+                  const dateStr = wine.chosen_at
+                    ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : '';
+                  const stamp = [dateStr, loc].filter(Boolean).join(' · ');
+                  return stamp ? <Text style={[styles.stampLine, wine.label_image_path ? styles.stampLineLeft : null]}>{stamp}</Text> : null;
+                })()}
+              </View>
             </View>
 
             <View style={styles.divider} />
@@ -510,6 +527,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
               onCity={setLocCity}
               locationName={locName}
               onLocationName={setLocName}
+              showLocation={false}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
               wishlistActive={wishlist}
@@ -564,6 +582,12 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
               <Text style={styles.editLabel}>Region</Text>
               <TextInput style={styles.editInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Restaurant / place</Text>
+              <TextInput style={styles.editInput} value={editRestaurant} onChangeText={setEditRestaurant} placeholder="Where you drank it" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>City</Text>
+              <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} placeholder="City" placeholderTextColor={colors.textSubtle} />
 
               <Text style={styles.editLabel}>Photo</Text>
               <View style={styles.editThumbRow}>
@@ -626,6 +650,13 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   header: { alignItems: 'center', marginBottom: spacing.sm },
+  // With a label photo the header becomes a row: thumbnail left, text right.
+  headerWithThumb: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerThumb: { width: 52, height: 68 },
+  headerTextCol: { flex: 1 },
+  headerLineLeft: { textAlign: 'left' },
+  regionLeft: { textAlign: 'left' },
+  stampLineLeft: { textAlign: 'left' },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: 2 },
   // Date · location stamp beneath region/grape — the "where & when" of the review.

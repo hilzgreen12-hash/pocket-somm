@@ -29,6 +29,10 @@ interface Props {
   onCity: (s: string) => void;
   locationName: string;
   onLocationName: (s: string) => void;
+  // When false, the location row is hidden and a city is not required to save —
+  // used where the location is fixed elsewhere (a restaurant visit) or edited
+  // via the card's Edit popup rather than typed inline.
+  showLocation?: boolean;
   drinkingWindow: string;
   onDrinkingWindow: (s: string) => void;
   // Optional Wish List + Add to Cellar (hidden on cellar reviews).
@@ -59,7 +63,7 @@ export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes,
-  city, onCity, locationName, onLocationName, drinkingWindow, onDrinkingWindow,
+  city, onCity, locationName, onLocationName, showLocation = true, drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
@@ -85,27 +89,32 @@ export function WineReviewFields({
       />
 
       {/* Location — a pin, the (GPS-prefilled) editable city, and a place name.
-          Sits below the score, above the review. */}
-      <Text style={styles.fieldLabel}>Location</Text>
-      <View style={styles.locRow}>
-        <Text style={styles.locPin}>📍</Text>
-        <View style={styles.locFields}>
-          <TextInput
-            style={styles.locInput}
-            value={city}
-            onChangeText={onCity}
-            placeholder="City"
-            placeholderTextColor={colors.textMuted}
-          />
-          <TextInput
-            style={[styles.locInput, styles.locInputSecond]}
-            value={locationName}
-            onChangeText={onLocationName}
-            placeholder="Restaurant, home, other… (optional)"
-            placeholderTextColor={colors.textMuted}
-          />
-        </View>
-      </View>
+          Sits below the score, above the review. Hidden where the location is
+          fixed by the visit or edited via the card's Edit popup. */}
+      {showLocation ? (
+        <>
+          <Text style={styles.fieldLabel}>Location</Text>
+          <View style={styles.locRow}>
+            <Text style={styles.locPin}>📍</Text>
+            <View style={styles.locFields}>
+              <TextInput
+                style={styles.locInput}
+                value={city}
+                onChangeText={onCity}
+                placeholder="City"
+                placeholderTextColor={colors.textMuted}
+              />
+              <TextInput
+                style={[styles.locInput, styles.locInputSecond]}
+                value={locationName}
+                onChangeText={onLocationName}
+                placeholder="Restaurant, home, other… (optional)"
+                placeholderTextColor={colors.textMuted}
+              />
+            </View>
+          </View>
+        </>
+      ) : null}
 
       {/* Your Review */}
       <View style={styles.dictateRow}>
@@ -193,7 +202,7 @@ export function WineReviewFields({
       <TouchableOpacity
         style={[styles.saveButton, (saved || goldSave) && styles.saveButtonSaved]}
         onPress={() => {
-          if (!city.trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
+          if (showLocation && !city.trim()) { showAlert({ title: 'Add a location', body: 'Add at least a city before saving your review.' }); return; }
           onSave();
         }}
         disabled={saving}

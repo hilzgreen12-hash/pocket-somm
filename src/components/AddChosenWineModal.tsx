@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard,
+  StyleSheet, Keyboard, Image,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQueryClient } from '@tanstack/react-query';
@@ -193,25 +193,34 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
 
             <Text style={styles.sectionLabel}>The wine</Text>
 
-            <Text style={styles.fieldLabel}>Producer</Text>
-            <TextInput style={styles.input} value={producer} onChangeText={edited(setProducer)} placeholder="e.g. Domaine Leflaive" placeholderTextColor={colors.textMuted} />
+            {/* Scanned / uploaded label sits to the left of the identity fields,
+                mirroring a cellar wine card. */}
+            <View style={labelImageUri ? styles.identityRow : undefined}>
+              {labelImageUri ? (
+                <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
+              ) : null}
+              <View style={labelImageUri ? styles.identityFields : undefined}>
+                <Text style={styles.fieldLabel}>Producer</Text>
+                <TextInput style={styles.input} value={producer} onChangeText={edited(setProducer)} placeholder="e.g. Domaine Leflaive" placeholderTextColor={colors.textMuted} />
 
-            <Text style={styles.fieldLabel}>Wine name</Text>
-            <TextInput style={styles.input} value={wineName} onChangeText={edited(setWineName)} placeholder="e.g. Puligny-Montrachet" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.fieldLabel}>Wine name</Text>
+                <TextInput style={styles.input} value={wineName} onChangeText={edited(setWineName)} placeholder="e.g. Puligny-Montrachet" placeholderTextColor={colors.textMuted} />
 
-            <Text style={styles.fieldLabel}>Vintage</Text>
-            <TextInput
-              style={styles.input}
-              value={vintage}
-              onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
-              placeholder="e.g. 2018"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="numeric"
-              maxLength={4}
-            />
+                <Text style={styles.fieldLabel}>Vintage</Text>
+                <TextInput
+                  style={styles.input}
+                  value={vintage}
+                  onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
+                  placeholder="e.g. 2018"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numeric"
+                  maxLength={4}
+                />
 
-            <Text style={styles.fieldLabel}>Region</Text>
-            <TextInput style={styles.input} value={region} onChangeText={edited(setRegion)} placeholder="e.g. Burgundy" placeholderTextColor={colors.textMuted} />
+                <Text style={styles.fieldLabel}>Region</Text>
+                <TextInput style={styles.input} value={region} onChangeText={edited(setRegion)} placeholder="e.g. Burgundy" placeholderTextColor={colors.textMuted} />
+              </View>
+            </View>
 
             <View style={styles.divider} />
 
@@ -232,6 +241,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               onCity={edited(setLocCity)}
               locationName={locName}
               onLocationName={edited(setLocName)}
+              showLocation={false}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}
@@ -266,4 +276,7 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm,
     fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm,
   },
+  identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
+  identityThumb: { width: 60, height: 80, borderRadius: 6, backgroundColor: colors.surface },
+  identityFields: { flex: 1 },
 });
