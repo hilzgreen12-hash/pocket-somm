@@ -1281,7 +1281,7 @@ export default function RackGridScreen() {
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
-          Add multiple bottles by long holding a slot & selecting your placements · Add multiple bottles at once with Add a Lineup · Select a thumbnail to View Intel, long hold to edit · Pinch the rack to zoom
+          Add multiple bottles of the same wine at once by long holding a slot & selecting your placements · Add multiple bottles at once with Add a Lineup · Select a thumbnail to View Intel, long hold to edit · Pinch the rack to zoom
         </Text>
 
         {winesInRack.length > 0 && (
