@@ -335,7 +335,7 @@ export default function FullCellarListScreen() {
     }
     showAlert({
       title: 'Add a Lineup',
-      body: "Add wine lineups to wine racks or fridges — select which one you're adding this lineup to below.",
+      body: "Add up to 6 bottles at a time straight into a wine rack or fridge — select which one you're adding this lineup to below.",
       buttons: [
         ...lineupRacks.map((r) => ({ text: r.name, onPress: () => router.push(`/cellar/rack/${r.id}?lineup=1` as any) })),
         { text: 'Cancel', style: 'cancel' as const },
@@ -1056,7 +1056,7 @@ export default function FullCellarListScreen() {
               style={[styles.addBtn, { marginTop: spacing.sm }]}
               onPress={startLineup}
             >
-              <Text style={styles.addBtnText}>Add a Lineup (up to 8 bottles)</Text>
+              <Text style={styles.addBtnText}>Add a Lineup (up to 6 bottles)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
