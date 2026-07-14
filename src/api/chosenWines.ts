@@ -91,6 +91,8 @@ export async function addSessionBottle(userId: string, input: {
   wineName: string;
   region: string | null;
   vintage: number | null;
+  // Wine colour / style (red, white, rosé…) — optional.
+  style?: string | null;
   // 'restaurant' = a List Bottle (chosen off the restaurant's list);
   // 'other' = an Off-List Bottle (brought to the visit, e.g. from home).
   source: 'restaurant' | 'other';
@@ -101,6 +103,7 @@ export async function addSessionBottle(userId: string, input: {
     wine_name: input.wineName.trim(),
     producer: input.producer?.trim() || null,
     region: input.region?.trim() || null,
+    style: input.style?.trim() || null,
     vintage: input.vintage,
     restaurant_name: input.restaurantName?.trim() || null,
     city: input.city?.trim() || null,
@@ -304,6 +307,7 @@ export async function patchChosenWine(
     producer: string | null;
     region: string | null;
     vintage: number | null;
+    style: string | null;
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);

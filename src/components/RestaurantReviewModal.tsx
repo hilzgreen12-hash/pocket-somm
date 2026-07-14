@@ -103,6 +103,7 @@ export function RestaurantReviewModal({
   const [cbProducer, setCbProducer] = useState('');
   const [cbWineName, setCbWineName] = useState('');
   const [cbRegion, setCbRegion] = useState('');
+  const [cbColour, setCbColour] = useState('');
   const [cbVintage, setCbVintage] = useState('');
   // "I brought this" — off the restaurant's list. Pre-set true for cellar picks.
   const [cbBrought, setCbBrought] = useState(false);
@@ -120,10 +121,11 @@ export function RestaurantReviewModal({
   // Per-wine origin — indices in the set were "brought"; the rest are list picks.
   const [multiBrought, setMultiBrought] = useState<Set<number>>(new Set());
 
-  function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; vintage?: string | number | null }, brought: boolean) {
+  function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; colour?: string | null; vintage?: string | number | null }, brought: boolean) {
     setCbProducer(prefill.producer ?? '');
     setCbWineName(prefill.wineName ?? '');
     setCbRegion(prefill.region ?? '');
+    setCbColour(prefill.colour ?? '');
     setCbVintage(prefill.vintage != null ? String(prefill.vintage) : '');
     setCbBrought(brought);
     setConfirmOpen(true);
@@ -234,6 +236,7 @@ export function RestaurantReviewModal({
         producer: cbProducer.trim() || null,
         wineName: name,
         region: cbRegion.trim() || null,
+        style: cbColour.trim() || null,
         vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
         source: cbBrought ? 'other' : 'restaurant',
       });
@@ -559,6 +562,8 @@ export function RestaurantReviewModal({
                   <TextInput style={styles.bottleInput} value={cbWineName} onChangeText={setCbWineName} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
                   <Text style={styles.bottleFieldLabel}>Region</Text>
                   <TextInput style={styles.bottleInput} value={cbRegion} onChangeText={setCbRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
+                  <Text style={styles.bottleFieldLabel}>Colour</Text>
+                  <TextInput style={styles.bottleInput} value={cbColour} onChangeText={setCbColour} placeholder="e.g. Red, White, Rosé, Sparkling" placeholderTextColor={colors.textMuted} />
                   <Text style={styles.bottleFieldLabel}>Vintage</Text>
                   <TextInput style={styles.bottleInput} value={cbVintage} onChangeText={setCbVintage} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
                   {/* Origin — two mutually-exclusive ticks (brought vs ordered). */}
