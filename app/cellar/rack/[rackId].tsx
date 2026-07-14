@@ -1459,7 +1459,7 @@ export default function RackGridScreen() {
           </GestureDetector>
         </View>
 
-        {/* Add a lineup straight into this storage — photograph up to 8
+        {/* Add a lineup straight into this storage — photograph up to 6
             bottles and onboard them via the same flow as Add a Wine. */}
         <TouchableOpacity
           style={styles.addLineupBtn}
@@ -1471,7 +1471,7 @@ export default function RackGridScreen() {
           }}
           activeOpacity={0.7}
         >
-          <Text style={styles.addLineupBtnText}>Add A Lineup (up to 8 bottles)</Text>
+          <Text style={styles.addLineupBtnText}>Add A Lineup (up to 6 bottles)</Text>
         </TouchableOpacity>
 
         {/* Edit bubble — opens the rack-management modal (wipe / rename /

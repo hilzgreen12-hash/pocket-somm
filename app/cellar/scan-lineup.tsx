@@ -182,10 +182,22 @@ export default function ScanLineupScreen() {
       const base64 = prepped.base64;
       if (!base64) throw new Error('Could not process the photo.');
       const { bottles } = await detectLineup(base64);
-      // Cap raw detections at 8, then batch identical bottles (same producer +
-      // name + vintage) into one row carrying a quantity, so a lineup with two
-      // of the same wine reads as a single "×2" entry instead of two rows.
-      const capped = (bottles ?? []).slice(0, 8);
+      const raw = bottles ?? [];
+      // Add a Lineup into the cellar is capped at 6 bottles — more than that gets
+      // confused, so we refuse and ask for a smaller photo (Archive a Night still
+      // takes up to 8). This counts physical bottles, before duplicate-batching.
+      if (raw.length > 6) {
+        showAlert({
+          title: 'Too many bottles',
+          body: 'Add a Lineup takes up to 6 bottles at a time. Please retake the photo with 6 bottles or fewer.',
+        });
+        setStage('capture');
+        return;
+      }
+      // Batch identical bottles (same producer + name + vintage) into one row
+      // carrying a quantity, so a lineup with two of the same wine reads as a
+      // single "×2" entry instead of two rows.
+      const capped = raw.slice(0, 6);
       // Batch identical bottles (same producer + name + vintage) into one ×N row
       // — different vintages of the same wine stay separate. This recognises
       // duplicates in EVERY lineup flow (rack/fridge and onboarding), so a
@@ -489,7 +501,7 @@ export default function ScanLineupScreen() {
           {isFridge && (
             <Text style={styles.hint}>Line up all bottles from the row, including those facing the back, with all labels right side up — you will likely need to remove the bottles from your fridge and line them up for an accurate photo.</Text>
           )}
-          <Text style={styles.hint}>Stand up to 8 bottles up with their front labels facing the camera. Get your photo as close up to the labels as possible.</Text>
+          <Text style={styles.hint}>Stand up to 6 bottles up with their front labels facing the camera. Get your photo as close up to the labels as possible.</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
             <Text style={styles.primaryBtnText}>Take a photo</Text>
           </TouchableOpacity>
