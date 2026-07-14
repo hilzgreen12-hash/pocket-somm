@@ -32,13 +32,13 @@ const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
 ];
 const VIEW_COLS: Record<ViewMode, number> = { thumbnails: 3, enlarge: 1 };
 
-type FavFilter = 'all' | 'fav';
-const FAV_OPTIONS: { value: FavFilter; label: string }[] = [
-  { value: 'all', label: 'All labels' },
-  { value: 'fav', label: 'Favourites only' },
+type DateSort = 'desc' | 'asc';
+const DATE_OPTIONS: { value: DateSort; label: string }[] = [
+  { value: 'desc', label: 'Descending (newest first)' },
+  { value: 'asc', label: 'Ascending (oldest first)' },
 ];
 
-type FilterField = 'view' | 'fav' | null;
+type FilterField = 'view' | 'date' | null;
 
 function formatStamp(label: LibraryLabel): string {
   const date = new Date(label.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -82,7 +82,7 @@ export default function MyLabelsScreen() {
   const { width } = useWindowDimensions();
 
   const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
-  const [favFilter, setFavFilter] = useState<FavFilter>('all');
+  const [dateSort, setDateSort] = useState<DateSort>('desc');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [selectCellarOpen, setSelectCellarOpen] = useState(false);
@@ -99,9 +99,12 @@ export default function MyLabelsScreen() {
   const { setImage, setWineDetails, setError } = useLabelStore();
 
   const shown = useMemo(() => {
-    if (favFilter === 'fav') return labels.filter((l) => l.is_favourite);
-    return labels;
-  }, [labels, favFilter]);
+    return [...labels].sort((a, b) => {
+      const ta = new Date(a.created_at).getTime();
+      const tb = new Date(b.created_at).getTime();
+      return dateSort === 'asc' ? ta - tb : tb - ta;
+    });
+  }, [labels, dateSort]);
 
   // Cellar wines that have a label photo — the pool for "Select from Cellar".
   const cellarWithPhotos = useMemo(() => cellarWines.filter((w) => w.label_image_path), [cellarWines]);
@@ -305,11 +308,11 @@ export default function MyLabelsScreen() {
   const tileHeight = tileWidth * 1.3;
 
   const viewLabel = VIEW_OPTIONS.find((o) => o.value === viewMode)?.label ?? 'Thumbnails';
-  const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All labels';
+  const dateLabel = dateSort === 'asc' ? 'Ascending' : 'Descending';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'view') return { title: 'View', options: VIEW_OPTIONS, selected: viewMode, onSelect: (v) => setViewMode(v as ViewMode) };
-    if (field === 'fav') return { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v) => setFavFilter(v as FavFilter) };
+    if (field === 'date') return { title: 'Date', options: DATE_OPTIONS, selected: dateSort, onSelect: (v) => setDateSort(v as DateSort) };
     return null;
   }
   const activeDropdown = dropdownConfig(openDropdown);
@@ -355,22 +358,16 @@ export default function MyLabelsScreen() {
               </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{viewLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('fav')}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Favourites</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Date</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'date' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, favFilter === 'fav' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favLabel}</Text>
+              <Text style={[styles.filterChipValue, dateSort === 'asc' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateLabel}</Text>
             </TouchableOpacity>
           </ScrollView>
 
-          {shown.length === 0 ? (
-            <View style={styles.empty}>
-              <Text style={styles.emptyTitle}>No favourites yet</Text>
-              <Text style={styles.emptyBody}>Tap the star on a label (in Enlarge view) to keep it here.</Text>
-            </View>
-          ) : (
-            <ScrollView style={styles.listScroll} contentContainerStyle={styles.grid}>
+          <ScrollView style={styles.listScroll} contentContainerStyle={styles.grid}>
               {shown.map((label) => (
                 <TouchableOpacity
                   key={label.id}
@@ -395,13 +392,12 @@ export default function MyLabelsScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
-                  <Text style={styles.caption} numberOfLines={1}>
-                    {label.is_favourite ? '★ ' : ''}{label.wine_name ?? label.producer ?? 'Wine label'}
+                  <Text style={styles.caption} numberOfLines={2}>
+                    {label.is_favourite ? '★ ' : ''}{wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                   </Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
-          )}
         </>
       )}
 

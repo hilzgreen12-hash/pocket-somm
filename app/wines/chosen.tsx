@@ -626,8 +626,8 @@ export default function ChosenWinesScreen() {
       <EditChosenWineModal
         wine={editingWine}
         visible={!!editingWine}
-        onClose={() => setEditingWine(null)}
-        onSaved={() => setEditingWine(null)}
+        onClose={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/cellar/labels'); }}
+        onSaved={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/cellar/labels'); }}
       />
 
       <EditCellarReviewModal
@@ -641,8 +641,8 @@ export default function ChosenWinesScreen() {
         visible={addOpen}
         initial={addInitial}
         labelImageUri={pendingReviewLabelUri}
-        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); }}
-        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); }}
+        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); if (cameViaLabelLink) router.replace('/cellar/labels'); }}
+        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); if (cameViaLabelLink) router.replace('/cellar/labels'); }}
       />
 
       {/* "+ Add" chooser — Scan / Upload run the same label recognise+confirm
