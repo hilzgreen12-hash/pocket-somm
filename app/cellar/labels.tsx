@@ -76,7 +76,7 @@ export default function MyLabelsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
   const { labels, isLoading, remove, setFavourite, create } = useLabels();
-  const { wines: cellarWines } = useCellar();
+  const { wines: cellarWines, addWine } = useCellar();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { width } = useWindowDimensions();
@@ -118,7 +118,7 @@ export default function MyLabelsScreen() {
   // offers "Add label to Label Library?" on the result.
   function handleScan() {
     setAddOpen(false);
-    router.push('/label/camera?context=intel');
+    router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
   }
 
   // +Add · Upload a Photo — same intel flow, seeded from a gallery image.
@@ -139,7 +139,7 @@ export default function MyLabelsScreen() {
     } finally {
       setScanningLabel(false);
     }
-    router.push('/label/confirm?context=intel');
+    router.push(`/label/confirm?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
   }
 
   // +Add · Select from Cellar — copy an existing cellar wine's label (photo +
@@ -176,12 +176,54 @@ export default function MyLabelsScreen() {
       body: formatStamp(label),
       buttons: [
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
-        { text: existingId ? 'View or Edit Your Review' : 'Create a Review', onPress: () => goToReview(existingId, label) },
+        { text: 'Add/Edit/View Review', onPress: () => goToReview(existingId, label) },
+        { text: 'Add to Full Cellar List', onPress: () => void addLabelToCellar(label) },
         { text: 'Share Thumbnail', onPress: () => { setShareNote(''); setShareLabel(label); } },
         { text: 'Remove from Library', style: 'destructive', onPress: () => confirmRemove(label) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  // Add this label's wine straight into the Full Cellar List, carrying its
+  // photo + any intel snapshot, dated today. Confirms with the wine name + date.
+  async function addLabelToCellar(label: LibraryLabel) {
+    if (!userId) return;
+    const today = new Date().toISOString().split('T')[0];
+    const intel = label.intel;
+    try {
+      await addWine.mutateAsync({
+        user_id: userId,
+        wine_name: label.wine_name || label.producer || 'Wine',
+        producer: label.producer,
+        region: label.region,
+        vintage: label.vintage != null ? String(label.vintage) : null,
+        quantity: 1,
+        storage_location: null,
+        date_received: today,
+        critic_score: intel?.criticScore ?? null,
+        critic_score_note: intel?.criticScoreNote ?? null,
+        drinking_window_from: intel?.drinkingWindowFrom ?? null,
+        drinking_window_to: intel?.drinkingWindowTo ?? null,
+        drinking_window_status: intel?.drinkingWindowStatus ?? 'unknown',
+        tasting_notes: intel?.tastingNotes ?? null,
+        grape_variety: intel?.grapeVariety ?? null,
+        label_image_path: label.label_image_path,
+        user_notes: null,
+        estimated_value: intel?.estimatedValue ?? null,
+        estimated_value_currency: intel?.estimatedValue != null ? currency : null,
+        estimated_value_source: intel?.valueSource ?? null,
+        bottle_size_ml: 750,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+      const dateLabel = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+      showAlert({
+        title: wineHeaderLine(label.producer, label.wine_name, label.vintage) || (label.wine_name ?? 'Wine'),
+        body: `Added to Full Cellar List on ${dateLabel}.`,
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not add to cellar', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   function goToReview(existingId: string | null, label: LibraryLabel) {
@@ -203,7 +245,7 @@ export default function MyLabelsScreen() {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(label.intel);
       useLastIntelStore.getState().setLast(details, label.intel);
-      router.push('/label/results?context=intel');
+      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
       return;
     }
     // No snapshot (review / older label) — regenerate on demand.
@@ -213,7 +255,7 @@ export default function MyLabelsScreen() {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(intel);
       useLastIntelStore.getState().setLast(details, intel);
-      router.push('/label/results?context=intel');
+      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
     } catch (err) {
       showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
