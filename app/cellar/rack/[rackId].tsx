@@ -1133,6 +1133,8 @@ export default function RackGridScreen() {
   // storage type the user actually built.
   const storageNoun = rack.storage_type === 'fridge' ? 'fridge' : 'rack';
   const StorageNoun = rack.storage_type === 'fridge' ? 'Fridge' : 'Rack';
+  // Total capacity = standard grid + any large-format band (not free spaces).
+  const totalSlots = rack.rows * rack.cols + (rack.large_format_cols && rack.large_format_cols > 0 ? rack.large_format_cols : 0);
 
   // Grid rows — rendered in the inline viewport and (when zoomed) in the
   // full-screen overlay. One function so the two never drift apart.
@@ -1237,9 +1239,9 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Gold tally — distinct wines vs total bottles in this rack/fridge. */}
+      {/* Gold tally — distinct wines, total bottles, and total slot capacity. */}
       <Text style={styles.rackSummary}>
-        {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'}
+        {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
       </Text>
 
       {lineupSetup && (

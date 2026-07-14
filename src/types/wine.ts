@@ -321,6 +321,8 @@ export interface ChosenWine {
   region: string | null;
   appellation: string | null;
   grape: string | null;
+  // Wine colour / style (red, white, rosé…), migration 070. Nullable.
+  style: string | null;
   vintage: number | null;
   menu_price: number | null;
   currency: string;
