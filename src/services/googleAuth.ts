@@ -1,22 +1,69 @@
-// Google sign-in is temporarily DISABLED for this release. The native module
-// (@react-native-google-signin/google-signin) is removed to avoid a CocoaPods
-// build conflict on iOS, and the buttons are hidden via SOCIAL_SIGN_IN_ENABLED.
+import * as WebBrowser from 'expo-web-browser';
+import * as Linking from 'expo-linking';
+import { supabase } from '../api/supabase';
+
+// Google sign-in via Supabase OAuth in an in-app browser — deliberately NOT the
+// native @react-native-google-signin module, which broke the iOS CocoaPods
+// build. This adds no native iOS pod, so the iOS build stays clean.
 //
-// To RE-ENABLE (once the pod issue is resolved + it's device-tested):
-//   1. npm install @react-native-google-signin/google-signin
-//   2. app.json plugins: add
-//        ["@react-native-google-signin/google-signin",
-//          { "iosUrlScheme": "com.googleusercontent.apps.876379327160-dtd9hsbuvab09nfpe7ov6t70fesq4g4a" }]
-//   3. Restore the real implementation from git history (WEB_CLIENT_ID
-//      876379327160-15mq34rt4ili3ncopbaub7r9ps1442b2, IOS_CLIENT_ID
-//      876379327160-dtd9hsbuvab09nfpe7ov6t70fesq4g4a).
-//   4. Flip SOCIAL_SIGN_IN_ENABLED in src/constants/features.ts.
+// Supabase prerequisites (Dashboard → Authentication):
+//   • Providers → Google: enabled, with the Web OAuth client ID + secret.
+//   • URL Configuration → Redirect URLs: allow-list `vinster://auth/callback`.
+// Google Cloud: the Web client's Authorized redirect URI must include
+//   https://skwfykendnhnhhbdrfbr.supabase.co/auth/v1/callback
+
+// Lets the in-app browser hand a completed session back on re-focus.
+WebBrowser.maybeCompleteAuthSession();
 
 export function isGoogleSignInCancelled(err: unknown): boolean {
   const e = err as { code?: string; message?: string } | undefined;
-  return e?.code === 'SIGN_IN_CANCELLED' || /cancel/i.test(e?.message ?? '');
+  return e?.code === 'SIGN_IN_CANCELLED' || /cancel|dismiss/i.test(e?.message ?? '');
+}
+
+function fragmentParam(url: string, key: string): string | null {
+  const frag = url.includes('#') ? url.slice(url.indexOf('#') + 1) : '';
+  for (const part of frag.split('&')) {
+    const [k, v] = part.split('=');
+    if (k === key) return decodeURIComponent(v ?? '');
+  }
+  return null;
 }
 
 export async function signInWithGoogle(): Promise<void> {
-  throw new Error('Google sign-in is not available in this build.');
+  const redirectTo = Linking.createURL('auth/callback');
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    provider: 'google',
+    options: { redirectTo, skipBrowserRedirect: true },
+  });
+  if (error) throw error;
+  if (!data?.url) throw new Error('Could not start Google sign-in.');
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (result.type === 'cancel' || result.type === 'dismiss') {
+    const e = new Error('Google sign-in cancelled.');
+    (e as { code?: string }).code = 'SIGN_IN_CANCELLED';
+    throw e;
+  }
+  if (result.type !== 'success' || !result.url) {
+    throw new Error('Google sign-in did not complete.');
+  }
+
+  // PKCE (the Supabase client default): the redirect carries ?code=…, which we
+  // exchange for a session.
+  const { queryParams } = Linking.parse(result.url);
+  const code = typeof queryParams?.code === 'string' ? queryParams.code : null;
+  if (code) {
+    const { error: exErr } = await supabase.auth.exchangeCodeForSession(code);
+    if (exErr) throw exErr;
+    return;
+  }
+  // Implicit fallback: tokens live in the URL fragment.
+  const access_token = fragmentParam(result.url, 'access_token');
+  const refresh_token = fragmentParam(result.url, 'refresh_token');
+  if (access_token && refresh_token) {
+    const { error: sErr } = await supabase.auth.setSession({ access_token, refresh_token });
+    if (sErr) throw sErr;
+    return;
+  }
+  throw new Error('Google sign-in did not return a session.');
 }
