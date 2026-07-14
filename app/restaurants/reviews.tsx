@@ -639,7 +639,6 @@ export default function RestaurantReviewsScreen() {
             </View>
           ) : (
             sorted.map((item) => {
-              const chosen = findChosenForVisit(item);
               const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingValue != null;
               return (
                 <View key={item.id} style={styles.cardCompact}>
@@ -697,31 +696,6 @@ export default function RestaurantReviewsScreen() {
                       </View>
                     )}
                   </TouchableOpacity>
-
-                  {chosen.length > 0 ? (
-                    <View style={styles.wineList}>
-                      {chosen.map((cw) => {
-                        const wineLine = [cw.producer, cw.wine_name, cw.vintage]
-                          .filter((x) => x != null && String(x).trim().length > 0)
-                          .join(' · ');
-                        return (
-                          <TouchableOpacity
-                            key={cw.id}
-                            style={styles.wineRow}
-                            onPress={() => setEditingWine(cw)}
-                            onLongPress={() => onLongPressCardWine(cw)}
-                            delayLongPress={400}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={styles.wineLine} numberOfLines={1}>{cw.source === 'other' ? 'Brought' : 'List Pick'}: {wineLine}</Text>
-                            {cw.user_score != null ? (
-                              <Text style={styles.wineScore}>{cw.user_score}/100</Text>
-                            ) : null}
-                          </TouchableOpacity>
-                        );
-                      })}
-                    </View>
-                  ) : null}
                 </View>
               );
             })
@@ -760,9 +734,15 @@ export default function RestaurantReviewsScreen() {
           onViewIntel={(i) => {
             const cw = findChosenForVisit(editing)[i];
             const visitId = editing.id;
-            // Close the modal WITHOUT the link-back (we navigate to intel next),
-            // and pass this visit so intel's Back returns here.
-            if (cw) { setEditing(null); setEditingFromLink(false); void viewWineIntel(cw, visitId); }
+            // Close the full-screen modal WITHOUT the link-back, then generate +
+            // open intel on the next tick. Navigating while the modal is still
+            // dismissing gets swallowed (the intel screen mounts behind it), so
+            // we defer until the modal is gone — this is why it "did nothing".
+            if (cw) {
+              setEditing(null);
+              setEditingFromLink(false);
+              setTimeout(() => { void viewWineIntel(cw, visitId); }, 320);
+            }
           }}
           onDeleteWine={(i) => {
             const cw = findChosenForVisit(editing)[i];

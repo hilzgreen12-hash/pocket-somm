@@ -399,8 +399,8 @@ export function RestaurantReviewModal({
     const origin = w.source === 'other' ? 'Brought' : 'List Pick';
     return (
       <TouchableOpacity key={w._idx} style={styles.wineRow} onPress={() => openWinePopup(w)} activeOpacity={0.7}>
-        <Text style={styles.wineLine} numberOfLines={2}>
-          <Text style={styles.wineOrigin}>{origin}: </Text>{line}{w.userScore != null ? ` · ${w.userScore}/100` : ''}
+        <Text style={styles.wineNameWhite} numberOfLines={2}>
+          <Text style={styles.wineOrigin}>{origin}: </Text>{line}{w.userScore != null ? <Text style={styles.wineScoreInline}> · {w.userScore}/100</Text> : null}
         </Text>
       </TouchableOpacity>
     );
@@ -446,38 +446,7 @@ export function RestaurantReviewModal({
 
             <View style={styles.divider} />
 
-            {/* Wines You Drank — one list. Whether each bottle was off the list
-                or brought along is shown as a quiet "brought" tag, not sorted
-                into separate buckets. One add flow infers which it is. */}
-            <Text style={styles.sectionLabel}>Wines You Drank</Text>
-            <View style={styles.wineBlock}>
-              {indexedWines.map(renderBottle)}
-              <TouchableOpacity style={styles.addBottleBtn} onPress={() => setBottleChooserOpen(true)} activeOpacity={0.8}>
-                <Text style={styles.addBottleText}>+ Add a bottle</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={styles.divider} />
-
-            {/* Ratings — condensed to a two-column grid to save vertical space. */}
-            <Text style={styles.fieldLabel}>Ratings</Text>
-            <View style={styles.ratingsGrid}>
-              {([
-                { label: 'Overall', value: overall, set: setOverall },
-                { label: 'Food', value: food, set: setFood },
-                { label: 'Wine list', value: wineList, set: setWineList },
-                { label: 'Service', value: service, set: setService },
-                { label: 'Value', value: value, set: setValue },
-              ] as const).map((r) => (
-                <View key={r.label} style={styles.ratingItem}>
-                  <Text style={styles.ratingItemLabel}>{r.label}</Text>
-                  <StarRating value={r.value} onChange={r.set} size={18} />
-                </View>
-              ))}
-            </View>
-
-            <View style={styles.divider} />
-
+            {/* Your review — moved to the top, right under the date. */}
             <View style={styles.dictateRow}>
               <Text style={styles.fieldLabel}>Your review</Text>
               <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} />
@@ -492,6 +461,38 @@ export function RestaurantReviewModal({
               numberOfLines={5}
               textAlignVertical="top"
             />
+
+            <View style={styles.divider} />
+
+            {/* Ratings — condensed: label + stars on one line, two columns, so
+                the five ratings fit in three tight rows. */}
+            <Text style={styles.fieldLabel}>Ratings</Text>
+            <View style={styles.ratingsGrid}>
+              {([
+                { label: 'Overall', value: overall, set: setOverall },
+                { label: 'Food', value: food, set: setFood },
+                { label: 'Wine list', value: wineList, set: setWineList },
+                { label: 'Service', value: service, set: setService },
+                { label: 'Value', value: value, set: setValue },
+              ] as const).map((r) => (
+                <View key={r.label} style={styles.ratingItem}>
+                  <Text style={styles.ratingItemLabel}>{r.label}</Text>
+                  <StarRating value={r.value} onChange={r.set} size={16} />
+                </View>
+              ))}
+            </View>
+
+            <View style={styles.divider} />
+
+            {/* Wines You Drank — one list. Whether each bottle was off the list
+                or brought along is shown as a quiet origin tag. */}
+            <Text style={styles.sectionLabel}>Wines You Drank</Text>
+            <View style={styles.wineBlock}>
+              {indexedWines.map(renderBottle)}
+              <TouchableOpacity style={styles.addBottleBtn} onPress={() => setBottleChooserOpen(true)} activeOpacity={0.8}>
+                <Text style={styles.addBottleText}>+ Add a bottle</Text>
+              </TouchableOpacity>
+            </View>
 
             {/* Share lives in the top-right corner now — no bottom share row. */}
 
@@ -742,15 +743,18 @@ const styles = StyleSheet.create({
   broughtToggleHint: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   // Wine reference — gold italic, matching the wine reference style elsewhere.
   wineLine: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, lineHeight: 21 },
-  // Origin prefix ("Brought:" / "List Pick:") — gold, non-italic to stand apart.
+  // Wine name in white; the origin prefix beside it stays gold.
+  wineNameWhite: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 21 },
+  wineScoreInline: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  // Origin prefix ("Brought:" / "List Pick:") — gold, semibold to stand apart.
   wineOrigin: { fontFamily: fonts.bodySemibold, color: colors.gold },
   wineReviewLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 2 },
   // "Add a Bottle" — dashed gold affordance under the bottle list.
   addBottleBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
   addBottleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  // Condensed ratings — two-column grid so the five ratings fit in three rows.
-  ratingsGrid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.sm, marginBottom: spacing.md },
-  ratingItem: { width: '47%', gap: 2 },
+  // Condensed ratings — label + stars share one line, two columns, three rows.
+  ratingsGrid: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: spacing.xs, marginBottom: spacing.md },
+  ratingItem: { width: '47%', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   ratingItemLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
   // "(coming soon)" line beneath "Share to Community".
   comingSoonText: { fontFamily: fonts.bodyRegular, fontSize: 12, color: '#FFFFFF', textAlign: 'center', marginTop: 2, opacity: 0.85 },
