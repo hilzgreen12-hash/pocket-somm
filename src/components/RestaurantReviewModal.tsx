@@ -839,8 +839,9 @@ const styles = StyleSheet.create({
   restaurantHeaderInput: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, letterSpacing: 0.3, paddingVertical: 2 },
   locationHeaderInput: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, paddingVertical: 2, marginTop: 2 },
   dateHeader: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
-  // Editable version of the date stamp — same look, tappable to correct the date.
-  dateHeaderInput: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, paddingVertical: 2 },
+  // Editable version of the date stamp — white so it clearly reads as a
+  // tappable field (like the restaurant-name input), not a muted read-only stamp.
+  dateHeaderInput: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, marginTop: spacing.xs, paddingVertical: 2 },
   heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
