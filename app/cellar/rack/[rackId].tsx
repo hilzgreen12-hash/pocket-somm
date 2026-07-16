@@ -52,12 +52,31 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'Declining' },
 ];
 
+// Stepper for the Resize sheet — mirrors the create-flow counter (min 1,
+// max 30) so growing/shrinking a rack feels the same as building one.
+function Counter({ label, value, onChange }: { label: string; value: number; onChange: (v: number) => void }) {
+  return (
+    <View style={styles.counterRow}>
+      <Text style={styles.counterLabel}>{label}</Text>
+      <View style={styles.counterControls}>
+        <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.max(1, value - 1))}>
+          <Text style={styles.counterBtnText}>−</Text>
+        </TouchableOpacity>
+        <Text style={styles.counterValue}>{value}</Text>
+        <TouchableOpacity style={styles.counterBtn} onPress={() => onChange(Math.min(30, value + 1))}>
+          <Text style={styles.counterBtnText}>+</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
 export default function RackGridScreen() {
   const { rackId, highlight, lineup } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
-  const { racks, remove: removeRack, rename: renameRackMutation, wipe: wipeRackMutation } = useRacks();
+  const { racks, remove: removeRack, rename: renameRackMutation, wipe: wipeRackMutation, resize: resizeRackMutation } = useRacks();
   // useCellar gives us access to updateWine so we can bump the wine's
   // quantity when the user places multiple bottles from this screen.
   const { wines, updateWine } = useCellar();
@@ -127,10 +146,14 @@ export default function RackGridScreen() {
   // "Add a Lineup" setup: pick the start slot + orientation before scanning.
   const [lineupSetup, setLineupSetup] = useState(false);
   const [lineupOrientation, setLineupOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
-  // Edit-rack modal — Wipe Contents / Rename / Delete.
+  // Edit-rack modal — Wipe Contents / Rename / Resize / Delete.
   const [editOpen, setEditOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [renameDraft, setRenameDraft] = useState('');
+  // Resize sub-view: draft rows/cols driven by the steppers.
+  const [resizing, setResizing] = useState(false);
+  const [rowsDraft, setRowsDraft] = useState(1);
+  const [colsDraft, setColsDraft] = useState(1);
 
   // Auto-clear the "Wine saved to rack" confirmation after a few seconds.
   useEffect(() => {
@@ -155,6 +178,43 @@ export default function RackGridScreen() {
   }, []);
 
   const rack = racks.find((r) => r.id === rackId);
+
+  // Close the edit sheet and reset its sub-views so it always reopens on the
+  // action list rather than a stale Rename/Resize screen.
+  function closeEdit() { setRenaming(false); setResizing(false); setEditOpen(false); }
+
+  // Save a resize. Growing is unconditional; shrinking that would cut occupied
+  // slots asks first — the wines stay in the cellar, just unmapped from here.
+  function handleResizeSave() {
+    if (!rack) return;
+    const newRows = rowsDraft;
+    const newCols = colsDraft;
+    if (newRows === rack.rows && newCols === rack.cols) { setResizing(false); return; }
+    const doResize = () => {
+      resizeRackMutation.mutate({ id: rackId, rows: newRows, cols: newCols }, {
+        onSuccess: () => { setResizing(false); setEditOpen(false); },
+        onError: (err) => showAlert({ title: 'Could not resize', body: err instanceof Error ? err.message : 'Please try again.' }),
+      });
+    };
+    // Standard slots (row_index >= 0) that fall outside the new grid; the
+    // large-format band (row_index -1) is independent and always kept.
+    const occupied = slots.filter(
+      (s) => s.row_index >= 0 && s.cellar_wine_id != null && (s.row_index >= newRows || s.col_index >= newCols),
+    );
+    if (occupied.length > 0) {
+      const n = occupied.length;
+      showAlert({
+        title: `Remove ${n} ${n === 1 ? 'bottle' : 'bottles'} from ${n === 1 ? 'its slot' : 'their slots'}?`,
+        body: `Shrinking to ${newRows} × ${newCols} unmaps ${n === 1 ? 'a bottle that sits' : `${n} bottles that sit`} outside the new grid. ${n === 1 ? 'It stays' : 'They stay'} in your cellar — just no longer placed in this ${storageNoun}.`,
+        buttons: [
+          { text: 'Resize & unassign', style: 'destructive', onPress: doResize },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+    } else {
+      doResize();
+    }
+  }
 
   // Arrived via "Add a Lineup" from the Cellar List (?lineup=1) — auto-enter the
   // slot/orientation setup once the rack has loaded (once per mount).
@@ -1741,7 +1801,7 @@ export default function RackGridScreen() {
         </KeyboardAvoidingView>
       </Modal>
       {/* Edit-rack modal — Wipe Contents / Rename / Delete. */}
-      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={() => setEditOpen(false)}>
+      <Modal visible={editOpen} transparent animationType="fade" onRequestClose={closeEdit}>
         <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
           <View style={styles.placeSheet}>
             <Text style={styles.placeTitle}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
@@ -1775,6 +1835,26 @@ export default function RackGridScreen() {
                   <Text style={styles.placeCancelText}>Cancel</Text>
                 </TouchableOpacity>
               </>
+            ) : resizing ? (
+              <>
+                <View style={styles.resizePreview}>
+                  <Text style={styles.resizePreviewLabel}>{rowsDraft} × {colsDraft}</Text>
+                  <Text style={styles.resizePreviewSub}>{rowsDraft * colsDraft} bottle slots</Text>
+                </View>
+                <Counter label="Vertical (rows)" value={rowsDraft} onChange={setRowsDraft} />
+                <View style={styles.resizeDivider} />
+                <Counter label="Horizontal (columns)" value={colsDraft} onChange={setColsDraft} />
+                <TouchableOpacity
+                  style={styles.placeConfirmBtn}
+                  onPress={handleResizeSave}
+                  disabled={resizeRackMutation.isPending}
+                >
+                  <Text style={styles.placeConfirmText}>{resizeRackMutation.isPending ? 'Saving…' : 'Save size'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setResizing(false)} style={styles.placeCancel}>
+                  <Text style={styles.placeCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
             ) : (
               <>
                 <TouchableOpacity
@@ -1783,6 +1863,13 @@ export default function RackGridScreen() {
                   activeOpacity={0.7}
                 >
                   <Text style={styles.editActionBtnText}>Rename {StorageNoun}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.editActionBtn}
+                  onPress={() => { setRowsDraft(rack.rows); setColsDraft(rack.cols); setResizing(true); }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.editActionBtnText}>Resize {StorageNoun}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.editActionBtn}
@@ -1834,7 +1921,7 @@ export default function RackGridScreen() {
                 >
                   <Text style={styles.editActionBtnTextDanger}>Delete {StorageNoun}</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => setEditOpen(false)} style={styles.placeCancel}>
+                <TouchableOpacity onPress={closeEdit} style={styles.placeCancel}>
                   <Text style={styles.placeCancelText}>Close</Text>
                 </TouchableOpacity>
               </>
@@ -2026,6 +2113,17 @@ const styles = StyleSheet.create({
   editActionBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   editActionBtnDanger: { borderColor: colors.gold },
   editActionBtnTextDanger: { color: colors.gold },
+  // Resize sub-view — preview stat + stepper rows, mirroring the create flow.
+  resizePreview: { backgroundColor: colors.surface, borderRadius: 12, padding: spacing.lg, alignItems: 'center', marginBottom: spacing.md },
+  resizePreviewLabel: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },
+  resizePreviewSub: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
+  resizeDivider: { height: 1, backgroundColor: colors.border },
+  counterRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md },
+  counterLabel: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  counterControls: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
+  counterBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  counterBtnText: { fontSize: 22, color: colors.text, fontFamily: fonts.headingRegular },
+  counterValue: { fontSize: 24, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 40, textAlign: 'center' },
   slotMovingSource: { borderColor: colors.gold, borderWidth: 2, opacity: 0.4 },
   movingBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, padding: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.10)' },
   // Inter — banner body
