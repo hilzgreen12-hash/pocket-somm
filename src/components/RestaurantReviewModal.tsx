@@ -1,4 +1,4 @@
-import { useRef, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
   StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView,
@@ -88,6 +88,55 @@ export function RestaurantReviewModal({
   const [sharing, setSharing] = useState(false);
   const [posting, setPosting] = useState(false);
   const shareCardRef = useRef<View>(null);
+
+  // The scan_sessions patch this review writes. Kept in one place so the Save
+  // button, the community share, and the silent autosave-on-leave all write
+  // exactly the same fields.
+  function buildPayload() {
+    return {
+      restaurant_name: restaurantName.trim() || null,
+      city: cityValue.trim() || null,
+      restaurant_note: note.trim() || null,
+      rating_food: food,
+      rating_service: service,
+      rating_wine_list: wineList,
+      rating_overall: overall,
+      rating_value: value,
+      is_favourite: isFavourite,
+    };
+  }
+
+  // --- Silent autosave so a review is never lost when leaving the page. ---
+  // The note + ratings live only in local state until Save. Tapping a wine to
+  // view its intel unmounts this modal (the parent sets editing=null before
+  // navigating), and the back arrow could discard edits too. We persist on the
+  // way out with NO confirmation prompt. Refs mirror the latest values so the
+  // unmount cleanup reads current state rather than a stale first-render
+  // closure, and a saved snapshot lets us skip a redundant write. onBlur is
+  // unreliable on Android unmount, so we diff refs — same pattern as
+  // app/profile/recipe.tsx.
+  const payloadRef = useRef(buildPayload());
+  payloadRef.current = buildPayload();
+  const currentSnap = JSON.stringify(payloadRef.current);
+  const savedSnapRef = useRef(currentSnap); // initialised to the loaded values
+  const dirtyRef = useRef(false);
+  dirtyRef.current = currentSnap !== savedSnapRef.current;
+  const sessionIdRef = useRef(sessionId);
+  sessionIdRef.current = sessionId;
+
+  useEffect(() => {
+    return () => {
+      if (!dirtyRef.current || !sessionIdRef.current) return;
+      // Fire-and-forget: the component is unmounting so we can't await. The
+      // scan-archive invalidation refreshes the list and the re-opened review
+      // form (via the ?openSession deep link) with the saved note + ratings.
+      supabase
+        .from('scan_sessions')
+        .update(payloadRef.current)
+        .eq('id', sessionIdRef.current)
+        .then(() => { qc.invalidateQueries({ queryKey: ['scan-archive'] }); });
+    };
+  }, []);
 
   // --- Add a Bottle: ONE flow, four ways in (Cellar / Upload / Scan / Manual),
   // all landing on a confirm-details sheet. Whether it's a "List Bottle" (off
@@ -292,17 +341,10 @@ export function RestaurantReviewModal({
   }
 
   async function persist() {
-    await supabase.from('scan_sessions').update({
-      restaurant_name: restaurantName.trim() || null,
-      city: cityValue.trim() || null,
-      restaurant_note: note.trim() || null,
-      rating_food: food,
-      rating_service: service,
-      rating_wine_list: wineList,
-      rating_overall: overall,
-      rating_value: value,
-      is_favourite: isFavourite,
-    }).eq('id', sessionId);
+    const payload = buildPayload();
+    await supabase.from('scan_sessions').update(payload).eq('id', sessionId);
+    // Mark the form clean so the unmount autosave doesn't write it again.
+    savedSnapRef.current = JSON.stringify(payload);
   }
 
   async function handleSave() {
@@ -320,6 +362,20 @@ export function RestaurantReviewModal({
       onSaved({ name: restaurantName.trim() || null, city: cityValue.trim() || null });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // Leaving via the back arrow (or Android hardware back). Unsaved edits are
+  // SAVED silently rather than discarded — handleSave persists and calls
+  // onSaved, which closes and, for a manual draft, marks it saved so the parent
+  // doesn't delete it. An untouched form just closes: onClose lets the parent
+  // drop a blank manual draft so empty rows don't pile up.
+  async function handleBack() {
+    Keyboard.dismiss();
+    if (dirtyRef.current && sessionId) {
+      await handleSave();
+    } else {
+      onClose();
     }
   }
 
@@ -410,12 +466,12 @@ export function RestaurantReviewModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleBack}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           {/* Top bar: gold back arrow (left); Share + favourite star (right). */}
           <View style={styles.topBar}>
-            <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+            <TouchableOpacity onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
               <Text accessibilityLabel="Back" style={styles.backArrow}>←</Text>
             </TouchableOpacity>
             <View style={styles.topRight}>
