@@ -119,6 +119,9 @@ export interface DetectedBottle {
   wineName: string;
   vintage: string | null;
   region?: string | null;
+  // Wine colour / style (Red, White, Rosé, Sparkling…), read from the label
+  // when legible. Seeds the Style field when a scanned bottle is confirmed.
+  style?: string | null;
   confident: boolean;
   // How many identical bottles this entry represents after the lineup is
   // batched (same producer + name + vintage collapse into one row). Absent or

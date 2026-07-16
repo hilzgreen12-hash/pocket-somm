@@ -58,6 +58,9 @@ interface Props {
   // Opens Wine Intel for the wine at this index (parent closes the modal and
   // navigates — same reason onReviewWine is a callback, not done inline).
   onViewIntel?: (index: number) => void;
+  // Opens the full "Edit wine" sheet (identity + style + photo) for the wine at
+  // this index. Parent closes this modal and opens EditChosenWineModal.
+  onEditWine?: (index: number) => void;
   // Permanently delete the wine at this index from the visit.
   onDeleteWine?: (index: number) => void;
   onClose: () => void;
@@ -68,7 +71,7 @@ interface Props {
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
-  city, date, wines, onReviewWine, onViewIntel, onDeleteWine, onClose, onSaved,
+  city, date, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -167,10 +170,13 @@ export function RestaurantReviewModal({
   // Multi-bottle add: a photo with several bottles opens a tick-list to confirm
   // which to add (mirrors the rack lineup flow).
   const [multiOpen, setMultiOpen] = useState(false);
-  const [multiBottles, setMultiBottles] = useState<{ producer: string | null; wineName: string | null; vintage: string | number | null; region: string | null }[]>([]);
+  const [multiBottles, setMultiBottles] = useState<{ producer: string | null; wineName: string | null; vintage: string | number | null; region: string | null; style: string | null }[]>([]);
   const [multiChecked, setMultiChecked] = useState<Set<number>>(new Set());
   // Per-wine origin — indices in the set were "brought"; the rest are list picks.
   const [multiBrought, setMultiBrought] = useState<Set<number>>(new Set());
+  // When set, the Confirm-details sheet is editing this multi-bottle row inline
+  // (correct its fields, then it stays in the batch) rather than adding a wine.
+  const [editingMultiIndex, setEditingMultiIndex] = useState<number | null>(null);
 
   function openConfirm(prefill: { producer?: string | null; wineName?: string | null; region?: string | null; colour?: string | null; vintage?: string | number | null }, brought: boolean) {
     setCbProducer(prefill.producer ?? '');
@@ -205,14 +211,14 @@ export function RestaurantReviewModal({
           // Several bottles → tick-list. A group photo isn't a single label, so
           // no per-wine photo in that case.
           setCbImageUri(null);
-          setMultiBottles(detected.map((b) => ({ producer: b.producer, wineName: b.wineName, vintage: b.vintage, region: b.region ?? null })));
+          setMultiBottles(detected.map((b) => ({ producer: b.producer, wineName: b.wineName, vintage: b.vintage, region: b.region ?? null, style: b.style ?? null })));
           setMultiChecked(new Set(detected.map((_, i) => i)));
           setMultiBrought(new Set()); // default all to "list pick"
           setMultiOpen(true);
         } else if (detected.length === 1) {
           const b = detected[0];
           setCbImageUri(uri); // save this label onto the review card
-          openConfirm({ producer: b.producer, wineName: b.wineName, region: b.region, vintage: b.vintage }, false);
+          openConfirm({ producer: b.producer, wineName: b.wineName, region: b.region, colour: b.style, vintage: b.vintage }, false);
         } else {
           setCbImageUri(uri);
           openConfirm({}, false);
@@ -258,6 +264,7 @@ export function RestaurantReviewModal({
           producer: b.producer?.trim() || null,
           wineName: (b.wineName || b.producer || 'Wine').trim(),
           region: b.region?.trim() || null,
+          style: b.style?.trim() || null,
           vintage: vint && !Number.isNaN(Number(vint)) ? Number(vint) : null,
           source: multiBrought.has(i) ? 'other' : 'restaurant',
         });
@@ -269,6 +276,51 @@ export function RestaurantReviewModal({
       showAlert({ title: 'Could not add bottles', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setBottleBusy(false);
+    }
+  }
+
+  // "Edit" on a multi-bottle row — reuse the Confirm-details sheet to correct
+  // that detected bottle's fields. It stays in the batch (nothing is saved
+  // until "Add N Bottles"). We hide the tick-list while editing so the sheet
+  // isn't rendered behind it, and restore it on save/cancel.
+  function startEditMulti(i: number) {
+    const b = multiBottles[i];
+    setCbCellarWineId(null);
+    setCbImageUri(null);
+    setEditingMultiIndex(i);
+    openConfirm(
+      { producer: b.producer, wineName: b.wineName, region: b.region, colour: b.style, vintage: b.vintage },
+      multiBrought.has(i),
+    );
+    setMultiOpen(false);
+  }
+
+  function saveEditMulti() {
+    const i = editingMultiIndex;
+    if (i == null) return;
+    const vint = cbVintage.trim();
+    setMultiBottles((prev) => prev.map((b, idx) => idx === i ? {
+      producer: cbProducer.trim() || null,
+      wineName: cbWineName.trim() || b.wineName,
+      region: cbRegion.trim() || null,
+      style: cbColour.trim() || null,
+      vintage: vint ? vint : null,
+    } : b));
+    // Keep the row's List Pick / Brought origin in step with the sheet's toggle.
+    setMultiBrought((prev) => { const n = new Set(prev); if (cbBrought) n.add(i); else n.delete(i); return n; });
+    setEditingMultiIndex(null);
+    setConfirmOpen(false);
+    setMultiOpen(true);
+  }
+
+  function cancelConfirm() {
+    if (editingMultiIndex != null) {
+      // Editing a multi-bottle row — drop back to the tick-list unchanged.
+      setEditingMultiIndex(null);
+      setConfirmOpen(false);
+      setMultiOpen(true);
+    } else {
+      setConfirmOpen(false);
     }
   }
 
@@ -447,6 +499,7 @@ export function RestaurantReviewModal({
     const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
     const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
     if (onReviewWine) buttons.push({ text: w.reviewed ? 'View / Edit Review' : 'Add Review', onPress: () => onReviewWine(w._idx) });
+    if (onEditWine) buttons.push({ text: 'Edit Wine', onPress: () => onEditWine(w._idx) });
     if (onViewIntel) buttons.push({ text: 'View Wine Intel', onPress: () => onViewIntel(w._idx) });
     if (onDeleteWine) buttons.push({ text: 'Delete Wine', style: 'destructive', onPress: () => onDeleteWine(w._idx) });
     buttons.push({ text: 'Cancel', style: 'cancel' });
@@ -614,14 +667,14 @@ export function RestaurantReviewModal({
               <View style={styles.bottleBackdrop} />
               <KeyboardAwareScrollView style={styles.confirmScroll} contentContainerStyle={styles.confirmContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
                 <View style={styles.bottleSheet}>
-                  <Text style={styles.bottleSheetTitle}>Confirm wine details</Text>
+                  <Text style={styles.bottleSheetTitle}>{editingMultiIndex != null ? 'Edit bottle' : 'Confirm wine details'}</Text>
                   <Text style={styles.bottleFieldLabel}>Producer</Text>
                   <TextInput style={styles.bottleInput} value={cbProducer} onChangeText={setCbProducer} placeholder="Producer" placeholderTextColor={colors.textMuted} />
                   <Text style={styles.bottleFieldLabel}>Wine name</Text>
                   <TextInput style={styles.bottleInput} value={cbWineName} onChangeText={setCbWineName} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
                   <Text style={styles.bottleFieldLabel}>Region</Text>
                   <TextInput style={styles.bottleInput} value={cbRegion} onChangeText={setCbRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
-                  <Text style={styles.bottleFieldLabel}>Colour</Text>
+                  <Text style={styles.bottleFieldLabel}>Style</Text>
                   <TextInput style={styles.bottleInput} value={cbColour} onChangeText={setCbColour} placeholder="e.g. Red, White, Rosé, Sparkling" placeholderTextColor={colors.textMuted} />
                   <Text style={styles.bottleFieldLabel}>Vintage</Text>
                   <TextInput style={styles.bottleInput} value={cbVintage} onChangeText={setCbVintage} placeholder="Vintage (e.g. 2019 or NV)" placeholderTextColor={colors.textMuted} maxLength={7} />
@@ -638,10 +691,16 @@ export function RestaurantReviewModal({
                     </View>
                     <Text style={styles.broughtToggleLabel}>I ordered this</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddBottle} disabled={bottleBusy}>
-                    <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : 'Add to This Visit'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.bottleCancel} onPress={() => setConfirmOpen(false)} disabled={bottleBusy}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+                  {editingMultiIndex != null ? (
+                    <TouchableOpacity style={styles.bottleAddBtn} onPress={saveEditMulti}>
+                      <Text style={styles.bottleAddText}>Save changes</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity style={[styles.bottleAddBtn, bottleBusy && styles.btnDisabled]} onPress={handleAddBottle} disabled={bottleBusy}>
+                      <Text style={styles.bottleAddText}>{bottleBusy ? 'Adding…' : 'Add to This Visit'}</Text>
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity style={styles.bottleCancel} onPress={cancelConfirm} disabled={bottleBusy}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
                 </View>
               </KeyboardAwareScrollView>
             </View>
@@ -674,6 +733,9 @@ export function RestaurantReviewModal({
                             </TouchableOpacity>
                             <TouchableOpacity onPress={() => setMultiBrought((prev) => { const n = new Set(prev); n.add(i); return n; })} style={[styles.originChip, brought && styles.originChipActive]} activeOpacity={0.7}>
                               <Text style={[styles.originChipText, brought && styles.originChipTextActive]}>Brought</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity onPress={() => startEditMulti(i)} style={styles.multiEditChip} activeOpacity={0.7}>
+                              <Text style={styles.multiEditChipText}>Edit</Text>
                             </TouchableOpacity>
                           </View>
                         </View>
@@ -866,6 +928,10 @@ const styles = StyleSheet.create({
   originChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
   originChipText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted },
   originChipTextActive: { color: colors.gold },
+  // "Edit" affordance on a multi-bottle row — an underlined text link so it
+  // reads as an action, distinct from the List Pick / Brought origin chips.
+  multiEditChip: { paddingVertical: 4, paddingHorizontal: spacing.sm },
+  multiEditChipText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, textDecorationLine: 'underline' },
   bottleBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)' },
   bottleSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460, maxHeight: '82%' },
   bottleSheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
