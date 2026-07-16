@@ -44,7 +44,7 @@ interface Props {
   sessionId: string;
   initialName?: string | null;
   initialNote?: string | null;
-  initialRatings?: { food: number | null; service: number | null; wineList: number | null; overall: number | null; value: number | null } | null;
+  initialRatings?: { food: number | null; service: number | null; wineList: number | null; overall: number | null; value: number | null; atmosphere: number | null } | null;
   initialFavourite?: boolean;
   // Read-only context shown at the top of the card, mirroring the wine
   // review page's header: where/when the visit was, all pre-filled by
@@ -82,6 +82,7 @@ export function RestaurantReviewModal({
   const [food, setFood] = useState<number | null>(initialRatings?.food ?? null);
   const [wineList, setWineList] = useState<number | null>(initialRatings?.wineList ?? null);
   const [service, setService] = useState<number | null>(initialRatings?.service ?? null);
+  const [atmosphere, setAtmosphere] = useState<number | null>(initialRatings?.atmosphere ?? null);
   const [value, setValue] = useState<number | null>(initialRatings?.value ?? null);
   const [isFavourite, setIsFavourite] = useState(initialFavourite ?? false);
   const [saving, setSaving] = useState(false);
@@ -102,6 +103,7 @@ export function RestaurantReviewModal({
       rating_wine_list: wineList,
       rating_overall: overall,
       rating_value: value,
+      rating_atmosphere: atmosphere,
       is_favourite: isFavourite,
     };
   }
@@ -532,6 +534,7 @@ export function RestaurantReviewModal({
                 { label: 'Food', value: food, set: setFood },
                 { label: 'Wine list', value: wineList, set: setWineList },
                 { label: 'Service', value: service, set: setService },
+                { label: 'Atmosphere', value: atmosphere, set: setAtmosphere },
                 { label: 'Value', value: value, set: setValue },
               ] as const).map((r) => (
                 <View key={r.label} style={styles.ratingItem}>
@@ -714,6 +717,7 @@ export function RestaurantReviewModal({
             ratingFood={food}
             ratingService={service}
             ratingWineList={wineList}
+            ratingAtmosphere={atmosphere}
             ratingValue={value}
             note={note.trim() || null}
             wines={(wines ?? []).map((w) => ({ producer: w.producer, wineName: w.wineName, vintage: w.vintage, userScore: w.userScore }))}

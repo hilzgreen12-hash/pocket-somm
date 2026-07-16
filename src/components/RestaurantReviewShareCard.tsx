@@ -25,6 +25,7 @@ interface Props {
   ratingFood: number | null;
   ratingService: number | null;
   ratingWineList: number | null;
+  ratingAtmosphere: number | null;
   ratingValue: number | null;
   note: string | null;
   wines: WineRow[];                           // wines chosen on this visit
@@ -51,9 +52,9 @@ function wineRowLine(w: WineRow): string {
 }
 
 export const RestaurantReviewShareCard = forwardRef<View, Props>(
-  ({ restaurantName, city, date, ratingOverall, ratingFood, ratingService, ratingWineList, ratingValue, note, wines }, ref) => {
+  ({ restaurantName, city, date, ratingOverall, ratingFood, ratingService, ratingWineList, ratingAtmosphere, ratingValue, note, wines }, ref) => {
     const stampLocation = [restaurantName, city].filter(Boolean).join(' · ');
-    const hasAnyRating = ratingOverall != null || ratingFood != null || ratingService != null || ratingWineList != null || ratingValue != null;
+    const hasAnyRating = ratingOverall != null || ratingFood != null || ratingService != null || ratingWineList != null || ratingAtmosphere != null || ratingValue != null;
 
     return (
       <View ref={ref} collapsable={false} style={styles.card}>
@@ -78,6 +79,7 @@ export const RestaurantReviewShareCard = forwardRef<View, Props>(
               <StarRow label="Food"      value={ratingFood} />
               <StarRow label="Wine list" value={ratingWineList} />
               <StarRow label="Service"   value={ratingService} />
+              <StarRow label="Atmosphere" value={ratingAtmosphere} />
               <StarRow label="Value"     value={ratingValue} />
             </View>
           ) : null}

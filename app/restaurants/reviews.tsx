@@ -75,6 +75,7 @@ export default function RestaurantReviewsScreen() {
     ratingFood: number | null;
     ratingService: number | null;
     ratingWineList: number | null;
+    ratingAtmosphere: number | null;
     ratingValue: number | null;
     note: string | null;
     wines: Array<{ producer: string | null; wineName: string; vintage: string | number | null; userScore: number | null }>;
@@ -114,6 +115,7 @@ export default function RestaurantReviewsScreen() {
       ratingFood: item.ratingFood,
       ratingService: item.ratingService,
       ratingWineList: item.ratingWineList,
+      ratingAtmosphere: item.ratingAtmosphere,
       ratingValue: item.ratingValue,
       note: item.restaurantNote?.trim() || null,
       wines: winesForCard,
@@ -138,6 +140,7 @@ export default function RestaurantReviewsScreen() {
         ratingLine('Food',     item.ratingFood),
         ratingLine('Wine list', item.ratingWineList),
         ratingLine('Service',  item.ratingService),
+        ratingLine('Atmosphere', item.ratingAtmosphere),
         ratingLine('Value',    item.ratingValue),
       ].filter(Boolean).join('\n');
       const note = item.restaurantNote?.trim()
@@ -248,6 +251,7 @@ export default function RestaurantReviewsScreen() {
         ratingWineList: null,
         ratingOverall: null,
         ratingValue: null,
+        ratingAtmosphere: null,
         isFavourite: false,
       });
     } catch (err) {
@@ -434,7 +438,7 @@ export default function RestaurantReviewsScreen() {
   // the user's actual review.
   const restaurantReviewed = (item: typeof reviewed[number]) => !!(
     item.ratingOverall != null || item.ratingFood != null || item.ratingService != null ||
-    item.ratingWineList != null || item.ratingValue != null ||
+    item.ratingWineList != null || item.ratingAtmosphere != null || item.ratingValue != null ||
     (item.restaurantNote && item.restaurantNote.trim())
   );
 
@@ -639,7 +643,7 @@ export default function RestaurantReviewsScreen() {
             </View>
           ) : (
             sorted.map((item) => {
-              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingValue != null;
+              const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingAtmosphere != null || item.ratingValue != null;
               return (
                 <View key={item.id} style={styles.cardCompact}>
                   {/* Restaurant header — tap to edit the restaurant review.
@@ -681,6 +685,12 @@ export default function RestaurantReviewsScreen() {
                             <StarRating value={item.ratingService} size={11} readonly />
                           </View>
                         )}
+                        {item.ratingAtmosphere != null && (
+                          <View style={styles.ratingCell}>
+                            <Text style={styles.ratingCellLabel}>Atmosphere</Text>
+                            <StarRating value={item.ratingAtmosphere} size={11} readonly />
+                          </View>
+                        )}
                         {item.ratingWineList != null && (
                           <View style={styles.ratingCell}>
                             <Text style={styles.ratingCellLabel}>Wine list</Text>
@@ -715,6 +725,7 @@ export default function RestaurantReviewsScreen() {
             wineList: editing.ratingWineList,
             overall: editing.ratingOverall,
             value: editing.ratingValue,
+            atmosphere: editing.ratingAtmosphere,
           }}
           initialFavourite={editing.isFavourite}
           city={editing.city}
@@ -843,6 +854,7 @@ export default function RestaurantReviewsScreen() {
             ratingFood={restaurantSharePayload.ratingFood}
             ratingService={restaurantSharePayload.ratingService}
             ratingWineList={restaurantSharePayload.ratingWineList}
+            ratingAtmosphere={restaurantSharePayload.ratingAtmosphere}
             ratingValue={restaurantSharePayload.ratingValue}
             note={restaurantSharePayload.note}
             wines={restaurantSharePayload.wines}
