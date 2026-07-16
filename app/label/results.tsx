@@ -93,8 +93,11 @@ export default function LabelResultsScreen() {
   const isIntelOnlyFlow = context === 'intel';
   // Entered from Cellar List "Add Wine" — no Wine Intel card. Go straight to the
   // Add-to-Cellar confirmation (size / quantity / orientation / location); intel
-  // is generated later, only from the Cellar tab's Generate Wine Intel.
-  const isAddFlow = context === 'add';
+  // is generated later, only from the Cellar tab's Generate Wine Intel. Both the
+  // plain add and the "add into an Other Home Storage location" flow are
+  // no-intel adds — 'add-location' must be included or the guard below dead-ends
+  // on "No results available" and the wine never saves (regression from 7e9deec).
+  const isAddFlow = context === 'add' || context === 'add-location';
   const { wineDetailsConfirmed, intelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
@@ -1421,7 +1424,9 @@ export default function LabelResultsScreen() {
                       ? `Save & Place in ${racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack'}`
                       : selectedLocationId
                         ? `Save to ${cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'Location'}`
-                        : 'Save to Cellar List'}
+                        : context === 'add-location'
+                          ? 'Save'
+                          : 'Save to Cellar List'}
               </Text>
             </TouchableOpacity>
 
