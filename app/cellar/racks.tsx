@@ -3,27 +3,26 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { useQuery } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
-import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
-import { getSlotAssignments } from '../../src/api/racks';
+import { getRackBottleCounts } from '../../src/api/racks';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import type { WineRack, CellarWine } from '../../src/types/wine';
+import type { WineRack } from '../../src/types/wine';
 
 function bottleLabel(n: number) {
   if (n === 0) return 'Empty';
   return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 }
 
-// A compact carousel card for a rack/fridge. `wines` is one entry per occupied
-// slot, so its length is the bottle count. Tap → rack detail; long-press → the
+// A compact carousel card for a rack/fridge. `count` is the number of occupied
+// slots (one placed slot = one bottle). Tap → rack detail; long-press → the
 // delete prompt.
-function RackCard({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarWine[]; onLongPress: () => void }) {
-  const totalBottles = wines.length;
+function RackCard({ rack, count, onLongPress }: { rack: WineRack; count: number; onLongPress: () => void }) {
+  const totalBottles = count;
   return (
     <TouchableOpacity
       style={styles.storageCard}
@@ -42,7 +41,6 @@ function RackCard({ rack, wines, onLongPress }: { rack: WineRack; wines: CellarW
 export default function RacksScreen() {
   const { session } = useAuth();
   const { racks, isLoading, remove: removeRack } = useRacks();
-  const { wines } = useCellar();
   const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
   const userId = session?.user.id;
   // Home storage locations (non-grid, photo-a-space) — shown in the Other Home
@@ -76,27 +74,22 @@ export default function RacksScreen() {
   }
 
   const rackIds = racks.map((r) => r.id);
-  const { data: slotAssignments = [] } = useQuery({
-    queryKey: ['slot-assignments', rackIds],
-    queryFn: () => getSlotAssignments(rackIds),
+  // Per-rack bottle counts, computed server-side in a single query. Keyed under
+  // the shared 'slot-assignments' prefix so every existing rack mutation across
+  // the app (which invalidates ['slot-assignments']) refreshes these counts too.
+  // The old approach joined two client caches (slot-assignments × cellar wines)
+  // and rendered 0 until BOTH had loaded — the cold-start "counts show 0" bug.
+  const { data: rackCounts = {} } = useQuery({
+    queryKey: ['slot-assignments', 'counts', rackIds],
+    queryFn: () => getRackBottleCounts(rackIds),
     enabled: rackIds.length > 0,
   });
-
-  // Build rack_id → list of wines map
-  const winesByRack: Record<string, CellarWine[]> = {};
-  for (const slot of slotAssignments) {
-    const wine = wines.find((w) => w.id === slot.cellar_wine_id);
-    if (!wine) continue;
-    const list = winesByRack[slot.rack_id] ?? [];
-    list.push(wine);
-    winesByRack[slot.rack_id] = list;
-  }
 
   // Whole-screen tally, mirroring the Full Cellar List summary ("X wines · X
   // bottles"): every bottle across every home storage container — racks,
   // fridges (one placed slot = one bottle) and other locations (summed
   // quantities) — and how many containers there are in total.
-  const rackBottles = Object.values(winesByRack).reduce((sum, list) => sum + list.length, 0);
+  const rackBottles = Object.values(rackCounts).reduce((sum: number, n: number) => sum + n, 0);
   const locationBottles = storageLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
   const totalBottles = rackBottles + locationBottles;
   const totalLocations = racks.length + storageLocations.length;
@@ -218,7 +211,7 @@ export default function RacksScreen() {
               <RackCard
                 key={rack.id}
                 rack={rack}
-                wines={winesByRack[rack.id] ?? []}
+                count={rackCounts[rack.id] ?? 0}
                 onLongPress={() => handleLongPressRack(rack)}
               />
             ))}
