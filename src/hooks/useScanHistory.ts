@@ -43,6 +43,7 @@ export interface ScanArchiveItem {
   ratingWineList: number | null;
   ratingOverall: number | null;
   ratingValue: number | null;
+  ratingAtmosphere: number | null;
   isFavourite: boolean;
 }
 
@@ -98,7 +99,7 @@ export function useScanHistory() {
       if (!userId) return [];
       const { data, error } = await supabase
         .from('scan_sessions')
-        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note, rating_food, rating_service, rating_wine_list, rating_overall, rating_value, is_favourite')
+        .select('id, captured_at, extracted_wines, recommendation, city, restaurant_name, restaurant_note, rating_food, rating_service, rating_wine_list, rating_overall, rating_value, rating_atmosphere, is_favourite')
         .eq('user_id', userId)
         .order('captured_at', { ascending: false });
       if (error) throw error;
@@ -115,6 +116,7 @@ export function useScanHistory() {
         ratingWineList: row.rating_wine_list ?? null,
         ratingOverall: row.rating_overall ?? null,
         ratingValue: row.rating_value ?? null,
+        ratingAtmosphere: row.rating_atmosphere ?? null,
         isFavourite: row.is_favourite ?? false,
       }));
     },

@@ -930,7 +930,7 @@ export default function ResultsScreen() {
             sessionId={reviewSessionId ?? ''}
             initialName={restaurantName || item?.restaurantName || null}
             initialNote={item?.restaurantNote ?? null}
-            initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall, value: item.ratingValue } : null}
+            initialRatings={item ? { food: item.ratingFood, service: item.ratingService, wineList: item.ratingWineList, overall: item.ratingOverall, value: item.ratingValue, atmosphere: item.ratingAtmosphere } : null}
             initialFavourite={item?.isFavourite ?? false}
             city={stampCity}
             date={stampDate}
