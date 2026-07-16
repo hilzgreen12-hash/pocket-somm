@@ -34,6 +34,7 @@ import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
+import { fetchStorageLocations, assignWineToStorageLocation } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
@@ -151,6 +152,16 @@ export default function CellarWineDetail() {
   // card only checked rack placement, so a wine filed ONLY in a Location kept
   // showing "Add to Location" as if it had none.
   const wineLocations = locations.filter((l) => l.wineIds?.includes(wineId ?? ''));
+
+  // Other Home Storage Locations (storage_locations) — also valid "Add to
+  // Location" destinations. A wine filed here lives via
+  // cellar_wines.storage_location_id (the shed, under the bed…).
+  const { data: storageLocations = [] } = useQuery({
+    queryKey: ['storage-locations', session?.user.id],
+    queryFn: () => fetchStorageLocations(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+  const wineStorageLocation = storageLocations.find((l) => l.id === wine?.storage_location_id) ?? null;
   // The location whose membership a pending add/remove applies to.
   const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
   const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
@@ -456,20 +467,35 @@ export default function CellarWineDetail() {
     }
   }
 
-  // "Add to Location" on an unplaced wine — either place it in a live
-  // rack/fridge, or file it under a cellar-wide bespoke Location filter.
+  // File the (unplaced) wine into an Other Home Storage location — the same
+  // cellar_wines.storage_location_id assignment the location screen uses.
+  async function fileInStorageLocation(locationId: string) {
+    try {
+      await assignWineToStorageLocation(wine!.id, locationId);
+      qc.invalidateQueries({ queryKey: ['storage-locations'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines', locationId] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      showAlert({ title: 'Added to location', body: `Now living in ${storageLocations.find((l) => l.id === locationId)?.name ?? 'the location'}.` });
+    } catch (err) {
+      showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // "Add to Location" on an unplaced wine — place it in a live rack/fridge, file
+  // it into an Other Home Storage location, or tag it under a Cellar List location.
   function handleAddToLocation() {
     const buttons = [
       ...racks.map((r) => ({ text: r.name, onPress: () => placeInRack(r.id) })),
+      ...storageLocations.map((l) => ({ text: `${l.name} (home storage)`, onPress: () => fileInStorageLocation(l.id) })),
       ...locations.map((l) => ({ text: `${l.name} (location)`, onPress: () => addWineToLocationFilter(l.id) })),
     ];
     if (buttons.length === 0) {
-      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge, or a Cellar List location first, then you can add wines to it.' });
+      showAlert({ title: 'No locations yet', body: 'Create a rack, fridge, a home storage location, or a Cellar List location first, then you can add wines to it.' });
       return;
     }
     showAlert({
       title: 'Add to Location',
-      body: 'Place it in a rack/fridge, or file it under a Cellar List location:',
+      body: 'Place it in a rack/fridge, a home storage location, or file it under a Cellar List location:',
       buttons: [
         ...buttons,
         { text: 'Cancel', style: 'cancel' as const },
@@ -1431,7 +1457,12 @@ export default function CellarWineDetail() {
           {wineLocations.map((l) => (
             <Text key={l.id} style={styles.statAction}>In {l.name}</Text>
           ))}
-          {wineRacks.length === 0 && wineLocations.length === 0 && !isArchived && !isWishlist && (
+          {wineStorageLocation && (
+            <TouchableOpacity onPress={() => router.push(`/cellar/storage-location/${wineStorageLocation.id}` as any)}>
+              <Text style={styles.statAction}>In {wineStorageLocation.name} →</Text>
+            </TouchableOpacity>
+          )}
+          {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !isArchived && !isWishlist && (
             <TouchableOpacity onPress={handleAddToLocation}>
               <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>
