@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { getRacks, createRack, deleteRack, renameRack, wipeRackContents, getRackSlots, assignSlot, clearSlot, type LargeFormatRowSpec } from '../api/racks';
+import { getRacks, createRack, deleteRack, renameRack, resizeRack, wipeRackContents, getRackSlots, assignSlot, clearSlot, type LargeFormatRowSpec } from '../api/racks';
 
 export function useRacks() {
   const { session } = useAuth();
@@ -40,7 +40,17 @@ export function useRacks() {
     },
   });
 
-  return { racks, isLoading, create, remove, rename, wipe };
+  const resize = useMutation({
+    mutationFn: ({ id, rows, cols }: { id: string; rows: number; cols: number }) => resizeRack(id, rows, cols),
+    onSuccess: (_data, { id }) => {
+      // rows/cols live on the rack row; freed slots come out of rack_slots.
+      qc.invalidateQueries({ queryKey: ['racks', userId] });
+      qc.invalidateQueries({ queryKey: ['rack-slots', id] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    },
+  });
+
+  return { racks, isLoading, create, remove, rename, wipe, resize };
 }
 
 export function useRack(rackId: string) {
