@@ -934,6 +934,7 @@ export default function ResultsScreen() {
             initialFavourite={item?.isFavourite ?? false}
             city={stampCity}
             date={stampDate}
+            capturedAt={item?.capturedAt ?? null}
             wines={pickedWines.map(({ w }) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
             onReviewWine={(idx) => { setRestaurantReviewOpen(false); setChosenModalWine(pickedWines[idx]?.w ?? null); }}
             onClose={() => setRestaurantReviewOpen(false)}
