@@ -733,6 +733,7 @@ export default function RestaurantReviewsScreen() {
           initialFavourite={editing.isFavourite}
           city={editing.city}
           date={formatDate(editing.capturedAt)}
+          capturedAt={editing.capturedAt}
           wines={findChosenForVisit(editing).map((cw) => ({
             producer: cw.producer,
             wineName: cw.wine_name,

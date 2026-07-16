@@ -308,6 +308,7 @@ export async function patchChosenWine(
     region: string | null;
     vintage: number | null;
     style: string | null;
+    chosen_at: string;              // when the wine was drunk / reviewed (ISO)
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
