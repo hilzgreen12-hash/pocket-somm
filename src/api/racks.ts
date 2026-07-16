@@ -52,6 +52,24 @@ export async function deleteRack(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Change a rack's grid dimensions. Growing just bumps rows/cols — new cells are
+// empty and need no rack_slots rows. Shrinking first drops any slot assignments
+// that now fall outside the grid: standard cells at row_index >= rows OR
+// col_index >= cols. The large-format band (row_index -1) has its own column
+// count and is intentionally left untouched. Prune BEFORE updating dimensions so
+// we never leave orphaned (still-counted) slots outside the visible grid.
+export async function resizeRack(id: string, rows: number, cols: number): Promise<void> {
+  const { error: pruneErr } = await supabase
+    .from('rack_slots')
+    .delete()
+    .eq('rack_id', id)
+    .gte('row_index', 0)
+    .or(`row_index.gte.${rows},col_index.gte.${cols}`);
+  if (pruneErr) throw pruneErr;
+  const { error } = await supabase.from('wine_racks').update({ rows, cols }).eq('id', id);
+  if (error) throw error;
+}
+
 export async function renameRack(id: string, name: string): Promise<void> {
   const { error } = await supabase.from('wine_racks').update({ name }).eq('id', id);
   if (error) throw error;
