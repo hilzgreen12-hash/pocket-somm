@@ -196,6 +196,9 @@ export default function RestaurantReviewsScreen() {
   // (i.e. from the List results page) — closing then returns the user there.
   const [editingFromLink, setEditingFromLink] = useState(false);
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
+  // True when the wine edit was opened via "Edit Wine" (open the identity sheet
+  // directly) rather than "Add/View Review" (open the review view).
+  const [editWineIdentity, setEditWineIdentity] = useState(false);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<string>('all');         // 'all' | 'YYYY-MM'
   const [favouriteFilter, setFavouriteFilter] = useState<'all' | 'fav'>('all');
@@ -340,7 +343,7 @@ export default function RestaurantReviewsScreen() {
     showAlert({
       title: wineHeaderLine(cw.producer, cw.wine_name, cw.vintage) || 'This wine',
       buttons: [
-        { text: 'Edit Wine', onPress: () => setEditingWine(cw) },
+        { text: 'Edit Wine', onPress: () => { setEditWineIdentity(true); setEditingWine(cw); } },
         { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteWine(cw) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -544,7 +547,7 @@ export default function RestaurantReviewsScreen() {
     setBottlePicksOpen(false);
     const visit = cw.scan_session_id ? archive.find((a) => a.id === cw.scan_session_id) : null;
     if (visit) { setEditing(visit); setEditingFromLink(false); }
-    else { setEditingWine(cw); }
+    else { setEditWineIdentity(false); setEditingWine(cw); }
   }
 
   return (
@@ -740,7 +743,11 @@ export default function RestaurantReviewsScreen() {
           }))}
           onReviewWine={(i) => {
             const cw = findChosenForVisit(editing)[i];
-            if (cw) { closeRestaurantReview(); setEditingWine(cw); }
+            if (cw) { closeRestaurantReview(); setEditWineIdentity(false); setEditingWine(cw); }
+          }}
+          onEditWine={(i) => {
+            const cw = findChosenForVisit(editing)[i];
+            if (cw) { closeRestaurantReview(); setEditWineIdentity(true); setEditingWine(cw); }
           }}
           onViewIntel={(i) => {
             const cw = findChosenForVisit(editing)[i];
@@ -774,8 +781,9 @@ export default function RestaurantReviewsScreen() {
       <EditChosenWineModal
         wine={editingWine}
         visible={editingWine !== null}
-        onClose={() => setEditingWine(null)}
-        onSaved={() => setEditingWine(null)}
+        initialIdentityEdit={editWineIdentity}
+        onClose={() => { setEditingWine(null); setEditWineIdentity(false); }}
+        onSaved={() => { setEditingWine(null); setEditWineIdentity(false); }}
       />
 
       {/* Filter dropdown — single sheet driven by openDropdown, matching the
