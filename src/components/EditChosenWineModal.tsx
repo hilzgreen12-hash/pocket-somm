@@ -26,6 +26,7 @@ import { showAlert } from './AppAlert';
 import { useLabelStore } from '../stores/labelStore';
 import { WineReviewFields } from './WineReviewFields';
 import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
+import { isoToYmd, ymdToIso } from '../utils/reviewDate';
 import { captureCity } from '../utils/captureCity';
 import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
@@ -71,6 +72,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [editVintage, setEditVintage] = useState('');
   const [editRegion, setEditRegion] = useState('');
   const [editStyle, setEditStyle] = useState('');
+  const [editDate, setEditDate] = useState('');
   const [editRestaurant, setEditRestaurant] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
@@ -374,6 +376,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
     setEditVintage(wine.vintage != null ? String(wine.vintage) : '');
     setEditRegion(wine.region ?? '');
     setEditStyle(wine.style ?? '');
+    setEditDate(isoToYmd(wine.chosen_at));
     setEditRestaurant(wine.restaurant_name ?? '');
     setEditCity(wine.city ?? '');
     setEditImageUri(null);
@@ -395,7 +398,11 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
     setSavingIdentity(true);
     try {
       const vt = editVintage.trim();
+      // Non-numeric (e.g. "NV") → null, which renders as "NV" across the app.
       const vintageNum = vt && Number.isFinite(Number(vt)) ? Math.trunc(Number(vt)) : null;
+      // Only write chosen_at when the date was actually changed, so an
+      // unrelated edit doesn't normalise its time of day to noon.
+      const chosenIso = editDate !== isoToYmd(wine.chosen_at) ? ymdToIso(editDate) : null;
       let labelPath: string | undefined;
       if (editImageUri) labelPath = await uploadLabelImage(session.user.id, editImageUri, wine.id);
       await patchChosenWine(wine.id, {
@@ -406,6 +413,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         vintage: vintageNum,
         restaurant_name: editRestaurant.trim() || null,
         city: editCity.trim() || null,
+        ...(chosenIso ? { chosen_at: chosenIso } : {}),
         ...(labelPath ? { label_image_path: labelPath } : {}),
       });
       // Keep the (hidden) location state in step so a later "Save Review"
@@ -587,7 +595,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="Wine name" placeholderTextColor={colors.textSubtle} />
 
               <Text style={styles.editLabel}>Vintage</Text>
-              <TextInput style={styles.editInput} value={editVintage} onChangeText={(t) => setEditVintage(t.replace(/[^0-9]/g, '').slice(0, 4))} placeholder="e.g. 2019" placeholderTextColor={colors.textSubtle} keyboardType="number-pad" maxLength={4} />
+              <TextInput style={styles.editInput} value={editVintage} onChangeText={(t) => setEditVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textSubtle} autoCapitalize="characters" maxLength={7} />
 
               <Text style={styles.editLabel}>Region</Text>
               <TextInput style={styles.editInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textSubtle} />
@@ -600,6 +608,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
 
               <Text style={styles.editLabel}>City</Text>
               <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} placeholder="City" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Date</Text>
+              <TextInput style={styles.editInput} value={editDate} onChangeText={(t) => setEditDate(t.replace(/[^0-9-]/g, '').slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" maxLength={10} />
 
               <Text style={styles.editLabel}>Photo</Text>
               <View style={styles.editThumbRow}>

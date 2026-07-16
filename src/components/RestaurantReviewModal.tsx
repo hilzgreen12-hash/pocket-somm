@@ -26,6 +26,7 @@ import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import { isoToYmd, ymdToIso } from '../utils/reviewDate';
 
 interface WineLine {
   producer: string | null;
@@ -51,6 +52,9 @@ interface Props {
   // Vinster from the scan, and which wine(s) were chosen.
   city?: string | null;
   date?: string | null;
+  // Raw ISO visit timestamp (scan_sessions.captured_at). When provided, the
+  // date under the header becomes editable (YYYY-MM-DD) and is saved back.
+  capturedAt?: string | null;
   wines?: WineLine[];
   // Opens the per-wine review (ChosenWineModal) for the picked wine at this
   // index. Wired by the results screen; absent when there's nothing to link.
@@ -71,7 +75,7 @@ interface Props {
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
-  city, date, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
+  city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -88,6 +92,9 @@ export function RestaurantReviewModal({
   const [atmosphere, setAtmosphere] = useState<number | null>(initialRatings?.atmosphere ?? null);
   const [value, setValue] = useState<number | null>(initialRatings?.value ?? null);
   const [isFavourite, setIsFavourite] = useState(initialFavourite ?? false);
+  // Visit date, editable as YYYY-MM-DD. Only writable when a raw capturedAt was
+  // passed in (i.e. we know which timestamp to overwrite).
+  const [dateValue, setDateValue] = useState(() => isoToYmd(capturedAt));
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -97,6 +104,10 @@ export function RestaurantReviewModal({
   // button, the community share, and the silent autosave-on-leave all write
   // exactly the same fields.
   function buildPayload() {
+    // Only overwrite captured_at when the user actually changed the date to a
+    // valid new value — otherwise leave the original timestamp (incl. its time
+    // of day) untouched rather than normalising it to noon on every save.
+    const capturedIso = dateValue !== isoToYmd(capturedAt) ? ymdToIso(dateValue) : null;
     return {
       restaurant_name: restaurantName.trim() || null,
       city: cityValue.trim() || null,
@@ -108,6 +119,9 @@ export function RestaurantReviewModal({
       rating_value: value,
       rating_atmosphere: atmosphere,
       is_favourite: isFavourite,
+      // Only overwrite the visit date when the field holds a complete valid
+      // date; an empty/partial entry leaves captured_at untouched.
+      ...(capturedIso ? { captured_at: capturedIso } : {}),
     };
   }
 
@@ -480,7 +494,7 @@ export function RestaurantReviewModal({
         const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
         return `· ${line}${w.userScore != null ? ` (${w.userScore}/100)` : ''}`;
       }).join('\n');
-      const message = `${header}${date ? `\n${date}` : ''}` + (ratings ? `\n\n${ratings}` : '') + noteText + winesBlock + VINSTER_TEXT_SHARE_FOOTER;
+      const message = `${header}${displayDate ? `\n${displayDate}` : ''}` + (ratings ? `\n\n${ratings}` : '') + noteText + winesBlock + VINSTER_TEXT_SHARE_FOOTER;
       await Share.share({ message, title: restaurant });
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -493,6 +507,14 @@ export function RestaurantReviewModal({
   // and Off-List Bottles (brought along). Keep each wine's original index so
   // "Review this wine →" still targets the right chosen_wine.
   const indexedWines = (wines ?? []).map((w, i) => ({ ...w, _idx: i }));
+
+  // Date shown on the shares — reflect an in-progress date edit when valid,
+  // otherwise fall back to the pre-formatted `date` prop.
+  const displayDate = (() => {
+    const iso = ymdToIso(dateValue);
+    if (!iso) return date ?? null;
+    return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  })();
 
   // Tap a wine → choose to review it (add or view/edit) or see its Wine Intel.
   function openWinePopup(w: WineLine & { _idx: number }) {
@@ -556,7 +578,19 @@ export function RestaurantReviewModal({
               placeholder="City or location"
               placeholderTextColor={colors.textMuted}
             />
-            {date ? <Text style={styles.dateHeader}>{date}</Text> : null}
+            {capturedAt != null ? (
+              <TextInput
+                style={styles.dateHeaderInput}
+                value={dateValue}
+                onChangeText={(t) => setDateValue(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="numbers-and-punctuation"
+                maxLength={10}
+              />
+            ) : date ? (
+              <Text style={styles.dateHeader}>{date}</Text>
+            ) : null}
 
             <View style={styles.divider} />
 
@@ -774,7 +808,7 @@ export function RestaurantReviewModal({
             ref={shareCardRef}
             restaurantName={restaurantName || 'Restaurant visit'}
             city={cityValue.trim() || null}
-            date={date ?? null}
+            date={displayDate}
             ratingOverall={overall}
             ratingFood={food}
             ratingService={service}
@@ -805,6 +839,8 @@ const styles = StyleSheet.create({
   restaurantHeaderInput: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, letterSpacing: 0.3, paddingVertical: 2 },
   locationHeaderInput: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, paddingVertical: 2, marginTop: 2 },
   dateHeader: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
+  // Editable version of the date stamp — same look, tappable to correct the date.
+  dateHeaderInput: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, paddingVertical: 2 },
   heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
