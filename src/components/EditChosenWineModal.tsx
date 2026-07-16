@@ -37,9 +37,12 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved: () => void;
+  // Open straight onto the "Edit wine" identity sheet (producer/name/style/…)
+  // rather than the review view. Used by the "Edit Wine" menu action.
+  initialIdentityEdit?: boolean;
 }
 
-export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) {
+export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialIdentityEdit = false }: Props) {
   const { update, remove } = useChosenWines();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -67,6 +70,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
   const [editName, setEditName] = useState('');
   const [editVintage, setEditVintage] = useState('');
   const [editRegion, setEditRegion] = useState('');
+  const [editStyle, setEditStyle] = useState('');
   const [editRestaurant, setEditRestaurant] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
@@ -91,6 +95,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
       setWishlist(!!wine.wishlist);
       setVinsterNotesOpen(false);
       setRemoveWishlistOpen(false);
+      // "Edit Wine" entry point opens straight onto the identity sheet.
+      if (initialIdentityEdit) openIdentityEdit();
+      else setIdentityEditOpen(false);
       // Auto-fill the estimated value once (no "Generate" button) — mirrors
       // the cellar flow where every wine carries an estimate. Only fires
       // when we don't already have one.
@@ -366,6 +373,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
     setEditName(wine.wine_name ?? '');
     setEditVintage(wine.vintage != null ? String(wine.vintage) : '');
     setEditRegion(wine.region ?? '');
+    setEditStyle(wine.style ?? '');
     setEditRestaurant(wine.restaurant_name ?? '');
     setEditCity(wine.city ?? '');
     setEditImageUri(null);
@@ -394,6 +402,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
         producer: editProducer.trim() || null,
         wine_name: editName.trim(),
         region: editRegion.trim() || null,
+        style: editStyle.trim() || null,
         vintage: vintageNum,
         restaurant_name: editRestaurant.trim() || null,
         city: editCity.trim() || null,
@@ -582,6 +591,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved }: Props) 
 
               <Text style={styles.editLabel}>Region</Text>
               <TextInput style={styles.editInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Style</Text>
+              <TextInput style={styles.editInput} value={editStyle} onChangeText={setEditStyle} placeholder="e.g. Red, White, Rosé, Sparkling" placeholderTextColor={colors.textSubtle} />
 
               <Text style={styles.editLabel}>Restaurant / place</Text>
               <TextInput style={styles.editInput} value={editRestaurant} onChangeText={setEditRestaurant} placeholder="Where you drank it" placeholderTextColor={colors.textSubtle} />
