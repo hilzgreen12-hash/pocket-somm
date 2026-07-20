@@ -61,21 +61,31 @@ export default function SignUp() {
     if (trimmedPassword !== trimmedConfirm) { setError('Passwords do not match.'); return; }
 
     setLoading(true);
-    const { data, error: signUpError } = await supabase.auth.signUp({
-      email: email.trim(),
-      password: trimmedPassword,
-      options: {
-        data: { display_name: displayName.trim() },
-        // Where Supabase sends the user after they tap the confirmation
-        // link. createURL resolves to the right scheme per build —
-        // vinster://auth/callback in a standalone/dev-client build,
-        // exp://…/--/auth/callback in Expo Go. The _layout deep-link
-        // handler installs the session from the returned tokens. This
-        // URL MUST be in the Supabase Redirect URLs allow-list, or
-        // Supabase ignores it and falls back to the Site URL.
-        emailRedirectTo: Linking.createURL('/auth/callback'),
-      },
-    });
+    let data;
+    let signUpError;
+    try {
+      // Guarded for the same reason as sign-in: the Create Account button is
+      // disabled={loading}, so a throw would strand the user on a dead button.
+      ({ data, error: signUpError } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: trimmedPassword,
+        options: {
+          data: { display_name: displayName.trim() },
+          // Where Supabase sends the user after they tap the confirmation
+          // link. createURL resolves to the right scheme per build —
+          // vinster://auth/callback in a standalone/dev-client build,
+          // exp://…/--/auth/callback in Expo Go. The _layout deep-link
+          // handler installs the session from the returned tokens. This
+          // URL MUST be in the Supabase Redirect URLs allow-list, or
+          // Supabase ignores it and falls back to the Site URL.
+          emailRedirectTo: Linking.createURL('/auth/callback'),
+        },
+      }));
+    } catch {
+      setLoading(false);
+      setError('Could not reach the server. Please check your connection and try again.');
+      return;
+    }
     setLoading(false);
 
     if (signUpError) {

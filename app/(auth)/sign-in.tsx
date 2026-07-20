@@ -56,7 +56,18 @@ export default function SignIn() {
       return;
     }
     setLoading(true);
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password: trimmedPassword });
+    let signInError;
+    try {
+      // The button is disabled={loading}, so an unguarded throw here would
+      // leave it permanently dead with no way to retry short of killing the
+      // app. Ordinary failures come back as { error }; this catches the
+      // transport-level throws that don't.
+      ({ error: signInError } = await supabase.auth.signInWithPassword({ email: trimmedEmail, password: trimmedPassword }));
+    } catch {
+      setLoading(false);
+      setError('Could not reach the server. Please check your connection and try again.');
+      return;
+    }
     setLoading(false);
     if (signInError) {
       if (signInError.message.toLowerCase().includes('email not confirmed')) {

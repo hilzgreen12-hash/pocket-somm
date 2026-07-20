@@ -66,7 +66,7 @@ Return only the raw JSON — no markdown, no explanation.`;
       messages: [{ role: 'user', content: prompt }],
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
     const match = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim().match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
 

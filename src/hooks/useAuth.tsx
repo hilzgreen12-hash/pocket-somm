@@ -41,10 +41,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(next);
     }
 
-    supabase.auth.getSession().then(({ data }) => {
-      syncUser(data.session);
-      setLoading(false);
-    });
+    // `loading` gates the whole app (app/index.tsx renders null while true),
+    // so it MUST be cleared on the failure path too. A rejected getSession —
+    // corrupt stored token, AsyncStorage fault, transport failure — would
+    // otherwise leave the app on a blank screen forever, with nothing thrown
+    // for the root ErrorBoundary to catch. Treat a failure as signed-out and
+    // let the normal routing take over.
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        syncUser(data.session);
+      })
+      .catch(() => {
+        syncUser(null);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
 
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       syncUser(session);

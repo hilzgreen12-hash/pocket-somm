@@ -28,7 +28,16 @@ export default function ResetPasswordScreen() {
       // _layout's handler may still be installing the session — poll
       // briefly rather than failing on the first empty read.
       for (let i = 0; i < 5; i++) {
-        const { data: { session } } = await supabase.auth.getSession();
+        // A throw here would escape the IIFE and leave `checking` true
+        // forever, stranding the user on "Verifying your reset link…" with
+        // no way out. Treat a failed read as "no session yet" and let the
+        // loop fall through to the no-session branch below.
+        let session = null;
+        try {
+          ({ data: { session } } = await supabase.auth.getSession());
+        } catch {
+          session = null;
+        }
         if (cancelled) return;
         if (session) {
           setHasSession(true);
@@ -56,7 +65,16 @@ export default function ResetPasswordScreen() {
     if (trimmedPassword.length < 8) { setError('Password must be at least 8 characters.'); return; }
     if (trimmedPassword !== trimmedConfirm) { setError('Passwords do not match.'); return; }
     setLoading(true);
-    const { error: updateError } = await supabase.auth.updateUser({ password: trimmedPassword });
+    let updateError;
+    try {
+      // The update button is disabled={loading}; a throw would strand the
+      // user mid-reset holding a one-time link they'd have to re-request.
+      ({ error: updateError } = await supabase.auth.updateUser({ password: trimmedPassword }));
+    } catch {
+      setLoading(false);
+      setError('Could not reach the server. Please check your connection and try again.');
+      return;
+    }
     setLoading(false);
     if (updateError) {
       setError(updateError.message);
