@@ -1,6 +1,10 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+
+const PAIRING_HOURLY_LIMIT = 30;
+const PAIRING_DAILY_LIMIT = 100;
 
 function symbolFor(code?: string | null): string {
   const map: Record<string, string> = {
@@ -142,7 +146,19 @@ Return raw JSON only. No markdown. No explanation.`;
 
 Deno.serve(async (req) => {
   try {
+    const limited = await checkRateLimit(req, 'food-wine-pairing', PAIRING_HOURLY_LIMIT, PAIRING_DAILY_LIMIT);
+    if (limited) return limited;
+
     const { dish, mode, cellarWines, userPreferences, stylePreference, budget } = await req.json();
+
+    // Without this, a malformed request interpolates "Dish: undefined" into
+    // the prompt and burns a full Sonnet call on nonsense.
+    if (typeof dish !== 'string' || !dish.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'dish required' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
     const currency = (userPreferences?.defaultCurrency as string | undefined) ?? 'GBP';
 
     const prompt = mode === 'cellar'

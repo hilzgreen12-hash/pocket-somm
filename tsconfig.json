@@ -2,5 +2,14 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    // Deno runtime, not React Native: these use the Deno global, npm:
+    // specifiers and Deno-mandated .ts import extensions, none of which this
+    // config can resolve. Including them produced ~84 phantom errors that
+    // drowned out real ones in the app code. Typecheck them with
+    // `deno check supabase/functions/**/*.ts` instead.
+    "supabase/functions"
+  ]
 }

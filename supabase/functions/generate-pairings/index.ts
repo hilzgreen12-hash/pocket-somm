@@ -1,6 +1,12 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+
+// Generous enough that no ordinary session hits them; low enough to cap a
+// runaway loop. Tune against real usage — these are a first pass.
+const PAIRINGS_HOURLY_LIMIT = 30;
+const PAIRINGS_DAILY_LIMIT = 100;
 
 // Curated pool of high-profile chefs Vinster draws inspiration from, so regular
 // users stop seeing the same one or two names (Ottolenghi / Nobu) every search.
@@ -225,6 +231,11 @@ function extractPairings(text: string): unknown[] {
 
 Deno.serve(async (req) => {
   try {
+    // Highest-cost function in the project: 8192 max_tokens on Sonnet, held
+    // open as an SSE stream for ~65s. Gate before doing any work.
+    const limited = await checkRateLimit(req, 'generate-pairings', PAIRINGS_HOURLY_LIMIT, PAIRINGS_DAILY_LIMIT);
+    if (limited) return limited;
+
     const { wine, filters, excludeChefs, additionalRequest, stream } = await req.json();
     const excludeChefsList = Array.isArray(excludeChefs)
       ? (excludeChefs as unknown[]).filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
