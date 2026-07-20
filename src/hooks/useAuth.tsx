@@ -3,6 +3,7 @@ import { Session } from '@supabase/supabase-js';
 import { useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../api/supabase';
+import { clearAllStores } from '../stores/clearAllStores';
 
 interface AuthContextValue {
   session: Session | null;
@@ -29,6 +30,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const nextUserId = next?.user.id ?? null;
       if (prevUserId.current !== undefined && prevUserId.current !== nextUserId) {
         qc.clear();
+        // The Zustand stores live in module scope and survive sign-out, so
+        // clearing only the React Query cache left the previous account's
+        // state in memory — signing in as another user and tapping "View
+        // last result" showed their wines. lastIntelStore also persists to
+        // AsyncStorage under a global key, so it survived restarts too.
+        clearAllStores();
         // Clear the city autocomplete history (global key) and the LEGACY
         // base scan-history key on account switch. Scan history is now stored
         // per-user (vinster_scan_history_<userId>, see useScanHistory) so a
