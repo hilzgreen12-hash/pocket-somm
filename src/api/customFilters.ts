@@ -92,7 +92,11 @@ export async function createCustomFilter(userId: string, name: string, wineIds: 
 // cached list — use the incremental helpers below, which can't drop other
 // members if the cache is stale and have no empty-set window.
 export async function setCustomFilterWines(filterId: string, wineIds: string[]): Promise<void> {
-  await supabase.from('custom_filter_wines').delete().eq('filter_id', filterId);
+  // Must throw: if the delete silently fails, the insert below collides with
+  // the composite primary key (050_custom_filters.sql:22) and surfaces a raw
+  // duplicate-key error instead of the intended replace.
+  const { error: deleteError } = await supabase.from('custom_filter_wines').delete().eq('filter_id', filterId);
+  if (deleteError) throw new Error(deleteError.message);
   if (wineIds.length === 0) return;
   const rows = wineIds.map((cellar_wine_id) => ({ filter_id: filterId, cellar_wine_id }));
   const { error } = await supabase.from('custom_filter_wines').insert(rows);

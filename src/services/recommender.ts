@@ -60,6 +60,10 @@ const WineRecommendationSchema = z.object({
 });
 
 const RecommendationResponseSchema = z.object({
+  // No .min(1): an empty result is a legitimate outcome (every wine filtered
+  // out by budget/preferences), not a malformed response. Rejecting it here
+  // would surface a generic parse error; extracting.tsx checks the length
+  // instead and shows actionable copy about widening the filters.
   wines: z.array(WineRecommendationSchema).max(3),
   summary: z.string(),
   topScoringMode: z.boolean().optional(),

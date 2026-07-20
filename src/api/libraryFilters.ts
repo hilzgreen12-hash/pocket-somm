@@ -47,7 +47,11 @@ export async function createLibraryFilter(userId: string, scope: LibraryScope, n
 }
 
 export async function setLibraryFilterItems(filterId: string, itemIds: string[]): Promise<void> {
-  await supabase.from('library_filter_items').delete().eq('filter_id', filterId);
+  // Same as setCustomFilterWines: a silently failed delete turns the insert
+  // below into a composite-primary-key collision (058_library_filters.sql:16)
+  // rather than a replace.
+  const { error: deleteError } = await supabase.from('library_filter_items').delete().eq('filter_id', filterId);
+  if (deleteError) throw new Error(deleteError.message);
   if (itemIds.length === 0) return;
   const rows = itemIds.map((item_id) => ({ filter_id: filterId, item_id }));
   const { error } = await supabase.from('library_filter_items').insert(rows);

@@ -551,6 +551,10 @@ export default function RackGridScreen() {
   }
 
   function openSlot(row: number, col: number) {
+    // `rack` is racks.find(...) so it is Rack | undefined, and the empty-slot
+    // branch below dereferences rack.rows/.cols. There is no render-level
+    // guard, so a stale link to a deleted rack would throw here.
+    if (!rack) return;
     // Multi-select in progress: taps toggle empty slots in/out of the set
     // rather than opening or navigating.
     if (multiSelectMode) { toggleMultiSlot(row, col); return; }

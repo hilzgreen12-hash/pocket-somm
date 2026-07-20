@@ -64,10 +64,15 @@ export async function deletePost(id: string): Promise<void> {
 }
 
 export async function toggleLike(postId: string, userId: string, hasLiked: boolean): Promise<void> {
+  // Throw on failure so the optimistic UI can roll back. Previously the result
+  // was discarded, so an RLS rejection or dropped connection left the like
+  // showing as applied until the next getPosts refetch quietly undid it.
   if (hasLiked) {
-    await supabase.from('community_likes').delete().eq('post_id', postId).eq('user_id', userId);
+    const { error } = await supabase.from('community_likes').delete().eq('post_id', postId).eq('user_id', userId);
+    if (error) throw error;
   } else {
-    await supabase.from('community_likes').insert({ post_id: postId, user_id: userId });
+    const { error } = await supabase.from('community_likes').insert({ post_id: postId, user_id: userId });
+    if (error) throw error;
   }
 }
 
