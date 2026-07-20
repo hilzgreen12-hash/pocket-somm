@@ -83,7 +83,11 @@ export default function CommunityTab() {
         <TouchableOpacity style={styles.button} onPress={() => gated('/community/restaurant')}>
           <Text style={styles.buttonText}>Restaurant Reviews</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button}>
+        {/* No /community/connections route exists yet. Left in place as a
+            placeholder, but explicitly disabled: with an active-looking button
+            and no onPress it dimmed on tap and did nothing, which reads as a
+            broken app rather than an unbuilt feature. */}
+        <TouchableOpacity style={[styles.button, { opacity: 0.5 }]} disabled>
           <Text style={styles.buttonText}>Your Connections</Text>
         </TouchableOpacity>
       </View>

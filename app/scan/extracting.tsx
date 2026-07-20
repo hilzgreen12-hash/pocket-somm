@@ -72,8 +72,12 @@ function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | 
   }
 
   // Hard filter: remove wines above budget
-  if (prefs.defaultBudget) {
-    filtered = filtered.filter((w) => w.menuPrice === null || w.menuPrice <= prefs.defaultBudget);
+  // Hoisted to a local so TypeScript narrows it inside the closure. The
+  // original guarded correctly at runtime, but TS can't narrow a property
+  // access captured by an arrow function, so it flagged a false positive.
+  const budget = prefs.defaultBudget;
+  if (budget) {
+    filtered = filtered.filter((w) => w.menuPrice === null || w.menuPrice <= budget);
   }
 
   // Soft sort: favourites first
@@ -182,6 +186,18 @@ export default function ExtractingScreen() {
       });
 
       if (!token.active) return;
+
+      // Mirrors the OCR guard above. The recommender schema accepts an empty
+      // wines array as valid, so without this the user lands on a results
+      // screen with a summary and no cards — and results.tsx then caches that
+      // empty scan into their history.
+      if (!recommendation.wines.length) {
+        setErrorDetail(
+          "No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.",
+        );
+        setStage('error');
+        return;
+      }
 
       setRecommendation(recommendation);
       router.replace('/scan/results');

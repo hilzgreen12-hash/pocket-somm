@@ -139,7 +139,11 @@ Deno.serve(async (req) => {
     console.error('OCR function error:', message);
     return new Response(
       JSON.stringify({
-        error: message,
+        // Same as recommend: the client uses `message`; the raw exception text
+        // is already in the console.error above and should not be shipped to
+        // the client. The 429 rate-limit response returns earlier, so its
+        // message still reaches extracting.tsx intact.
+        error: 'ocr_failed',
         message: "Vinster had trouble reading this photo. Try a clearer, well-lit shot with the wine list fully in frame.",
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },

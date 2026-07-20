@@ -162,18 +162,34 @@ export default function PersonalityScreen() {
       setLastGeneratedAt(now);
       const textColumn = cat === 'wine' ? 'last_wine_personality' : 'last_recipe_personality';
       const tsColumn = cat === 'wine' ? 'last_wine_personality_at' : 'last_recipe_personality_at';
-      await supabase.from('profiles').upsert({
+      // These two writes are logged but deliberately NOT thrown. The sketch
+      // has already been generated and shown to the user via setText above,
+      // so throwing here would land in the catch and replace a perfectly good
+      // result with "Could not generate personality" — a false error.
+      //
+      // The cost of a silent failure is real but bounded: nothing is cached,
+      // so the hydrate effect finds no text and the auto-generate effect pays
+      // for a fresh Claude call on the next visit. Logging makes that
+      // diagnosable, which is the part that was missing.
+      const { error: cacheError } = await supabase.from('profiles').upsert({
         user_id: session.user.id,
         [textColumn]: result.text,
         [tsColumn]: now,
       });
+      if (cacheError) {
+        console.error('[personality] failed to cache sketch; will regenerate next visit:', cacheError);
+      }
+
       // Append to the personality archive so the user can scroll back
       // through every sketch Vinster has ever drawn for them.
-      await supabase.from('personality_sketches').insert({
+      const { error: archiveError } = await supabase.from('personality_sketches').insert({
         user_id: session.user.id,
         category: cat,
         text: result.text,
       });
+      if (archiveError) {
+        console.error('[personality] failed to append sketch to archive:', archiveError);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not generate personality.');
     } finally {

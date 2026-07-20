@@ -302,12 +302,18 @@ ${dislikedGrapesLine}
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('Recommend function error:', message);
-    // Send a user-friendly message field alongside the raw error so the
-    // client's invokeFunction picks up the friendly text. The detail is
-    // kept in `error` for log diagnostics in production.
+    // The client reads `message` for its user-facing copy. `error` used to
+    // carry the raw exception text — the comment claimed that was "for log
+    // diagnostics", but this payload goes to the CLIENT, not the log. The
+    // console.error above is the diagnostic path; the raw text (Anthropic SDK
+    // request/response detail, or echoed model output on a parse failure)
+    // does not need to leave the server.
+    //
+    // The 429 rate-limit response is returned earlier and never reaches this
+    // catch, so extracting.tsx still receives that message intact.
     return new Response(
       JSON.stringify({
-        error: message,
+        error: 'recommend_failed',
         message: "Vinster had trouble reading the wine list this time. Please try again — usually a second attempt works.",
       }),
       { status: 500, headers: { 'Content-Type': 'application/json' } },

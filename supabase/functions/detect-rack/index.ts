@@ -48,6 +48,12 @@ Deno.serve(async (req) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('detect-rack error:', message);
-    return new Response(JSON.stringify({ error: message }), { status: 500 });
+    // Logged above with full detail. The client gets a generic message:
+    // raw exception text can carry Anthropic SDK request/response detail or
+    // echo back model output on a JSON parse failure.
+    return new Response(
+      JSON.stringify({ error: 'Something went wrong. Please try again.' }),
+      { status: 500, headers: { 'Content-Type': 'application/json' } },
+    );
   }
 });
