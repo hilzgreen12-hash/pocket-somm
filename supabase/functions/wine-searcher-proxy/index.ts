@@ -73,7 +73,9 @@ async function getUsdRate(target: string): Promise<number> {
   }
 
   try {
-    const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${FX_TARGETS.join(',')}`);
+    const res = await fetch(`https://api.frankfurter.app/latest?from=USD&to=${FX_TARGETS.join(',')}`, {
+      signal: AbortSignal.timeout(10_000),
+    });
     if (res.ok) {
       const body = await res.json();
       const rates = body?.rates ?? {};
@@ -143,7 +145,23 @@ function buildWsUrl(name: string, vintageValue: string | null, cur: string): str
 // query or fall back to the Claude estimate. Logs the return code so misses are
 // diagnosable (vintage miss vs name miss) from the function logs.
 async function lookupWineSearcher(name: string, vintageValue: string | null, cur: string) {
-  const res = await fetch(buildWsUrl(name, vintageValue, cur));
+  let res: Response;
+  try {
+    res = await fetch(buildWsUrl(name, vintageValue, cur), {
+      // Without a timeout an unresponsive upstream blocks until the platform
+      // wall-clock kill, and the retry path below makes that two serial hangs
+      // before the caller sees anything.
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    // SECURITY: buildWsUrl inlines WINE_SEARCHER_API_KEY into the URL as a
+    // query param, and Deno embeds the full request URL in transport-level
+    // fetch errors. Letting that error propagate would write the plaintext
+    // key into the function logs via the console.error in the handler below.
+    // Re-throw a message that carries no URL.
+    const reason = err instanceof Error && err.name === 'TimeoutError' ? 'timed out' : 'request failed';
+    throw new Error(`Wine-Searcher ${reason}`);
+  }
   if (!res.ok) throw new Error(`Wine-Searcher returned ${res.status}`);
   const xml = await res.text();
   const returnCode = tag(xml, 'return-code');
