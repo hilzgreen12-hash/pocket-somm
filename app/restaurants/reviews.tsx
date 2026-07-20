@@ -59,7 +59,9 @@ function chosenHasReview(w: ChosenWine): boolean {
 }
 
 export default function RestaurantReviewsScreen() {
-  const { archive, archiveLoading, removeArchiveItem } = useScanHistory();
+  // archiveError was already exposed by the hook but never read here, so a
+  // failed fetch fell through to "No restaurants yet" — reads as lost visits.
+  const { archive, archiveLoading, archiveError, removeArchiveItem } = useScanHistory();
 
   // Off-screen branded share card — mirrors the WineListShareCard +
   // WineReviewShareCard pattern so all three Vinster surfaces share
@@ -574,6 +576,13 @@ export default function RestaurantReviewsScreen() {
       ) : archiveLoading ? (
         <View style={styles.empty}>
           <ActivityIndicator color={colors.gold} />
+        </View>
+      ) : archiveError ? (
+        <View style={styles.empty}>
+          <Text style={styles.emptyTitle}>Couldn&apos;t load your visits</Text>
+          <Text style={styles.emptyBody}>
+            Check your connection and pull down to refresh. Your reviews are safe.
+          </Text>
         </View>
       ) : (reviewed.length === 0 && bottlePicks.length === 0) ? (
         <View style={styles.empty}>
