@@ -95,7 +95,7 @@ type ArchivedFilter = 'hide' | 'include' | 'only';
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
-  const { wines, isLoading } = useCellar();
+  const { wines, isLoading, isError } = useCellar();
   const { wines: archivedWines } = useArchive();
   const { racks } = useRacks();
   const qc = useQueryClient();
@@ -849,7 +849,17 @@ export default function FullCellarListScreen() {
 
       {sorted.length === 0 ? (
         <View style={styles.empty}>
-          {wines.length === 0 ? (
+          {isError ? (
+            // Distinct from the empty state on purpose: `wines` is [] on a
+            // failed fetch too, and telling someone with a full cellar that
+            // it is empty reads as data loss.
+            <>
+              <Text style={styles.emptyTitle}>Couldn&apos;t load your cellar</Text>
+              <Text style={styles.emptyBody}>
+                Check your connection and pull down to refresh. Your wines are safe.
+              </Text>
+            </>
+          ) : wines.length === 0 ? (
             <>
               <Text style={styles.emptyTitle}>Your cellar is empty</Text>
               <Text style={styles.emptyBody}>Add wines to your cellar to generate your list.</Text>

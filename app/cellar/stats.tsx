@@ -44,7 +44,7 @@ function pct(n: number, total: number): string {
 
 export default function CellarStatsScreen() {
   const { session } = useAuth();
-  const { wines, isLoading } = useCellar();
+  const { wines, isLoading, isError } = useCellar();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
 
@@ -236,7 +236,17 @@ export default function CellarStatsScreen() {
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
 
-          {wines.length === 0 && (
+          {isError ? (
+            // Without this the tiles below read 0 bottles / £0 on a failed
+            // fetch, which looks like the cellar was wiped rather than a
+            // network problem.
+            <View style={styles.emptyBanner}>
+              <Text style={styles.emptyBannerTitle}>Couldn&apos;t load your cellar</Text>
+              <Text style={styles.emptyBannerBody}>
+                These figures are incomplete. Check your connection and pull down to refresh — your wines are safe.
+              </Text>
+            </View>
+          ) : wines.length === 0 && (
             <View style={styles.emptyBanner}>
               <Text style={styles.emptyBannerTitle}>Your cellar is empty</Text>
               <Text style={styles.emptyBannerBody}>

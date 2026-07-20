@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView,
+  StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
@@ -153,7 +153,14 @@ export function RestaurantReviewModal({
         .from('scan_sessions')
         .update(payloadRef.current)
         .eq('id', sessionIdRef.current)
-        .then(() => { qc.invalidateQueries({ queryKey: ['scan-archive'] }); });
+        .then(({ error }) => {
+          // Only refetch on a confirmed write. Invalidating unconditionally
+          // made a FAILED save look like a successful one: the list refetched
+          // and silently rendered the pre-edit values back over the user's
+          // changes, with no error shown.
+          if (error) return;
+          qc.invalidateQueries({ queryKey: ['scan-archive'] });
+        });
     };
   }, []);
 
@@ -410,8 +417,15 @@ export function RestaurantReviewModal({
 
   async function persist() {
     const payload = buildPayload();
-    await supabase.from('scan_sessions').update(payload).eq('id', sessionId);
-    // Mark the form clean so the unmount autosave doesn't write it again.
+    // The Supabase client RESOLVES with { error } rather than throwing, so an
+    // undestructured await here swallowed RLS rejections and offline failures.
+    // The form was then marked clean regardless, which also disarmed the
+    // unmount autosave retry below — the user's ratings and note were lost
+    // with a success message on screen.
+    const { error } = await supabase.from('scan_sessions').update(payload).eq('id', sessionId);
+    if (error) throw error;
+    // Mark the form clean ONLY on a confirmed write, so a failure leaves it
+    // dirty and the unmount autosave still gets its attempt.
     savedSnapRef.current = JSON.stringify(payload);
   }
 
@@ -428,6 +442,14 @@ export function RestaurantReviewModal({
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       qc.invalidateQueries({ queryKey: ['my-community-uploads'] });
       onSaved({ name: restaurantName.trim() || null, city: cityValue.trim() || null });
+    } catch {
+      // Deliberately do NOT call onSaved here — that closes the modal. Keeping
+      // it open preserves what the user typed and leaves the form dirty, so
+      // the unmount autosave can still retry.
+      Alert.alert(
+        "Couldn't save your review",
+        'Check your connection and try again. Your notes and ratings are still here.',
+      );
     } finally {
       setSaving(false);
     }

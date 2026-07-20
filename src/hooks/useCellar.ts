@@ -17,7 +17,10 @@ export function useCellar() {
   const userId = session?.user.id ?? '';
   const qc = useQueryClient();
 
-  const { data: wines = [], isLoading } = useQuery({
+  // isError must be surfaced: `wines` defaults to [] on a failed fetch, so a
+  // consumer that only reads isLoading renders "Your cellar is empty" to a
+  // user who actually has bottles — indistinguishable from data loss.
+  const { data: wines = [], isLoading, isError } = useQuery({
     queryKey: ['cellar', userId],
     queryFn: () => getCellarWines(userId),
     enabled: !!userId,
@@ -85,7 +88,7 @@ export function useCellar() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['cellar-shares', userId] }),
   });
 
-  return { wines, isLoading, shares, addWine, updateWine, deleteWine, share, removeShare };
+  return { wines, isLoading, isError, shares, addWine, updateWine, deleteWine, share, removeShare };
 }
 
 export function useWishList() {
