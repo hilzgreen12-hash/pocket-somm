@@ -1,6 +1,12 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { checkRateLimit } from '../_shared/rateLimit.ts';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+
+// A personality sketch is generated rarely per user; these are deliberately
+// loose so a legitimate retry never trips them.
+const PERSONALITY_HOURLY_LIMIT = 20;
+const PERSONALITY_DAILY_LIMIT = 60;
 
 function buildWinePrompt(payload: any): string {
   const p = payload.preferences ?? {};
@@ -120,6 +126,9 @@ Return only the prose — no preamble, no markdown headers other than the title 
 
 Deno.serve(async (req) => {
   try {
+    const limited = await checkRateLimit(req, 'personality', PERSONALITY_HOURLY_LIMIT, PERSONALITY_DAILY_LIMIT);
+    if (limited) return limited;
+
     const body = await req.json();
     const category = (body.category ?? 'wine').toString();
     const prompt = category === 'recipe' ? buildRecipePrompt(body) : buildWinePrompt(body);
