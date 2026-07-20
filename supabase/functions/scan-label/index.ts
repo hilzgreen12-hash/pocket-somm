@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
       }],
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
     const cleaned = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
     const match = cleaned.match(/\{[\s\S]*\}/);
     if (!match) throw new Error(`No JSON found in response: ${text.slice(0, 200)}`);

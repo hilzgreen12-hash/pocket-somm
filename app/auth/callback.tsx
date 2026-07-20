@@ -30,7 +30,16 @@ export default function AuthCallbackScreen() {
       // Poll for a session — _layout's handler may already be mid-flight.
       // Three quick checks at 200ms intervals is enough in practice.
       for (let i = 0; i < 3; i++) {
-        const { data: { session } } = await supabase.auth.getSession();
+        // A throw here would escape the IIFE leaving status stuck on
+        // 'verifying' — a permanent spinner with no retry, because the
+        // error branch that renders "Back to sign in" is never reached.
+        // Treat a failed read as "no session yet" and fall through.
+        let session = null;
+        try {
+          ({ data: { session } } = await supabase.auth.getSession());
+        } catch {
+          session = null;
+        }
         if (cancelled) return;
         if (session) {
           setStatus('ok');
