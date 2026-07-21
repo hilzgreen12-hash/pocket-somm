@@ -182,7 +182,7 @@ export default function ScanTab() {
           account-only feature, so hard-gated for guests. */}
       <View style={[styles.section, { marginTop: spacing.lg }]}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
-          <Text style={styles.buttonText}>Scan Archive</Text>
+          <Text style={styles.buttonText}>Label Scan Library</Text>
         </TouchableOpacity>
       </View>
 

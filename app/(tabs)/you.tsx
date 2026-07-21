@@ -194,18 +194,7 @@ export default function YouScreen() {
         {currentUsername || currentEmail.split('@')[0]} · Vinster since {formatJoinedShort(session?.user.created_at)}
       </Text>
 
-      <View style={styles.divider} />
-
-      {/* Collections — moved out of the Cellar tab. */}
-      <View style={styles.block}>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Restaurants</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Wine Reviews</Text>
-        </TouchableOpacity>
-      </View>
-
+      {/* Restaurants and Wine Reviews moved to the Dine tab. */}
       <View style={styles.goldLine} />
 
       <View style={styles.block}>

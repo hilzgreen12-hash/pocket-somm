@@ -82,7 +82,7 @@ export default function ChefTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.appName}>Chef</Text>
+        <Text style={styles.appName}>Dine</Text>
       </View>
 
       <View style={styles.section}>
@@ -94,7 +94,7 @@ export default function ChefTab() {
           <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You</Text>
           {' '}to guide its results.
         </Text>
-        <HelpButton label="More About Chef" title="How Chef works" body={CHEF_HELP} />
+        <HelpButton label="More About Dine" title="How Dine works" body={CHEF_HELP} />
       </View>
 
       <View style={styles.divider} />
@@ -125,7 +125,18 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
+      {/* Your dining record — Wine Reviews and Restaurants, moved here from You
+          so the food-and-wine collections sit together above the Cookbook. */}
       <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/wines/chosen')}>
+          <Text style={styles.buttonText}>Wine Reviews</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
+          <Text style={styles.buttonText}>Restaurants</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={[styles.section, { marginTop: spacing.sm }]}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
           <Text style={styles.buttonText}>View Cookbook</Text>
         </TouchableOpacity>
