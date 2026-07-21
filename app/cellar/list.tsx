@@ -768,6 +768,20 @@ export default function FullCellarListScreen() {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
+        {/* Archive folder — enters the dedicated archived-bottles view
+            (?archived=1). A navigation "folder" rather than a filter dropdown
+            (note the › vs the ▾ chevrons), so it reads as a place you go into.
+            Hidden while already in the Archive. */}
+        {!isArchiveView && (
+          <TouchableOpacity style={styles.filterChip} onPress={() => router.push('/cellar/list?archived=1')}>
+            <View style={styles.filterChipHeadingRow}>
+              <Text style={styles.filterChipLabel}>Archive</Text>
+              <Text style={styles.filterChipChevron}>›</Text>
+            </View>
+            <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">Archived bottles</Text>
+          </TouchableOpacity>
+        )}
+
         {/* Location filtering is a Full Cellar List affordance — the Archive
             has no racks/locations to filter by, so hide the chip there. */}
         {!isArchiveView && (

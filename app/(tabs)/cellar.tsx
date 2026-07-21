@@ -77,15 +77,13 @@ export default function CellarTab() {
 
       <View style={styles.divider} />
 
-      {/* Your Archive. "Archive a Night" photographs a bottle lineup, matches
-          each to the cellar and bulk-archives them; Cellar Archive lists the
-          archived bottles. (Wine Reviews now live in You.) */}
+      {/* "Archive a Night" photographs a bottle lineup, matches each to the
+          cellar and bulk-archives them. The archived-bottles list ("Cellar
+          Archive") is no longer a top-level button — it now lives as an
+          "Archive" folder in the Full Cellar List filter carousel. */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}>
           <Text style={styles.buttonText}>Archive a Night</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1'))}>
-          <Text style={styles.buttonText}>Cellar Archive</Text>
         </TouchableOpacity>
       </View>
 
