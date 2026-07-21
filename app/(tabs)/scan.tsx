@@ -31,12 +31,29 @@ export default function ScanTab() {
 
   const [addWineOpen, setAddWineOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const [hardGate, setHardGate] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
+  // Soft gate: guest sees the prompt but may Continue without an account.
+  // Used for scanning, which is guest-open.
   function requireAuth(action: () => void) {
     if (!session) {
+      setHardGate(false);
       pendingActionRef.current = action;
+      setSignInPromptVisible(true);
+      return;
+    }
+    action();
+  }
+
+  // Hard gate: account-only feature (e.g. revisiting saved history). Guest gets
+  // the create-account prompt with no "continue" escape; there is nothing to
+  // proceed to without an account, so no pending action is stored.
+  function requireAccount(action: () => void) {
+    if (!session) {
+      setHardGate(true);
+      pendingActionRef.current = null;
       setSignInPromptVisible(true);
       return;
     }
@@ -45,6 +62,7 @@ export default function ScanTab() {
 
   function dismissSignInPrompt() {
     setSignInPromptVisible(false);
+    setHardGate(false);
     pendingActionRef.current = null;
   }
 
@@ -139,7 +157,7 @@ export default function ScanTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/scan/wine-list')}>
           <Text style={styles.buttonText}>Wine List</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleViewLastListResult}>
+        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)}>
           <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
       </View>
@@ -149,7 +167,7 @@ export default function ScanTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
           <Text style={styles.buttonText}>Wine Label</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleViewLastIntel}>
+        <TouchableOpacity onPress={() => requireAccount(handleViewLastIntel)}>
           <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
       </View>
@@ -205,6 +223,7 @@ export default function ScanTab() {
 
       <SignInPromptModal
         visible={signInPromptVisible}
+        allowContinue={!hardGate}
         onDismiss={dismissSignInPrompt}
         onSignIn={() => { dismissSignInPrompt(); router.push('/(auth)/sign-in'); }}
         onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
