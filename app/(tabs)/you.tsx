@@ -199,10 +199,10 @@ export default function YouScreen() {
       {/* Collections — moved out of the Cellar tab. */}
       <View style={styles.block}>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/restaurants/reviews')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Restaurants</Text>
+          <Text style={styles.prefButtonText}>Restaurants</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Wine Reviews</Text>
+          <Text style={styles.prefButtonText}>Wine Reviews</Text>
         </TouchableOpacity>
       </View>
 

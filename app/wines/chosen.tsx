@@ -698,7 +698,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wine Reviews</Text>
+        <Text style={styles.title}>Wine Reviews</Text>
         <TouchableOpacity
           onPress={() => setChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
