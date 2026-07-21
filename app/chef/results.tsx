@@ -676,7 +676,7 @@ const styles = StyleSheet.create({
   // Fresh-result header — wine line centred in gold beneath the date, with
   // a "Brief Summary" of the requested requirements below it.
   freshHeader: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md, alignItems: 'center' },
-  freshWineLine: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, lineHeight: 26 },
+  freshWineLine: { fontSize: 20, fontFamily: fonts.headingBold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, lineHeight: 26 },
   briefSummary: { fontSize: 14, fontFamily: fonts.bodyRegular, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 20, marginTop: spacing.sm },
   briefSummaryLabel: { fontFamily: fonts.bodySemibold, color: '#FFFFFF' },
   section: { padding: spacing.xl },
