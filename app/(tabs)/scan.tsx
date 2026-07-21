@@ -172,6 +172,15 @@ export default function ScanTab() {
         </TouchableOpacity>
       </View>
 
+      {/* Scan Archive → every saved label scan, actionable (add to cellar /
+          review / wish list / view intel). Relocated here from You; an
+          account-only feature, so hard-gated for guests. */}
+      <View style={[styles.section, { marginTop: spacing.lg }]}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/cellar/labels'))}>
+          <Text style={styles.buttonText}>Scan Archive</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Generate Wine Intel chooser (same flow as the old Cellar button). */}
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>

@@ -269,7 +269,7 @@ export default function MyLabelsScreen() {
   function confirmRemove(label: LibraryLabel) {
     showAlert({
       title: 'Remove from Library?',
-      body: `${wineHeaderLine(label.producer, label.wine_name, label.vintage)}\n\nThis removes the label from Your Label Library. Your cellar wine and any review stay put.`,
+      body: `${wineHeaderLine(label.producer, label.wine_name, label.vintage)}\n\nThis removes the scan from your Scan Archive. Your cellar wine and any review stay put.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(label.id) },
@@ -331,7 +331,7 @@ export default function MyLabelsScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Label Library</Text>
+        <Text style={styles.title}>Scan Archive</Text>
         <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
           <Text style={styles.addLink}>+ Add</Text>
         </TouchableOpacity>
