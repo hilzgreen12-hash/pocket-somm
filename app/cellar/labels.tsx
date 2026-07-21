@@ -6,7 +6,7 @@ import { captureRef } from 'react-native-view-shot';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { router } from 'expo-router';
 import { useLabels } from '../../src/hooks/useLabels';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -77,6 +77,7 @@ export default function MyLabelsScreen() {
   const userId = session?.user.id;
   const { labels, isLoading, remove, setFavourite, create } = useLabels();
   const { wines: cellarWines, addWine } = useCellar();
+  const { addWine: addWishListWine } = useWishList();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { width } = useWindowDimensions();
@@ -181,8 +182,9 @@ export default function MyLabelsScreen() {
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
         { text: 'Add/Edit/View Review', onPress: () => goToReview(existingId, label) },
         { text: 'Add to Full Cellar List', onPress: () => void addLabelToCellar(label) },
+        { text: 'Add to Wish List', onPress: () => void addLabelToWishList(label) },
         { text: 'Share Thumbnail', onPress: () => { setShareNote(''); setShareLabel(label); } },
-        { text: 'Remove from Library', style: 'destructive', onPress: () => confirmRemove(label) },
+        { text: 'Remove from Archive', style: 'destructive', onPress: () => confirmRemove(label) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -226,6 +228,47 @@ export default function MyLabelsScreen() {
       });
     } catch (err) {
       showAlert({ title: 'Could not add to cellar', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Same as addLabelToCellar but flags the row is_wishlist (a wish-list entry
+  // is a cellar_wines row with is_wishlist=true — see useWishList). Carries the
+  // captured identity + intel so the wish-list card is pre-populated.
+  async function addLabelToWishList(label: LibraryLabel) {
+    if (!userId) return;
+    const today = new Date().toISOString().split('T')[0];
+    const intel = label.intel;
+    try {
+      await addWishListWine.mutateAsync({
+        user_id: userId,
+        wine_name: label.wine_name || label.producer || 'Wine',
+        producer: label.producer,
+        region: label.region,
+        vintage: label.vintage != null ? String(label.vintage) : null,
+        quantity: 1,
+        storage_location: null,
+        date_received: today,
+        critic_score: intel?.criticScore ?? null,
+        critic_score_note: intel?.criticScoreNote ?? null,
+        drinking_window_from: intel?.drinkingWindowFrom ?? null,
+        drinking_window_to: intel?.drinkingWindowTo ?? null,
+        drinking_window_status: intel?.drinkingWindowStatus ?? 'unknown',
+        tasting_notes: intel?.tastingNotes ?? null,
+        grape_variety: intel?.grapeVariety ?? null,
+        label_image_path: label.label_image_path,
+        user_notes: null,
+        estimated_value: intel?.estimatedValue ?? null,
+        estimated_value_currency: intel?.estimatedValue != null ? currency : null,
+        estimated_value_source: intel?.valueSource ?? null,
+        bottle_size_ml: 750,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any);
+      showAlert({
+        title: wineHeaderLine(label.producer, label.wine_name, label.vintage) || (label.wine_name ?? 'Wine'),
+        body: 'Added to your Wish List.',
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not add to wish list', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
