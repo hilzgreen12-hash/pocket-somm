@@ -72,9 +72,35 @@ export default function ArchiveNightScreen() {
       if (result.canceled || !result.assets.length) return;
       const uri = result.assets[0].uri;
       setImageUri(uri);
-      await analyze(uri);
+      await saveForLater(uri);
     } catch (err) {
       showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Capture-first: the photo is saved to Your Lineup Library immediately, with
+  // wines=null (the "awaiting attention" state). Confirming which bottles came
+  // from the cellar and archiving them is deferred — the user tends to it later
+  // from the library, when they have time, rather than itemising 8 bottles mid-
+  // dinner. (The detect/match/confirm machinery below — analyze / confirmArchive
+  // — is preserved for that deferred tend flow.)
+  async function saveForLater(uri: string) {
+    if (!session?.user.id) {
+      showAlert({ title: 'Sign in needed', body: 'Sign in to save a lineup.' });
+      setStage('capture');
+      return;
+    }
+    setStage('archiving');
+    try {
+      const city = await captureCity();
+      const row = await saveLineupArchive(session.user.id, uri, null, { city });
+      setSavedLineup(row);
+      setArchivedCount(0);
+      qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
+      setStage('done');
+    } catch (err) {
+      showAlert({ title: 'Could not save the lineup', body: err instanceof Error ? err.message : 'Please try again.' });
+      setStage('capture');
     }
   }
 
@@ -194,10 +220,10 @@ export default function ArchiveNightScreen() {
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.lead}>Drank some bottles?</Text>
           <Text style={styles.leadBody}>
-            Photograph your lineup and Vinster will match which bottles came from your cellar. Confirm the selection to archive.
+            Snap your lineup now — it saves straight to Your Lineup Library. When you have a moment, confirm which bottles came from your cellar and archive them; until then it sits in your library marked "awaiting attention".
           </Text>
           <Text style={styles.leadBody}>
-            All of your lineup photos are saved to Your Lineup Library in the You tab — you can comment on lineups and share them with friends.
+            You can comment on your lineups and share them with friends from the library.
           </Text>
           <Text style={styles.hint}>Photograph up to 8 bottles with their front labels facing the camera</Text>
           <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
@@ -216,16 +242,15 @@ export default function ArchiveNightScreen() {
       ) : stage === 'archiving' ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
-          <Text style={styles.hint}>Archiving…</Text>
+          <Text style={styles.hint}>Saving your lineup…</Text>
         </View>
       ) : stage === 'done' ? (
         <KeyboardAwareScrollView contentContainerStyle={styles.doneContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-          <Text style={styles.doneTitle}>Night Archived</Text>
+          <Text style={styles.doneTitle}>{archivedCount > 0 ? 'Night Archived' : 'Lineup Saved'}</Text>
           <Text style={styles.doneCount}>
-            {archivedCount} bottle{archivedCount === 1 ? '' : 's'} moved to your archive.{' '}
-            {photoSaved
-              ? 'The photo is saved in Your Lineup Library.'
-              : "The bottles were archived, but the lineup photo couldn't be saved to Your Lineup Library."}
+            {archivedCount > 0
+              ? `${archivedCount} bottle${archivedCount === 1 ? '' : 's'} moved to your archive. The photo is saved in Your Lineup Library.`
+              : "Saved to Your Lineup Library. It'll show as “awaiting attention” until you confirm which bottles came from your cellar and archive them — you can do that anytime from the library."}
           </Text>
 
           {savedLineup ? (
@@ -281,8 +306,12 @@ export default function ArchiveNightScreen() {
             </>
           ) : null}
 
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list?archived=1')} activeOpacity={0.85}>
-            <Text style={styles.doneBtnText}>View Cellar Archive</Text>
+          <TouchableOpacity
+            style={styles.doneBtn}
+            onPress={() => router.replace(archivedCount > 0 ? '/cellar/list?archived=1' : '/cellar/lineups')}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.doneBtnText}>{archivedCount > 0 ? 'View Cellar Archive' : 'View in Lineup Library'}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>Done</Text>
