@@ -142,10 +142,6 @@ export default function SignIn() {
         </>
       )}
 
-      <TouchableOpacity style={styles.guestButton} onPress={() => router.replace('/(tabs)/scan')}>
-        <Text style={styles.guestText}>Continue without account</Text>
-      </TouchableOpacity>
-
       <Link href="/(auth)/forgot-password" style={styles.link}>
         Forgot your password?
       </Link>
@@ -254,17 +250,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: spacing.md,
     marginTop: spacing.sm,
-  },
-  guestButton: {
-    padding: spacing.md,
-    alignItems: 'center',
-    marginTop: spacing.sm,
-  },
-  // "Continue without account" — button label.
-  guestText: {
-    fontFamily: fonts.headingRegular,
-    color: colors.textMuted,
-    fontSize: 14,
   },
   // Forgot password / sign-up navigation links — button-like.
   link: {
