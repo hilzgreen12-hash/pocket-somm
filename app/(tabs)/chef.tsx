@@ -99,23 +99,27 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Wine → Recipe */}
+      {/* Wine → Recipe. Tap to start; press-and-hold to revisit your last
+          result. The standalone "View last result" link was removed to reclaim
+          space. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/review-requirements')}>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => router.push('/chef/review-requirements')}
+          onLongPress={handleViewLastLabelSearch}
+        >
           <Text style={styles.buttonText}>I've got a wine, find me a recipe</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleViewLastLabelSearch}>
-          <Text style={styles.lastResultLink}>View last result</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Recipe → Wine (flow unchanged) */}
+      {/* Recipe → Wine. Tap to start; press-and-hold to revisit your last result. */}
       <View style={[styles.section, { marginTop: spacing.lg }]}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/find-pairing')}>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => router.push('/chef/find-pairing')}
+          onLongPress={handleViewLastPairing}
+        >
           <Text style={styles.buttonText}>I know what I'm cooking, find me a wine</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleViewLastPairing}>
-          <Text style={styles.lastResultLink}>View last result</Text>
         </TouchableOpacity>
       </View>
 

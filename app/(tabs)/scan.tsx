@@ -152,23 +152,28 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Wine List → restaurant-list recommendations */}
+      {/* Wine List → restaurant-list recommendations. Tap to scan; press-and-
+          hold to revisit your last result (account-gated). The old "View Last
+          Result" link was removed to reclaim vertical space. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/scan/wine-list')}>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => router.push('/scan/wine-list')}
+          onLongPress={() => requireAccount(handleViewLastListResult)}
+        >
           <Text style={styles.buttonText}>Wine List</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)}>
-          <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Wine Label → Generate Wine Intel */}
+      {/* Wine Label → Generate Wine Intel. Tap to scan; press-and-hold to
+          revisit your last result (account-gated). */}
       <View style={[styles.section, { marginTop: spacing.lg }]}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => setAddWineOpen(true))}>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => requireAuth(() => setAddWineOpen(true))}
+          onLongPress={() => requireAccount(handleViewLastIntel)}
+        >
           <Text style={styles.buttonText}>Wine Label</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => requireAccount(handleViewLastIntel)}>
-          <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
       </View>
 
