@@ -165,9 +165,13 @@ export default function ScanTab() {
         </TouchableOpacity>
       </View>
 
+      {/* Gold divider separating the Wine List flow from the Wine Label flow
+          (Wine Label + its Label Scan Library). */}
+      <View style={styles.goldDivider} />
+
       {/* Wine Label → Generate Wine Intel. Tap to scan; press-and-hold to
           revisit your last result (account-gated). */}
-      <View style={[styles.section, { marginTop: spacing.lg }]}>
+      <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
           onPress={() => requireAuth(() => setAddWineOpen(true))}
@@ -254,6 +258,7 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  goldDivider: { height: 1, backgroundColor: colors.gold, marginHorizontal: spacing.xl, marginVertical: spacing.lg, opacity: 0.7 },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Top blurb under the Scan heading — kept Cormorant per user spec
   // ("blurbs below the headers on the tab screens").
