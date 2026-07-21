@@ -8,9 +8,13 @@ interface Props {
   onSignIn: () => void;
   onCreateAccount: () => void;
   onContinue: () => void;
+  // Soft gates (e.g. the scan nudge) let a guest proceed without an account.
+  // Hard gates (account-only features like saved history) hide that escape so
+  // the only ways forward are Sign In / Create Account. Defaults to soft.
+  allowContinue?: boolean;
 }
 
-export function SignInPromptModal({ visible, onDismiss, onSignIn, onCreateAccount, onContinue }: Props) {
+export function SignInPromptModal({ visible, onDismiss, onSignIn, onCreateAccount, onContinue, allowContinue = true }: Props) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onDismiss}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onDismiss}>
@@ -19,9 +23,9 @@ export function SignInPromptModal({ visible, onDismiss, onSignIn, onCreateAccoun
             <Text style={styles.closeText}>✕</Text>
           </TouchableOpacity>
 
-          <Text style={styles.heading}>Get more from Vinster</Text>
+          <Text style={styles.heading}>Create an account to continue</Text>
           <Text style={styles.body}>
-            Sign in to your account for advanced results tailoring and to archive and manage your results.
+            Create a free Vinster account to unlock this — save and revisit your results, build your cellar, and get recommendations tailored to your taste.
           </Text>
 
           <TouchableOpacity style={styles.signIn} onPress={onSignIn}>
@@ -32,9 +36,11 @@ export function SignInPromptModal({ visible, onDismiss, onSignIn, onCreateAccoun
             <Text style={styles.create}>Not registered? Create Account</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity onPress={onContinue}>
-            <Text style={styles.continueText}>Continue without an account</Text>
-          </TouchableOpacity>
+          {allowContinue && (
+            <TouchableOpacity onPress={onContinue}>
+              <Text style={styles.continueText}>Continue without an account</Text>
+            </TouchableOpacity>
+          )}
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
