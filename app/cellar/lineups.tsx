@@ -299,6 +299,13 @@ export default function LineupLibraryScreen() {
     0,
   );
 
+  // Lineups captured but not yet confirmed/actioned. `wines == null` means the
+  // photo was saved (Archive a Night / + Add) without its bottles being
+  // detected, matched and confirmed yet — the deferred "tend to it later"
+  // state. Counted across the WHOLE library (not the active filter) so the
+  // nudge reflects the real backlog, mirroring "wines awaiting review".
+  const awaitingLineups = lineups.filter((l) => l.wines == null);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -335,6 +342,14 @@ export default function LineupLibraryScreen() {
           <Text style={styles.lineupSummary}>
             {filtered.length} {filtered.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
           </Text>
+          {/* Awaiting-attention line — mirrors "N wines awaiting your review".
+              Shown whenever there is a backlog; the count is the whole library,
+              not the active filter. */}
+          {awaitingLineups.length > 0 && (
+            <Text style={styles.lineupAwaiting}>
+              {awaitingLineups.length} {awaitingLineups.length === 1 ? 'lineup' : 'lineups'} awaiting attention
+            </Text>
+          )}
           <View style={styles.summaryDivider} />
           <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
@@ -521,6 +536,7 @@ const styles = StyleSheet.create({
   blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   // Gold whole-library tally, same treatment as the Full Cellar List summary.
   lineupSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md },
+  lineupAwaiting: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 4 },
   summaryDivider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: spacing.md },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
