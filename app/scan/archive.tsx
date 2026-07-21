@@ -122,7 +122,7 @@ export default function MyLabelsScreen() {
   // offers "Add label to Label Library?" on the result.
   function handleScan() {
     setAddOpen(false);
-    router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
+    router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/scan/archive')}`);
   }
 
   // +Add · Upload a Photo — same intel flow, seeded from a gallery image.
@@ -143,7 +143,7 @@ export default function MyLabelsScreen() {
     } finally {
       setScanningLabel(false);
     }
-    router.push(`/label/confirm?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
+    router.push(`/label/confirm?context=intel&backTo=${encodeURIComponent('/scan/archive')}`);
   }
 
   // +Add · Select from Cellar — copy an existing cellar wine's label (photo +
@@ -291,7 +291,7 @@ export default function MyLabelsScreen() {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(label.intel);
       useLastIntelStore.getState().setLast(details, label.intel);
-      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
+      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/scan/archive')}`);
       return;
     }
     // No snapshot (review / older label) — regenerate on demand.
@@ -301,7 +301,7 @@ export default function MyLabelsScreen() {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(intel);
       useLastIntelStore.getState().setLast(details, intel);
-      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/cellar/labels')}`);
+      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/scan/archive')}`);
     } catch (err) {
       showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
