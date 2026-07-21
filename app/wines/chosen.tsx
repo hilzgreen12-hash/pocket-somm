@@ -20,8 +20,6 @@ import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { useLabels } from '../../src/hooks/useLabels';
-import { captureCity } from '../../src/utils/captureCity';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -135,7 +133,6 @@ type ReviewItem =
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
-  const { create: createLabel } = useLabels();
   const qc = useQueryClient();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
@@ -568,26 +565,6 @@ export default function ChosenWinesScreen() {
   async function handleChooseScan() { setChooserOpen(false); void ocrThenReview('camera'); }
   async function handleChooseUpload() { setChooserOpen(false); void ocrThenReview('library'); }
 
-  // Save a scanned/uploaded review label to Your Label Library — best-effort.
-  async function addScannedLabelToLibrary(
-    uri: string,
-    ocr: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null,
-  ) {
-    try {
-      const city = await captureCity();
-      await createLabel.mutateAsync({
-        imageUri: uri,
-        producer: ocr?.producer,
-        wineName: ocr?.wineName,
-        vintage: ocr?.vintage,
-        region: ocr?.region,
-        city,
-      });
-    } catch (err) {
-      showAlert({ title: 'Could not save label', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
   async function ocrThenReview(source: 'camera' | 'library') {
     try {
       if (!(await ensureMediaPermission(source))) return;
@@ -611,10 +588,10 @@ export default function ChosenWinesScreen() {
       }
       setAddInitial(ocr);
       setPendingReviewLabelUri(uri);
-      // A scanned/uploaded review label is automatically kept in Your Label
-      // Library (best-effort), and its photo also rides along onto the review
-      // (see AddChosenWineModal's labelImageUri). Then open the review input.
-      void addScannedLabelToLibrary(uri, ocr);
+      // The scanned photo rides onto the review itself (AddChosenWineModal's
+      // labelImageUri). It no longer ALSO spawns a Your Label Library row —
+      // the label library (Scan Archive) is fed only by actual label scans,
+      // so a review no longer duplicates the wine into it.
       setAddOpen(true);
     } catch (err) {
       showAlert({ title: 'Could not open photo', body: err instanceof Error ? err.message : 'Please try again.' });

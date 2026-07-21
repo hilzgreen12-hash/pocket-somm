@@ -1,9 +1,9 @@
 import { showAlert } from '../components/AppAlert';
 
-// Shared "Add label to Label Library?" Yes/No prompt. Used from both capture
-// points — the Scan Wine Label intel result and Your Wine Reviews · Scan /
-// Upload — so the wording stays identical. onNo is optional; the flow should
-// always continue whichever way the user answers.
+// "Add label to your Scan Archive?" Yes/No prompt, shown after a Scan Wine
+// Label result — the ONLY remaining flow that saves a label. (Review scans and
+// cellar wines no longer feed the archive; that duplication was removed.) onNo
+// is optional; the flow should always continue whichever way the user answers.
 export function promptAddToLabelLibrary(onYes: () => void, onNo?: () => void) {
   showAlert({
     title: 'Add label to Label Library in Your Stuff?',
