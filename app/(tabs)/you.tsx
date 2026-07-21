@@ -218,9 +218,6 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/lineups')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Lineup Library</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/labels')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Label Library</Text>
-        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
