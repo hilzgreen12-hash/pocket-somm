@@ -558,7 +558,7 @@ export default function RestaurantReviewsScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Restaurants</Text>
+        <Text style={styles.title}>Your Restaurants</Text>
         {session ? (
           <TouchableOpacity onPress={handleAddRestaurant} disabled={addingRestaurant} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={styles.addLink}>{addingRestaurant ? '…' : 'Add +'}</Text>
