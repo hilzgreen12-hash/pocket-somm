@@ -176,7 +176,7 @@ export default function ScanTab() {
           review / wish list / view intel). Relocated here from You; an
           account-only feature, so hard-gated for guests. */}
       <View style={[styles.section, { marginTop: spacing.lg }]}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/cellar/labels'))}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
           <Text style={styles.buttonText}>Scan Archive</Text>
         </TouchableOpacity>
       </View>
