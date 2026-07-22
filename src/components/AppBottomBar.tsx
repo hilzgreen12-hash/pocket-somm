@@ -9,7 +9,7 @@ import { fonts } from '../constants/fonts';
 // Order + routes match TabSwipeView / the (tabs) navigator, left-to-right.
 const TABS = [
   { key: 'scan', label: 'Scan' },
-  { key: 'chef', label: 'Chef' },
+  { key: 'chef', label: 'Dine' },
   { key: 'cellar', label: 'Cellar' },
   { key: 'community', label: 'Community' },
   { key: 'you', label: 'You' },
