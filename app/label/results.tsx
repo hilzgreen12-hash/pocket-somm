@@ -631,8 +631,10 @@ export default function LabelResultsScreen() {
               buttons: [{ text: 'OK', onPress: () => router.replace(`/cellar/rack/${selectedRackId}` as any) }],
             });
           } else {
+            // No confirmation popup — landing on the rack with the bottles in
+            // place is confirmation enough; keep the add flow quick so the user
+            // can move straight to the next wine.
             router.replace(`/cellar/rack/${selectedRackId}` as any);
-            confirmSaved(`${placed.length} bottle${placed.length === 1 ? '' : 's'} placed in ${rack.name} — and added to your Full Cellar List.`, true);
           }
           return;
         }
