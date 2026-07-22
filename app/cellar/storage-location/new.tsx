@@ -6,7 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
-import { createStorageLocation, setStorageLocationPhoto } from '../../../src/api/storageLocations';
+import { createStorageLocation, setStorageLocationPhoto, deleteStorageLocation } from '../../../src/api/storageLocations';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { showAlert } from '../../../src/components/AppAlert';
 import { colors, spacing } from '../../../src/constants/theme';
@@ -43,13 +43,21 @@ export default function NewStorageLocationScreen() {
     if (!name.trim()) { showAlert({ title: 'Name needed', body: 'Give this location a name — e.g. "The shed".' }); return; }
     if (!photoUri) { showAlert({ title: 'Photo needed', body: 'Add a photo of the space first.' }); return; }
     setSaving(true);
+    // Track the row so we can roll it back if a later step fails — otherwise a
+    // flaky upload leaves a committed, photo-less location behind and a retry
+    // creates a duplicate (D4).
+    let createdId: string | null = null;
     try {
       const loc = await createStorageLocation(session.user.id, name);
+      createdId = loc.id;
       const path = await uploadLocationPhoto(session.user.id, photoUri, loc.id);
       await setStorageLocationPhoto(loc.id, path);
       qc.invalidateQueries({ queryKey: ['storage-locations', session.user.id] });
       router.replace(`/cellar/storage-location/${loc.id}` as any);
     } catch (err) {
+      if (createdId) {
+        try { await deleteStorageLocation(createdId); } catch { /* best-effort rollback */ }
+      }
       showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
       setSaving(false);
     }

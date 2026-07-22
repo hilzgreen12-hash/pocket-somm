@@ -13,13 +13,15 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
     .from('storage_locations')
     // Pull the (non-archived) wines' quantities so the card shows a real BOTTLE
     // count — the old embedded count(*) counted rows and included archived wines.
-    .select(`${LIST_COLS}, cellar_wines(quantity, archived_at)`)
+    .select(`${LIST_COLS}, cellar_wines(quantity, archived_at, is_wishlist)`)
     .eq('user_id', userId)
     .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []).map((r: any) => {
-    const wines: Array<{ quantity?: number | null; archived_at?: string | null }> = Array.isArray(r.cellar_wines) ? r.cellar_wines : [];
-    const wineCount = wines.filter((w) => !w.archived_at).reduce((sum, w) => sum + (w.quantity ?? 1), 0);
+    const wines: Array<{ quantity?: number | null; archived_at?: string | null; is_wishlist?: boolean | null }> = Array.isArray(r.cellar_wines) ? r.cellar_wines : [];
+    // Exclude wishlist wines (unowned) — they aren't physically stored here, so
+    // they must not inflate the bottle count. Mirrors the rack path (S2).
+    const wineCount = wines.filter((w) => !w.archived_at && !w.is_wishlist).reduce((sum, w) => sum + (w.quantity ?? 1), 0);
     return {
       id: r.id,
       user_id: r.user_id,
@@ -62,14 +64,24 @@ export async function renameStorageLocation(id: string, name: string): Promise<v
 }
 
 export async function deleteStorageLocation(id: string): Promise<void> {
-  // Grab the photo path before deleting the row so we can clean up Storage too.
-  const { data } = await supabase.from('storage_locations').select('photo_path').eq('id', id).maybeSingle();
+  // Grab user_id + photo path before deleting so we can clean up Storage too.
+  // We capture (not drop) the read error — cleanup is best-effort, but the read
+  // failing is worth not swallowing silently (B1).
+  const { data, error: readErr } = await supabase
+    .from('storage_locations').select('user_id, photo_path').eq('id', id).maybeSingle();
   const { error } = await supabase.from('storage_locations').delete().eq('id', id);
   if (error) throw error;
-  const path = (data as { photo_path?: string | null } | null)?.photo_path;
-  if (path) {
-    try { await supabase.storage.from('wine-labels').remove([path]); } catch { /* best-effort cleanup */ }
+  const row = data as { user_id?: string; photo_path?: string | null } | null;
+  const paths = new Set<string>();
+  if (row?.photo_path) paths.add(row.photo_path);
+  // Also remove the DETERMINISTIC upload path — so a photo that was uploaded but
+  // whose photo_path never persisted (D5) is still cleaned up rather than
+  // orphaned in the bucket forever.
+  if (row?.user_id) paths.add(`${row.user_id}/locations/${id}.jpg`);
+  if (paths.size > 0) {
+    try { await supabase.storage.from('wine-labels').remove([...paths]); } catch { /* best-effort cleanup */ }
   }
+  if (readErr) { /* tolerated: the row delete above is the operation that matters */ }
 }
 
 // Wines physically filed into this location (newest first).
@@ -79,6 +91,9 @@ export async function fetchStorageLocationWines(locationId: string): Promise<Cel
     .select('*')
     .eq('storage_location_id', locationId)
     .is('archived_at', null)
+    // Wishlist wines aren't physically here — exclude them so the location list
+    // and its count match the racks (S2).
+    .eq('is_wishlist', false)
     .order('created_at', { ascending: false });
   if (error) throw error;
   return (data ?? []) as CellarWine[];
