@@ -5,28 +5,31 @@ import type { WineRack, BinCell, CellarWine } from '../types/wine';
 // interior cells are full diamonds, cells on the edge of the unit are triangles
 // holding half a diamond's capacity.
 
-// Which cells are edge cells (triangles)? A cell on the outer border of the
-// `across × down` grid. Interior cells are full diamonds. (Simple, explainable
-// rule — the visual can be refined later without touching the data model.)
-function isEdge(row: number, col: number, across: number, down: number): boolean {
-  return row === 0 || row === down - 1 || col === 0 || col === across - 1;
-}
-
 export interface BinCellSpec { idx: number; kind: 'diamond' | 'triangle'; capacity: number }
 
-// Build the cell list for a diamond unit. Triangles get half the per-diamond
-// capacity (rounded down, min 1).
+// The number of half-diamond TRIANGLES that fill the perimeter gaps around an
+// across × down block of full diamonds — one per diamond along each of the four
+// edges. (A 2×2 block → 8 edge triangles.) Kept as a named helper so the sizer
+// preview and the DB cell generation always agree.
+export function binTriangleCount(across: number, down: number): number {
+  return 2 * (across + down);
+}
+
+// Build the cell list for a diamond bin: an across × down grid of FULL diamonds,
+// then the perimeter triangles filling the edge gaps around them. Triangles hold
+// half a diamond's capacity (rounded down, min 1).
 export function buildBinCells(across: number, down: number, diamondCapacity: number): BinCellSpec[] {
   const cells: BinCellSpec[] = [];
+  let idx = 0;
   for (let r = 0; r < down; r++) {
     for (let c = 0; c < across; c++) {
-      const edge = isEdge(r, c, across, down);
-      cells.push({
-        idx: r * across + c,
-        kind: edge ? 'triangle' : 'diamond',
-        capacity: edge ? Math.max(1, Math.floor(diamondCapacity / 2)) : diamondCapacity,
-      });
+      cells.push({ idx: idx++, kind: 'diamond', capacity: diamondCapacity });
     }
+  }
+  const triCap = Math.max(1, Math.floor(diamondCapacity / 2));
+  const triangles = binTriangleCount(across, down);
+  for (let t = 0; t < triangles; t++) {
+    cells.push({ idx: idx++, kind: 'triangle', capacity: triCap });
   }
   return cells;
 }
