@@ -1644,7 +1644,7 @@ export default function CellarWineDetail() {
           </TouchableOpacity>
         ) : (
           <TouchableOpacity style={styles.chefBtn} onPress={handleFindPairings}>
-            <Text style={styles.chefBtnText}>Chef, find me a recipe for this wine</Text>
+            <Text style={styles.chefBtnText}>Find me a recipe for this wine</Text>
           </TouchableOpacity>
         )
       )}
