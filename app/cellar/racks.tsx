@@ -113,7 +113,7 @@ export default function RacksScreen() {
     });
   }
 
-  // The "+ Add" tile in the Other Home Storage Locations carousel. Grid = yes →
+  // The "+ Add" tile in the Other Home Storage carousel. Grid = yes →
   // treat it like a rack and reuse the rack build flow. Grid = no → the bespoke
   // photo-a-space flow (built separately).
   function handleAddLocationPrompt() {
@@ -222,10 +222,10 @@ export default function RacksScreen() {
 
           <View style={styles.divider} />
 
-          {/* Other Home Storage Locations — the user's own free-form home
+          {/* Other Home Storage — the user's own free-form home
               places (shed, under the bed…). A distinct concept from the Cellar
               List "Locations" filter, so those are NOT shown here. */}
-          <Text style={styles.blockHeader}>Other Home Storage Locations</Text>
+          <Text style={styles.blockHeader}>Other Home Storage</Text>
           <Text style={styles.blockBlurb}>
             Add bespoke locations: In the shed, under the bed…
           </Text>
