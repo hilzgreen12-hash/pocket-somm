@@ -6,6 +6,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getRackBottleCounts } from '../../src/api/racks';
+import { getBins, getBinBottleCounts } from '../../src/api/bins';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -50,6 +51,19 @@ export default function RacksScreen() {
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
+  // Bins (diamond, count-based) — top-level furniture shown in the same
+  // "Racks, Fridges & Bins" carousel as racks/fridges.
+  const { data: bins = [] } = useQuery({
+    queryKey: ['bins', userId],
+    queryFn: () => getBins(userId!),
+    enabled: !!userId,
+  });
+  const binIds = bins.map((b) => b.id);
+  const { data: binCounts = {} } = useQuery({
+    queryKey: ['bins', 'counts', binIds],
+    queryFn: () => getBinBottleCounts(binIds),
+    enabled: binIds.length > 0,
+  });
   // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
   // that storage type (photograph vs manual layout).
   const [chooser, setChooser] = useState<'rack' | 'fridge' | null>(null);
@@ -90,9 +104,10 @@ export default function RacksScreen() {
   // fridges (one placed slot = one bottle) and other locations (summed
   // quantities) — and how many containers there are in total.
   const rackBottles = Object.values(rackCounts).reduce((sum: number, n: number) => sum + n, 0);
+  const binBottles = Object.values(binCounts).reduce((sum: number, n: number) => sum + n, 0);
   const locationBottles = storageLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
-  const totalBottles = rackBottles + locationBottles;
-  const totalLocations = racks.length + storageLocations.length;
+  const totalBottles = rackBottles + binBottles + locationBottles;
+  const totalLocations = racks.length + bins.length + storageLocations.length;
 
   // Open the photograph-or-manual chooser for the requested storage type.
   function handleAddType(type: 'rack' | 'fridge') {
@@ -108,6 +123,7 @@ export default function RacksScreen() {
       buttons: [
         { text: 'Add a Wine Rack', onPress: () => handleAddType('rack') },
         { text: 'Add a Wine Fridge', onPress: () => handleAddType('fridge') },
+        { text: 'Add a Wine Bin', onPress: () => router.push('/cellar/bin/new' as any) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
@@ -214,6 +230,18 @@ export default function RacksScreen() {
                 count={rackCounts[rack.id] ?? 0}
                 onLongPress={() => handleLongPressRack(rack)}
               />
+            ))}
+            {bins.map((bin) => (
+              <TouchableOpacity
+                key={bin.id}
+                style={styles.storageCard}
+                onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.storageCardType}>Bin</Text>
+                <Text style={styles.storageCardName} numberOfLines={2}>{bin.name}</Text>
+                <Text style={styles.storageCardCount}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
+              </TouchableOpacity>
             ))}
             <TouchableOpacity style={styles.addTile} onPress={handleAddStoragePrompt} activeOpacity={0.85}>
               <Text style={styles.addTilePlus}>+ Add</Text>

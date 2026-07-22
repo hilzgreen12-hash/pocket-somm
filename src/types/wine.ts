@@ -193,6 +193,10 @@ export interface CellarWine {
   // boxed in, within its storage location. Optional/nullable — loose bottles
   // have no case.
   case_id?: string | null;
+  // Migration 072. The bin diamond/triangle cell this wine is filed into, if
+  // any. Count-based (the row's quantity is how many bottles are in the cell).
+  // Optional/nullable — non-bin wines have none.
+  bin_cell_id?: string | null;
   user_notes: string | null;
   // Migration 043. The user's WRITTEN REVIEW — sharable to community
   // and outside the app. Distinct from user_notes (Personal Notes,
@@ -260,15 +264,37 @@ export interface WineRack {
   id: string;
   user_id: string;
   name: string;
+  // On bins (migration 072) these are NULL in the DB — bins are count-based,
+  // not a slot grid — but bins never go through the rack rows/cols code paths,
+  // so the type stays `number` to keep the rack call sites clean.
   rows: number;
   cols: number;
-  storage_type: 'rack' | 'fridge';
+  storage_type: 'rack' | 'fridge' | 'bin';
   created_at: string;
   // Optional large-format row that sits above the standard grid. Both
   // null = no special row. Slots in this row use row_index = -1 in
   // rack_slots; columns 0..large_format_cols-1.
   large_format_cols: number | null;
   large_format_bottle_size_ml: number | null;
+  // Bin fields (migration 072, storage_type='bin' only). The diamond grid
+  // arrangement and per-full-diamond bottle capacity. NULL on racks/fridges.
+  diamonds_across?: number | null;
+  diamonds_down?: number | null;
+  diamond_capacity?: number | null;
+}
+
+// A single cell of a wine bin (migration 072). Interior cells are full
+// diamonds; cells on the edge of the unit are triangles holding half.
+export interface BinCell {
+  id: string;
+  bin_id: string;
+  idx: number;
+  kind: 'diamond' | 'triangle';
+  capacity: number;
+  // Joined in when listing a bin's cells: the wines filed into this cell and
+  // the summed bottle count, for the fill meter.
+  wines?: CellarWine[];
+  bottleCount?: number;
 }
 
 export interface RackSlot {
