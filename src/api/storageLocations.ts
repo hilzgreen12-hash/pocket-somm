@@ -109,9 +109,23 @@ export async function assignWineToStorageLocation(wineId: string, locationId: st
 
 const CASE_COLS = 'id, user_id, storage_location_id, name, kind, note, created_at';
 
+// Case packaging kinds (migration 073). Loose is a UI-only choice (no case row).
+export type CaseKind = 'single' | 'mixed' | 'owc' | 'non_owc';
+
+// User-facing label for a case's packaging kind, shared across the add flow,
+// the location card chips and the Cases filter so the wording stays in sync.
+export function caseKindLabel(kind: string): string {
+  switch (kind) {
+    case 'owc': return 'OWC Complete';
+    case 'non_owc': return 'Non-OWC Complete';
+    case 'mixed': return 'Mixed';
+    default: return 'Case'; // legacy 'single'
+  }
+}
+
 export async function createStorageCase(
   userId: string,
-  input: { storageLocationId: string; name: string; kind: 'single' | 'mixed'; note?: string | null },
+  input: { storageLocationId: string; name: string; kind: CaseKind; note?: string | null },
 ): Promise<StorageCase> {
   const { data, error } = await supabase
     .from('storage_cases')
