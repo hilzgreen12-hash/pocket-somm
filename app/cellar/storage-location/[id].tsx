@@ -44,6 +44,14 @@ const CASE_FILTER_OPTIONS: { value: string; label: string }[] = [
   { value: 'mixed', label: 'Mixed' },
 ];
 
+// The "List" chip is a view-mode picker: the default grouped view, a flat bottle
+// list (like the Full Cellar List), or a summary list of the cases/boxes.
+const LIST_VIEW_OPTIONS: { value: 'default' | 'bottles' | 'cases'; label: string }[] = [
+  { value: 'default', label: 'List' },
+  { value: 'bottles', label: 'Full Bottle List' },
+  { value: 'cases', label: 'Cases List' },
+];
+
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 }
@@ -58,6 +66,8 @@ export default function StorageLocationScreen() {
   const [maturityOpen, setMaturityOpen] = useState(false);
   const [casesFilter, setCasesFilter] = useState('');
   const [casesOpen, setCasesOpen] = useState(false);
+  const [listView, setListView] = useState<'default' | 'bottles' | 'cases'>('default');
+  const [listOpen, setListOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   // Multi-select — long-press a wine to select, then bulk archive / delete /
   // remove-from-location. Mirrors the Full Cellar List select-mode.
@@ -501,15 +511,17 @@ export default function StorageLocationScreen() {
             then a "Maturity" dropdown, so the affordance is consistent. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           <TouchableOpacity
-            style={[styles.filterChip, (!maturity && !casesFilter) && styles.filterChipActive]}
-            onPress={() => { setMaturity(''); setCasesFilter(''); setMaturityOpen(false); setCasesOpen(false); }}
+            style={[styles.filterChip, listView !== 'default' && styles.filterChipActive]}
+            onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setCasesOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, (!maturity && !casesFilter) && styles.filterChipTextActive]}>List</Text>
+            <Text style={[styles.filterChipText, listView !== 'default' && styles.filterChipTextActive]}>
+              {LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List'} {listOpen ? '▴' : '▾'}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
-            onPress={() => { setMaturityOpen((v) => !v); setCasesOpen(false); }}
+            onPress={() => { setMaturityOpen((v) => !v); setCasesOpen(false); setListOpen(false); }}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]}>
@@ -518,7 +530,7 @@ export default function StorageLocationScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterChip, casesFilter ? styles.filterChipActive : null]}
-            onPress={() => { setCasesOpen((v) => !v); setMaturityOpen(false); }}
+            onPress={() => { setCasesOpen((v) => !v); setMaturityOpen(false); setListOpen(false); }}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, casesFilter ? styles.filterChipTextActive : null]}>
@@ -526,6 +538,19 @@ export default function StorageLocationScreen() {
             </Text>
           </TouchableOpacity>
         </ScrollView>
+
+        {listOpen ? (
+          <View style={styles.maturityDropdown}>
+            {LIST_VIEW_OPTIONS.map((o) => {
+              const active = listView === o.value;
+              return (
+                <TouchableOpacity key={o.value} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setListView(o.value); setListOpen(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
 
         {maturityOpen ? (
           <View style={styles.maturityDropdown}>
@@ -569,7 +594,32 @@ export default function StorageLocationScreen() {
           ) : null}
         </View>
 
-        {filtered.length === 0 && caseGroups.length === 0 ? (
+        {listView === 'bottles' ? (
+          filtered.length === 0 ? (
+            <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your filters.'}</Text>
+          ) : (
+            <View style={styles.listSection}>{filtered.map(renderWine)}</View>
+          )
+        ) : listView === 'cases' ? (
+          caseGroups.length === 0 ? (
+            <Text style={styles.emptyList}>No cases here yet.</Text>
+          ) : (
+            <View style={styles.listSection}>
+              {caseGroups.map((g) => {
+                const count = wines.filter((w) => w.case_id === g.box.id).reduce((s, w) => s + (w.quantity ?? 0), 0);
+                return (
+                  <TouchableOpacity key={g.box.id} style={styles.caseListRow} onPress={() => openAddToCase(g.box)} onLongPress={() => openCaseMenu(g.box)} delayLongPress={350} activeOpacity={0.7}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
+                      <Text style={styles.caseListMeta} numberOfLines={1}>{caseKindLabel(g.box.kind)} · {location.name} · {count} {count === 1 ? 'bottle' : 'bottles'}</Text>
+                    </View>
+                    <Text style={styles.caseAdd}>›</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )
+        ) : filtered.length === 0 && caseGroups.length === 0 ? (
           <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your search.'}</Text>
         ) : (
           <View style={styles.listSection}>
@@ -746,6 +796,8 @@ const styles = StyleSheet.create({
   caseNoteText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 3 },
   caseAdd: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   looseHeader: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.sm, marginBottom: spacing.xs },
+  caseListRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  caseListMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
   caseModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center' },
   caseModalScroll: { flexGrow: 1, justifyContent: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl },
   caseModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
