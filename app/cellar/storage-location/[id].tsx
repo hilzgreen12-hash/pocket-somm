@@ -267,6 +267,56 @@ export default function StorageLocationScreen() {
     });
   }
 
+  // Per-wine action runner (single wine) — same invalidation + empty-case
+  // cleanup as runBulk.
+  async function runSingle(verb: string, wid: string, action: (id: string) => Promise<void>) {
+    setBusy(true);
+    try {
+      await action(wid);
+      await deleteEmptyCasesForLocation(id).catch(() => {});
+      invalidateAfterBulk();
+      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
+    } catch (err) {
+      showAlert({ title: `Could not ${verb.toLowerCase()}`, body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally { setBusy(false); }
+  }
+
+  // Long-press a wine → a per-wine action pop-up (replaces the select-mode dark
+  // bar), for consistency with the rack/fridge grids.
+  function openWineActions(w: CellarWine) {
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      buttons: [
+        { text: 'Remove from Location', onPress: () => showAlert({
+          title: `Remove from ${location?.name ?? 'this location'}?`,
+          body: 'It stays in your cellar as a loose bottle — this only takes it out of this location.',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Remove', onPress: () => runSingle('Removed', w.id, async (wid) => { await assignWineToCase(wid, null); await assignWineToStorageLocation(wid, null); }) },
+          ],
+        }) },
+        { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/${w.id}` as any) },
+        { text: 'Archive', onPress: () => showAlert({
+          title: 'Archive this wine?',
+          body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Archive', onPress: () => runSingle('Archived', w.id, async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
+          ],
+        }) },
+        { text: 'Delete', style: 'destructive', onPress: () => showAlert({
+          title: 'Delete this wine?',
+          body: "Permanently remove it from your records. This can't be undone.",
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete (permanent)', style: 'destructive', onPress: () => runSingle('Deleted', w.id, async (wid) => { await clearWineFromRacks(wid); await deleteCellarWine(wid); }) },
+          ],
+        }) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   // Rename this location (U1 — renameStorageLocation had no caller/UI).
   const [renaming, setRenaming] = useState(false);
   const [renameVal, setRenameVal] = useState('');
@@ -381,7 +431,7 @@ export default function StorageLocationScreen() {
         key={w.id}
         style={[styles.wineRow, isSelected && styles.wineRowSelected]}
         onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}` as any); }}
-        onLongPress={() => { if (!selectMode) enterSelect(w.id); }}
+        onLongPress={() => openWineActions(w)}
         delayLongPress={400}
         activeOpacity={0.7}
       >
