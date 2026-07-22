@@ -64,10 +64,6 @@ export default function RacksScreen() {
     queryFn: () => getBinBottleCounts(binIds),
     enabled: binIds.length > 0,
   });
-  // null = chooser closed; 'rack' / 'fridge' = open, asking how to build
-  // that storage type (photograph vs manual layout).
-  const [chooser, setChooser] = useState<'rack' | 'fridge' | null>(null);
-
   function handleLongPressRack(rack: WineRack) {
     showAlert({
       title: rack.name,
@@ -109,9 +105,13 @@ export default function RacksScreen() {
   const totalBottles = rackBottles + binBottles + locationBottles;
   const totalLocations = racks.length + bins.length + storageLocations.length;
 
-  // Open the photograph-or-manual chooser for the requested storage type.
+  // Straight into the corner-pull sizer — the photograph/manual chooser is
+  // retired for both racks and fridges.
   function handleAddType(type: 'rack' | 'fridge') {
-    setChooser(type);
+    clearStalePendingWine();
+    resetRackStore();
+    setPendingStorageType(type);
+    router.push('/cellar/rack/resize' as any);
   }
 
   // The "+ Add" tile in the Wine Racks & Fridges carousel — first asks which
@@ -123,7 +123,7 @@ export default function RacksScreen() {
       buttons: [
         { text: 'Add a Wine Rack', onPress: () => handleAddType('rack') },
         { text: 'Add a Wine Fridge', onPress: () => handleAddType('fridge') },
-        { text: 'Add a Wine Bin', onPress: () => router.push('/cellar/bin/new' as any) },
+        { text: 'Add a Wine Bin', onPress: () => router.push('/cellar/bin/resize' as any) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
@@ -153,28 +153,6 @@ export default function RacksScreen() {
   function clearStalePendingWine() {
     setPendingWineId(null);
     setPendingAddMode(false);
-  }
-
-  // "Photograph your rack/fridge" — the existing camera-then-detect flow.
-  function handleChoosePhotograph() {
-    if (!chooser) return;
-    clearStalePendingWine();
-    setPendingStorageType(chooser);
-    setChooser(null);
-    router.push('/cellar/rack/camera');
-  }
-
-  // "Manually Select Layout" — skip the camera and drop the user straight
-  // onto the Confirm Rack / Confirm Fridge page with default 4×6 dims that
-  // they can tweak before saving. Reset first so any stale image / dims
-  // from a previous photograph attempt don't bleed through.
-  function handleChooseManual() {
-    if (!chooser) return;
-    clearStalePendingWine();
-    resetRackStore();
-    setPendingStorageType(chooser);
-    setChooser(null);
-    router.push('/cellar/rack/detect');
   }
 
   if (isLoading) {
@@ -278,33 +256,6 @@ export default function RacksScreen() {
         </ScrollView>
       )}
 
-      {/* Photograph / manual chooser for Add Wine Rack & Add Wine Fridge.
-          The photograph path runs the camera + auto-detect flow; the
-          manual path skips the camera and drops the user straight on the
-          Confirm Rack/Fridge page so they can set dimensions by hand. */}
-      <Modal visible={chooser !== null} transparent animationType="fade" onRequestClose={() => setChooser(null)}>
-        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooser(null)}>
-          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
-            <Text style={styles.chooserTitle}>
-              {chooser === 'fridge' ? 'Add Wine Fridge' : 'Add Wine Rack'}
-            </Text>
-            <Text style={styles.chooserBody}>
-              How would you like to build it?
-            </Text>
-            <TouchableOpacity style={styles.chooserBtn} onPress={handleChoosePhotograph} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>
-                {chooser === 'fridge' ? 'Photograph your fridge' : 'Photograph your rack'}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.chooserBtn, styles.chooserBtnSecondary]} onPress={handleChooseManual} activeOpacity={0.8}>
-              <Text style={[styles.chooserBtnText, styles.chooserBtnTextSecondary]}>Manually Select Layout</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setChooser(null)} style={styles.chooserCancel}>
-              <Text style={styles.chooserCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
     </View>
   );
 }
