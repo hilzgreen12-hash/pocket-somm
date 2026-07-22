@@ -74,8 +74,9 @@ export default function LineupLibraryScreen() {
   });
 
   const [favFilter, setFavFilter] = useState<'all' | 'fav'>('all');
+  const [cityFilter, setCityFilter] = useState<string>('All');
   const [monthFilter, setMonthFilter] = useState<string>('All');
-  const [openDropdown, setOpenDropdown] = useState<'fav' | 'month' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'fav' | 'city' | 'month' | null>(null);
 
   // "+ Add" a lineup straight from a photo — no cellar match, no bottle count,
   // just the picture. Once saved it behaves exactly like an Archive-a-Night
@@ -117,9 +118,18 @@ export default function LineupLibraryScreen() {
     return [{ value: 'All', label: 'All months' }, ...seen.map((m) => ({ value: m, label: m }))];
   }, [lineups]);
 
+  // City options — distinct cities the lineups were captured in, alphabetical.
+  const cityOptions = useMemo(() => {
+    const seen: string[] = [];
+    for (const l of lineups) { const c = (l.city ?? '').trim(); if (c && !seen.includes(c)) seen.push(c); }
+    seen.sort((a, b) => a.localeCompare(b));
+    return [{ value: 'All', label: 'All cities' }, ...seen.map((c) => ({ value: c, label: c }))];
+  }, [lineups]);
+
   const filtered = useMemo(() => {
     let list = lineups;
     if (favFilter === 'fav') list = list.filter((l) => l.is_favourite);
+    if (cityFilter !== 'All') list = list.filter((l) => (l.city ?? '').trim() === cityFilter);
     if (monthFilter !== 'All') list = list.filter((l) => monthKey(l.archived_at) === monthFilter);
     if (activeCustomId) {
       const f = customFilters.find((cf) => cf.id === activeCustomId);
@@ -127,7 +137,7 @@ export default function LineupLibraryScreen() {
       list = list.filter((l) => ids.has(l.id));
     }
     return list;
-  }, [lineups, favFilter, monthFilter, activeCustomId, customFilters]);
+  }, [lineups, favFilter, cityFilter, monthFilter, activeCustomId, customFilters]);
 
   function applyCustom(id: string) {
     setActiveCustomId((prev) => (prev === id ? null : id));
@@ -284,10 +294,13 @@ export default function LineupLibraryScreen() {
   const tileWidth = (width - spacing.xl * 2 - gap * (cols - 1)) / cols;
 
   const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All lineups';
+  const cityLabel = cityFilter === 'All' ? 'All cities' : cityFilter;
   const monthLabel = monthFilter === 'All' ? 'All months' : monthFilter;
 
   const dropdown = openDropdown === 'fav'
     ? { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v: string) => setFavFilter(v as 'all' | 'fav') }
+    : openDropdown === 'city'
+    ? { title: 'City', options: cityOptions, selected: cityFilter, onSelect: (v: string) => setCityFilter(v) }
     : openDropdown === 'month'
     ? { title: 'Month enjoyed', options: monthOptions, selected: monthFilter, onSelect: (v: string) => setMonthFilter(v) }
     : null;
@@ -359,6 +372,13 @@ export default function LineupLibraryScreen() {
                 <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, favFilter !== 'all' && { color: colors.gold }]} numberOfLines={1}>{favLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.filterChip, cityFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('city')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>City</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'city' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, cityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{cityLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.filterChip, monthFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>

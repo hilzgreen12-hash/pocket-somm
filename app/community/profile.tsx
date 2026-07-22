@@ -100,7 +100,7 @@ export default function CommunityProfileScreen() {
 
             {/* Chef personality — posted from the user's Profile screen */}
             <PersonalityBlock
-              title="Chef personality"
+              title="Foodie personality"
               publishedText={published?.recipe_personality ?? null}
               onUnpublish={() => unpublish('recipe_personality')}
             />
@@ -143,7 +143,7 @@ function PersonalityBlock({
           </TouchableOpacity>
         </>
       ) : (
-        <Text style={styles.helper}>Not yet posted to your community profile. You can post it from Your Profile → Wine/Chef Personality.</Text>
+        <Text style={styles.helper}>Not yet posted to your community profile. You can post it from Your Profile → Wine/Foodie Personality.</Text>
       )}
     </View>
   );
