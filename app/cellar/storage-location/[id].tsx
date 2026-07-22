@@ -4,7 +4,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, assignWineToStorageLocation, fetchStorageLocationCases, updateStorageCase, deleteStorageCase } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
@@ -127,13 +127,28 @@ export default function StorageLocationScreen() {
     if (!location) return;
     showAlert({
       title: location.name,
-      body: 'Remove this storage location? The wines in it stay in your cellar — they just become loose bottles again.',
+      body: 'Manage this storage location.',
       buttons: [
+        {
+          text: 'Rename location',
+          onPress: () => { setRenameVal(location.name); setRenaming(true); },
+        },
         {
           text: 'Delete location',
           style: 'destructive',
           onPress: async () => {
-            try { await deleteStorageLocation(location.id); router.back(); }
+            try {
+              await deleteStorageLocation(location.id);
+              // Every other mutation here invalidates; this one didn't, leaving
+              // the deleted card + its bottle count on Home Storage and the
+              // wines under a stale sloc: filter (S1).
+              qc.invalidateQueries({ queryKey: ['storage-locations'] });
+              qc.invalidateQueries({ queryKey: ['storage-location', id] });
+              qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+              qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              router.back();
+            }
             catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
           },
         },
@@ -188,7 +203,7 @@ export default function StorageLocationScreen() {
       body: 'They move to Your Archive and leave this location. Your reviews and history stay.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => { await clearWineFromRacks(wid); await archiveCellarWine(wid); }) },
+        { text: 'Archive Wines', onPress: () => runBulk('Archived', async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
       ],
     });
   }
@@ -212,9 +227,24 @@ export default function StorageLocationScreen() {
       body: 'They stay in your cellar as loose bottles — this only takes them out of this location.',
       buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove from location', onPress: () => runBulk('Removed', (wid) => assignWineToStorageLocation(wid, null)) },
+        // Clear case_id too — otherwise a removed wine keeps a stale pointer to
+        // a case still living in the old location (D3).
+        { text: 'Remove from location', onPress: () => runBulk('Removed', async (wid) => { await assignWineToCase(wid, null); await assignWineToStorageLocation(wid, null); }) },
       ],
     });
+  }
+
+  // Rename this location (U1 — renameStorageLocation had no caller/UI).
+  const [renaming, setRenaming] = useState(false);
+  const [renameVal, setRenameVal] = useState('');
+  async function saveRename() {
+    if (!location || !renameVal.trim()) { setRenaming(false); return; }
+    try {
+      await renameStorageLocation(location.id, renameVal);
+      qc.invalidateQueries({ queryKey: ['storage-location', id] });
+      qc.invalidateQueries({ queryKey: ['storage-locations'] });
+      setRenaming(false);
+    } catch (err) { showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' }); }
   }
 
   // ---- Cases ----
@@ -273,9 +303,11 @@ export default function StorageLocationScreen() {
   }
 
   // Wines split into their cases + the loose remainder (search/maturity applied).
+  // Render EVERY case, even one with zero (matching) wines — otherwise an
+  // emptied case vanishes with no route left to its Dissolve menu (D1), and a
+  // search that excludes a case's wines hides its "+ Add" (U2).
   const caseGroups = cases
-    .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) }))
-    .filter((g) => g.wines.length > 0);
+    .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) }));
   const looseFiltered = filtered.filter((w) => !w.case_id);
 
   const renderWine = (w: CellarWine) => {
@@ -380,7 +412,7 @@ export default function StorageLocationScreen() {
           ))}
         </ScrollView>
 
-        {filtered.length === 0 ? (
+        {filtered.length === 0 && caseGroups.length === 0 ? (
           <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your search.'}</Text>
         ) : (
           <View style={styles.listSection}>
@@ -439,6 +471,24 @@ export default function StorageLocationScreen() {
       )}
 
       {/* Edit a case's name + note */}
+      <Modal visible={renaming} transparent animationType="fade" onRequestClose={() => setRenaming(false)}>
+        <View style={styles.caseModalOverlay}>
+          <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+            <View style={styles.caseModalSheet}>
+              <Text style={styles.caseModalTitle}>Rename location</Text>
+              <Text style={styles.caseModalLabel}>Name</Text>
+              <TextInput style={styles.caseModalInput} value={renameVal} onChangeText={setRenameVal} placeholder="Location name" placeholderTextColor={colors.textSubtle} />
+              <TouchableOpacity style={styles.caseModalSave} onPress={saveRename} activeOpacity={0.85}>
+                <Text style={styles.caseModalSaveText}>Save</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.caseModalCancel} onPress={() => setRenaming(false)}>
+                <Text style={styles.caseModalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAwareScrollView>
+        </View>
+      </Modal>
+
       <Modal visible={caseEdit !== null} transparent animationType="fade" onRequestClose={() => setCaseEdit(null)}>
         <View style={styles.caseModalOverlay}>
           <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>

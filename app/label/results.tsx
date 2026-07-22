@@ -16,14 +16,14 @@ import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
-import { createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
+import { createStorageCase, assignWineToCase, deleteStorageCase } from '../../src/api/storageLocations';
 import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
-import { assignSlots, getRackSlots, getSlotAssignments } from '../../src/api/racks';
+import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -468,6 +468,10 @@ export default function LabelResultsScreen() {
     // harmless on any other flow). File the saved wine in and return to it.
     if (pendingStorageLocationId && context === 'add-location') {
       const locQty = Math.max(1, bottleCount);
+      // Filing into a location means the wine is no longer racked. A re-scanned
+      // wine that already sat in a rack would otherwise be counted twice — once
+      // via its rack slots and once via the location's summed quantity (S3).
+      await clearWineFromRacks(savedWineId);
       await updateWine.mutateAsync({
         id: savedWineId,
         updates: { quantity: mode === 'merge' ? baseQuantity + locQty : locQty, storage_location_id: pendingStorageLocationId },
@@ -485,7 +489,15 @@ export default function LabelResultsScreen() {
             kind: storageKind,
             note: caseNote,
           });
-          await assignWineToCase(savedWineId, created.id);
+          try {
+            await assignWineToCase(savedWineId, created.id);
+          } catch (assignErr) {
+            // Roll back the just-created case — a create that succeeds followed
+            // by a failed assign otherwise commits a zero-member case that (per
+            // D1) is invisible and undeletable (D2).
+            try { await deleteStorageCase(created.id); } catch { /* best-effort */ }
+            throw assignErr;
+          }
         }
       } catch { /* wine is still filed in the location */ }
       qc.invalidateQueries({ queryKey: ['cellar'] });
