@@ -237,7 +237,7 @@ export default function ArchiveNightScreen() {
         !permission ? (
           <View style={styles.cameraWrap} />
         ) : !permission.granted ? (
-          <PermissionScreen onRequest={requestPermission} />
+          <PermissionScreen onRequest={requestPermission} hideBack />
         ) : (
           <View style={styles.cameraWrap}>
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" autofocus="on" />
