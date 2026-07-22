@@ -175,7 +175,7 @@ export default function RacksScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Home Storage</Text>
+        <Text style={styles.title}>Home Wine Storage</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -201,7 +201,7 @@ export default function RacksScreen() {
 
           {/* Wine Racks & Fridges — a horizontal carousel of racks/fridges with
               a permanent "+ Add" tile at the end. */}
-          <Text style={styles.blockHeader}>Wine Racks & Fridges</Text>
+          <Text style={styles.blockHeader}>Racks, Fridges & Bins</Text>
           <Text style={styles.blockBlurb}>
             Add a wine rack or fridge by photographing or manually inputting it's layout. Once you have your grid set up you can input individual wines, multiples of the same wine, or lineups of up to 6 bottles at a time.
           </Text>

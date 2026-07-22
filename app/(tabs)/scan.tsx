@@ -130,7 +130,7 @@ export default function ScanTab() {
     } finally {
       setScanningLabel(false);
     }
-    router.push('/label/confirm?context=intel');
+    router.push(`/label/confirm?context=intel&backTo=${encodeURIComponent('/(tabs)/scan')}`);
   }
 
   return (
@@ -198,13 +198,18 @@ export default function ScanTab() {
             <Text style={styles.modalBody}>Scan, upload, or enter a wine and Vinster will pull in critic scores, tasting notes, the drinking window and estimated value.</Text>
             <TouchableOpacity
               style={styles.modalButton}
-              onPress={() => { setAddWineOpen(false); router.push('/label/camera?context=intel'); }}
+              onPress={() => { setAddWineOpen(false); router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)/scan')}`); }}
             >
               <Text style={styles.modalButtonText}>Scan Label</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.modalButton, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); handleUploadLabel(); }}
+              // Launch the photo picker AFTER the chooser modal has finished
+              // dismissing — presenting a native picker while this modal is
+              // still animating out silently fails (the picker never appears
+              // and the user is left back on Scan). Scan/Manual navigate away,
+              // so they don't hit this; only Upload opens a native picker.
+              onPress={() => { setAddWineOpen(false); setTimeout(handleUploadLabel, 350); }}
             >
               <Text style={styles.modalButtonText}>Upload A Wine Label</Text>
             </TouchableOpacity>
@@ -215,7 +220,7 @@ export default function ScanTab() {
                 // Clear any prior scan so Confirm Wine Details opens blank
                 // for the user to fill in by hand.
                 resetLabelStore();
-                router.push('/label/confirm?manual=1&context=intel');
+                router.push(`/label/confirm?manual=1&context=intel&backTo=${encodeURIComponent('/(tabs)/scan')}`);
               }}
             >
               <Text style={styles.modalButtonText}>Manual Input</Text>

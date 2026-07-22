@@ -911,6 +911,10 @@ export default function LabelResultsScreen() {
           : isWishlistFlow ? '/cellar/wishlist'
           : isReviewsFlow ? '/wines/chosen'
           : isLineupFlow ? '/cellar/scan-lineup'
+          // Wine Intel is launched from the Scan tab now, so return there by
+          // default rather than the old Cellar home. Non-Scan origins should
+          // still pass an explicit backTo.
+          : isIntelOnlyFlow ? '/(tabs)/scan'
           : '/(tabs)/cellar'
         )}
       >
