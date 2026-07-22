@@ -331,7 +331,7 @@ export default function StorageLocationScreen() {
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
+          <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="contain" />
         ) : null}
 
         {/* Add a wine — filed straight into this location. Scan a wine label,

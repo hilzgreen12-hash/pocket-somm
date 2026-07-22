@@ -12,9 +12,9 @@ import { showAlert } from '../../../src/components/AppAlert';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
-// Create a non-grid home storage location: a PORTRAIT photo of the space + a
-// name. Vinster only accepts portrait images here, so the picker is locked to a
-// 3:4 crop.
+// Create a non-grid home storage location: a photo of the space + a name.
+// The photo is taken as-is (any orientation) and displayed with the whole
+// image visible — no forced crop.
 export default function NewStorageLocationScreen() {
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -24,30 +24,24 @@ export default function NewStorageLocationScreen() {
 
   async function pickPhoto(source: 'camera' | 'library') {
     if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
+    // No allowsEditing: it opened an unexplained native crop screen. Take the
+    // photo as-is (any orientation) and let the display fit the whole image.
     const opts: ImagePicker.ImagePickerOptions = {
       mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [3, 4], // portrait
       quality: 1,
     };
     const res = source === 'camera'
       ? await ImagePicker.launchCameraAsync(opts)
       : await ImagePicker.launchImageLibraryAsync(opts);
     if (res.canceled || !res.assets.length) return;
-    const asset = res.assets[0];
-    // Guard against landscape slipping through if a platform ignores the crop.
-    if (asset.width && asset.height && asset.width > asset.height) {
-      showAlert({ title: 'Portrait only', body: 'Vinster only accepts portrait images for Other Home Storage Locations. Please crop it upright.' });
-      return;
-    }
-    setPhotoUri(asset.uri);
+    setPhotoUri(res.assets[0].uri);
   }
 
   async function handleSave() {
     if (saving) return;
     if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to create a storage location.' }); return; }
     if (!name.trim()) { showAlert({ title: 'Name needed', body: 'Give this location a name — e.g. "The shed".' }); return; }
-    if (!photoUri) { showAlert({ title: 'Photo needed', body: 'Add a portrait photo of the space first.' }); return; }
+    if (!photoUri) { showAlert({ title: 'Photo needed', body: 'Add a photo of the space first.' }); return; }
     setSaving(true);
     try {
       const loc = await createStorageLocation(session.user.id, name);
@@ -72,11 +66,11 @@ export default function NewStorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.notice}>Vinster only accepts portrait images for Other Home Storage Locations.</Text>
+        <Text style={styles.notice}>Add a photo of the space — any orientation is fine.</Text>
 
         {photoUri ? (
           <View style={styles.previewWrap}>
-            <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" />
+            <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="contain" />
             <TouchableOpacity onPress={() => setPhotoUri(null)} style={styles.retakeBtn} activeOpacity={0.7}>
               <Text style={styles.retakeText}>Retake</Text>
             </TouchableOpacity>
@@ -121,7 +115,7 @@ const styles = StyleSheet.create({
   photoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   photoBtnTextSecondary: { color: '#FFFFFF' },
   previewWrap: { alignItems: 'center' },
-  preview: { width: 210, height: 280, borderRadius: 14, backgroundColor: colors.surface },
+  preview: { width: '100%', height: 280, borderRadius: 14, backgroundColor: colors.surface },
   retakeBtn: { marginTop: spacing.sm, paddingVertical: 6, paddingHorizontal: spacing.md },
   retakeText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.xl, marginBottom: 6 },
