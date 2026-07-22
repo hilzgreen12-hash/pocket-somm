@@ -751,26 +751,11 @@ export default function RackGridScreen() {
       setPlacePrechosen(false);
 
       const placed = freeSlots.length;
-      if (pendingAddMode) {
-        // "+ Add bottles" flow: confirm with a popup, then STAY on the live rack
-        // so the user sees the bottles they just placed. (Previously this
-        // router.dismiss(2)'d back, which over-popped to the Cellar tab when the
-        // flow was started from the rack's own long-press — the stack only had
-        // [Cellar tab, rack], so dismissing two routes skipped past the rack.)
-        setPendingAddMode(false);
-        showAlert({
-          title: 'Your bottle has been added',
-          body: placed === 1
-            ? `Added to ${rack?.name ?? 'your rack'} — and in your Full Cellar List.`
-            : `${placed} bottles added to ${rack?.name ?? 'your rack'} — and in your Full Cellar List.`,
-          buttons: [
-            { text: 'View in Full Cellar List', onPress: () => router.replace('/cellar/list') },
-            { text: 'Done', style: 'cancel' },
-          ],
-        });
-      } else {
-        setSavedMsg(placed === 1 ? 'Saved to rack & Cellar List' : `${placed} bottles saved to rack & Cellar List`);
-      }
+      // No confirmation popup on either path — STAY on the live rack with the
+      // bottles visibly placed, and show only a quiet inline note. The wine is
+      // in the rack and the Full Cellar List; the user can move straight on.
+      setPendingAddMode(false);
+      setSavedMsg(placed === 1 ? 'Saved to rack & Cellar List' : `${placed} bottles saved to rack & Cellar List`);
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
