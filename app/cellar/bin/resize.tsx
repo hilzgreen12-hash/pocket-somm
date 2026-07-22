@@ -1,0 +1,220 @@
+import { useRef, useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Animated } from 'react-native';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { router } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
+import { useAuth } from '../../../src/hooks/useAuth';
+import { createBin, binTriangleCount, binTotalCapacity } from '../../../src/api/bins';
+import { showAlert } from '../../../src/components/AppAlert';
+import { colors, spacing } from '../../../src/constants/theme';
+import { fonts } from '../../../src/constants/fonts';
+
+// Size a diamond bin by PULLING its corner — the same inverse-crop gesture as
+// racks/fridges. Pulling adds whole DIAMONDS (an across × down grid); the
+// half-cubby TRIANGLES re-fill every perimeter gap automatically. A frame wraps
+// it all. Starts at 2×2 = four diamonds, per the real-world layout.
+
+const MIN = 1;
+const MAX = 10;
+const DRAG_PER_CELL = 52;   // finger travel (px) that adds/removes one diamond
+const CANVAS_H = 360;
+const MAX_CELL = 64;
+const HANDLE = 44;
+
+export default function BinResizeScreen() {
+  const { session } = useAuth();
+  const qc = useQueryClient();
+  const userId = session?.user.id;
+
+  const [across, setAcross] = useState(2);
+  const [down, setDown] = useState(2);
+  const [capacity, setCapacity] = useState(20);
+  const [name, setName] = useState('My Wine Bin');
+  const [saving, setSaving] = useState(false);
+  const [vpw, setVpw] = useState(0);
+
+  const handleTX = useRef(new Animated.Value(0)).current;
+  const handleTY = useRef(new Animated.Value(0)).current;
+  const base = useRef({ across: 2, down: 2 }).current;
+
+  const diamonds = across * down;
+  const triangles = binTriangleCount(across, down);
+  const total = binTotalCapacity(across, down, capacity);
+
+  // Auto-fit: the whole unit (diamonds + the half-cell triangle border) stays on
+  // screen, so adding diamonds zooms it out. +1 budgets the half-cell edges.
+  const S = Math.min(MAX_CELL, vpw > 0 ? vpw / (across + 1) : MAX_CELL, CANVAS_H / (down + 1));
+  const half = S / 2;
+  const DS = S * 0.7;          // rotated-square side → its diagonal ≈ one cell
+  const triBase = DS;
+  const triH = half * 0.86;
+  const gridW = (across + 1) * S;
+  const gridH = (down + 1) * S;
+  const originLeft = vpw / 2 - gridW / 2;
+  const originTop = CANVAS_H / 2 - gridH / 2;
+
+  const pan = Gesture.Pan()
+    .runOnJS(true)
+    .onStart(() => { base.across = across; base.down = down; })
+    .onUpdate((e) => {
+      handleTX.setValue(e.translationX);
+      handleTY.setValue(e.translationY);
+      const na = Math.min(MAX, Math.max(MIN, base.across + Math.round(e.translationX / DRAG_PER_CELL)));
+      const nd = Math.min(MAX, Math.max(MIN, base.down + Math.round(e.translationY / DRAG_PER_CELL)));
+      if (na !== across) setAcross(na);
+      if (nd !== down) setDown(nd);
+    })
+    .onEnd(() => {
+      Animated.spring(handleTX, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+      Animated.spring(handleTY, { toValue: 0, useNativeDriver: true, speed: 20, bounciness: 6 }).start();
+    });
+
+  async function handleSave() {
+    if (saving) return;
+    if (!userId) { showAlert({ title: 'Sign in needed', body: 'Sign in to create a bin.' }); return; }
+    if (!name.trim()) { showAlert({ title: 'Name needed', body: 'Give this bin a name.' }); return; }
+    setSaving(true);
+    try {
+      const bin = await createBin(userId, name.trim(), across, down, capacity);
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      router.replace(`/cellar/bin/${bin.id}` as any);
+    } catch (err) {
+      showAlert({ title: 'Could not create bin', body: err instanceof Error ? err.message : 'Please try again.' });
+      setSaving(false);
+    }
+  }
+
+  const diamond = { width: DS, height: DS, transform: [{ rotate: '45deg' }], borderWidth: 1.5, borderColor: colors.gold, borderRadius: 2, backgroundColor: colors.surfaceElevated } as const;
+  const triUp = { width: 0, height: 0, borderLeftWidth: triBase / 2, borderRightWidth: triBase / 2, borderBottomWidth: triH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderBottomColor: colors.gold + '66' } as const;
+  const triDown = { width: 0, height: 0, borderLeftWidth: triBase / 2, borderRightWidth: triBase / 2, borderTopWidth: triH, borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: colors.gold + '66' } as const;
+  const triLeft = { width: 0, height: 0, borderTopWidth: triBase / 2, borderBottomWidth: triBase / 2, borderRightWidth: triH, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderRightColor: colors.gold + '66' } as const;
+  const triRight = { width: 0, height: 0, borderTopWidth: triBase / 2, borderBottomWidth: triBase / 2, borderLeftWidth: triH, borderTopColor: 'transparent', borderBottomColor: 'transparent', borderLeftColor: colors.gold + '66' } as const;
+
+  if (saving) {
+    return (
+      <View style={styles.loading}>
+        <ActivityIndicator color={colors.gold} size="large" />
+        <Text style={styles.loadingText}>Building your bin…</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()}>
+          <Text accessibilityLabel="Back" style={styles.back}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Size Your Bin</Text>
+        <View style={{ width: 40 }} />
+      </View>
+
+      <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+        <Text style={styles.intro}>Pull the corner to size your bin — each pull adds diamonds, and the edge triangles fall into place.</Text>
+
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>{diamonds} {diamonds === 1 ? 'diamond' : 'diamonds'} · {triangles} triangles</Text>
+          <Text style={styles.badgeSub}>{total} bottle capacity</Text>
+        </View>
+
+        <GestureHandlerRootView style={{ height: CANVAS_H }}>
+          <View style={styles.canvas} onLayout={(e) => setVpw(e.nativeEvent.layout.width)}>
+            <View style={{ position: 'absolute', left: originLeft, top: originTop, width: gridW, height: gridH }}>
+              {/* top edge triangles */}
+              <View style={{ flexDirection: 'row', height: half }}>
+                <View style={{ width: half }} />
+                {Array.from({ length: across }).map((_, c) => (
+                  <View key={c} style={{ width: S, height: half, alignItems: 'center', justifyContent: 'flex-end' }}><View style={triUp} /></View>
+                ))}
+                <View style={{ width: half }} />
+              </View>
+              {/* diamond rows, flanked by left/right edge triangles */}
+              {Array.from({ length: down }).map((_, r) => (
+                <View key={r} style={{ flexDirection: 'row', height: S }}>
+                  <View style={{ width: half, height: S, alignItems: 'flex-end', justifyContent: 'center' }}><View style={triLeft} /></View>
+                  {Array.from({ length: across }).map((_, c) => (
+                    <View key={c} style={{ width: S, height: S, alignItems: 'center', justifyContent: 'center' }}><View style={diamond} /></View>
+                  ))}
+                  <View style={{ width: half, height: S, alignItems: 'flex-start', justifyContent: 'center' }}><View style={triRight} /></View>
+                </View>
+              ))}
+              {/* bottom edge triangles */}
+              <View style={{ flexDirection: 'row', height: half }}>
+                <View style={{ width: half }} />
+                {Array.from({ length: across }).map((_, c) => (
+                  <View key={c} style={{ width: S, height: half, alignItems: 'center', justifyContent: 'flex-start' }}><View style={triDown} /></View>
+                ))}
+                <View style={{ width: half }} />
+              </View>
+            </View>
+
+            <GestureDetector gesture={pan}>
+              <Animated.View
+                style={[
+                  styles.handle,
+                  { left: originLeft + gridW - HANDLE / 2, top: originTop + gridH - HANDLE / 2, transform: [{ translateX: handleTX }, { translateY: handleTY }] },
+                ]}
+              >
+                <Text style={styles.handleGlyph}>⤡</Text>
+              </Animated.View>
+            </GestureDetector>
+          </View>
+        </GestureHandlerRootView>
+
+        <View style={styles.capRow}>
+          <Text style={styles.capLabel}>Bottles per full diamond</Text>
+          <View style={styles.stepper}>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => setCapacity((v) => Math.max(2, v - 1))}><Text style={styles.stepBtnText}>−</Text></TouchableOpacity>
+            <Text style={styles.stepVal}>{capacity}</Text>
+            <TouchableOpacity style={styles.stepBtn} onPress={() => setCapacity((v) => Math.min(60, v + 1))}><Text style={styles.stepBtnText}>+</Text></TouchableOpacity>
+          </View>
+        </View>
+
+        <Text style={styles.fieldLabel}>Bin name</Text>
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="e.g. The cellar wall"
+          placeholderTextColor={colors.textMuted}
+        />
+
+        <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85}>
+          <Text style={styles.saveBtnText}>Create Bin</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.cancelBtn} onPress={() => router.back()}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </TouchableOpacity>
+      </KeyboardAwareScrollView>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.background },
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.lg },
+  loadingText: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
+  title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  intro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, textAlign: 'center', marginBottom: spacing.lg },
+  badge: { alignItems: 'center', marginBottom: spacing.md },
+  badgeText: { fontSize: 20, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.4 },
+  badgeSub: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  canvas: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
+  handle: { position: 'absolute', width: HANDLE, height: HANDLE, borderRadius: HANDLE / 2, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
+  handleGlyph: { fontSize: 22, color: colors.background, fontFamily: fonts.bodyBold },
+  capRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
+  capLabel: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, flex: 1 },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  stepBtn: { width: 36, height: 36, borderRadius: 18, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  stepBtnText: { fontSize: 20, fontFamily: fonts.bodyRegular, color: colors.text },
+  stepVal: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 30, textAlign: 'center' },
+  fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginTop: spacing.xl, marginBottom: spacing.sm },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  saveBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
+  saveBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 17 },
+  cancelBtn: { alignItems: 'center', paddingVertical: spacing.md },
+  cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+});
