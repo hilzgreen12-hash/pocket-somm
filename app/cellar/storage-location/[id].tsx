@@ -47,6 +47,7 @@ export default function StorageLocationScreen() {
   const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
+  const [maturityOpen, setMaturityOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   // Multi-select — long-press a wine to select, then bulk archive / delete /
   // remove-from-location. Mirrors the Full Cellar List select-mode.
@@ -383,7 +384,40 @@ export default function StorageLocationScreen() {
           </View>
         </View>
 
-        <Text style={styles.listHeader}>List</Text>
+        {/* Filter row — same format as the rack/fridge screens: "List" first,
+            then a "Maturity" dropdown, so the affordance is consistent. */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          <TouchableOpacity
+            style={[styles.filterChip, !maturity && styles.filterChipActive]}
+            onPress={() => { setMaturity(''); setMaturityOpen(false); }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.filterChipText, !maturity && styles.filterChipTextActive]}>List</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
+            onPress={() => setMaturityOpen((v) => !v)}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]}>
+              {maturity ? (MATURITY_OPTIONS.find((o) => o.value === maturity)?.label ?? 'Maturity') : 'Maturity'} {maturityOpen ? '▴' : '▾'}
+            </Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        {maturityOpen ? (
+          <View style={styles.maturityDropdown}>
+            {MATURITY_OPTIONS.map((o) => {
+              const active = maturity === o.value;
+              return (
+                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setMaturity(o.value); setMaturityOpen(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
+
         <View style={styles.searchRow}>
           <TextInput
             style={styles.searchInput}
@@ -399,18 +433,6 @@ export default function StorageLocationScreen() {
             </TouchableOpacity>
           ) : null}
         </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.maturityRow}>
-          {MATURITY_OPTIONS.map((opt) => (
-            <TouchableOpacity
-              key={opt.value || 'all'}
-              style={[styles.maturityChip, maturity === opt.value && styles.maturityChipActive]}
-              onPress={() => setMaturity(opt.value)}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.maturityChipText, maturity === opt.value && styles.maturityChipTextActive]}>{opt.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
 
         {filtered.length === 0 && caseGroups.length === 0 ? (
           <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your search.'}</Text>
@@ -545,6 +567,18 @@ const styles = StyleSheet.create({
   maturityChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
   maturityChipText: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   maturityChipTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
+  // Filter chips + Maturity dropdown — matched to the rack/fridge screens so the
+  // Other Home Storage filters read the same (was a lighter, muted pill before).
+  filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.sm },
+  filterChip: { borderWidth: 1, borderColor: colors.border, borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md, backgroundColor: colors.surface, maxWidth: 170 },
+  filterChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
+  filterChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  filterChipTextActive: { color: colors.gold },
+  maturityDropdown: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
+  maturityOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
+  maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },
+  maturityOptionTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
   listSection: { paddingHorizontal: spacing.xl },
   emptyList: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl, lineHeight: 20 },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
