@@ -36,6 +36,14 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'Declining' },
 ];
 
+// Cases filter — by packaging kind (migration 073).
+const CASE_FILTER_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'All cases' },
+  { value: 'owc', label: 'OWC Complete' },
+  { value: 'non_owc', label: 'Non-OWC Complete' },
+  { value: 'mixed', label: 'Mixed' },
+];
+
 function bottleLabel(n: number) {
   return n === 0 ? 'Empty' : `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
 }
@@ -48,6 +56,8 @@ export default function StorageLocationScreen() {
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
   const [maturityOpen, setMaturityOpen] = useState(false);
+  const [casesFilter, setCasesFilter] = useState('');
+  const [casesOpen, setCasesOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   // Multi-select — long-press a wine to select, then bulk archive / delete /
   // remove-from-location. Mirrors the Full Cellar List select-mode.
@@ -80,10 +90,20 @@ export default function StorageLocationScreen() {
   }, [id]);
   const photoUrl = useLabelImageUrl(location?.photo_path ?? null);
 
+  // wine → its case's packaging kind, for the Cases filter.
+  const caseKindById = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const c of cases) m[c.id] = c.kind;
+    return m;
+  }, [cases]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return wines.filter((w) => {
       if (maturity && w.drinking_window_status !== maturity) return false;
+      // Cases filter: keep only wines boxed in a case of the chosen packaging
+      // kind (loose wines have no case, so they're excluded when it's set).
+      if (casesFilter && (!w.case_id || caseKindById[w.case_id] !== casesFilter)) return false;
       if (q) {
         const hay = [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase();
         const statusTerms = STATUS_SEARCH.find((s) => s.status === w.drinking_window_status)?.terms ?? [];
@@ -91,7 +111,7 @@ export default function StorageLocationScreen() {
       }
       return true;
     });
-  }, [wines, search, maturity]);
+  }, [wines, search, maturity, casesFilter, caseKindById]);
 
   // All add paths file the saved wine into THIS location (context=add-location,
   // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.
@@ -320,6 +340,7 @@ export default function StorageLocationScreen() {
   // emptied case vanishes with no route left to its Dissolve menu (D1), and a
   // search that excludes a case's wines hides its "+ Add" (U2).
   const caseGroups = cases
+    .filter((c) => !casesFilter || c.kind === casesFilter)
     .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) }));
   const looseFiltered = filtered.filter((w) => !w.case_id);
 
@@ -400,19 +421,28 @@ export default function StorageLocationScreen() {
             then a "Maturity" dropdown, so the affordance is consistent. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
           <TouchableOpacity
-            style={[styles.filterChip, !maturity && styles.filterChipActive]}
-            onPress={() => { setMaturity(''); setMaturityOpen(false); }}
+            style={[styles.filterChip, (!maturity && !casesFilter) && styles.filterChipActive]}
+            onPress={() => { setMaturity(''); setCasesFilter(''); setMaturityOpen(false); setCasesOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, !maturity && styles.filterChipTextActive]}>List</Text>
+            <Text style={[styles.filterChipText, (!maturity && !casesFilter) && styles.filterChipTextActive]}>List</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
-            onPress={() => setMaturityOpen((v) => !v)}
+            onPress={() => { setMaturityOpen((v) => !v); setCasesOpen(false); }}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]}>
               {maturity ? (MATURITY_OPTIONS.find((o) => o.value === maturity)?.label ?? 'Maturity') : 'Maturity'} {maturityOpen ? '▴' : '▾'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterChip, casesFilter ? styles.filterChipActive : null]}
+            onPress={() => { setCasesOpen((v) => !v); setMaturityOpen(false); }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.filterChipText, casesFilter ? styles.filterChipTextActive : null]}>
+              {casesFilter ? (CASE_FILTER_OPTIONS.find((o) => o.value === casesFilter)?.label ?? 'Cases') : 'Cases'} {casesOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
         </ScrollView>
@@ -423,6 +453,19 @@ export default function StorageLocationScreen() {
               const active = maturity === o.value;
               return (
                 <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setMaturity(o.value); setMaturityOpen(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {casesOpen ? (
+          <View style={styles.maturityDropdown}>
+            {CASE_FILTER_OPTIONS.map((o) => {
+              const active = casesFilter === o.value;
+              return (
+                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCasesFilter(o.value); setCasesOpen(false); }} activeOpacity={0.7}>
                   <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
                 </TouchableOpacity>
               );
