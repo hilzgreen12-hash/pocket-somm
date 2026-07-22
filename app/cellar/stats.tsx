@@ -15,6 +15,7 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
+import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
 import type { CellarWine } from '../../src/types/wine';
 
 const CONCURRENCY = 3;
@@ -90,6 +91,34 @@ export default function CellarStatsScreen() {
   // even after an update, which reads like the update did nothing.
   const winesNotYetValued = winesNeedingEstimate.filter((w) => !w.estimated_value_at);
   const winesUnvaluable = winesNeedingEstimate.filter((w) => !!w.estimated_value_at);
+  // Wines with no purchase price recorded — the user can fill these in to grow
+  // Total Purchase Value and the change comparison below.
+  const winesNoPurchase = wines.filter((w) => w.purchase_price == null);
+
+  // % change from purchase to estimated current value, on the wines that have
+  // BOTH (and in the same currency, so the comparison is like-for-like).
+  const matchedByCode: Record<string, { p: number; v: number }> = {};
+  for (const w of wines) {
+    if (w.purchase_price == null || w.estimated_value == null) continue;
+    const pc = (w.purchase_price_currency ?? 'GBP').toUpperCase();
+    const vc = (w.estimated_value_currency ?? 'GBP').toUpperCase();
+    if (pc !== vc) continue;
+    const b = matchedByCode[pc] ?? { p: 0, v: 0 };
+    b.p += Number(w.purchase_price) * w.quantity;
+    b.v += Number(w.estimated_value) * w.quantity;
+    matchedByCode[pc] = b;
+  }
+  const changeEntries = Object.entries(matchedByCode)
+    .filter(([, b]) => b.p > 0)
+    .map(([code, b]) => ({ code, pct: ((b.v - b.p) / b.p) * 100 }));
+
+  // Which value-editor sheet is open (user fills in what Vinster couldn't find).
+  const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | null>(null);
+  const editorCurrency = preferences?.defaultCurrency ?? 'GBP';
+  function onEditorSaved() {
+    if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+    setValueEditor(null);
+  }
   // "Missing intel" = never valued (no critic score / pricing downloaded yet).
   const winesMissingIntel = wines.filter(isMissingIntel);
   const lastEstimateAt = useMemo(() => {
@@ -291,6 +320,13 @@ export default function CellarStatsScreen() {
                 Add a purchase price to individual wines from their wine card to see this total.
               </Text>
             )}
+            {winesNoPurchase.length > 0 ? (
+              <TouchableOpacity onPress={() => setValueEditor('purchase')} activeOpacity={0.7}>
+                <Text style={styles.recalcLink}>
+                  Add purchase prices for {winesNoPurchase.length} wine{winesNoPurchase.length === 1 ? '' : 's'}
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.valueDivider} />
 
@@ -300,6 +336,19 @@ export default function CellarStatsScreen() {
                 {valueTotal || '—'}
               </Text>
             </View>
+
+            {changeEntries.length > 0 ? (
+              <View style={styles.valueRow}>
+                <Text style={styles.valueLabel}>Change since purchase</Text>
+                <View style={styles.changeStack}>
+                  {changeEntries.map((e) => (
+                    <Text key={e.code} style={[styles.changePct, { color: e.pct >= 0 ? '#5FA463' : '#C0603A' }]}>
+                      {e.pct >= 0 ? '▲' : '▼'} {Math.abs(e.pct).toFixed(1)}%{changeEntries.length > 1 ? ` ${e.code}` : ''}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            ) : null}
 
             {wines.length === 0 ? null : (
               <View style={styles.estimateMetaStack}>
@@ -331,9 +380,14 @@ export default function CellarStatsScreen() {
                 {/* Make it explicit when wines were valued but came back blank
                     so the count doesn't read as a failed update. */}
                 {winesUnvaluable.length > 0 ? (
-                  <Text style={styles.unvaluableNote}>
-                    {winesUnvaluable.length} wine{winesUnvaluable.length === 1 ? '' : 's'} couldn't be valued — Vinster doesn't have enough market data for {winesUnvaluable.length === 1 ? 'it' : 'them'} yet.
-                  </Text>
+                  <>
+                    <Text style={styles.unvaluableNote}>
+                      {winesUnvaluable.length} wine{winesUnvaluable.length === 1 ? '' : 's'} couldn't be valued — Vinster doesn't have enough market data for {winesUnvaluable.length === 1 ? 'it' : 'them'} yet.
+                    </Text>
+                    <TouchableOpacity onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
+                      <Text style={styles.recalcLink}>View wines to update</Text>
+                    </TouchableOpacity>
+                  </>
                 ) : null}
               </View>
             )}
@@ -399,6 +453,19 @@ export default function CellarStatsScreen() {
 
         </ScrollView>
       )}
+
+      <WineValueEditorModal
+        visible={valueEditor !== null}
+        field={valueEditor === 'purchase' ? 'purchase_price' : 'estimated_value'}
+        title={valueEditor === 'purchase' ? 'Add purchase prices' : 'Update estimated values'}
+        subtitle={valueEditor === 'purchase'
+          ? 'Enter what you paid per bottle — this adds to your Total Purchase Value.'
+          : "Enter your own estimated value per bottle for the wines Vinster couldn't price."}
+        wines={valueEditor === 'purchase' ? winesNoPurchase : winesUnvaluable}
+        currency={editorCurrency}
+        onClose={() => setValueEditor(null)}
+        onSaved={onEditorSaved}
+      />
     </View>
   );
 }
@@ -455,6 +522,8 @@ const styles = StyleSheet.create({
   // Cormorant — inline action link reads as a button
   recalcLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
   unvaluableNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, marginTop: spacing.xs },
+  changeStack: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', justifyContent: 'flex-end' },
+  changePct: { fontSize: 15, fontFamily: fonts.bodySemibold },
   breakdownRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
   // Inter — list rank
   breakdownRank: { fontFamily: fonts.bodyBold, fontSize: 14, color: colors.gold, width: 24 },
