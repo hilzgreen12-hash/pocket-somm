@@ -3,6 +3,9 @@ import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
+import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -18,7 +21,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-type Stage = 'capture' | 'analyzing' | 'review' | 'archiving' | 'done';
+type Stage = 'capture' | 'preview' | 'analyzing' | 'review' | 'archiving' | 'done';
 
 export default function ArchiveNightScreen() {
   const { session } = useAuth();
@@ -27,6 +30,8 @@ export default function ArchiveNightScreen() {
 
   const [stage, setStage] = useState<Stage>('capture');
   const [imageUri, setImageUri] = useState<string | null>(null);
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
   const [matches, setMatches] = useState<NightMatch[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [unmatched, setUnmatched] = useState<DetectedBottle[]>([]);
@@ -63,18 +68,30 @@ export default function ArchiveNightScreen() {
     }
   }
 
-  async function pickFrom(source: 'camera' | 'library') {
+  // In-app camera capture → show the shot in the 'preview' stage, where the
+  // user chooses Retake / Save to Lineup Library / Review Now.
+  async function handleCapture() {
+    if (!cameraRef.current) return;
     try {
-      const opts = { mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 };
-      const result = source === 'camera'
-        ? await ImagePicker.launchCameraAsync(opts)
-        : await ImagePicker.launchImageLibraryAsync(opts);
-      if (result.canceled || !result.assets.length) return;
-      const uri = result.assets[0].uri;
-      setImageUri(uri);
-      await saveForLater(uri);
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
+      if (!photo?.uri) return;
+      setImageUri(photo.uri);
+      setStage('preview');
     } catch (err) {
-      showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Camera error', body: err instanceof Error ? err.message : 'Could not capture the photo. Please try again.' });
+    }
+  }
+
+  // Upload an existing photo instead of shooting one — lands in the same preview.
+  async function pickFromLibrary() {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+      if (result.canceled || !result.assets.length) return;
+      setImageUri(result.assets[0].uri);
+      setStage('preview');
+    } catch (err) {
+      showAlert({ title: 'Could not open the photo', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -217,22 +234,44 @@ export default function ArchiveNightScreen() {
       </View>
 
       {stage === 'capture' ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.lead}>Drank some bottles?</Text>
-          <Text style={styles.leadBody}>
-            Snap your lineup now — it saves straight to Your Lineup Library. When you have a moment, confirm which bottles came from your cellar and archive them; until then it sits in your library marked "awaiting attention".
-          </Text>
-          <Text style={styles.leadBody}>
-            You can comment on your lineups and share them with friends from the library.
-          </Text>
-          <Text style={styles.hint}>Photograph up to 8 bottles with their front labels facing the camera</Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
-            <Text style={styles.primaryBtnText}>Take a photo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFrom('library')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Upload a Photo</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        !permission ? (
+          <View style={styles.cameraWrap} />
+        ) : !permission.granted ? (
+          <PermissionScreen onRequest={requestPermission} />
+        ) : (
+          <View style={styles.cameraWrap}>
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" autofocus="on" />
+            {/* Simple instruction over the scanner. The fuller "what is Archive
+                a Night" blurb now lives on the button's long-press in Cellar. */}
+            <View style={styles.instructionCard}>
+              <Text style={styles.instructionText}>Photograph up to 8 bottles with their front labels facing the camera.</Text>
+            </View>
+            <View style={styles.cameraControls}>
+              <TouchableOpacity style={styles.sideAction} onPress={pickFromLibrary} activeOpacity={0.8}>
+                <Text style={styles.sideActionText}>Upload</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.captureBtn} onPress={handleCapture} activeOpacity={0.85}>
+                <View style={styles.captureBtnInner} />
+              </TouchableOpacity>
+              <View style={styles.sideAction} />
+            </View>
+          </View>
+        )
+      ) : stage === 'preview' ? (
+        <View style={styles.cameraWrap}>
+          {imageUri ? <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+          <View style={styles.previewActions}>
+            <TouchableOpacity style={styles.previewSecondary} onPress={() => { setImageUri(null); setStage('capture'); }} activeOpacity={0.85}>
+              <Text style={styles.previewSecondaryText}>Retake</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.previewPrimary} onPress={() => { if (imageUri) void saveForLater(imageUri); }} activeOpacity={0.85}>
+              <Text style={styles.previewPrimaryText}>Save to Lineup Library</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.previewSecondary} onPress={() => { if (imageUri) void analyze(imageUri); }} activeOpacity={0.85}>
+              <Text style={styles.previewSecondaryText}>Review Now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       ) : stage === 'analyzing' ? (
         <View style={styles.centerBlock}>
           {imageUri ? <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="contain" /> : null}
@@ -409,6 +448,29 @@ export default function ArchiveNightScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // In-app camera scan screen + preview
+  cameraWrap: { flex: 1, backgroundColor: '#000' },
+  instructionCard: {
+    position: 'absolute', top: spacing.lg, left: spacing.xl, right: spacing.xl,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, borderWidth: 1, borderColor: colors.gold,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+  },
+  instructionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 21 },
+  cameraControls: {
+    position: 'absolute', bottom: 40, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl,
+  },
+  sideAction: { width: 80, alignItems: 'center' },
+  sideActionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 4 },
+  captureBtn: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  captureBtnInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#FFFFFF' },
+  previewActions: {
+    position: 'absolute', bottom: 40, left: spacing.xl, right: spacing.xl, gap: spacing.sm,
+  },
+  previewPrimary: { backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
+  previewPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.background },
+  previewSecondary: { borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
+  previewSecondaryText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   headerSpacer: { width: 44 },

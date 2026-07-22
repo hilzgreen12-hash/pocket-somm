@@ -3,6 +3,7 @@ import { useRef, useState } from 'react';
 import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
+import { showAlert } from '../../src/components/AppAlert';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
@@ -82,7 +83,14 @@ export default function CellarTab() {
           Archive") is no longer a top-level button — it now lives as an
           "Archive" folder in the Full Cellar List filter carousel. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
+          onLongPress={() => showAlert({
+            title: 'Archive a Night',
+            body: "Drank some bottles tonight? Archive a Night snaps a photo of your lineup and saves it to your Lineup Library. Save it now and confirm the bottles whenever you like, or review straight away to match each one to your cellar and archive what you've opened — then add a note and share the night with friends.",
+          })}
+        >
           <Text style={styles.buttonText}>Archive a Night</Text>
         </TouchableOpacity>
         {/* Lineup Library sits below Archive a Night: the capture action, then
