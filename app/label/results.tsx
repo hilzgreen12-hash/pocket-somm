@@ -24,6 +24,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
+import { fetchPricing } from '../../src/services/pricing';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -212,6 +213,30 @@ export default function LabelResultsScreen() {
     const est = intelligence?.estimatedValue;
     if (est != null) setPurchasePrice((prev) => prev || String(est));
   }, [intelligence?.estimatedValue]);
+
+  // Some add flows skip full Wine Intel (notably add-to-location under Other
+  // Home Storage), so `intelligence` is null and the price never pre-filled.
+  // Fetch a real Wine-Searcher market price directly so the Estimated Purchase
+  // Price/Bottle is populated in EVERY add flow. Runs once; a user-typed price
+  // is left untouched.
+  const pricePrefetchedRef = useRef(false);
+  useEffect(() => {
+    if (!isAddFlow || pricePrefetchedRef.current) return;
+    if (intelligence?.estimatedValue != null) return; // already have an estimate
+    const w = wineDetailsConfirmed;
+    if (!w) return;
+    const queryName = [w.producer, w.wineName].filter(Boolean).join(' ').trim() || (w.wineName ?? '');
+    if (!queryName) return;
+    pricePrefetchedRef.current = true;
+    const vintageNum = w.vintage && w.vintage !== 'NV' ? Number(w.vintage) : null;
+    fetchPricing(queryName, Number.isFinite(vintageNum as number) ? (vintageNum as number) : null, userCurrency)
+      .then((p) => {
+        if (p.source === 'wine-searcher' && p.matched !== false && p.averageMarketPrice != null) {
+          setPurchasePrice((prev) => prev || String(p.averageMarketPrice));
+        }
+      })
+      .catch(() => {});
+  }, [isAddFlow, wineDetailsConfirmed, intelligence?.estimatedValue, userCurrency]);
 
   // Add flow has no intel card — drop the user straight onto the Add-to-Cellar
   // confirmation (size / quantity / orientation / location).
