@@ -1518,8 +1518,9 @@ export default function CellarWineDetail() {
                 activeOpacity={0.7}
               >
                 <Text style={styles.reviewShareBtnText}>
-                  {!COMMUNITY_ENABLED ? 'Share to Community (coming soon)' : reviewPosted ? '✓ Posted' : postingReview ? 'Posting…' : 'Share to Community'}
+                  {!COMMUNITY_ENABLED ? 'Share to Community' : reviewPosted ? '✓ Posted' : postingReview ? 'Posting…' : 'Share to Community'}
                 </Text>
+                {!COMMUNITY_ENABLED ? <Text style={styles.reviewShareBtnSub}>(coming soon)</Text> : null}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.reviewShareBtn, sharingOutside && styles.buttonDisabled]}
@@ -2215,15 +2216,25 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: colors.gold,
-    borderRadius: 10,
-    paddingVertical: spacing.sm,
+    borderRadius: 14,
+    paddingVertical: 7,
+    paddingHorizontal: spacing.sm,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   // Cormorant — share button text
   reviewShareBtnText: {
     fontFamily: fonts.headingSemibold,
     fontSize: 14,
     color: colors.gold,
+    textAlign: 'center',
+  },
+  // Small "(coming soon)" sub-line under the Share to Community label.
+  reviewShareBtnSub: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 1,
   },
   // Hides the off-screen branded share card while it's mounted for
   // capture by react-native-view-shot.
