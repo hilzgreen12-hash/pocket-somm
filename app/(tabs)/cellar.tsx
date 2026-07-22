@@ -88,7 +88,7 @@ export default function CellarTab() {
           onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
           onLongPress={() => showAlert({
             title: 'Archive a Night',
-            body: "Drank some bottles tonight? Archive a Night snaps a photo of your lineup and saves it to your Lineup Library. Save it now and confirm the bottles whenever you like, or review straight away to match each one to your cellar and archive what you've opened — then add a note and share the night with friends.",
+            body: "Drank some bottles?\n\nSnap a pic of your lineup to save automatically to Lineup Library to revisit, review, comment and share at a convenient time. Vinster can archive bottles it identifies from your cellar along the way.\n\nChin-Chin!",
           })}
         >
           <Text style={styles.buttonText}>Archive a Night</Text>
