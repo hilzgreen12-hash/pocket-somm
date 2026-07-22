@@ -1,10 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
@@ -70,6 +70,14 @@ export default function StorageLocationScreen() {
     queryFn: () => fetchStorageLocationCases(id!),
     enabled: !!id,
   });
+  // Sweep any orphaned empty cases left over from earlier deletions (their old
+  // names were lingering in the add-a-wine flow) when the location opens.
+  useEffect(() => {
+    if (!id) return;
+    deleteEmptyCasesForLocation(id)
+      .then(() => qc.invalidateQueries({ queryKey: ['storage-location-cases', id] }))
+      .catch(() => {});
+  }, [id]);
   const photoUrl = useLabelImageUrl(location?.photo_path ?? null);
 
   const filtered = useMemo(() => {
@@ -184,7 +192,11 @@ export default function StorageLocationScreen() {
     const done: string[] = [];
     try {
       for (const wid of ids) { await action(wid); done.push(wid); }
+      // A case that just lost its last wine shouldn't linger as a nameless
+      // orphan — clean it up before refreshing.
+      await deleteEmptyCasesForLocation(id).catch(() => {});
       invalidateAfterBulk();
+      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
       exitSelect();
     } catch (err) {
       invalidateAfterBulk();

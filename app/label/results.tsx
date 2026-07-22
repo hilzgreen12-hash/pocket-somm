@@ -1415,7 +1415,7 @@ export default function LabelResultsScreen() {
               </>
             )}
 
-            <Text style={styles.modalLabel}>Estimated Purchase Price <Text style={styles.modalLabelHint}>(adjust for accuracy)</Text></Text>
+            <Text style={styles.modalLabel}>Estimated Purchase Price/Bottle <Text style={styles.modalLabelHint}>(adjust for accuracy)</Text></Text>
             <View style={styles.priceRow}>
               <Text style={styles.priceCurrency}>{currencySymbol(userCurrency)}</Text>
               <TextInput

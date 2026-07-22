@@ -160,3 +160,20 @@ export async function assignWineToCase(wineId: string, caseId: string | null): P
   const { error } = await supabase.from('cellar_wines').update({ case_id: caseId }).eq('id', wineId);
   if (error) throw error;
 }
+
+// Delete any case in this location that no longer holds a wine — so an emptied
+// case doesn't linger as a nameless orphan (still surfacing its old name in the
+// add-a-wine flow) after its bottles are removed, deleted, or archived.
+export async function deleteEmptyCasesForLocation(locationId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('storage_cases')
+    .select('id, cellar_wines(id)')
+    .eq('storage_location_id', locationId);
+  if (error) throw error;
+  const emptyIds = (data ?? [])
+    .filter((c: any) => (Array.isArray(c.cellar_wines) ? c.cellar_wines.length : 0) === 0)
+    .map((c: any) => c.id as string);
+  if (emptyIds.length === 0) return;
+  const { error: delErr } = await supabase.from('storage_cases').delete().in('id', emptyIds);
+  if (delErr) throw delErr;
+}
