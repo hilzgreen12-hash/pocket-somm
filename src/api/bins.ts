@@ -7,28 +7,36 @@ import type { WineRack, BinCell, CellarWine } from '../types/wine';
 
 export interface BinCellSpec { idx: number; kind: 'diamond' | 'triangle'; capacity: number }
 
-// The number of half-diamond TRIANGLES that fill the perimeter gaps around an
-// across × down block of full diamonds — one per diamond along each of the four
-// edges. (A 2×2 block → 8 edge triangles.) Kept as a named helper so the sizer
-// preview and the DB cell generation always agree.
+// Counts derived from the actual diamond tessellation clipped to the frame (see
+// the geometry diagram + app/cellar/bin/resize.tsx), so the stored cells match
+// the drawing cell-for-cell.
+//
+// Full DIAMONDS: the across × down grid PLUS the interleaved half-row diamonds
+// that sit between them — (across-1) × (down-1) extra. A 2×2 frame → 5 diamonds.
+export function binDiamondCount(across: number, down: number): number {
+  return across * down + Math.max(0, across - 1) * Math.max(0, down - 1);
+}
+
+// TRIANGLES: every diamond the frame clips along its edges — 2 × (across+down),
+// counting the corner pieces as triangles too (so there are only two cell types,
+// not fiddly quarter-cubbies). A 2×2 frame → 8 triangles.
 export function binTriangleCount(across: number, down: number): number {
   return 2 * (across + down);
 }
 
-// Build the cell list for a diamond bin: an across × down grid of FULL diamonds,
-// then the perimeter triangles filling the edge gaps around them. Triangles hold
-// half a diamond's capacity (rounded down, min 1).
+// Build the cell list for a diamond bin so it mirrors the drawing: the full
+// diamonds first, then the edge triangles. Triangles hold half a diamond's
+// capacity (rounded down, min 1).
 export function buildBinCells(across: number, down: number, diamondCapacity: number): BinCellSpec[] {
   const cells: BinCellSpec[] = [];
   let idx = 0;
-  for (let r = 0; r < down; r++) {
-    for (let c = 0; c < across; c++) {
-      cells.push({ idx: idx++, kind: 'diamond', capacity: diamondCapacity });
-    }
+  const diamonds = binDiamondCount(across, down);
+  for (let i = 0; i < diamonds; i++) {
+    cells.push({ idx: idx++, kind: 'diamond', capacity: diamondCapacity });
   }
   const triCap = Math.max(1, Math.floor(diamondCapacity / 2));
   const triangles = binTriangleCount(across, down);
-  for (let t = 0; t < triangles; t++) {
+  for (let i = 0; i < triangles; i++) {
     cells.push({ idx: idx++, kind: 'triangle', capacity: triCap });
   }
   return cells;

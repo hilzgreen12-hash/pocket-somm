@@ -5,7 +5,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { createBin, binTriangleCount, binTotalCapacity } from '../../../src/api/bins';
+import { createBin, binDiamondCount, binTriangleCount, binTotalCapacity } from '../../../src/api/bins';
 import { showAlert } from '../../../src/components/AppAlert';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -40,7 +40,7 @@ export default function BinResizeScreen() {
   const handleTY = useRef(new Animated.Value(0)).current;
   const base = useRef({ across: 2, down: 2 }).current;
 
-  const diamonds = across * down;
+  const diamonds = binDiamondCount(across, down);
   const triangles = binTriangleCount(across, down);
   const total = binTotalCapacity(across, down, capacity);
 
