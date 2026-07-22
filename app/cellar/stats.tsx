@@ -97,12 +97,14 @@ export default function CellarStatsScreen() {
 
   // % change from purchase to estimated current value, on the wines that have
   // BOTH (and in the same currency, so the comparison is like-for-like).
+  let matchedCount = 0;
   const matchedByCode: Record<string, { p: number; v: number }> = {};
   for (const w of wines) {
     if (w.purchase_price == null || w.estimated_value == null) continue;
     const pc = (w.purchase_price_currency ?? 'GBP').toUpperCase();
     const vc = (w.estimated_value_currency ?? 'GBP').toUpperCase();
     if (pc !== vc) continue;
+    matchedCount += 1;
     const b = matchedByCode[pc] ?? { p: 0, v: 0 };
     b.p += Number(w.purchase_price) * w.quantity;
     b.v += Number(w.estimated_value) * w.quantity;
@@ -111,6 +113,10 @@ export default function CellarStatsScreen() {
   const changeEntries = Object.entries(matchedByCode)
     .filter(([, b]) => b.p > 0)
     .map(([code, b]) => ({ code, pct: ((b.v - b.p) / b.p) * 100 }));
+  // The change is computed ONLY on wines that have both a purchase price and a
+  // current value. If some wines are missing one of those, the headline totals
+  // cover different sets than the %, so we caption the basis to keep it honest.
+  const changePartial = changeEntries.length > 0 && (winesNoPurchase.length > 0 || winesNeedingEstimate.length > 0);
 
   // Which value-editor sheet is open (user fills in what Vinster couldn't find).
   const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | null>(null);
@@ -321,9 +327,9 @@ export default function CellarStatsScreen() {
               </Text>
             )}
             {winesNoPurchase.length > 0 ? (
-              <TouchableOpacity onPress={() => setValueEditor('purchase')} activeOpacity={0.7}>
-                <Text style={styles.recalcLink}>
-                  Add purchase prices for {winesNoPurchase.length} wine{winesNoPurchase.length === 1 ? '' : 's'}
+              <TouchableOpacity style={styles.missingIntelRow} onPress={() => setValueEditor('purchase')} activeOpacity={0.7}>
+                <Text style={styles.missingIntelText}>
+                  {winesNoPurchase.length} Missing Value{winesNoPurchase.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -348,6 +354,11 @@ export default function CellarStatsScreen() {
                   ))}
                 </View>
               </View>
+            ) : null}
+            {changePartial ? (
+              <Text style={styles.valueHint}>
+                Compares the {matchedCount} wine{matchedCount === 1 ? '' : 's'} with both a purchase price and a current value. Fill in the missing values above for the full picture.
+              </Text>
             ) : null}
 
             {wines.length === 0 ? null : (
@@ -377,17 +388,15 @@ export default function CellarStatsScreen() {
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Make it explicit when wines were valued but came back blank
-                    so the count doesn't read as a failed update. */}
+                {/* Wines Vinster tried to value but had no market data for —
+                    the user can supply their own figure. Same treatment as the
+                    Purchase Value block. */}
                 {winesUnvaluable.length > 0 ? (
-                  <>
-                    <Text style={styles.unvaluableNote}>
-                      {winesUnvaluable.length} wine{winesUnvaluable.length === 1 ? '' : 's'} couldn't be valued — Vinster doesn't have enough market data for {winesUnvaluable.length === 1 ? 'it' : 'them'} yet.
+                  <TouchableOpacity style={styles.missingIntelRow} onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
+                    <Text style={styles.missingIntelText}>
+                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
                     </Text>
-                    <TouchableOpacity onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
-                      <Text style={styles.recalcLink}>View wines to update</Text>
-                    </TouchableOpacity>
-                  </>
+                  </TouchableOpacity>
                 ) : null}
               </View>
             )}
