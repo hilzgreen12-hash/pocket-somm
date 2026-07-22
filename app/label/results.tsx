@@ -146,10 +146,18 @@ export default function LabelResultsScreen() {
   const [bottleCount, setBottleCount] = useState(() =>
     Math.max(1, useLabelStore.getState().wineDetailsConfirmed?.quantity ?? 1)
   );
-  const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count'>(null);
+  const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count' | 'packaging'>(null);
+  // How a wine is packaged in an Other Home Storage location. Loose = no case;
+  // the rest create a storage_cases row of that kind (migration 073).
+  const PACKAGING = [
+    { k: 'loose', label: 'Loose Bottle(s)' },
+    { k: 'owc', label: 'OWC Complete Case' },
+    { k: 'non_owc', label: 'Non-OWC Complete Case' },
+    { k: 'mixed', label: 'Mixed Case' },
+  ] as const;
   // Case storage (add-to-location flow, migration 069). 'loose' files the wine
   // straight into the location; 'single'/'mixed' also box it in a named case.
-  const [storageKind, setStorageKind] = useState<'loose' | 'single' | 'mixed'>('loose');
+  const [storageKind, setStorageKind] = useState<'loose' | 'owc' | 'non_owc' | 'mixed'>('loose');
   const [caseName, setCaseName] = useState('');
   const [caseNote, setCaseNote] = useState('');
   const [customSizeMode, setCustomSizeMode] = useState(false);
@@ -891,7 +899,9 @@ export default function LabelResultsScreen() {
           ]
         : openField === 'count'
           ? Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1, onSelect: () => setBottleCount(i + 1) }))
-          : [];
+          : openField === 'packaging'
+            ? PACKAGING.map((p) => ({ label: p.label, value: p.k, onSelect: () => setStorageKind(p.k) }))
+            : [];
 
   const windowM = windowMeta(intel.drinkingWindowStatus);
 
@@ -1356,28 +1366,16 @@ export default function LabelResultsScreen() {
                   <Text style={styles.caseAddingNote}>Adding to your open case.</Text>
                 ) : (
                   <>
-                    <Text style={styles.modalLabel}>How is this wine stored?</Text>
-                    <View style={styles.caseKindRow}>
-                      {([
-                        { k: 'loose', label: 'Loose' },
-                        { k: 'single', label: 'In a case' },
-                        { k: 'mixed', label: 'Mixed case' },
-                      ] as const).map((opt) => (
-                        <TouchableOpacity
-                          key={opt.k}
-                          style={[styles.caseKindBtn, storageKind === opt.k && styles.caseKindBtnOn]}
-                          onPress={() => setStorageKind(opt.k)}
-                          activeOpacity={0.8}
-                        >
-                          <Text style={[styles.caseKindText, storageKind === opt.k && styles.caseKindTextOn]}>{opt.label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
+                    <Text style={styles.modalLabel}>How is this wine packaged?</Text>
+                    <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('packaging')} activeOpacity={0.7}>
+                      <Text style={styles.fieldSelectValue}>{PACKAGING.find((p) => p.k === storageKind)?.label ?? 'Loose Bottle(s)'}</Text>
+                      <Text style={styles.fieldSelectArrow}>▾</Text>
+                    </TouchableOpacity>
 
                     {storageKind !== 'loose' && (
                       <>
                         <Text style={styles.caseHelp}>
-                          {storageKind === 'single'
+                          {storageKind !== 'mixed'
                             ? 'A case of this one wine — its bottles are boxed together.'
                             : 'A box of different wines. Save this one, then add the rest to the same case from the location.'}
                         </Text>
@@ -1459,7 +1457,7 @@ export default function LabelResultsScreen() {
         <TouchableOpacity style={styles.fieldModalOverlay} activeOpacity={1} onPress={() => setOpenField(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.fieldModalSheet} onPress={() => {}}>
             <Text style={styles.fieldModalTitle}>
-              {openField === 'storage' ? 'Storage location' : openField === 'bottle' ? 'Bottle size' : 'Number of bottles'}
+              {openField === 'storage' ? 'Storage location' : openField === 'bottle' ? 'Bottle size' : openField === 'packaging' ? 'How is this wine packaged?' : 'Number of bottles'}
             </Text>
             <ScrollView style={{ maxHeight: 320 }}>
               {fieldOptions.map((opt) => (

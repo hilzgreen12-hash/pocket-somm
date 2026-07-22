@@ -254,7 +254,10 @@ export interface StorageCase {
   user_id: string;
   storage_location_id: string | null;
   name: string;
-  kind: 'single' | 'mixed';
+  // 'single' is legacy (a single-wine case). Migration 073 splits single-wine
+  // cases into 'owc' (original wooden case) and 'non_owc' (self-boxed complete
+  // case); 'mixed' is different wines boxed together.
+  kind: 'single' | 'mixed' | 'owc' | 'non_owc';
   note: string | null;
   created_at: string;
 }

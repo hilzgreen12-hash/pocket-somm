@@ -4,7 +4,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
@@ -462,7 +462,7 @@ export default function StorageLocationScreen() {
                   <View style={{ flex: 1 }}>
                     <View style={styles.caseTitleRow}>
                       <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
-                      <View style={styles.caseChip}><Text style={styles.caseChipText}>{g.box.kind === 'mixed' ? 'Mixed case' : 'Case'}</Text></View>
+                      <View style={styles.caseChip}><Text style={styles.caseChipText}>{caseKindLabel(g.box.kind)}</Text></View>
                     </View>
                     {g.box.note ? <Text style={styles.caseNoteText} numberOfLines={2}>{g.box.note}</Text> : null}
                   </View>
