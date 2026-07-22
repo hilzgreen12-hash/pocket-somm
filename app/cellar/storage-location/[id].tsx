@@ -6,7 +6,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
-import { archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
+import { archiveCellarWine, deleteCellarWine, updateCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
@@ -289,17 +289,47 @@ export default function StorageLocationScreen() {
     qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
     qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
   }
+  // Quick "how many bottles are you adding" flow for a single-wine case.
+  const [addBottlesCase, setAddBottlesCase] = useState<StorageCase | null>(null);
+  const [addBottlesQty, setAddBottlesQty] = useState(1);
+
   function openAddToCase(c: StorageCase) {
+    const buttons: { text: string; style?: 'cancel'; onPress?: () => void }[] = [];
+    // Single-wine case: adding more is just +N bottles of the wine already in it,
+    // so lead with a button (not a statement) that runs the quantity flow.
+    if (c.kind !== 'mixed') {
+      buttons.push({ text: 'Add more bottles of this wine', onPress: () => { setAddBottlesQty(1); setAddBottlesCase(c); } });
+    }
+    buttons.push(
+      { text: 'Scan a Label', onPress: () => handleScan(c.id) },
+      { text: 'Upload Photo', onPress: () => handleUpload(c.id) },
+      { text: 'Manual Input', onPress: () => handleManual(c.id) },
+      { text: 'Cancel', style: 'cancel' },
+    );
     showAlert({
       title: `Add a wine to ${c.name}`,
-      body: c.kind === 'mixed' ? 'Add another wine to this mixed case.' : 'Add more bottles of this wine.',
-      buttons: [
-        { text: 'Scan a Label', onPress: () => handleScan(c.id) },
-        { text: 'Upload Photo', onPress: () => handleUpload(c.id) },
-        { text: 'Manual Input', onPress: () => handleManual(c.id) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
+      body: c.kind === 'mixed' ? 'Add another wine to this mixed case.' : 'Add bottles to this case.',
+      buttons,
     });
+  }
+
+  async function confirmAddBottles() {
+    const c = addBottlesCase;
+    if (!c) return;
+    const target = wines.find((w) => w.case_id === c.id);
+    if (!target) {
+      setAddBottlesCase(null);
+      showAlert({ title: 'No wine yet', body: 'This case has no wine to add to — scan or add one first.' });
+      return;
+    }
+    try {
+      await updateCellarWine(target.id, { quantity: (target.quantity ?? 0) + addBottlesQty });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      setAddBottlesCase(null);
+    } catch (err) {
+      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
   function confirmDissolveCase(c: StorageCase) {
     showAlert({
@@ -548,6 +578,24 @@ export default function StorageLocationScreen() {
       )}
 
       {/* Edit a case's name + note */}
+      <Modal visible={addBottlesCase !== null} transparent animationType="fade" onRequestClose={() => setAddBottlesCase(null)}>
+        <View style={styles.caseModalOverlay}>
+          <View style={styles.caseModalSheet}>
+            <Text style={styles.caseModalTitle}>Add bottles</Text>
+            <Text style={[styles.caseModalLabel, { textAlign: 'center' }]}>How many bottles are you adding{addBottlesCase ? ` to ${addBottlesCase.name}` : ''}?</Text>
+            <View style={styles.addQtyRow}>
+              <TouchableOpacity style={styles.addQtyBtn} onPress={() => setAddBottlesQty((q) => Math.max(1, q - 1))} activeOpacity={0.7}><Text style={styles.addQtyBtnText}>−</Text></TouchableOpacity>
+              <Text style={styles.addQtyValue}>{addBottlesQty}</Text>
+              <TouchableOpacity style={styles.addQtyBtn} onPress={() => setAddBottlesQty((q) => q + 1)} activeOpacity={0.7}><Text style={styles.addQtyBtnText}>+</Text></TouchableOpacity>
+            </View>
+            <TouchableOpacity style={styles.caseModalSave} onPress={confirmAddBottles} activeOpacity={0.85}>
+              <Text style={styles.caseModalSaveText}>✓  Add {addBottlesQty} bottle{addBottlesQty === 1 ? '' : 's'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setAddBottlesCase(null)}><Text style={styles.caseModalCancelText}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={renaming} transparent animationType="fade" onRequestClose={() => setRenaming(false)}>
         <View style={styles.caseModalOverlay}>
           <KeyboardAwareScrollView contentContainerStyle={styles.caseModalScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
@@ -658,6 +706,10 @@ const styles = StyleSheet.create({
   caseModalNoteInput: { flex: 1, minHeight: 44, textAlignVertical: 'top' },
   caseModalSave: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
   caseModalSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.surface },
+  addQtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl, marginTop: spacing.md },
+  addQtyBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  addQtyBtnText: { fontSize: 26, fontFamily: fonts.bodyRegular, color: colors.gold },
+  addQtyValue: { fontSize: 28, fontFamily: fonts.bodyBold, color: colors.text, minWidth: 48, textAlign: 'center' },
   caseModalCancel: { alignItems: 'center', paddingTop: spacing.md },
   caseModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   checkbox: { width: 22, height: 22, borderRadius: 11, borderWidth: 1.5, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
