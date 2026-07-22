@@ -1335,7 +1335,7 @@ export default function RackGridScreen() {
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
-          Add multiple bottles of the same wine at once by long holding a slot & selecting your placements · Add multiple bottles at once with Add a Lineup · Select a thumbnail to View Intel, long hold to edit · Pinch the rack to zoom
+          Short Press a slot to Add Wine or View Intel. Long Press a slot to Add Multiples of the same wine or Edit slot contents. Use Add a Lineup to add whole rows or columns. Pinch the grid to Zoom In.
         </Text>
 
         {winesInRack.length > 0 && (
