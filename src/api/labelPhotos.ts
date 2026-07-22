@@ -1,5 +1,6 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { supabase } from './supabase';
+import { primeCachedLabel } from './labelImageCache';
 
 // Storage bucket for user wine-label photos. Created via dashboard SQL
 // (public-read; writes locked to each user's own {userId}/ folder). The
@@ -60,6 +61,9 @@ export async function uploadLabelImage(userId: string, localUri: string, wineId:
     upsert: true,
   });
   if (error) throw error;
+  // Prime the on-disk cache with exactly what we stored, so this device shows
+  // the image instantly (and a retake overwrites the stale local copy).
+  primeCachedLabel(path, bytes);
   return path;
 }
 
@@ -76,6 +80,9 @@ export async function uploadLocationPhoto(userId: string, localUri: string, loca
     upsert: true,
   });
   if (error) throw error;
+  // Prime the on-disk cache with exactly what we stored, so this device shows
+  // the image instantly (and a retake overwrites the stale local copy).
+  primeCachedLabel(path, bytes);
   return path;
 }
 
@@ -93,6 +100,9 @@ export async function uploadLibraryLabel(userId: string, localUri: string, label
     upsert: true,
   });
   if (error) throw error;
+  // Prime the on-disk cache with exactly what we stored, so this device shows
+  // the image instantly (and a retake overwrites the stale local copy).
+  primeCachedLabel(path, bytes);
   return path;
 }
 
