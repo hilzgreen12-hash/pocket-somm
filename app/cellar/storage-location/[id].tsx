@@ -334,11 +334,12 @@ export default function StorageLocationScreen() {
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
         ) : null}
 
-        {/* Add a wine — filed straight into this location. Scan (wine or case),
-            upload a photo, or enter by hand. */}
+        {/* Add a wine — filed straight into this location. Scan a wine label,
+            upload a photo, or enter by hand. (Case-label scanning was removed:
+            a case/box label doesn't carry enough to identify the wine inside.) */}
         <View style={styles.addSection}>
           <TouchableOpacity style={styles.addBtn} onPress={() => handleScan()} activeOpacity={0.85}>
-            <Text style={styles.addBtnText}>Scan a Wine or Case Label</Text>
+            <Text style={styles.addBtnText}>Scan a Wine Label</Text>
           </TouchableOpacity>
           <View style={styles.addRow}>
             <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={() => handleUpload()} activeOpacity={0.85}>
@@ -380,7 +381,7 @@ export default function StorageLocationScreen() {
         </ScrollView>
 
         {filtered.length === 0 ? (
-          <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a label or a case to start filling it.' : 'No wines match your search.'}</Text>
+          <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your search.'}</Text>
         ) : (
           <View style={styles.listSection}>
             {caseGroups.map((g) => (
