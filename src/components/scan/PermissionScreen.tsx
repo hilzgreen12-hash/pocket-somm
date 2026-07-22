@@ -9,9 +9,13 @@ interface Props {
   // to route elsewhere — e.g. back to the wine-storage form rather than
   // the OS-level previous view.
   onBack?: () => void;
+  // Hide the built-in "Back" link when the hosting screen already provides its
+  // own back control (e.g. Archive a Night's header arrow) — otherwise two
+  // back affordances stack up.
+  hideBack?: boolean;
 }
 
-export function PermissionScreen({ onRequest, onBack }: Props) {
+export function PermissionScreen({ onRequest, onBack, hideBack }: Props) {
   function handleBack() {
     if (onBack) {
       onBack();
@@ -22,13 +26,15 @@ export function PermissionScreen({ onRequest, onBack }: Props) {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity
-        style={styles.backRow}
-        onPress={handleBack}
-        hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-      >
-        <Text style={styles.backLink}>Back</Text>
-      </TouchableOpacity>
+      {hideBack ? null : (
+        <TouchableOpacity
+          style={styles.backRow}
+          onPress={handleBack}
+          hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        >
+          <Text style={styles.backLink}>Back</Text>
+        </TouchableOpacity>
+      )}
 
       <View style={styles.body}>
         <Text style={styles.title}>Camera Access</Text>
