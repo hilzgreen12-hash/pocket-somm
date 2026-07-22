@@ -27,8 +27,8 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: 'How Chef Works',
-    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each. Chef will apply any additional dietary needs or preferences that you have set in your profile.',
+    title: 'How Dine Works',
+    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each. Dine will apply any additional dietary needs or preferences that you have set in your profile.',
   },
   {
     title: 'How Cellar Works',
@@ -46,7 +46,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'Your Preferences',
-    body: 'The settings you save in your Profile are used as default parameters across Scan and Chef as you generate recommendations. You can override your preferences on each specific search you generate in Scan or Chef, depending on one-off requirements.',
+    body: 'The settings you save in your Profile are used as default parameters across Scan and Dine as you generate recommendations. You can override your preferences on each specific search you generate in Scan or Dine, depending on one-off requirements.',
   },
   {
     title: 'Privacy & Data',

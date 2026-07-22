@@ -24,7 +24,7 @@ export default function WelcomeTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Chef</Text>
+        <Text style={styles.sectionTitle}>Dine</Text>
         <Text style={styles.sectionDesc}>Tell Vinster what you're cooking and it will recommend a wine pairing — or scan a wine label and receive chef-inspired recipe suggestions to match the bottle.</Text>
       </View>
 

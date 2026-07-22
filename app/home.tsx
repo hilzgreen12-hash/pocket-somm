@@ -93,7 +93,7 @@ const motifStyles = StyleSheet.create({
 
 const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: () => React.JSX.Element }> = [
   { label: 'Scan',      desc: 'Wine Lists & Labels',   route: '/(tabs)/scan',      Motif: ListMotif },
-  { label: 'Chef',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
+  { label: 'Dine',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
   { label: 'Cellar',    desc: 'build your collection', route: '/(tabs)/cellar',    Motif: CellarMotif },
   { label: 'Community', desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
 ];
@@ -104,7 +104,7 @@ const MENU_ITEMS: ReadonlyArray<{ label: string; route: string }> = [
   { label: 'About Vinster', route: '/about' },
   { label: 'Scan',          route: '/(tabs)/scan' },
   { label: 'Cellar',        route: '/(tabs)/cellar' },
-  { label: 'Chef',          route: '/(tabs)/chef' },
+  { label: 'Dine',          route: '/(tabs)/chef' },
   { label: 'Community',     route: '/(tabs)/community' },
 ];
 

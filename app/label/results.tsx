@@ -983,7 +983,7 @@ export default function LabelResultsScreen() {
             <Text style={styles.deepBtnText}>Dive Deeper into this wine</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.deepBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.8}>
-            <Text style={styles.deepBtnText}>Chef, find me a recipe for this wine</Text>
+            <Text style={styles.deepBtnText}>Find me a recipe for this wine</Text>
           </TouchableOpacity>
         </View>
       ) : null}

@@ -17,7 +17,7 @@ const SLIDES: Slide[] = [
     body: 'Point your camera at any wine list and Vinster will dive deep into online resources to find the best wines for your tastes based on critic scores, value for money, rarity, vintage quality and drinkability. Don\'t ever sweat a wine pairing again.',
   },
   {
-    badge: 'Chef',
+    badge: 'Dine',
     title: 'Cook & Drink better',
     body: 'Tell Vinster what you\'re cooking and it offers you a wine, scan a label and it serves up three chef-inspired recipes. Save, edit and organise your recipes in your Cookbook for future reference.',
   },
