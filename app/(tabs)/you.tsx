@@ -40,7 +40,6 @@ export default function YouScreen() {
   );
   const [currencyOpen, setCurrencyOpen] = useState(false);
   const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
-  const [lineupInfoOpen, setLineupInfoOpen] = useState(false);
   const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
@@ -194,21 +193,8 @@ export default function YouScreen() {
         {currentUsername || currentEmail.split('@')[0]} · Vinster since {formatJoinedShort(session?.user.created_at)}
       </Text>
 
-      {/* Restaurants and Wine Reviews moved to the Dine tab. */}
-      <View style={styles.goldLine} />
-
-      <View style={styles.block}>
-        <View style={styles.sketchHeaderRow}>
-          <Text style={styles.sketchHeader}>Your Library</Text>
-          <TouchableOpacity onPress={() => setLineupInfoOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.whatsThis}>what's this?</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/cellar/lineups')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Lineup Library</Text>
-        </TouchableOpacity>
-      </View>
-
+      {/* Restaurants & Wine Reviews moved to the Dine tab; the Lineup Library
+          moved to the Cellar tab. This tab is now identity + settings only. */}
       <View style={styles.divider} />
 
       <View style={styles.block}>
@@ -384,19 +370,6 @@ export default function YouScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={lineupInfoOpen} transparent animationType="fade" onRequestClose={() => setLineupInfoOpen(false)}>
-        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setLineupInfoOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>Your Library</Text>
-            <Text style={styles.confirmBody}>
-              Your Library keeps two photo collections. Your Lineup Library is a diary of the bottles you drink — photograph a lineup (via Archive a Night or by adding one) to note and share it. Your Label Library saves individual wine labels you scan, each stamped with the date and place, so you can revisit a wine's intel and your review any time.
-            </Text>
-            <TouchableOpacity style={styles.confirmGoldBtn} onPress={() => setLineupInfoOpen(false)}>
-              <Text style={styles.confirmGoldBtnText}>Got it</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
         <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setCurrencyOpen(false)}>

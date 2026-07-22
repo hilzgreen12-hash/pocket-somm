@@ -46,7 +46,7 @@ export default function PersonalityArchiveScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{cat === 'wine' ? 'Wine Personality Archive' : 'Chef Personality Archive'}</Text>
+        <Text style={styles.title}>{cat === 'wine' ? 'Wine Personality Archive' : 'Foodie Personality Archive'}</Text>
         <View style={{ width: 40 }} />
       </View>
 

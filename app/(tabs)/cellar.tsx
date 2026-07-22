@@ -85,6 +85,11 @@ export default function CellarTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}>
           <Text style={styles.buttonText}>Archive a Night</Text>
         </TouchableOpacity>
+        {/* Lineup Library sits below Archive a Night: the capture action, then
+            the gallery of everything captured (moved here from the You tab). */}
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/lineups'))}>
+          <Text style={styles.buttonText}>Lineup Library</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
