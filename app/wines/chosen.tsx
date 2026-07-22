@@ -189,7 +189,16 @@ export default function ChosenWinesScreen() {
   // Restaurant bottle picks the user has NOT yet reviewed — these are excluded
   // from the main reviews list (they live in Your Restaurants until reviewed),
   // and surface in the "Bottle Picks Awaiting Review" section + the on-open prompt.
-  const awaitingReview = chosenWines.filter((w) => !chosenHasReview(w));
+  // Identities (producer·name·vintage) that already carry a review somewhere —
+  // a chosen review OR a cellar review. A bare bottle-pick row for one of these
+  // is a phantom (e.g. a legacy duplicate) and must NOT show as "awaiting", so a
+  // wine you've reviewed never appears in the awaiting list too.
+  const idKey = (w: { producer?: string | null; wine_name?: string | null; vintage?: string | number | null }) =>
+    `${(w.producer ?? '').trim().toLowerCase()}|${(w.wine_name ?? '').trim().toLowerCase()}|${w.vintage ?? ''}`;
+  const reviewedIdentityKeys = new Set<string>();
+  for (const w of chosenWines) if (chosenHasReview(w)) reviewedIdentityKeys.add(idKey(w));
+  for (const w of cellarReviews) reviewedIdentityKeys.add(idKey(w));
+  const awaitingReview = chosenWines.filter((w) => !chosenHasReview(w) && !reviewedIdentityKeys.has(idKey(w)));
 
   // One-time, dismissible prompt nudging the user to review a waiting pick.
   const { session } = useAuth();

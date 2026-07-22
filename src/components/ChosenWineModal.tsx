@@ -142,16 +142,31 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         await doSave('update', existing);
         return;
       }
-      showAlert({
-        title: "You've reviewed this wine before",
-        body: `You already have a review for ${wineName}. Update it, add a new dated tasting to it, or start a fresh review?`,
-        buttons: [
-          { text: 'Update review', onPress: () => { void doSave('update', existing); } },
-          { text: 'Add to review', onPress: () => { void doSave('append', existing); } },
-          { text: 'Create new', onPress: () => { void doSave('create', null); } },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      });
+      const existingDay = existing.chosen_at ? new Date(existing.chosen_at).toISOString().slice(0, 10) : '';
+      const todayDay = new Date().toISOString().slice(0, 10);
+      if (existingDay === todayDay) {
+        showAlert({
+          title: 'Already in Your Reviews today',
+          body: `You already have this wine in Your Reviews on this date. Keep both, replace the existing one, or discard this?`,
+          buttons: [
+            { text: 'Keep both', onPress: () => { void doSave('create', null); } },
+            { text: 'Replace existing', onPress: () => { void doSave('update', existing); } },
+            { text: 'Discard', style: 'cancel' },
+          ],
+        });
+      } else {
+        const dateLabel = existing.chosen_at ? new Date(existing.chosen_at).toLocaleDateString('en-GB') : 'a previous date';
+        showAlert({
+          title: "You've reviewed this wine before",
+          body: `You reviewed this wine on ${dateLabel}. Would you like to add to that review, update that review, or create a new review card?`,
+          buttons: [
+            { text: 'Add to that review', onPress: () => { void doSave('append', existing); } },
+            { text: 'Update that review', onPress: () => { void doSave('update', existing); } },
+            { text: 'Create a new review card', onPress: () => { void doSave('create', null); } },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        });
+      }
       return;
     }
     await doSave('create', null);
