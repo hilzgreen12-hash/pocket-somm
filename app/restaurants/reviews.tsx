@@ -753,11 +753,26 @@ export default function RestaurantReviewsScreen() {
           }))}
           onReviewWine={(i) => {
             const cw = findChosenForVisit(editing)[i];
-            if (cw) { closeRestaurantReview(); setEditWineIdentity(false); setEditingWine(cw); }
+            if (cw) {
+              // Reviewing a wine that belongs to this restaurant is an ACTIVE
+              // review, not an abandoned blank draft — mark it saved so
+              // closeRestaurantReview keeps the (manual) draft instead of
+              // deleting it. The modal's silent autosave persists the
+              // restaurant note/ratings as it unmounts.
+              manualSavedRef.current = true;
+              closeRestaurantReview();
+              setEditWineIdentity(false);
+              setEditingWine(cw);
+            }
           }}
           onEditWine={(i) => {
             const cw = findChosenForVisit(editing)[i];
-            if (cw) { closeRestaurantReview(); setEditWineIdentity(true); setEditingWine(cw); }
+            if (cw) {
+              manualSavedRef.current = true; // keep the draft — see onReviewWine
+              closeRestaurantReview();
+              setEditWineIdentity(true);
+              setEditingWine(cw);
+            }
           }}
           onViewIntel={(i) => {
             const cw = findChosenForVisit(editing)[i];
