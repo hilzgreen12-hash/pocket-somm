@@ -69,29 +69,41 @@ Reuse the rack infrastructure, count-based instead of slot-based:
 - **Cells** → a `bin_cells` table parallels `rack_slots`:
   `(bin_id, index, kind 'diamond'|'triangle', capacity)`. Edge cells are
   `triangle` at half capacity.
-- **Membership** → count-based: a `cellar_wines` row references its bin cell
-  (or the unit) with a `quantity`. **No `rack_slots`.**
+- **Membership** → count-based, tracked **per diamond**: a `cellar_wines` row
+  references the specific `bin_cell` it lives in, with a `quantity`. **No
+  `rack_slots`.**
 
 Cases keep their **own** existing model (`storage_cases`, inside a storage
 location) — they are not modelled through `wine_racks`.
 
-## Phasing (recommended)
+### Diamond contents (the per-diamond list)
 
-1. **Phase 1 — unit-level count.** Capture the diamond arrangement + per-diamond
-   capacity to compute total capacity, but populate at the **unit** level (one
-   fill meter for the whole bin). Ships the bin flow with minimal new tables
-   (`bin_cells` optional here).
-2. **Phase 2 — per-diamond tracking.** Because we already captured the diamond
-   grid, we can let users populate a **specific diamond** ("all my Barolo is in
-   diamond 3"), each cell with its own fill meter. This is the count-based
-   analogue of per-slot rack tracking — the natural next step, not a rework.
+**Each diamond has its own list of the wines within it** — this is the tracking
+granularity (decided; not a whole-bin single meter). You drill into a diamond
+and see its contents.
 
-## Open decision
+Mirror the **lineup input list** (`scan-lineup.tsx`) exactly — that pattern is
+the template:
 
-**Track per-diamond, or just total unit capacity?** The rack analogy ("like
-rows and cols") points to per-diamond (Phase 2). Recommendation: build Phase 1
-now (unit-level), with the schema already shaped for Phase 2. Confirm before
-building whether per-diamond tracking is wanted at launch or can follow.
+- **One row per wine + format**, shown as `qty × wine` with a **format tag**,
+  e.g. `12 × Diamond Creek · 75cl`. A diamond full of one wine is a single row
+  (`12 × Diamond Creek`).
+- **Batching:** identical wine **and** format collapse into one `×N` row (same
+  rule lineup uses for `producer + name + vintage`), here extended to include
+  **format** so sizes never silently merge.
+- **Drill-through / edit:** tap a row to open its editor (quantity stepper,
+  producer/name/region/vintage, and a `BottleSizePicker` for the format) —
+  reuse the lineup edit sheet, including scan-to-fill.
+- **Fill meter** per diamond: sum of row quantities vs the diamond's capacity
+  (full = cap, triangle = cap ÷ 2).
+
+### Formats (bottle sizes)
+
+**Multiple bottle sizes are allowed both _within_ a diamond and _across_ a
+bin.** Format is part of a row's identity, so one diamond can hold
+`6 × Diamond Creek · 75cl` and `2 × Diamond Creek · 150cl` as **two** rows.
+Every membership row carries its own `bottle_size_ml` (as lineup rows already
+do) — do not assume 750ml.
 
 ## Non-negotiables (already decided)
 
