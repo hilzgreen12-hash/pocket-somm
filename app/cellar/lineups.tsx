@@ -332,7 +332,7 @@ export default function LineupLibraryScreen() {
       </View>
 
       <Text style={styles.blurb}>
-        A visual record of your vinous exploits. Lineups photographed in Archive a Night under Cellar will appear here with date stamps.
+        A visual record of your vinous exploits. Lineups photographed in Archive a Night under Cellar will appear here.
       </Text>
 
       {isLoading ? (
@@ -348,7 +348,7 @@ export default function LineupLibraryScreen() {
       ) : lineups.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No lineups yet</Text>
-          <Text style={styles.emptyBody}>Tap + Add to save a lineup photo straight to your library, or use Archive a Night in your Cellar to photograph and log a bottle lineup — each one is saved here with its date.</Text>
+          <Text style={styles.emptyBody}>Tap + Add to save a lineup photo straight to your library, or use Archive a Night in your Cellar to photograph and log a bottle lineup.</Text>
         </View>
       ) : (
         <>
