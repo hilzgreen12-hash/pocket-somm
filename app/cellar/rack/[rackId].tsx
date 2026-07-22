@@ -803,6 +803,11 @@ export default function RackGridScreen() {
         },
       },
       {
+        // Edit the wine's details — opens its card (the edit surface).
+        text: 'Edit Wine',
+        onPress: () => router.push(`/cellar/${wineId}?from=rack` as any),
+      },
+      {
         // Archive keeps the wine in the user's records (Cellar Archive) but
         // takes it out of the live Cellar List and this rack.
         text: 'Archive Wine',
