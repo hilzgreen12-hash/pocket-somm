@@ -151,7 +151,7 @@ export default function CellarWineDetail() {
   // showing "Add to Location" as if it had none.
   const wineLocations = locations.filter((l) => l.wineIds?.includes(wineId ?? ''));
 
-  // Other Home Storage Locations (storage_locations) — also valid "Add to
+  // Other Home Storage (storage_locations) — also valid "Add to
   // Location" destinations. A wine filed here lives via
   // cellar_wines.storage_location_id (the shed, under the bed…).
   const { data: storageLocations = [] } = useQuery({
