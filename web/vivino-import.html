@@ -6,13 +6,13 @@
 <title>Import your Vivino cellar · Vinster</title>
 <style>
   :root {
-    --bg: #14100d;
-    --panel: #1e1813;
-    --line: rgba(212,176,96,0.22);
-    --gold: #d4b060;
-    --gold-soft: rgba(212,176,96,0.12);
-    --text: #f4ebe0;
-    --muted: #a99e8e;
+    --bg: #7f4f4c;        /* Vinster terracotta */
+    --panel: #572f2b;     /* surface */
+    --line: rgba(224,184,74,0.28);
+    --gold: #e0b84a;      /* brand gold */
+    --gold-soft: rgba(224,184,74,0.14);
+    --text: #f4ebe0;      /* cream */
+    --muted: rgba(244,235,224,0.72);
   }
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; }
@@ -38,7 +38,7 @@
   label.fld { display:block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
   input[type=email] {
     width: 100%; padding: 12px 14px; font-size: 16px; border-radius: 10px;
-    border: 1px solid var(--line); background: #17120e; color: var(--text); font-family: inherit;
+    border: 1px solid var(--line); background: #4a2522; color: var(--text); font-family: inherit;
   }
   .btn {
     display: inline-flex; align-items:center; justify-content:center; gap:8px;
@@ -46,7 +46,7 @@
     background: transparent; color: var(--gold); font-family: inherit; font-size: 16px; font-weight: 600;
     border: 1px solid var(--gold); border-radius: 12px; letter-spacing: 0.3px;
   }
-  .btn.solid { background: var(--gold); color: #14100d; }
+  .btn.solid { background: var(--gold); color: #4a2522; }
   .btn:disabled { opacity: 0.45; cursor: default; }
   .btn.secondary { border-color: var(--line); color: var(--text); }
   .muted { color: var(--muted); font-size: 14px; }

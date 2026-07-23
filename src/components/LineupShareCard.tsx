@@ -79,7 +79,7 @@ const styles = StyleSheet.create({
     borderColor: colors.gold,
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: '#000',
+    backgroundColor: colors.background,
   },
   photo: { width: '100%', height: 660 },
   note: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: '#FFFFFF', lineHeight: 44, marginTop: 32, textAlign: 'center' },

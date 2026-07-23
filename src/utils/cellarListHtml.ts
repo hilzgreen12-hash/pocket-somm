@@ -28,7 +28,7 @@ export function buildCellarListHtml(opts: {
 <style>
   @page { margin: 28px; }
   * { box-sizing: border-box; }
-  body { font-family: Georgia, 'Times New Roman', serif; margin: 0; background: #1E0F13; color: #F4EBE0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: Georgia, 'Times New Roman', serif; margin: 0; background: #7F4F4C; color: #F4EBE0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .wrap { border: 2px solid #E0B84A; border-radius: 16px; padding: 26px 30px; }
   .brand { text-align: center; letter-spacing: 8px; font-size: 32px; font-weight: bold; color: #fff; }
   .tagline { text-align: center; font-style: italic; color: rgba(255,255,255,.7); font-size: 13px; margin-top: 4px; letter-spacing: 1px; }
