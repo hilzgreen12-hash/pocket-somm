@@ -648,14 +648,19 @@ export default function StorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="contain" />
-        ) : null}
+        {/* Layout: line under the header, stats bar, the (portrait) photo,
+            another line, then the filters/search/list. */}
+        <View style={styles.sectionLine} />
 
-        {/* Stats bar — no fixed slot capacity here, so cases / loose / total. */}
         <Text style={styles.statsBar}>
           {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'} · {totalBottles} Total {totalBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
+
+        {photoUrl ? (
+          <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
+        ) : null}
+
+        <View style={styles.sectionLine} />
 
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
@@ -757,7 +762,7 @@ export default function StorageLocationScreen() {
 
         {listView === 'bottles' ? (
           filtered.length === 0 ? (
-            <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your filters.'}</Text>
+            <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet, +Add to start cellaring' : 'No wines match your filters.'}</Text>
           ) : (
             <View style={styles.listSection}>{filtered.map(renderWine)}</View>
           )
@@ -781,7 +786,7 @@ export default function StorageLocationScreen() {
             </View>
           )
         ) : filtered.length === 0 && caseGroups.length === 0 ? (
-          <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet — photograph a wine label to start filling it.' : 'No wines match your search.'}</Text>
+          <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet, +Add to start cellaring' : 'No wines match your search.'}</Text>
         ) : (
           <View style={styles.listSection}>
             {caseGroups.map((g) => (
@@ -947,7 +952,9 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   headerActions: { alignItems: 'flex-end', gap: 4 },
   headerLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
-  areaPhoto: { width: '100%', height: 360, backgroundColor: colors.surface },
+  // Portrait photo, ~2/3 the old footprint, centred.
+  areaPhoto: { alignSelf: 'center', width: '58%', aspectRatio: 3 / 4, borderRadius: 14, backgroundColor: colors.surface, marginVertical: spacing.md },
+  sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
   statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.md, paddingHorizontal: spacing.xl },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
