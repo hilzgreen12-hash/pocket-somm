@@ -4,14 +4,17 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../src/api/racks';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
+import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useLabelImageUrl } from '../../../src/hooks/useLabelImageUrl';
+import { useAuth } from '../../../src/hooks/useAuth';
+import { useLocationFilters } from '../../../src/hooks/useLocationFilters';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -36,19 +39,21 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'In Decline' },
 ];
 
-// Cases filter — by packaging kind (migration 073).
-const CASE_FILTER_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'All cases' },
-  { value: 'owc', label: 'OWC Complete' },
-  { value: 'non_owc', label: 'Non-OWC Complete' },
-  { value: 'mixed', label: 'Mixed' },
+// Packaging filter — loose bottles vs. the case packaging kinds (migration 073).
+const PACKAGING_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: 'Packaging' },
+  { value: 'loose', label: 'Loose Bottles' },
+  { value: 'mixed', label: 'Mixed Cases' },
+  { value: 'non_owc', label: 'Complete Cases' },
+  { value: 'owc', label: 'OWC' },
 ];
 
-// The "List" chip is a view-mode picker: the default grouped view, a flat bottle
-// list (like the Full Cellar List), or a summary list of the cases/boxes.
-const LIST_VIEW_OPTIONS: { value: 'default' | 'bottles' | 'cases'; label: string }[] = [
-  { value: 'default', label: 'List' },
-  { value: 'bottles', label: 'Full Bottle List' },
+// The "List" chip is a view-mode picker. The default is the flat full list (in
+// the order wines were added); the grouped-by-case and cases-summary views are
+// the alternates.
+const LIST_VIEW_OPTIONS: { value: 'bottles' | 'default' | 'cases'; label: string }[] = [
+  { value: 'bottles', label: 'Full List' },
+  { value: 'default', label: 'Grouped by Case' },
   { value: 'cases', label: 'Cases List' },
 ];
 
@@ -59,16 +64,27 @@ function bottleLabel(n: number) {
 export default function StorageLocationScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const qc = useQueryClient();
+  const { session } = useAuth();
+  const userId = session?.user.id;
   const { setPendingStorageLocationId, setPendingCaseId } = useRackStore();
   const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
   const [maturityOpen, setMaturityOpen] = useState(false);
-  const [casesFilter, setCasesFilter] = useState('');
-  const [casesOpen, setCasesOpen] = useState(false);
-  const [listView, setListView] = useState<'default' | 'bottles' | 'cases'>('default');
+  const [packaging, setPackaging] = useState('');
+  const [packagingOpen, setPackagingOpen] = useState(false);
+  const [listView, setListView] = useState<'default' | 'bottles' | 'cases'>('bottles');
   const [listOpen, setListOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [editingImage, setEditingImage] = useState(false);
+  // Bespoke "+ Add" filters, scoped to this location (migration 075).
+  const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useLocationFilters(id);
+  const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilterId, setEditingFilterId] = useState<string | null>(null);
+  const [filterName, setFilterName] = useState('');
+  const [selectedWineIds, setSelectedWineIds] = useState<Set<string>>(new Set());
+  const [savingFilter, setSavingFilter] = useState(false);
   // Multi-select — long-press a wine to select, then bulk archive / delete /
   // remove-from-location. Mirrors the Full Cellar List select-mode.
   const [selectMode, setSelectMode] = useState(false);
@@ -107,13 +123,21 @@ export default function StorageLocationScreen() {
     return m;
   }, [cases]);
 
+  const activeFilterWineIds = useMemo(() => {
+    if (!activeCustomFilterId) return null;
+    const f = customFilters.find((cf) => cf.id === activeCustomFilterId);
+    return new Set(f?.wineIds ?? []);
+  }, [activeCustomFilterId, customFilters]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return wines.filter((w) => {
       if (maturity && w.drinking_window_status !== maturity) return false;
-      // Cases filter: keep only wines boxed in a case of the chosen packaging
-      // kind (loose wines have no case, so they're excluded when it's set).
-      if (casesFilter && (!w.case_id || caseKindById[w.case_id] !== casesFilter)) return false;
+      // Packaging filter: "loose" keeps only un-cased bottles; a case kind keeps
+      // only wines boxed in a case of that kind.
+      if (packaging === 'loose') { if (w.case_id) return false; }
+      else if (packaging) { if (!w.case_id || caseKindById[w.case_id] !== packaging) return false; }
+      if (activeFilterWineIds && !activeFilterWineIds.has(w.id)) return false;
       if (q) {
         const hay = [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase();
         const statusTerms = STATUS_SEARCH.find((s) => s.status === w.drinking_window_status)?.terms ?? [];
@@ -121,7 +145,12 @@ export default function StorageLocationScreen() {
       }
       return true;
     });
-  }, [wines, search, maturity, casesFilter, caseKindById]);
+  }, [wines, search, maturity, packaging, caseKindById, activeFilterWineIds]);
+
+  // Stats bar figures — cases, loose (un-cased) bottles, and the grand total.
+  const caseCount = cases.length;
+  const looseBottles = wines.filter((w) => !w.case_id).reduce((s, w) => s + (w.quantity ?? 0), 0);
+  const totalBottles = wines.reduce((s, w) => s + (w.quantity ?? 0), 0);
 
   // All add paths file the saved wine into THIS location (context=add-location,
   // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.
@@ -159,6 +188,102 @@ export default function StorageLocationScreen() {
       showAlert({ title: 'Could not read label', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setUploading(false);
+    }
+  }
+
+  // "+ Add Wine" header link → the same chooser the rack/bin flows use.
+  function openAddWine() {
+    showAlert({
+      title: 'Add a wine to this location',
+      buttons: [
+        { text: 'Scan a Label', onPress: () => handleScan() },
+        { text: 'Upload Photo', onPress: () => handleUpload() },
+        { text: 'Manual Input', onPress: () => handleManual() },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // "Edit Image" header link → retake or re-pick the location's portrait photo.
+  async function pickAndSetImage(fromCamera: boolean) {
+    if (!id || !userId) return;
+    if (!(await ensureMediaPermission(fromCamera ? 'camera' : 'library'))) return;
+    const res = fromCamera
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (res.canceled || !res.assets[0]) return;
+    setEditingImage(true);
+    try {
+      const path = await uploadLocationPhoto(userId, res.assets[0].uri, id);
+      await setStorageLocationPhoto(id, path);
+      qc.invalidateQueries({ queryKey: ['storage-location', id] });
+      qc.invalidateQueries({ queryKey: ['storage-locations'] });
+    } catch (err) {
+      showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setEditingImage(false);
+    }
+  }
+  function handleEditImage() {
+    showAlert({
+      title: 'Location photo',
+      buttons: [
+        { text: 'Take Photo', onPress: () => pickAndSetImage(true) },
+        { text: 'Choose from Library', onPress: () => pickAndSetImage(false) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // ---- Bespoke filters ----
+  function applyCustomFilter(filterId: string) {
+    setActiveCustomFilterId((prev) => (prev === filterId ? null : filterId));
+  }
+  function openCreateFilter() {
+    setEditingFilterId(null);
+    setFilterName('');
+    setSelectedWineIds(new Set());
+    setFilterModalOpen(true);
+  }
+  function openEditFilter(f: { id: string; name: string; wineIds: string[] }) {
+    setEditingFilterId(f.id);
+    setFilterName(f.name);
+    setSelectedWineIds(new Set(f.wineIds));
+    setFilterModalOpen(true);
+  }
+  function openFilterOptions(f: { id: string; name: string; wineIds: string[] }) {
+    showAlert({
+      title: f.name,
+      body: 'Rename this filter or change the wines it holds, or delete it. Your wines stay in the location either way.',
+      buttons: [
+        { text: 'Rename / Add / Remove Wines', onPress: () => openEditFilter(f) },
+        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomFilterId === f.id) setActiveCustomFilterId(null); removeFilter.mutate(f.id); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function toggleWineInSelection(wineId: string) {
+    setSelectedWineIds((prev) => { const next = new Set(prev); next.has(wineId) ? next.delete(wineId) : next.add(wineId); return next; });
+  }
+  async function saveFilter() {
+    const name = filterName.trim();
+    if (!name) { showAlert({ title: 'Name needed', body: 'Give your filter a name first.' }); return; }
+    const here = new Set(wines.map((w) => w.id));
+    const wineIds = Array.from(selectedWineIds).filter((wid) => here.has(wid));
+    setSavingFilter(true);
+    try {
+      if (editingFilterId) {
+        await renameFilter.mutateAsync({ filterId: editingFilterId, name });
+        await setFilterWines.mutateAsync({ filterId: editingFilterId, wineIds });
+      } else {
+        await createFilter.mutateAsync({ name, wineIds });
+      }
+      setFilterModalOpen(false);
+      setEditingFilterId(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
     }
   }
 
@@ -429,9 +554,12 @@ export default function StorageLocationScreen() {
   // Render EVERY case, even one with zero (matching) wines — otherwise an
   // emptied case vanishes with no route left to its Dissolve menu (D1), and a
   // search that excludes a case's wines hides its "+ Add" (U2).
-  const caseGroups = cases
-    .filter((c) => !casesFilter || c.kind === casesFilter)
-    .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) }));
+  // "Loose" packaging hides case groups entirely; a case kind keeps only that
+  // kind. Case groups are built from `filtered` so maturity/search/bespoke
+  // filters compose into the grouped + cases views too.
+  const caseGroups = (packaging === 'loose' ? [] : cases
+    .filter((c) => !packaging || c.kind === packaging)
+    .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) })));
   const looseFiltered = filtered.filter((w) => !w.case_id);
 
   const renderWine = (w: CellarWine) => {
@@ -482,7 +610,14 @@ export default function StorageLocationScreen() {
         <TouchableOpacity style={{ flex: 1 }} onLongPress={handleLongPressHeader} delayLongPress={400} activeOpacity={1}>
           <Text style={styles.title} numberOfLines={1}>{location.name}</Text>
         </TouchableOpacity>
-        <View style={{ width: 40 }} />
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={openAddWine} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={styles.headerLink}>+ Add Wine</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleEditImage} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={styles.headerLink}>Edit Image</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
@@ -490,52 +625,51 @@ export default function StorageLocationScreen() {
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="contain" />
         ) : null}
 
-        {/* Add a wine — filed straight into this location. Scan a wine label,
-            upload a photo, or enter by hand. (Case-label scanning was removed:
-            a case/box label doesn't carry enough to identify the wine inside.) */}
-        <View style={styles.addSection}>
-          <TouchableOpacity style={styles.addBtn} onPress={() => handleScan()} activeOpacity={0.85}>
-            <Text style={styles.addBtnText}>Scan a Wine Label</Text>
-          </TouchableOpacity>
-          <View style={styles.addRow}>
-            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={() => handleUpload()} activeOpacity={0.85}>
-              <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Upload Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.addBtn, styles.addBtnSecondary, { flex: 1 }]} onPress={() => handleManual()} activeOpacity={0.85}>
-              <Text style={[styles.addBtnText, styles.addBtnTextSecondary]}>Manual Input</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        {/* Stats bar — no fixed slot capacity here, so cases / loose / total. */}
+        <Text style={styles.statsBar}>
+          {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'} · {totalBottles} Total {totalBottles === 1 ? 'Bottle' : 'Bottles'}
+        </Text>
 
-        {/* Filter row — same format as the rack/fridge screens: "List" first,
-            then a "Maturity" dropdown, so the affordance is consistent. */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+        {/* Filter row — List (default full list), Packaging, Maturity, saved
+            filters, then + Add, mirroring the rack/fridge affordance. */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
-            style={[styles.filterChip, listView !== 'default' && styles.filterChipActive]}
-            onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setCasesOpen(false); }}
+            style={[styles.filterChip, listView !== 'bottles' && styles.filterChipActive]}
+            onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, listView !== 'default' && styles.filterChipTextActive]}>
+            <Text style={[styles.filterChipText, listView !== 'bottles' && styles.filterChipTextActive]}>
               {LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List'} {listOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
+            style={[styles.filterChip, packaging ? styles.filterChipActive : null]}
+            onPress={() => { setPackagingOpen((v) => !v); setMaturityOpen(false); setListOpen(false); }}
+            activeOpacity={0.7}
+          >
+            <Text style={[styles.filterChipText, packaging ? styles.filterChipTextActive : null]}>
+              {packaging ? (PACKAGING_OPTIONS.find((o) => o.value === packaging)?.label ?? 'Packaging') : 'Packaging'} {packagingOpen ? '▴' : '▾'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
             style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
-            onPress={() => { setMaturityOpen((v) => !v); setCasesOpen(false); setListOpen(false); }}
+            onPress={() => { setMaturityOpen((v) => !v); setPackagingOpen(false); setListOpen(false); }}
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, maturity ? styles.filterChipTextActive : null]}>
               {maturity ? (MATURITY_OPTIONS.find((o) => o.value === maturity)?.label ?? 'Maturity') : 'Maturity'} {maturityOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, casesFilter ? styles.filterChipActive : null]}
-            onPress={() => { setCasesOpen((v) => !v); setMaturityOpen(false); setListOpen(false); }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterChipText, casesFilter ? styles.filterChipTextActive : null]}>
-              {casesFilter ? (CASE_FILTER_OPTIONS.find((o) => o.value === casesFilter)?.label ?? 'Cases') : 'Cases'} {casesOpen ? '▴' : '▾'}
-            </Text>
+          {customFilters.map((f) => {
+            const active = activeCustomFilterId === f.id;
+            return (
+              <TouchableOpacity key={f.id} style={[styles.filterChip, active && styles.filterChipActive]} onPress={() => applyCustomFilter(f.id)} onLongPress={() => openFilterOptions(f)} delayLongPress={400} activeOpacity={0.7}>
+                <Text style={[styles.filterChipText, active && styles.filterChipTextActive]} numberOfLines={1}>{f.name}</Text>
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity style={styles.filterChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+            <Text style={styles.filterChipAddText}>+ Add</Text>
           </TouchableOpacity>
         </ScrollView>
 
@@ -552,12 +686,12 @@ export default function StorageLocationScreen() {
           </View>
         ) : null}
 
-        {maturityOpen ? (
+        {packagingOpen ? (
           <View style={styles.maturityDropdown}>
-            {MATURITY_OPTIONS.map((o) => {
-              const active = maturity === o.value;
+            {PACKAGING_OPTIONS.map((o) => {
+              const active = packaging === o.value;
               return (
-                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setMaturity(o.value); setMaturityOpen(false); }} activeOpacity={0.7}>
+                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setPackaging(o.value); setPackagingOpen(false); }} activeOpacity={0.7}>
                   <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
                 </TouchableOpacity>
               );
@@ -565,12 +699,12 @@ export default function StorageLocationScreen() {
           </View>
         ) : null}
 
-        {casesOpen ? (
+        {maturityOpen ? (
           <View style={styles.maturityDropdown}>
-            {CASE_FILTER_OPTIONS.map((o) => {
-              const active = casesFilter === o.value;
+            {MATURITY_OPTIONS.map((o) => {
+              const active = maturity === o.value;
               return (
-                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCasesFilter(o.value); setCasesOpen(false); }} activeOpacity={0.7}>
+                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setMaturity(o.value); setMaturityOpen(false); }} activeOpacity={0.7}>
                   <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
                 </TouchableOpacity>
               );
@@ -606,7 +740,7 @@ export default function StorageLocationScreen() {
           ) : (
             <View style={styles.listSection}>
               {caseGroups.map((g) => {
-                const count = wines.filter((w) => w.case_id === g.box.id).reduce((s, w) => s + (w.quantity ?? 0), 0);
+                const count = g.wines.reduce((s, w) => s + (w.quantity ?? 0), 0);
                 return (
                   <TouchableOpacity key={g.box.id} style={styles.caseListRow} onPress={() => openAddToCase(g.box)} onLongPress={() => openCaseMenu(g.box)} delayLongPress={350} activeOpacity={0.7}>
                     <View style={{ flex: 1 }}>
@@ -737,10 +871,40 @@ export default function StorageLocationScreen() {
         </View>
       </Modal>
 
-      {uploading && (
+      {/* Bespoke-filter builder — name it, tick the wines it holds. */}
+      <Modal visible={filterModalOpen} transparent animationType="fade" onRequestClose={() => setFilterModalOpen(false)}>
+        <View style={styles.caseModalOverlay}>
+          <View style={styles.caseModalSheet}>
+            <Text style={styles.caseModalTitle}>{editingFilterId ? 'Edit Filter' : 'New Filter'}</Text>
+            <TextInput style={styles.caseModalInput} value={filterName} onChangeText={setFilterName} placeholder="Filter name (e.g. Drink First)" placeholderTextColor={colors.textSubtle} />
+            <Text style={[styles.caseModalLabel, { marginTop: spacing.md }]}>Wines in this filter</Text>
+            <ScrollView style={{ maxHeight: 280 }} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+              {wines.length === 0 ? (
+                <Text style={styles.emptyList}>No wines in this location yet.</Text>
+              ) : wines.map((w) => {
+                const on = selectedWineIds.has(w.id);
+                return (
+                  <TouchableOpacity key={w.id} style={styles.pickRow} onPress={() => toggleWineInSelection(w.id)} activeOpacity={0.7}>
+                    <View style={[styles.pickCheckbox, on && styles.pickCheckboxOn]}>{on ? <Text style={styles.pickCheckboxTick}>✓</Text> : null}</View>
+                    <Text style={styles.wineName} numberOfLines={1}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={[styles.caseModalSave, savingFilter && { opacity: 0.5 }]} onPress={saveFilter} disabled={savingFilter} activeOpacity={0.85}>
+              {savingFilter ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.caseModalSaveText}>{editingFilterId ? 'Save Filter' : 'Create Filter'}</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setFilterModalOpen(false)}>
+              <Text style={styles.caseModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {(uploading || editingImage) && (
         <View style={styles.uploadingOverlay} pointerEvents="auto">
           <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.uploadingText}>Reading the label…</Text>
+          <Text style={styles.uploadingText}>{editingImage ? 'Updating photo…' : 'Reading the label…'}</Text>
         </View>
       )}
     </View>
@@ -754,7 +918,16 @@ const styles = StyleSheet.create({
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  headerActions: { alignItems: 'flex-end', gap: 4 },
+  headerLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   areaPhoto: { width: '100%', height: 360, backgroundColor: colors.surface },
+  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.md, paddingHorizontal: spacing.xl },
+  filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
+  filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
+  pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickCheckbox: { width: 22, height: 22, borderRadius: 5, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
+  pickCheckboxOn: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.16)' },
+  pickCheckboxTick: { fontSize: 13, color: colors.gold, fontFamily: fonts.bodySemibold },
   addSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, gap: spacing.sm },
   addRow: { flexDirection: 'row', gap: spacing.sm },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },

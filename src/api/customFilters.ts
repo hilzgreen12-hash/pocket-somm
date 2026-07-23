@@ -76,6 +76,45 @@ export async function createCellarLocation(userId: string, name: string, wineIds
   await setCustomFilterWines(data.id, wineIds);
 }
 
+// Per-location bespoke filters — the same custom_filters table scoped by
+// storage_location_id (migration 075), so Other Home Storage locations get the
+// rack-style "+ Add" filter without colliding with rack_id filters.
+export async function fetchLocationFilters(userId: string, locationId: string): Promise<CustomFilter[]> {
+  const { data: filters, error } = await supabase
+    .from('custom_filters')
+    .select('id, name')
+    .eq('user_id', userId)
+    .eq('storage_location_id', locationId)
+    .order('created_at', { ascending: true });
+  if (error) throw new Error(error.message);
+  const ids = (filters ?? []).map((f) => f.id);
+  if (ids.length === 0) return [];
+
+  const { data: links, error: linkErr } = await supabase
+    .from('custom_filter_wines')
+    .select('filter_id, cellar_wine_id')
+    .in('filter_id', ids);
+  if (linkErr) throw new Error(linkErr.message);
+
+  const byFilter = new Map<string, string[]>();
+  for (const l of links ?? []) {
+    const arr = byFilter.get(l.filter_id) ?? [];
+    arr.push(l.cellar_wine_id);
+    byFilter.set(l.filter_id, arr);
+  }
+  return (filters ?? []).map((f) => ({ id: f.id, name: f.name, wineIds: byFilter.get(f.id) ?? [] }));
+}
+
+export async function createLocationFilter(userId: string, name: string, wineIds: string[], locationId: string): Promise<void> {
+  const { data, error } = await supabase
+    .from('custom_filters')
+    .insert({ user_id: userId, name: name.trim(), storage_location_id: locationId })
+    .select('id')
+    .single();
+  if (error) throw new Error(error.message);
+  await setCustomFilterWines(data.id, wineIds);
+}
+
 export async function createCustomFilter(userId: string, name: string, wineIds: string[], rackId: string): Promise<void> {
   const { data, error } = await supabase
     .from('custom_filters')
