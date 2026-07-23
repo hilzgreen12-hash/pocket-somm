@@ -870,8 +870,11 @@ export default function FullCellarListScreen() {
             <>
               <Text style={styles.emptyTitle}>Couldn&apos;t load your cellar</Text>
               <Text style={styles.emptyBody}>
-                Check your connection and pull down to refresh. Your wines are safe.
+                Check your connection and try again. Your wines are safe.
               </Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => qc.invalidateQueries({ queryKey: ['cellar', userId] })} activeOpacity={0.85}>
+                <Text style={styles.retryBtnText}>Try again</Text>
+              </TouchableOpacity>
             </>
           ) : wines.length === 0 ? (
             <>
@@ -1218,6 +1221,8 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   // Inter — empty body
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Gold tinge on a row picked in multi-select mode.
   rowSelected: { backgroundColor: 'rgba(212,176,96,0.18)' },

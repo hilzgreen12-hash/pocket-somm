@@ -766,6 +766,13 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, yourScoreLabel !== 'Any' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Collection</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, typeFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{portfolioLabel}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Favourites</Text>
