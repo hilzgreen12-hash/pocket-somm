@@ -42,6 +42,78 @@ export function buildBinCells(across: number, down: number, diamondCapacity: num
   return cells;
 }
 
+// --- Grid references -------------------------------------------------------
+// Every full diamond (D) and half diamond (HD) gets a human reference so a cubby
+// can be named — rows are letters (top→bottom, A first), columns are numbers
+// (left→right within a row, 1 first), and a reference reads prefix+column+row
+// e.g. D2B (diamond, column 2, row B) or HD3C (half diamond, column 3, row C).
+// The quarter diamonds in the four corners are ignored (no reference). Labels
+// are aligned to the tessellation emit order
+// (see tessellate() in the bin screen): diamonds in geo.full order, triangles in
+// geo.clipped order — so they pair 1:1 with the stored cells' idx.
+export interface BinLabelInfo {
+  diamondLabels: (string | null)[];
+  triangleLabels: (string | null)[];
+}
+
+function columnLetter(i: number): string {
+  let s = '';
+  let n = i + 1;
+  while (n > 0) {
+    const r = (n - 1) % 26;
+    s = String.fromCharCode(65 + r) + s;
+    n = Math.floor((n - 1) / 26);
+  }
+  return s;
+}
+
+export function binCellLabels(across: number, down: number): BinLabelInfo {
+  const E = 1e-9;
+  type P = { x: number; y: number; full: boolean; corner: boolean };
+  const full: P[] = [];
+  const clipped: P[] = [];
+  for (let jj = -1; jj <= down * 2 + 1; jj++) {
+    const y = jj / 2;
+    const offset = Math.abs(jj) % 2 === 0 ? 0 : 0.5;
+    for (let x = offset - 1; x <= across + 1 + E; x += 1) {
+      if (x + 0.5 <= E || x - 0.5 >= across - E || y + 0.5 <= E || y - 0.5 >= down - E) continue;
+      const isFull = x - 0.5 >= -E && x + 0.5 <= across + E && y - 0.5 >= -E && y + 0.5 <= down + E;
+      const clipX = x - 0.5 < -E || x + 0.5 > across + E;
+      const clipY = y - 0.5 < -E || y + 0.5 > down + E;
+      const corner = clipX && clipY; // clipped on both axes → quarter diamond
+      (isFull ? full : clipped).push({ x, y, full: isFull, corner });
+    }
+  }
+
+  const labelable = [...full, ...clipped].filter((p) => !p.corner);
+  const ys = Array.from(new Set(labelable.map((p) => p.y))).sort((a, b) => a - b);
+  const rowLetter = new Map<number, string>();
+  ys.forEach((y, i) => rowLetter.set(y, columnLetter(i)));
+
+  const labelOf = new Map<P, string>();
+  for (const y of ys) {
+    const rowCells = labelable.filter((p) => p.y === y).sort((a, b) => a.x - b.x);
+    rowCells.forEach((p, i) => {
+      // Reference reads prefix + column-number + row-letter, e.g. D2B / HD3C.
+      labelOf.set(p, `${p.full ? 'D' : 'HD'}${i + 1}${rowLetter.get(y)}`);
+    });
+  }
+
+  return {
+    diamondLabels: full.map((p) => labelOf.get(p) ?? null),
+    triangleLabels: clipped.map((p) => labelOf.get(p) ?? null),
+  };
+}
+
+// Label for one stored cell, keyed off its idx (diamonds occupy idx 0..D-1 in
+// geo.full order, triangles the rest in geo.clipped order). Null for corners.
+export function binCellLabel(across: number, down: number, kind: 'diamond' | 'triangle', idx: number): string | null {
+  const labels = binCellLabels(across, down);
+  return kind === 'diamond'
+    ? labels.diamondLabels[idx] ?? null
+    : labels.triangleLabels[idx - binDiamondCount(across, down)] ?? null;
+}
+
 // Total bottle capacity of a unit before it's created (for the create-screen
 // preview) — sum of every cell's capacity.
 export function binTotalCapacity(across: number, down: number, diamondCapacity: number): number {
@@ -154,6 +226,16 @@ export async function getBinCell(cellId: string): Promise<{ cell: BinCell; wines
     .order('created_at', { ascending: true });
   if (wineErr) throw wineErr;
   return { cell, wines: (wines ?? []) as CellarWine[] };
+}
+
+// Empty a whole cell — every wine in it loses its cell pointer (bottles stay in
+// the cellar, loose). Used by the long-press "Empty" action on the lattice.
+export async function emptyBinCell(cellId: string): Promise<void> {
+  const { error } = await supabase
+    .from('cellar_wines')
+    .update({ bin_cell_id: null, updated_at: new Date().toISOString() })
+    .eq('bin_cell_id', cellId);
+  if (error) throw error;
 }
 
 // Take a wine out of its bin cell — the bottles stay in the cellar (loose), the
