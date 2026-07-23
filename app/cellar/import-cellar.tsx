@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
+import { parseVivinoCsv } from '../../src/utils/vivinoCsv';
 import { addCellarWine, getCellarWines } from '../../src/api/cellar';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { showAlert } from '../../src/components/AppAlert';
@@ -30,12 +33,28 @@ export default function ImportCellarScreen() {
   const { preferences } = usePreferences();
   const qc = useQueryClient();
   const defaultCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
+  // Entry source from the "Upload Cellar Document" chooser: camera / library
+  // (photo → OCR) or vivino (a Vivino CSV export → parse).
+  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' }>();
+  const isVivino = source === 'vivino';
 
   const [stage, setStage] = useState<Stage>('capture');
   const [wines, setWines] = useState<ImportedCellarWine[]>([]);
   const [keep, setKeep] = useState<boolean[]>([]);
   const [dupFlags, setDupFlags] = useState<DupFlag[]>([]);
   const [addedCount, setAddedCount] = useState(0);
+
+  // Auto-open the right picker so the chooser → this screen → picker feels like
+  // one action. Vivino stays on the instructions screen (the user needs to have
+  // exported the CSV first). Runs once.
+  const didAuto = useRef(false);
+  useEffect(() => {
+    if (didAuto.current) return;
+    didAuto.current = true;
+    if (source === 'camera') void pick('camera');
+    else if (source === 'library') void pick('library');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [source]);
 
   async function pick(source: 'camera' | 'library') {
     try {
@@ -61,39 +80,65 @@ export default function ImportCellarScreen() {
         return w ?? [];
       }));
       const all = results.flat();
-
-      // Pre-tick logic: by default everything is ticked, but pre-untick wines
-      // that already exist in the cellar or repeat an earlier row in this
-      // import, so a re-import (or overlapping multi-screenshot grab) doesn't
-      // silently create parallel cellar lines. The user can re-tick any of them.
-      let existingKeys = new Set<string>();
-      const userId = session?.user.id;
-      if (userId) {
-        try {
-          const existing = await getCellarWines(userId);
-          existingKeys = new Set(existing.map(wineKey));
-        } catch {
-          // Dedup is best-effort — if the cellar can't be read, just don't
-          // pre-untick anything rather than blocking the import.
-        }
-      }
-      const seen = new Set<string>();
-      const flags: DupFlag[] = [];
-      const initialKeep: boolean[] = [];
-      for (const w of all) {
-        const k = wineKey(w);
-        const flag: DupFlag = existingKeys.has(k) ? 'cellar' : seen.has(k) ? 'import' : null;
-        seen.add(k);
-        flags.push(flag);
-        initialKeep.push(flag === null);
-      }
-
-      setWines(all);
-      setDupFlags(flags);
-      setKeep(initialKeep);
-      setStage('review');
+      await presentWines(all);
     } catch (err) {
       showAlert({ title: 'Could not read the screenshot', body: err instanceof Error ? err.message : 'Please try again.' });
+      setStage('capture');
+    }
+  }
+
+  // Pre-tick logic shared by every import source: by default everything is
+  // ticked, but pre-untick wines already in the cellar or repeated earlier in
+  // this import, so a re-import doesn't silently create parallel cellar lines.
+  async function presentWines(all: ImportedCellarWine[]) {
+    let existingKeys = new Set<string>();
+    const userId = session?.user.id;
+    if (userId) {
+      try {
+        const existing = await getCellarWines(userId);
+        existingKeys = new Set(existing.map(wineKey));
+      } catch { /* best-effort — don't block the import if the cellar can't be read */ }
+    }
+    const seen = new Set<string>();
+    const flags: DupFlag[] = [];
+    const initialKeep: boolean[] = [];
+    for (const w of all) {
+      const k = wineKey(w);
+      const flag: DupFlag = existingKeys.has(k) ? 'cellar' : seen.has(k) ? 'import' : null;
+      seen.add(k);
+      flags.push(flag);
+      initialKeep.push(flag === null);
+    }
+    setWines(all);
+    setDupFlags(flags);
+    setKeep(initialKeep);
+    setStage('review');
+  }
+
+  // Import Vivino: pick the CSV the user exported from Vivino's website and parse
+  // it (reviews are captured too, for the later reviews-import feature).
+  async function pickVivinoFile() {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', 'text/plain', '*/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      setStage('analyzing');
+      const text = await new File(res.assets[0].uri).text();
+      const parsed = parseVivinoCsv(text);
+      if (parsed.wines.length === 0) {
+        showAlert({
+          title: "Couldn't read that file",
+          body: 'That doesn\'t look like a Vivino cellar export. Make sure you exported your cellar as a CSV from vivino.com and try again.',
+        });
+        setStage('capture');
+        return;
+      }
+      await presentWines(parsed.wines);
+    } catch (err) {
+      showAlert({ title: 'Could not read the file', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
     }
   }
@@ -177,24 +222,40 @@ export default function ImportCellarScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Import a Cellar</Text>
+        <Text style={styles.title}>{isVivino ? 'Import from Vivino' : 'Import a Cellar'}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {stage === 'capture' ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.lead}>
-            Vinster can upload cellar lists from invoices, storage certificates, or wine apps, as
-            long as they are clear screenshots or photos.
-          </Text>
-          <Text style={styles.hint}>Pick several screenshots at once if your list spans more than one screen.</Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => pick('library')} activeOpacity={0.85}>
-            <Text style={styles.primaryBtnText}>Upload Screenshot</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => pick('camera')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Take Photo</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        isVivino ? (
+          <ScrollView contentContainerStyle={styles.content}>
+            <Text style={styles.lead}>Bring your Vivino cellar across.</Text>
+            <Text style={styles.hint}>Vivino only exports on a computer, so:</Text>
+            <View style={styles.steps}>
+              <Text style={styles.step}>1.  On a computer, open <Text style={styles.stepEm}>vivino.com</Text> and sign in.</Text>
+              <Text style={styles.step}>2.  Click your profile → <Text style={styles.stepEm}>Settings</Text>, then scroll down to <Text style={styles.stepEm}>Export your cellar</Text> and download the CSV file.</Text>
+              <Text style={styles.step}>3.  Email or AirDrop that file to your phone, then choose it below.</Text>
+            </View>
+            <TouchableOpacity style={styles.primaryBtn} onPress={pickVivinoFile} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Choose Vivino export file</Text>
+            </TouchableOpacity>
+            <Text style={styles.footnote}>Your ratings and tasting notes come across in the file too — importing those into your reviews is coming soon.</Text>
+          </ScrollView>
+        ) : (
+          <ScrollView contentContainerStyle={styles.content}>
+            <Text style={styles.lead}>
+              Vinster can upload cellar lists from invoices, storage certificates, or wine apps, as
+              long as they are clear screenshots or photos.
+            </Text>
+            <Text style={styles.hint}>Pick several screenshots at once if your list spans more than one screen.</Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => pick('library')} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Upload Screenshot</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => pick('camera')} activeOpacity={0.85}>
+              <Text style={styles.secondaryBtnText}>Take Photo</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )
       ) : stage === 'analyzing' ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
@@ -270,7 +331,7 @@ export default function ImportCellarScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Choose another image</Text>
+            <Text style={styles.secondaryBtnText}>{isVivino ? 'Choose another file' : 'Choose another image'}</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
@@ -288,6 +349,10 @@ const styles = StyleSheet.create({
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
   hint: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
+  steps: { gap: spacing.sm, marginBottom: spacing.lg, marginTop: spacing.xs },
+  step: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
+  stepEm: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  footnote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: spacing.lg },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
