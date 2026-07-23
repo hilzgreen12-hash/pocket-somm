@@ -445,7 +445,7 @@ export default function StorageLocationScreen() {
             { text: 'Remove', onPress: () => runSingle('Removed', w.id, async (wid) => { await assignWineToCase(wid, null); await assignWineToStorageLocation(wid, null); }) },
           ],
         }) },
-        { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/${w.id}` as any) },
+        { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         { text: 'Archive', onPress: () => showAlert({
           title: 'Archive this wine?',
           body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',

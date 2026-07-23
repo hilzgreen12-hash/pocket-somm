@@ -183,6 +183,8 @@ export interface CellarWine {
   drinking_window_status: string;
   tasting_notes: string | null;
   grape_variety: string | null;
+  // Wine colour / style (red, white, rosé…), migration 026. Nullable.
+  style: string | null;
   label_image_path: string | null;
   // Migration 064. The home-storage location (non-grid, e.g. "the shed") this
   // wine physically lives in, if any. Distinct from rack placement and from the

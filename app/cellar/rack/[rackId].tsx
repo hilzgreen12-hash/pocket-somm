@@ -803,9 +803,9 @@ export default function RackGridScreen() {
         },
       },
       {
-        // Edit the wine's details — opens its card (the edit surface).
+        // Quick amend of the wine's identity (name / vintage / style).
         text: 'Edit Wine',
-        onPress: () => router.push(`/cellar/${wineId}?from=rack` as any),
+        onPress: () => router.push(`/cellar/edit-wine/${wineId}` as any),
       },
       {
         // Archive keeps the wine in the user's records (Cellar Archive) but
@@ -975,7 +975,7 @@ export default function RackGridScreen() {
       body: 'What would you like to do?',
       buttons: [
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${wine.id}?from=rack` as any) },
-        { text: 'Edit Wine', onPress: () => router.push(`/cellar/${wine.id}?from=rack` as any) },
+        { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${wine.id}` as any) },
         {
           text: 'Archive Wine',
           onPress: () => {
