@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
 import { updateCellarWine } from '../api/cellar';
 import { bottleSizeCl } from './BottleSizePicker';
@@ -33,6 +33,21 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
   const [saving, setSaving] = useState(false);
   const sym = symbolFor(currency);
 
+  // Seed each input with the wine's CURRENT value for this field when the sheet
+  // opens (empty for "missing value" wines, the existing estimate for a review),
+  // so the user can double-check and adjust. Runs only on open, never mid-edit.
+  const winesRef = useRef(wines); winesRef.current = wines;
+  const fieldRef = useRef(field); fieldRef.current = field;
+  useEffect(() => {
+    if (!visible) return;
+    const init: Record<string, string> = {};
+    for (const w of winesRef.current) {
+      const cur = fieldRef.current === 'purchase_price' ? w.purchase_price : w.estimated_value;
+      if (cur != null) init[w.id] = String(cur);
+    }
+    setValues(init);
+  }, [visible]);
+
   function setVal(id: string, text: string) {
     // Keep digits + a single decimal point.
     const cleaned = text.replace(/[^0-9.]/g, '').replace(/(\.\d*)\./g, '$1');
@@ -60,6 +75,8 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
           await updateCellarWine(e.id, {
             purchase_price: e.n,
             purchase_price_currency: currency,
+            // The user has now confirmed/entered it — no longer an estimate.
+            purchase_price_estimated: false,
           });
         }
       }

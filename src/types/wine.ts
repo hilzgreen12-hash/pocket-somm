@@ -208,6 +208,9 @@ export interface CellarWine {
   archived_at: string | null;
   purchase_price: number | null;
   purchase_price_currency: string | null;
+  // Migration 074. True when purchase_price is an auto-estimate (Wine-Searcher /
+  // Vinster, filled on add) rather than a figure the user actually entered.
+  purchase_price_estimated?: boolean;
   estimated_value: number | null;
   estimated_value_currency: string | null;
   estimated_value_at: string | null;
