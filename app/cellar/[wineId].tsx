@@ -803,15 +803,30 @@ export default function CellarWineDetail() {
   }
 
   async function handleRemoveWine() {
-    // Hard delete: removes the wine record entirely from cellar_wines and
-    // clears any rack slots referencing it. Triggered after the user has
-    // confirmed in the styled confirm modal.
+    // Respects the quantity entered in the Archive/Delete sheet. Deleting FEWER
+    // than all bottles of a LIVE wine is a partial delete — decrement the row
+    // and free that many rack slots, leaving the rest. Only "all" (or an
+    // already-archived record) removes the whole cellar_wines row.
     if (!wine) return;
+    const count = Math.max(1, Math.min(parseInt(removeCount) || wine.quantity, wine.quantity));
+    const partial = !isArchived && count < wine.quantity;
     setRemoving(true);
     // Remember the location before the row (and its case pointer) is gone, so a
     // now-empty case can be swept and that location's lists refreshed.
     const delLocId = wine.storage_location_id;
     try {
+      if (partial) {
+        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity - count } });
+        await removeSlotsForWine(wine.id, count);
+        qc.invalidateQueries({ queryKey: ['cellar'] });
+        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+        qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        if (delLocId) qc.invalidateQueries({ queryKey: ['storage-location-wines', delLocId] });
+        setRemoveStep('idle');
+        setRemoveCount('1');
+        setRemoving(false);
+        return;
+      }
       await clearWineFromRacks(wine.id);
       const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
       if (error) throw error;
@@ -1873,7 +1888,14 @@ export default function CellarWineDetail() {
               <>
                 <Text style={styles.removeModalTitle}>Remove this wine?</Text>
                 <Text style={styles.removeModalBody}>
-                  This will permanently delete {wine.wine_name}{wine.vintage ? ` ${wine.vintage}` : ''} from your record. This can't be undone.
+                  {(() => {
+                    const c = Math.max(1, Math.min(parseInt(removeCount) || wine.quantity, wine.quantity));
+                    const partial = !isArchived && c < wine.quantity;
+                    const label = `${wine.wine_name}${wine.vintage ? ` ${wine.vintage}` : ''}`;
+                    return partial
+                      ? `This will permanently delete ${c} of your ${wine.quantity} bottles of ${label}. This can't be undone.`
+                      : `This will permanently delete ${label} from your record. This can't be undone.`;
+                  })()}
                 </Text>
                 <TouchableOpacity
                   style={[styles.removeModalConfirmBtn, removing && styles.buttonDisabled]}
