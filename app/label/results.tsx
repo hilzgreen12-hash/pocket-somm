@@ -574,7 +574,10 @@ export default function LabelResultsScreen() {
       router.replace(`/cellar/storage-location/${dest}` as any);
       return;
     }
-    if (pendingSlot) {
+    // Gate on context === 'place' so a stale pendingSlot (left by an abandoned
+    // rack-placement flow, never cleared on cancel) can't silently hijack an
+    // unrelated wine save into that slot — mirrors confirm.tsx's guard.
+    if (pendingSlot && context === 'place') {
       // Soft warning when the bottle's size doesn't match the slot's
       // expected size. Fires once before placement runs; user can
       // continue or cancel back into the Add modal.
@@ -1013,7 +1016,7 @@ export default function LabelResultsScreen() {
       <NoIntelPrompt
         visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed}
         onDismiss={() => setNoIntelDismissed(true)}
-        onEdit={() => router.replace('/(tabs)/cellar')}
+        onEdit={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
         editLabel="Check details"
       />
 
@@ -1123,7 +1126,7 @@ export default function LabelResultsScreen() {
         // Cellar tab "Generate Wine Intel" — view-only. No Add to Cellar action
         // (deliberately removed when the add-a-wine routes were simplified);
         // this flow exists purely to surface the intel card.
-        <TouchableOpacity style={styles.discardButton} onPress={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/cellar')}>
+        <TouchableOpacity style={styles.discardButton} onPress={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}>
           <Text style={styles.discardText}>Discard</Text>
         </TouchableOpacity>
       ) : (

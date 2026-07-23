@@ -33,7 +33,7 @@ import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
-import { fetchStorageLocations, assignWineToStorageLocation } from '../../src/api/storageLocations';
+import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
@@ -450,9 +450,18 @@ export default function CellarWineDetail() {
   // cellar_wines.storage_location_id assignment the location screen uses.
   async function fileInStorageLocation(locationId: string) {
     try {
+      // Filing into a location clears any rack slots and bin cell first, so the
+      // wine can't be double-counted (its old rack/bin membership would still
+      // show it there) — mirrors the S3 guard in the label results flow.
+      await clearWineFromRacks(wine!.id);
+      if (wine!.bin_cell_id) await updateWine.mutateAsync({ id: wine!.id, updates: { bin_cell_id: null } });
       await assignWineToStorageLocation(wine!.id, locationId);
       qc.invalidateQueries({ queryKey: ['storage-locations'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines', locationId] });
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      qc.invalidateQueries({ queryKey: ['bin-cells'] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       showAlert({ title: 'Added to location', body: `Now living in ${storageLocations.find((l) => l.id === locationId)?.name ?? 'the location'}.` });
     } catch (err) {
@@ -586,6 +595,12 @@ export default function CellarWineDetail() {
           },
         });
         await clearWineFromRacks(wine!.id);
+        // Leaving the cellar also leaves any case it was boxed in — clear the
+        // case pointer and sweep a now-empty case, so a wine archived from its
+        // own card (not the location menu) doesn't leave a ghost case behind.
+        const archLocId = wine!.storage_location_id;
+        await assignWineToCase(wine!.id, null);
+        if (archLocId) await deleteEmptyCasesForLocation(archLocId).catch(() => {});
         if (session?.user.id) {
           // Drop the archived wine from the live cellar cache straight away —
           // it no longer belongs in the Cellar List, and leaving it there
@@ -598,6 +613,11 @@ export default function CellarWineDetail() {
         }
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        if (archLocId) {
+          qc.invalidateQueries({ queryKey: ['storage-location-wines', archLocId] });
+          qc.invalidateQueries({ queryKey: ['storage-location-cases', archLocId] });
+          qc.invalidateQueries({ queryKey: ['storage-locations'] });
+        }
         showAlert({
           title: 'Wine Archived',
           body: 'Removed from Cellar List and racks.',
@@ -787,10 +807,19 @@ export default function CellarWineDetail() {
     // confirmed in the styled confirm modal.
     if (!wine) return;
     setRemoving(true);
+    // Remember the location before the row (and its case pointer) is gone, so a
+    // now-empty case can be swept and that location's lists refreshed.
+    const delLocId = wine.storage_location_id;
     try {
       await clearWineFromRacks(wine.id);
       const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
       if (error) throw error;
+      if (delLocId) {
+        await deleteEmptyCasesForLocation(delLocId).catch(() => {});
+        qc.invalidateQueries({ queryKey: ['storage-location-wines', delLocId] });
+        qc.invalidateQueries({ queryKey: ['storage-location-cases', delLocId] });
+        qc.invalidateQueries({ queryKey: ['storage-locations'] });
+      }
       // Prune the deleted wine from the cached cellar list synchronously, so
       // its "memory" is gone immediately and the duplicate-detection on a
       // fresh add can never match it — even if the background refetch below
@@ -1441,7 +1470,7 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>In {wineStorageLocation.name} →</Text>
             </TouchableOpacity>
           )}
-          {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !isArchived && !isWishlist && (
+          {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !wine?.bin_cell_id && !isArchived && !isWishlist && (
             <TouchableOpacity onPress={handleAddToLocation}>
               <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>

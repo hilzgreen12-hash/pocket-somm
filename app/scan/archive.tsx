@@ -128,6 +128,10 @@ export default function MyLabelsScreen() {
   // +Add · Upload a Photo — same intel flow, seeded from a gallery image.
   async function handleUpload() {
     setAddOpen(false);
+    // Defer the native picker past the modal's close animation — launching it
+    // the same tick a <Modal> starts dismissing can silently swallow the picker
+    // call (the "upload bounce" fixed in scan.tsx via the same deferral).
+    await new Promise((r) => setTimeout(r, 350));
     if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
