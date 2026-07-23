@@ -888,6 +888,48 @@ export default function LabelResultsScreen() {
 
   async function handleAddToCellar() {
     if (!session?.user.id) return;
+    // Scanning a wine to add to a home storage location, but that wine already
+    // sits UNPLACED in the cellar → offer to place the existing listing here
+    // (rather than duplicating it) or just bump the existing count.
+    if (context === 'add-location' && matchingExisting && pendingStorageLocationId
+        && !matchingExisting.storage_location_id && !matchingExisting.bin_cell_id) {
+      const target = matchingExisting;
+      const destLoc = pendingStorageLocationId;
+      const addCount = Math.max(1, bottleCount);
+      const existingQty = target.quantity;
+      const wineLabel = `${target.wine_name}${target.vintage ? ` ${target.vintage}` : ''}`;
+      showAlert({
+        title: 'Already in your cellar!',
+        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel} not yet in a home storage location. Should Vinster place your existing listing here?`,
+        buttons: [
+          { text: 'Yes, place existing wines', onPress: async () => {
+            setSaving(true);
+            try {
+              await clearWineFromRacks(target.id);
+              await updateWine.mutateAsync({ id: target.id, updates: { storage_location_id: destLoc, bin_cell_id: null, case_id: pendingCaseId ?? null } });
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              qc.invalidateQueries({ queryKey: ['storage-location-wines', destLoc] });
+              qc.invalidateQueries({ queryKey: ['storage-locations'] });
+              setPendingStorageLocationId(null); setPendingCaseId(null); setAddingToCellar(false);
+              router.replace(`/cellar/storage-location/${destLoc}` as any);
+            } catch (err) { showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' }); }
+            finally { setSaving(false); }
+          } },
+          { text: 'No, add to existing wines', onPress: async () => {
+            setSaving(true);
+            try {
+              await updateWine.mutateAsync({ id: target.id, updates: { quantity: target.quantity + addCount } });
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              setPendingStorageLocationId(null); setPendingCaseId(null); setAddingToCellar(false);
+              router.replace('/cellar/list?added=1');
+            } catch (err) { showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' }); }
+            finally { setSaving(false); }
+          } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
     if (matchingExisting) {
       // Exact match (producer + wine name + vintage). We never create a
       // second Full Cellar List line for the same bottle — that would
