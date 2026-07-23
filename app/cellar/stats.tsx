@@ -14,6 +14,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
+import { topRegionsAdaptive } from '../../src/utils/wineRegionGroup';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
 import type { CellarWine } from '../../src/types/wine';
@@ -143,16 +144,9 @@ export default function CellarStatsScreen() {
     : null;
 
   // Top 3 regions by bottle count
-  const regionCounts: Record<string, number> = {};
-  for (const w of wines) {
-    if (!w.region) continue;
-    const key = w.region.trim();
-    if (!key) continue;
-    regionCounts[key] = (regionCounts[key] ?? 0) + (w.quantity ?? 0);
-  }
-  const topRegions = Object.entries(regionCounts)
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3);
+  // Countries by default; France/Italy split into headline regions; and any
+  // area the collector has real depth in is broken down further (see util).
+  const topRegions = topRegionsAdaptive(wines, 3);
 
   // Style breakdown — uses explicit style column if present, falls back to a
   // grape/region heuristic. Wines that can't be classified bucket as "Other".
