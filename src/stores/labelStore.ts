@@ -34,7 +34,14 @@ export const useLabelStore = create<LabelState>((set) => ({
   stage: 'idle',
   error: null,
 
-  setImage: (uri, base64) => set({ imageUri: uri, imageBase64: base64, stage: 'scanning' }),
+  // A new photo = a new scan: clear the PREVIOUS scan's identity/intel/error so
+  // that if this scan's OCR fails or is slow, the Confirm screen can never fall
+  // back to showing the last wine's details (the "2nd scan repeats the 1st" bug).
+  setImage: (uri, base64) => set({
+    imageUri: uri, imageBase64: base64,
+    wineDetails: null, wineDetailsConfirmed: null, intelligence: null, error: null,
+    stage: 'scanning',
+  }),
   setWineDetails: (details) => set({ wineDetails: details, stage: 'confirming' }),
   setWineDetailsConfirmed: (details) => set({ wineDetailsConfirmed: details, stage: 'loading' }),
   setIntelligence: (intel) => set({ intelligence: intel }),
