@@ -102,7 +102,7 @@ export default function RackResizeScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.intro}>Pull the corner to size your {isFridge ? 'fridge' : 'rack'} — each pull adds a row or column of bottles.</Text>
+        <Text style={styles.intro}>Pull the corner to size your {isFridge ? 'fridge' : 'rack'} — each pull adds a row or column of bottles.{isFridge ? ' For each row create a space for bottles facing forward and backward.' : ''}</Text>
 
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{rows} × {cols}</Text>
@@ -146,16 +146,16 @@ export default function RackResizeScreen() {
         {/* Precision fallback — fine-tune without fighting the gesture. */}
         <View style={styles.nudgeRow}>
           <View style={styles.nudgeGroup}>
-            <Text style={styles.nudgeLabel}>Rows</Text>
-            <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(-1, 0)}><Text style={styles.nudgeBtnText}>−</Text></TouchableOpacity>
-            <Text style={styles.nudgeVal}>{rows}</Text>
-            <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(1, 0)}><Text style={styles.nudgeBtnText}>+</Text></TouchableOpacity>
-          </View>
-          <View style={styles.nudgeGroup}>
-            <Text style={styles.nudgeLabel}>Cols</Text>
+            <Text style={styles.nudgeLabel}>Horizontal</Text>
             <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(0, -1)}><Text style={styles.nudgeBtnText}>−</Text></TouchableOpacity>
             <Text style={styles.nudgeVal}>{cols}</Text>
             <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(0, 1)}><Text style={styles.nudgeBtnText}>+</Text></TouchableOpacity>
+          </View>
+          <View style={styles.nudgeGroup}>
+            <Text style={styles.nudgeLabel}>Vertical</Text>
+            <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(-1, 0)}><Text style={styles.nudgeBtnText}>−</Text></TouchableOpacity>
+            <Text style={styles.nudgeVal}>{rows}</Text>
+            <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(1, 0)}><Text style={styles.nudgeBtnText}>+</Text></TouchableOpacity>
           </View>
         </View>
 
