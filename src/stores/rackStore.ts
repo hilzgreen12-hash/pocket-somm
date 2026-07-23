@@ -30,8 +30,6 @@ export interface PendingMove {
 
 interface RackStore {
   imageUri: string | null;
-  detectedRows: number;
-  detectedCols: number;
   pendingSlot: PendingSlot | null;
   // Explicit set of slots the user hand-picked (multi-slot placement). When
   // present, the placement screens fill EXACTLY these slots with the one wine
@@ -57,7 +55,6 @@ interface RackStore {
   // rather than the wine card.
   pendingAddMode: boolean;
   setImage: (uri: string) => void;
-  setDetected: (rows: number, cols: number) => void;
   setPendingSlot: (slot: PendingSlot | null) => void;
   setPendingSlots: (slots: Array<{ row: number; col: number }> | null) => void;
   setPendingWineId: (id: string | null) => void;
@@ -71,8 +68,6 @@ interface RackStore {
 
 export const useRackStore = create<RackStore>((set) => ({
   imageUri: null,
-  detectedRows: 4,
-  detectedCols: 6,
   pendingSlot: null,
   pendingSlots: null,
   pendingWineId: null,
@@ -82,7 +77,6 @@ export const useRackStore = create<RackStore>((set) => ({
   pendingStorageLocationId: null,
   pendingCaseId: null,
   setImage: (uri) => set({ imageUri: uri }),
-  setDetected: (rows, cols) => set({ detectedRows: rows, detectedCols: cols }),
   setPendingSlot: (slot) => set({ pendingSlot: slot }),
   setPendingSlots: (slots) => set({ pendingSlots: slots }),
   setPendingWineId: (id) => set({ pendingWineId: id }),
@@ -91,10 +85,10 @@ export const useRackStore = create<RackStore>((set) => ({
   setPendingMove: (m) => set({ pendingMove: m }),
   setPendingStorageLocationId: (id) => set({ pendingStorageLocationId: id }),
   setPendingCaseId: (id) => set({ pendingCaseId: id }),
-  // Resets only the rack-detection transients (image, rows, cols). pendingSlot,
-  // pendingWineId and pendingStorageType are cross-flow signals that should
-  // persist until their consumer clears them — clearing them here breaks the
-  // "Add wine → Create new rack → place on grid" flow because rack-creation
-  // would wipe out the wine the user just saved.
-  reset: () => set({ imageUri: null, detectedRows: 4, detectedCols: 6 }),
+  // Resets only the transient image. pendingSlot, pendingWineId and
+  // pendingStorageType are cross-flow signals that should persist until their
+  // consumer clears them — clearing them here breaks the "Add wine → New
+  // Location → place on grid" flow because location-creation would wipe out the
+  // wine the user just saved.
+  reset: () => set({ imageUri: null }),
 }));

@@ -182,8 +182,6 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/add" />
             <Stack.Screen name="cellar/import-preview" />
             <Stack.Screen name="cellar/racks" />
-            <Stack.Screen name="cellar/rack/camera" />
-            <Stack.Screen name="cellar/rack/detect" />
             <Stack.Screen name="cellar/rack/[rackId]" />
             <Stack.Screen name="cellar/[wineId]" />
             <Stack.Screen name="cellar/archive" />

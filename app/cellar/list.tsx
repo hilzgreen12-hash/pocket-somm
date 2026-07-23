@@ -398,11 +398,23 @@ export default function FullCellarListScreen() {
   // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
   // to archived wines only and hides the Archived filter chip so nothing
   // outside the archive can ever show.
-  const { archived } = useLocalSearchParams<{ archived?: string }>();
+  const { archived, added } = useLocalSearchParams<{ archived?: string; added?: string }>();
   const isArchiveView = archived === '1';
   const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
+
+  // Brief "Added to your cellar list" toast after an add flow lands here — shows
+  // for a beat then fades, instead of an action popup the user has to dismiss.
+  const [showAddedToast, setShowAddedToast] = useState(false);
+  const addedToastRef = useRef(false);
+  useEffect(() => {
+    if (!added || addedToastRef.current) return;
+    addedToastRef.current = true;
+    setShowAddedToast(true);
+    const t = setTimeout(() => setShowAddedToast(false), 2600);
+    return () => clearTimeout(t);
+  }, [added]);
 
   // Share the current (filtered) list as a branded PNG. Same off-screen-capture
   // pattern the wine card uses.
@@ -717,6 +729,13 @@ export default function FullCellarListScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Transient "added" toast — auto-fades, no action to dismiss. */}
+      {showAddedToast && (
+        <View style={styles.addedToast} pointerEvents="none">
+          <Text style={styles.addedToastText}>Added to your cellar list ✓</Text>
+        </View>
+      )}
 
       {/* Off-screen branded share card, mounted only while a share is in flight. */}
       {listSharePayload && (
@@ -1223,6 +1242,8 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
   retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  addedToast: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs, backgroundColor: 'rgba(224,184,74,0.14)', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  addedToastText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   row: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Gold tinge on a row picked in multi-select mode.
   rowSelected: { backgroundColor: 'rgba(212,176,96,0.18)' },
