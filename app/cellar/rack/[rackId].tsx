@@ -1464,7 +1464,16 @@ export default function RackGridScreen() {
                         <TouchableOpacity
                           key={wine.id}
                           style={[styles.wineRow, active && styles.wineRowActive]}
-                          onPress={() => { setHighlightedWineId(wine.id); setActiveCustomFilterId(null); setSearchQuery(''); setMaturityHighlight(''); setBottleListOpen(false); }}
+                          onPress={() => {
+                            // Toggle: tapping the already-highlighted wine clears
+                            // it (and keeps the list open so the un-highlight is
+                            // visible); tapping a new one highlights it and closes
+                            // the list so the grid highlight is unobstructed.
+                            const alreadyOn = highlightedWineId === wine.id;
+                            setHighlightedWineId(alreadyOn ? null : wine.id);
+                            setActiveCustomFilterId(null); setSearchQuery(''); setMaturityHighlight('');
+                            if (!alreadyOn) setBottleListOpen(false);
+                          }}
                           onLongPress={() => openWineListMenu(wine)}
                           delayLongPress={400}
                         >

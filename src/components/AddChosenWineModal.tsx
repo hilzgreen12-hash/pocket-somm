@@ -6,6 +6,7 @@ import {
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { useQueryClient } from '@tanstack/react-query';
 import { showAlert } from './AppAlert';
+import { LabelThumb } from './LabelThumb';
 import { WineReviewFields } from './WineReviewFields';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
@@ -37,9 +38,16 @@ interface Props {
   // chosen_wines.label_image_path so the review card shows the label photo —
   // exactly like a cellar wine card. Null for Manual Input.
   labelImageUri?: string | null;
+  // Set when the identity is ALREADY confirmed (e.g. adding a review from Your
+  // Label Library). We then present a review CARD — wine name as an editable
+  // header, an editable date, and the label thumbnail — instead of the blank
+  // manual-entry form. `labelImagePath` is the label's existing stored photo
+  // (reused on save, no re-upload) so the review carries the same thumbnail.
+  confirmedIdentity?: boolean;
+  labelImagePath?: string | null;
 }
 
-export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri }: Props) {
+export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null }: Props) {
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { saveManual, update, chosenWines } = useChosenWines();
@@ -61,9 +69,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [isFavourite, setIsFavourite] = useState(false);
   const [saved, setSaved] = useState(false);
-  // Drinking date defaults to today (the canonical card doesn't expose a date
-  // field; manual reviews stamp as today).
-  const [reviewDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Drinking date defaults to today; editable in the confirmed-identity card.
+  const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().split('T')[0]);
+  // Confirmed-identity card: the wine details are collapsed under an "Edit"
+  // link (the name/date show as a header) — reveal the inputs to change them.
+  const [identityOpen, setIdentityOpen] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -73,6 +83,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       setRegion(initial?.region ?? '');
       setLocCity(''); setLocName(''); setListPrice(''); setTastingNote(''); setOtherObservations('');
       setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false);
+      setReviewDate(new Date().toISOString().split('T')[0]);
+      setIdentityOpen(false);
       // Prefill the city from GPS for a fresh review.
       captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
     }
@@ -147,6 +159,14 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
             await patchChosenWine(row.id, { label_image_path: path });
             qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
           } catch { /* non-fatal — review saved without a photo */ }
+        } else if (labelImagePath && row?.id) {
+          // From Your Label Library — the photo already lives in storage, so
+          // reuse its path rather than re-uploading, so the review card shows
+          // the same thumbnail.
+          try {
+            await patchChosenWine(row.id, { label_image_path: labelImagePath });
+            qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+          } catch { /* non-fatal — review saved without a photo */ }
         }
       } else {
         const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
@@ -202,43 +222,94 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           </TouchableOpacity>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
-            <Text style={styles.heading}>Add a Wine Review</Text>
-            <Text style={styles.subheading}>Record a wine you drank — every field is editable.</Text>
+            {confirmedIdentity ? (
+              // Review CARD — the wine is already confirmed (from Your Label
+              // Library), so the name is the header + editable date + thumbnail,
+              // and the review inputs sit below. This is a review awaiting input.
+              <>
+                <View style={[styles.cardHeader, labelImagePath ? styles.cardHeaderRow : null]}>
+                  {labelImagePath ? (
+                    <LabelThumb path={labelImagePath} fallbackText={wineName} style={styles.headerThumb} radius={5} frame={0} />
+                  ) : null}
+                  <View style={labelImagePath ? styles.headerTextCol : undefined}>
+                    <Text style={[styles.headerLine, labelImagePath ? styles.headerLineLeft : null]}>
+                      {[producer, wineName, vintage].filter(Boolean).join(' · ') || wineName || 'This wine'}
+                    </Text>
+                    {region ? <Text style={[styles.headerRegion, labelImagePath ? styles.headerLineLeft : null]}>{region}</Text> : null}
+                  </View>
+                </View>
 
-            <View style={styles.divider} />
-
-            <Text style={styles.sectionLabel}>The wine</Text>
-
-            {/* Scanned / uploaded label sits to the left of the identity fields,
-                mirroring a cellar wine card. */}
-            <View style={labelImageUri ? styles.identityRow : undefined}>
-              {labelImageUri ? (
-                <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
-              ) : null}
-              <View style={labelImageUri ? styles.identityFields : undefined}>
-                <Text style={styles.fieldLabel}>Producer</Text>
-                <TextInput style={styles.input} value={producer} onChangeText={edited(setProducer)} placeholder="e.g. Domaine Leflaive" placeholderTextColor={colors.textMuted} />
-
-                <Text style={styles.fieldLabel}>Wine name</Text>
-                <TextInput style={styles.input} value={wineName} onChangeText={edited(setWineName)} placeholder="e.g. Puligny-Montrachet" placeholderTextColor={colors.textMuted} />
-
-                <Text style={styles.fieldLabel}>Vintage</Text>
+                <Text style={styles.fieldLabel}>Date</Text>
                 <TextInput
                   style={styles.input}
-                  value={vintage}
-                  onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
-                  placeholder="e.g. 2018"
+                  value={reviewDate}
+                  onChangeText={edited((t: string) => setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)))}
+                  placeholder="YYYY-MM-DD"
                   placeholderTextColor={colors.textMuted}
-                  keyboardType="numeric"
-                  maxLength={4}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={10}
                 />
 
-                <Text style={styles.fieldLabel}>Region</Text>
-                <TextInput style={styles.input} value={region} onChangeText={edited(setRegion)} placeholder="e.g. Burgundy" placeholderTextColor={colors.textMuted} />
-              </View>
-            </View>
+                <TouchableOpacity onPress={() => setIdentityOpen((v) => !v)} activeOpacity={0.7} style={styles.editIdentityRow}>
+                  <Text style={styles.editIdentityLink}>{identityOpen ? 'Hide wine details ▴' : 'Edit wine details ▾'}</Text>
+                </TouchableOpacity>
 
-            <View style={styles.divider} />
+                {identityOpen ? (
+                  <View>
+                    <Text style={styles.fieldLabel}>Producer</Text>
+                    <TextInput style={styles.input} value={producer} onChangeText={edited(setProducer)} placeholder="e.g. Domaine Leflaive" placeholderTextColor={colors.textMuted} />
+                    <Text style={styles.fieldLabel}>Wine name</Text>
+                    <TextInput style={styles.input} value={wineName} onChangeText={edited(setWineName)} placeholder="e.g. Puligny-Montrachet" placeholderTextColor={colors.textMuted} />
+                    <Text style={styles.fieldLabel}>Vintage</Text>
+                    <TextInput style={styles.input} value={vintage} onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))} placeholder="e.g. 2018" placeholderTextColor={colors.textMuted} keyboardType="numeric" maxLength={4} />
+                    <Text style={styles.fieldLabel}>Region</Text>
+                    <TextInput style={styles.input} value={region} onChangeText={edited(setRegion)} placeholder="e.g. Burgundy" placeholderTextColor={colors.textMuted} />
+                  </View>
+                ) : null}
+
+                <View style={styles.divider} />
+              </>
+            ) : (
+              <>
+                <Text style={styles.heading}>Add a Wine Review</Text>
+                <Text style={styles.subheading}>Record a wine you drank — every field is editable.</Text>
+
+                <View style={styles.divider} />
+
+                <Text style={styles.sectionLabel}>The wine</Text>
+
+                {/* Scanned / uploaded label sits to the left of the identity fields,
+                    mirroring a cellar wine card. */}
+                <View style={labelImageUri ? styles.identityRow : undefined}>
+                  {labelImageUri ? (
+                    <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
+                  ) : null}
+                  <View style={labelImageUri ? styles.identityFields : undefined}>
+                    <Text style={styles.fieldLabel}>Producer</Text>
+                    <TextInput style={styles.input} value={producer} onChangeText={edited(setProducer)} placeholder="e.g. Domaine Leflaive" placeholderTextColor={colors.textMuted} />
+
+                    <Text style={styles.fieldLabel}>Wine name</Text>
+                    <TextInput style={styles.input} value={wineName} onChangeText={edited(setWineName)} placeholder="e.g. Puligny-Montrachet" placeholderTextColor={colors.textMuted} />
+
+                    <Text style={styles.fieldLabel}>Vintage</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={vintage}
+                      onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
+                      placeholder="e.g. 2018"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="numeric"
+                      maxLength={4}
+                    />
+
+                    <Text style={styles.fieldLabel}>Region</Text>
+                    <TextInput style={styles.input} value={region} onChangeText={edited(setRegion)} placeholder="e.g. Burgundy" placeholderTextColor={colors.textMuted} />
+                  </View>
+                </View>
+
+                <View style={styles.divider} />
+              </>
+            )}
 
             {/* Shared review card — identical to every other review surface. */}
             <WineReviewFields
@@ -295,4 +366,13 @@ const styles = StyleSheet.create({
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
   identityThumb: { width: 60, height: 80, borderRadius: 6, backgroundColor: colors.surface },
   identityFields: { flex: 1 },
+  cardHeader: { alignItems: 'center', marginBottom: spacing.sm },
+  cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerThumb: { width: 52, height: 68 },
+  headerTextCol: { flex: 1 },
+  headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
+  headerLineLeft: { textAlign: 'left' },
+  headerRegion: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: 2 },
+  editIdentityRow: { alignItems: 'center', paddingVertical: spacing.xs, marginBottom: spacing.xs },
+  editIdentityLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
 });

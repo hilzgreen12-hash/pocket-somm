@@ -268,10 +268,12 @@ export default function LabelResultsScreen() {
     if (isAddFlow) setAddingToCellar(true);
   }, [isAddFlow]);
 
-  // Popup A — a fresh Scan Wine Label intel result offers to keep the label in
-  // Your Label Library. Fires exactly once (guarded ref), and only when there's
-  // an actual photo to save (manual-input intel has no imageUri → no prompt;
-  // "View last result" pushes without fresh=1 → no prompt).
+  // A fresh Scan Wine Label intel result is kept in Your Label Library
+  // automatically — the old "add to library?" prompt was redundant friction, so
+  // the user now lands straight on the intel card and the label is saved
+  // silently in the background. Fires exactly once (guarded ref), and only when
+  // there's an actual photo to save (manual-input intel has no imageUri → no
+  // save; "View last result" pushes without fresh=1 → no save).
   const libraryPromptShown = useRef(false);
   useEffect(() => {
     if (libraryPromptShown.current) return;
@@ -281,24 +283,20 @@ export default function LabelResultsScreen() {
     if (!imageUri || !w) return;
     libraryPromptShown.current = true;
     const intelSnapshot = useLabelStore.getState().intelligence;
-    promptAddToLabelLibrary(() => {
-      void (async () => {
-        try {
-          const city = await captureCity();
-          await createLabel.mutateAsync({
-            imageUri,
-            producer: w.producer,
-            wineName: w.wineName,
-            vintage: w.vintage,
-            region: w.region,
-            intel: intelSnapshot,
-            city,
-          });
-        } catch (err) {
-          showAlert({ title: 'Could not save label', body: err instanceof Error ? err.message : 'Please try again.' });
-        }
-      })();
-    });
+    void (async () => {
+      try {
+        const city = await captureCity();
+        await createLabel.mutateAsync({
+          imageUri,
+          producer: w.producer,
+          wineName: w.wineName,
+          vintage: w.vintage,
+          region: w.region,
+          intel: intelSnapshot,
+          city,
+        });
+      } catch { /* silent — saving the label to the library is best-effort */ }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isIntelOnlyFlow, fresh]);
 
