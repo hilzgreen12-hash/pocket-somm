@@ -65,7 +65,6 @@ export default function BinCellScreen() {
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const count = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
   const capacity = cell?.capacity ?? 0;
 
   function invalidate() {
@@ -276,7 +275,7 @@ export default function BinCellScreen() {
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 100 }}>
-          <Text style={styles.summary}>{count}/{capacity} bottles</Text>
+          <Text style={styles.summary}>{wines.length} {wines.length === 1 ? 'Wine' : 'Wines'} · {capacity} Slots</Text>
 
           {wines.length === 0 ? (
             <Text style={styles.empty}>No wines in this {kindLabel.toLowerCase()} yet.</Text>

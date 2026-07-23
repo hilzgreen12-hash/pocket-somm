@@ -965,6 +965,37 @@ export default function RackGridScreen() {
     });
   }
 
+  // Long-press on a wine in the search/list dropdown → an action menu rather
+  // than the old straight-to-Delete confirm (which fired an aggressive delete
+  // on a mis-hold). Mirrors the slot menu's verbs.
+  function openWineListMenu(wine: CellarWine) {
+    const qty = wine.quantity ?? 1;
+    showAlert({
+      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
+      body: 'What would you like to do?',
+      buttons: [
+        { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${wine.id}?from=rack` as any) },
+        { text: 'Edit Wine', onPress: () => router.push(`/cellar/${wine.id}?from=rack` as any) },
+        {
+          text: 'Archive Wine',
+          onPress: () => {
+            if (qty > 1) { setArchiveCount('1'); setArchiveModal({ wineId: wine.id, wineName: wine.wine_name, qty }); }
+            else confirmArchiveWine(wine.id, wine.wine_name, qty);
+          },
+        },
+        {
+          text: 'Delete Wine (Permanent)',
+          style: 'destructive',
+          onPress: () => {
+            if (qty > 1) { setDeleteCount('1'); setDeleteModal({ wineId: wine.id, wineName: wine.wine_name, qty }); }
+            else confirmDeleteWine(wine.id, wine.wine_name, qty);
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   // Delete from the multi-bottle modal. `deleteAll` removes the whole listing
   // (row + all slots). Otherwise it permanently removes the entered count:
   // decrement the live row and free exactly that many slots. No archive clone —
@@ -1434,7 +1465,7 @@ export default function RackGridScreen() {
                           key={wine.id}
                           style={[styles.wineRow, active && styles.wineRowActive]}
                           onPress={() => { setHighlightedWineId(wine.id); setActiveCustomFilterId(null); setSearchQuery(''); setMaturityHighlight(''); setBottleListOpen(false); }}
-                          onLongPress={() => confirmDeleteWine(wine.id, wine.wine_name, wine.quantity ?? 1)}
+                          onLongPress={() => openWineListMenu(wine)}
                           delayLongPress={400}
                         >
                           <View style={styles.wineRowMain}>
