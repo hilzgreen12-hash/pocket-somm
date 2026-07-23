@@ -320,14 +320,12 @@ export default function CellarStatsScreen() {
               </Text>
             )}
             {winesNoPurchase.length > 0 ? (
-              <TouchableOpacity style={styles.missingIntelRow} onPress={() => setValueEditor('purchase')} activeOpacity={0.7}>
-                <Text style={styles.missingIntelText}>
+              <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('purchase')} activeOpacity={0.7}>
+                <Text style={styles.missingValueText}>
                   {winesNoPurchase.length} Missing Value{winesNoPurchase.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
                 </Text>
               </TouchableOpacity>
             ) : null}
-
-            <View style={styles.valueDivider} />
 
             <View style={styles.valueRow}>
               <Text style={styles.valueLabel}>Total Estimated Current Value</Text>
@@ -492,6 +490,9 @@ const styles = StyleSheet.create({
   emptyBannerBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20 },
   missingIntelRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
   missingIntelText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
+  // Left-aligned, borderless variant — sits directly under Total Purchase Value.
+  missingValueRow: { paddingHorizontal: spacing.xl, paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
+  missingValueText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted },
   missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
   stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.lg },
