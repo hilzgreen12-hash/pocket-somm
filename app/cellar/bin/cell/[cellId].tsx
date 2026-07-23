@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -6,9 +6,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../../../src/hooks/useAuth';
 import { getBinCell, removeWineFromCell } from '../../../../src/api/bins';
 import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
+import { clearWineFromRacks } from '../../../../src/api/racks';
 import { prepareImageBase64, scanLabel } from '../../../../src/api/label';
 import { ensureMediaPermission } from '../../../../src/utils/mediaPermissions';
 import { BottleSizePicker, bottleSizeCl } from '../../../../src/components/BottleSizePicker';
+import { CellarWinePicker } from '../../../../src/components/CellarWinePicker';
 import { showAlert } from '../../../../src/components/AppAlert';
 import { colors, spacing } from '../../../../src/constants/theme';
 import { fonts } from '../../../../src/constants/fonts';
@@ -29,10 +31,18 @@ type Draft = {
 const EMPTY_DRAFT: Draft = { id: null, producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1 };
 
 export default function BinCellScreen() {
-  const { cellId } = useLocalSearchParams<{ cellId: string }>();
+  const { cellId, add } = useLocalSearchParams<{ cellId: string; add?: string }>();
   const { session } = useAuth();
   const qc = useQueryClient();
   const userId = session?.user.id;
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  // Arrived via a tap on the diamond/triangle (?add=1) → open the add chooser
+  // straight away, mirroring tapping an empty rack slot.
+  const autoOpenedRef = useRef(false);
+  useEffect(() => {
+    if (add === '1' && !autoOpenedRef.current) { autoOpenedRef.current = true; setChooserOpen(true); }
+  }, [add]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['bin-cell', cellId],
@@ -93,6 +103,46 @@ export default function BinCellScreen() {
       }
     } catch (err) {
       showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Upload a label from the library to fill the draft (mirrors handleScan).
+  async function handleUpload() {
+    if (!(await ensureMediaPermission('library'))) return;
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      setScanning(true);
+      try {
+        const base64 = await prepareImageBase64(res.assets[0].uri);
+        const details = await scanLabel(base64);
+        setDraft((d) => d && ({
+          ...d,
+          producer: details.producer ?? d.producer,
+          wineName: details.wineName ?? d.wineName,
+          region: details.region ?? d.region,
+          vintage: details.vintage ?? d.vintage,
+        }));
+      } catch {
+        showAlert({ title: 'Could not read label', body: 'Enter the details by hand instead.' });
+      } finally {
+        setScanning(false);
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not open library', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // "Select from Cellar List" — file an existing cellar wine into this cell.
+  async function addFromCellar(wine: CellarWine) {
+    setPickerOpen(false);
+    if (!cellId) return;
+    try {
+      await clearWineFromRacks(wine.id);
+      await updateCellarWine(wine.id, { bin_cell_id: cellId, storage_location_id: null, case_id: null });
+      invalidate();
+    } catch (err) {
+      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -235,7 +285,7 @@ export default function BinCellScreen() {
             ))
           )}
 
-          <TouchableOpacity style={styles.addBtn} onPress={openAdd} activeOpacity={0.85}>
+          <TouchableOpacity style={styles.addBtn} onPress={() => setChooserOpen(true)} activeOpacity={0.85}>
             <Text style={styles.addBtnText}>+ Add wine</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -281,6 +331,32 @@ export default function BinCellScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* Add-a-wine chooser — same four options as a rack/fridge slot. */}
+      <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
+            <Text style={styles.chooserTitle}>Add a wine to this {kindLabel.toLowerCase()}</Text>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setDraft({ ...EMPTY_DRAFT }); void handleScan(); }} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Scan a Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setPickerOpen(true); }} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Select from Cellar List</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setDraft({ ...EMPTY_DRAFT }); void handleUpload(); }} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Upload Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); openAdd(); }} activeOpacity={0.8}>
+              <Text style={styles.chooserBtnText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserCancel} onPress={() => setChooserOpen(false)}>
+              <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      <CellarWinePicker visible={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addFromCellar} />
     </View>
   );
 }
@@ -301,6 +377,13 @@ const styles = StyleSheet.create({
   rowFormat: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   addBtnText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
+  chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  chooserTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.lg },
+  chooserBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
+  chooserBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  chooserCancel: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: 4 },
+  chooserCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
   sheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
