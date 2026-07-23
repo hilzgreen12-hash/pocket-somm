@@ -16,10 +16,14 @@ export function CellarWinePicker({
   visible,
   onClose,
   onSelect,
+  // When true, list EVERY cellar wine (placed or not) so the caller can offer to
+  // MOVE a placed bottle. Default false = only unplaced (drop into a rack slot).
+  allowPlaced = false,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (wine: CellarWine) => void;
+  allowPlaced?: boolean;
 }) {
   const { wines } = useCellar();
   const { racks } = useRacks();
@@ -35,16 +39,16 @@ export function CellarWinePicker({
     const placed = new Set(slotAssignments.map((s) => s.cellar_wine_id));
     const q = query.trim().toLowerCase();
     return wines
-      .filter((w) => !placed.has(w.id))
+      .filter((w) => allowPlaced || !placed.has(w.id))
       .filter((w) => !q || `${w.producer ?? ''} ${w.wine_name} ${w.vintage ?? ''}`.toLowerCase().includes(q));
-  }, [wines, slotAssignments, query]);
+  }, [wines, slotAssignments, query, allowPlaced]);
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <Text style={styles.title}>Select from Cellar List</Text>
-          <Text style={styles.subtitle}>Unplaced wines — pick one to drop into this slot.</Text>
+          <Text style={styles.subtitle}>{allowPlaced ? 'Pick a wine — already-placed bottles can be moved here.' : 'Unplaced wines — pick one to drop into this slot.'}</Text>
           <TextInput
             style={styles.search}
             placeholder="Search your cellar…"
@@ -57,7 +61,7 @@ export function CellarWinePicker({
             <Text style={styles.empty}>
               {wines.length === 0
                 ? 'Your cellar is empty — add a wine first.'
-                : 'Every cellar wine is already placed in a rack.'}
+                : allowPlaced ? 'No wines match your search.' : 'Every cellar wine is already placed in a rack.'}
             </Text>
           ) : (
             <FlatList
