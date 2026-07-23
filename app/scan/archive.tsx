@@ -213,7 +213,7 @@ export default function MyLabelsScreen() {
         { text: 'Add/Edit/View Review', onPress: () => goToReview(existingId, label) },
         { text: 'Add to Full Cellar List', onPress: () => void addLabelToCellar(label) },
         { text: 'Share Thumbnail', onPress: () => { setShareNote(''); setShareLabel(label); } },
-        { text: 'Delete from Library', style: 'destructive', onPress: () => confirmRemove(label) },
+        { text: 'Delete from Library', style: 'destructive', onPress: () => confirmRemove(label, existingId) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -298,39 +298,48 @@ export default function MyLabelsScreen() {
     }
   }
 
-  function confirmRemove(label: LibraryLabel) {
+  function confirmRemove(label: LibraryLabel, reviewId: string | null) {
     const header = wineHeaderLine(label.producer, label.wine_name, label.vintage) || (label.wine_name ?? 'this label');
+    // No review attached → a plain confirm; there's nothing else to delete.
+    if (!reviewId) {
+      showAlert({
+        title: 'Delete from Library?',
+        body: `${header}\n\nThis removes the scan from your Label Scan Library. Your cellar wine stays put.`,
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Delete from Library', style: 'destructive', onPress: () => remove.mutate(label.id) },
+        ],
+      });
+      return;
+    }
+    // Has a review → offer to take the review with it, or keep it.
     showAlert({
       title: 'Delete from Library',
-      body: `${header}\n\nDelete just this label, or also its wine review?`,
+      body: `${header}\n\nDelete just this label, or the label and its wine review?`,
       buttons: [
         {
-          text: 'Delete All Records',
+          text: 'Delete Label & Review',
           style: 'destructive',
           onPress: () => showAlert({
-            title: 'Delete all records?',
-            body: 'This removes the label from your Library AND deletes its matching wine review. This can\'t be undone.',
+            title: 'Delete label & review?',
+            body: 'This removes the label from your Library AND deletes its wine review. This can\'t be undone.',
             buttons: [
               { text: 'Cancel', style: 'cancel' },
-              { text: 'Delete All', style: 'destructive', onPress: () => void deleteAllRecords(label) },
+              { text: 'Delete Both', style: 'destructive', onPress: () => void deleteLabelAndReview(label, reviewId) },
             ],
           }),
         },
-        { text: 'Delete from Library (keep reviews, etc)', onPress: () => remove.mutate(label.id) },
+        { text: 'Delete from Library (keep review)', onPress: () => remove.mutate(label.id) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
-  // "Delete All Records" — remove the library label AND its matching wine review
-  // (chosen_wines, matched by identity). Cellar bottles / wish-list entries are
-  // physical inventory managed elsewhere, so they're intentionally left alone.
-  async function deleteAllRecords(label: LibraryLabel) {
+  // Remove the library label AND its wine review (chosen_wines). Cellar bottles /
+  // wish-list entries are physical inventory managed elsewhere, so they're left.
+  async function deleteLabelAndReview(label: LibraryLabel, reviewId: string) {
     try {
-      if (userId) {
-        const match = await findMatchingChosenWine(userId, { producer: label.producer, wineName: label.wine_name ?? '', vintage: label.vintage });
-        if (match?.id) await deleteChosenWine(match.id);
-      }
+      await deleteChosenWine(reviewId);
       await remove.mutateAsync(label.id);
     } catch (err) {
       showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
