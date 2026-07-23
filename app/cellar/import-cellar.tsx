@@ -115,6 +115,20 @@ export default function ImportCellarScreen() {
     setStage('review');
   }
 
+  // "How to import from Vivino" — the exact export steps (Vivino only exports on
+  // the web, so these are desktop steps).
+  function showVivinoSteps() {
+    showAlert({
+      title: 'How to import from Vivino',
+      body:
+        '1.  Sign in at vivino.com on a computer.\n\n' +
+        '2.  Click your profile icon (top-right corner).\n\n' +
+        '3.  Go to Settings.\n\n' +
+        '4.  Scroll to the bottom of the page — there’s an "Export your cellar list" option that downloads a CSV.',
+      buttons: [{ text: 'Got it' }],
+    });
+  }
+
   // Import Vivino: pick the CSV the user exported from Vivino's website and parse
   // it (reviews are captured too, for the later reviews-import feature).
   async function pickVivinoFile() {
@@ -230,12 +244,10 @@ export default function ImportCellarScreen() {
         isVivino ? (
           <ScrollView contentContainerStyle={styles.content}>
             <Text style={styles.lead}>Bring your Vivino cellar across.</Text>
-            <Text style={styles.hint}>Vivino only exports on a computer, so:</Text>
-            <View style={styles.steps}>
-              <Text style={styles.step}>1.  On a computer, open <Text style={styles.stepEm}>vivino.com</Text> and sign in.</Text>
-              <Text style={styles.step}>2.  Click your profile → <Text style={styles.stepEm}>Settings</Text>, then scroll down to <Text style={styles.stepEm}>Export your cellar</Text> and download the CSV file.</Text>
-              <Text style={styles.step}>3.  Email or AirDrop that file to your phone, then choose it below.</Text>
-            </View>
+            <Text style={styles.hint}>Vivino only exports on a computer. Once the file is on your phone, choose it below.</Text>
+            <TouchableOpacity onPress={showVivinoSteps} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Text style={styles.howToLink}>How to import from Vivino</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.primaryBtn} onPress={pickVivinoFile} activeOpacity={0.85}>
               <Text style={styles.primaryBtnText}>Choose Vivino export file</Text>
             </TouchableOpacity>
@@ -349,9 +361,7 @@ const styles = StyleSheet.create({
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
   hint: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
-  steps: { gap: spacing.sm, marginBottom: spacing.lg, marginTop: spacing.xs },
-  step: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22 },
-  stepEm: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  howToLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.md },
   footnote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: spacing.lg },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
   primaryBtnDisabled: { opacity: 0.5 },
