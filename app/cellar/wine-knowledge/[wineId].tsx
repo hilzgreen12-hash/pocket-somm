@@ -43,8 +43,10 @@ export default function WineKnowledgeScreen() {
 
   useEffect(() => {
     if (!hasWine) return;
-    // Cached profiles on the cellar row → instant. Otherwise generate once.
-    if (cellarWine?.wine_knowledge) {
+    // Cached profiles on the cellar row → instant. But a cache from before the
+    // stats bars existed (no producerStats) is regenerated once so it upgrades
+    // to the richer shape.
+    if (cellarWine?.wine_knowledge && cellarWine.wine_knowledge.producerStats !== undefined) {
       setKnowledge(cellarWine.wine_knowledge);
       return;
     }
@@ -180,15 +182,53 @@ export default function WineKnowledgeScreen() {
           ) : knowledge ? (
             <>
               <Text style={styles.sectionLabel}>Producer Profile</Text>
+              {(() => {
+                const s = knowledge.producerStats;
+                const items = s ? [
+                  s.founded ? `Circa ${s.founded}` : null,
+                  s.annualBottles ? `Est. ${s.annualBottles} bottles/yr` : null,
+                  s.hectares ? `${s.hectares}` : null,
+                ].filter(Boolean) : [];
+                return items.length ? (
+                  <View style={styles.statsBar}><Text style={styles.statsText}>{items.join('   ·   ')}</Text></View>
+                ) : null;
+              })()}
               <Text style={styles.body}>{knowledge.producerProfile}</Text>
 
               <Text style={styles.sectionLabel}>Region Profile</Text>
+              {(() => {
+                const s = knowledge.regionStats;
+                const items = s ? [s.climate, s.soil, s.altitude].filter(Boolean) : [];
+                return items.length ? (
+                  <View style={styles.statsBar}><Text style={styles.statsText}>{items.join('   ·   ')}</Text></View>
+                ) : null;
+              })()}
               <Text style={styles.body}>{knowledge.regionProfile}</Text>
 
               <Text style={styles.sectionLabel}>Vintage Profile</Text>
+              {(() => {
+                const s = knowledge.vintageStats;
+                if (!s || (!s.comparableVintages && !s.describedAs)) return null;
+                return (
+                  <View style={styles.statsBar}>
+                    {s.comparableVintages ? <Text style={styles.statsText}><Text style={styles.statsKey}>Comparable Vintages: </Text>{s.comparableVintages}</Text> : null}
+                    {s.describedAs ? <Text style={[styles.statsText, s.comparableVintages ? styles.statsTextSecond : null]}><Text style={styles.statsKey}>Described As: </Text>{s.describedAs}</Text> : null}
+                  </View>
+                );
+              })()}
               <Text style={styles.body}>{knowledge.vintageProfile}</Text>
 
               <Text style={styles.sectionLabel}>Grape Variety</Text>
+              {(() => {
+                const s = knowledge.grapeStats;
+                if (!s || (!s.characteristics && !s.grownIn)) return null;
+                return (
+                  <View style={styles.statsBar}>
+                    {s.characteristics ? <Text style={styles.statsText}><Text style={styles.statsKey}>Typical Characteristics: </Text>{s.characteristics}</Text> : null}
+                    {s.grownIn ? <Text style={[styles.statsText, s.characteristics ? styles.statsTextSecond : null]}><Text style={styles.statsKey}>Grown in: </Text>{s.grownIn}</Text> : null}
+                  </View>
+                );
+              })()}
               <Text style={styles.body}>{knowledge.grapeProfile}</Text>
             </>
           ) : null}
@@ -238,6 +278,11 @@ const styles = StyleSheet.create({
 
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
   body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
+  // Compact facts bar beneath each section label — specifics, not prose.
+  statsBar: { borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', borderRadius: 10, backgroundColor: 'rgba(224,184,74,0.06)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
+  statsText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, lineHeight: 19 },
+  statsTextSecond: { marginTop: 4 },
+  statsKey: { fontFamily: fonts.bodyRegular, color: colors.textMuted },
 
   loadingBlock: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   loadingText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center' },
