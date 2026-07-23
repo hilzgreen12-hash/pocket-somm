@@ -302,14 +302,7 @@ export default function CellarStatsScreen() {
             </View>
           </View>
 
-          {/* Wines with no critic score / pricing yet — one tap values them all. */}
-          {winesMissingIntel.length > 0 ? (
-            <TouchableOpacity style={styles.missingIntelRow} onPress={handleUpdateMissingIntel} activeOpacity={0.7}>
-              <Text style={styles.missingIntelText}>
-                {winesMissingIntel.length} {winesMissingIntel.length === 1 ? 'wine' : 'wines'} missing intel · <Text style={styles.missingIntelLink}>Update all</Text>
-              </Text>
-            </TouchableOpacity>
-          ) : null}
+          {/* "Wines missing intel" lives on the Full Cellar List only — not here. */}
 
           {/* Value block */}
           <View style={styles.section}>
