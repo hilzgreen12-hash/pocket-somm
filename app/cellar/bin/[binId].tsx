@@ -98,7 +98,7 @@ export default function BinDetailScreen() {
       const dist = dx * dx + dy * dy;
       if (dist < bestDist) { bestDist = dist; best = p.cell; }
     }
-    if (best) router.push(`/cellar/bin/cell/${best.id}` as any);
+    if (best) router.push(`/cellar/bin/cell/${best.id}?add=1` as any);
   }
 
   function handleDelete() {

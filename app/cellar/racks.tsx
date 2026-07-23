@@ -123,7 +123,7 @@ export default function RacksScreen() {
       buttons: [
         { text: 'Add a Wine Rack', onPress: () => handleAddType('rack') },
         { text: 'Add a Wine Fridge', onPress: () => handleAddType('fridge') },
-        { text: 'Add a Wine Bin', onPress: () => router.push('/cellar/bin/resize' as any) },
+        { text: 'Add a Wine Bin (diamond shaped)', onPress: () => router.push('/cellar/bin/resize' as any) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
