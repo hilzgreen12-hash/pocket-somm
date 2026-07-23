@@ -74,9 +74,9 @@ const COLOUR_OPTIONS = ['All', 'Red', 'White', 'Sparkling', 'Other'];
 const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'All', label: 'All maturities' },
   { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Approaching' },
-  { value: 'peak', label: 'Peak' },
-  { value: 'declining', label: 'Declining' },
+  { value: 'approaching', label: 'Early but Approachable' },
+  { value: 'peak', label: 'Sweet Spot' },
+  { value: 'declining', label: 'In Decline' },
 ];
 
 type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | null;
