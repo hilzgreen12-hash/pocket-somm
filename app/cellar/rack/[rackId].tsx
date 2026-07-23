@@ -27,7 +27,6 @@ import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { RackSlot, CellarWine } from '../../../src/types/wine';
-import * as ScreenOrientation from 'expo-screen-orientation';
 
 function truncate(str: string, max: number) {
   return str.length > max ? str.slice(0, max - 1) + '…' : str;
@@ -108,7 +107,6 @@ export default function RackGridScreen() {
   const [pickerInitialSelected, setPickerInitialSelected] = useState<Set<string>>(new Set());
   const [savingFilter, setSavingFilter] = useState(false);
   const [bottleListOpen, setBottleListOpen] = useState(false);
-  const [isLandscape, setIsLandscape] = useState(false);
   // The in-progress move lives in the rack store (see rackStore) so it
   // survives navigating to another rack — pick up on rack A, drop on rack B.
   const moving = pendingMove;
@@ -170,19 +168,6 @@ export default function RackGridScreen() {
   }, [placed]);
 
 
-  // Unlock landscape for this screen; restore portrait on leave
-  useEffect(() => {
-    ScreenOrientation.unlockAsync().catch(() => {});
-    const sub = ScreenOrientation.addOrientationChangeListener((e) => {
-      const landscape = e.orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_LEFT ||
-        e.orientationInfo.orientation === ScreenOrientation.Orientation.LANDSCAPE_RIGHT;
-      setIsLandscape(landscape);
-    });
-    return () => {
-      ScreenOrientation.removeOrientationChangeListener(sub);
-      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-    };
-  }, []);
 
   const rack = racks.find((r) => r.id === rackId);
 
@@ -233,6 +218,14 @@ export default function RackGridScreen() {
       setLineupSetup(true);
     }
   }, [lineup, rack]);
+
+  // Start the "Add a Lineup" flow — pick the start slot + orientation, then
+  // scan up to 6 bottles. Fridges are always horizontal, so force it.
+  function startLineup() {
+    if (!rack) return;
+    setLineupOrientation(rack.storage_type === 'fridge' ? 'Horizontal' : 'Vertical');
+    setLineupSetup(true);
+  }
 
   // Inter-rack swipe — mirrors the pattern in TabSwipeView: horizontal
   // pan with 30px activation threshold, fails on >30px vertical so the
@@ -1317,18 +1310,7 @@ export default function RackGridScreen() {
             <Text style={[styles.navArrow, !nextRack && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
         </View>
-        <TouchableOpacity
-          style={styles.rotateBtn}
-          onPress={() => {
-            if (isLandscape) {
-              ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
-            } else {
-              ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(() => {});
-            }
-          }}
-        >
-          <Text style={styles.rotateBtnText}>{isLandscape ? '↺ Portrait' : '↻ Landscape'}</Text>
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Gold tally — distinct wines, total bottles, and total slot capacity. */}
@@ -1373,7 +1355,10 @@ export default function RackGridScreen() {
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
-          Short Press a slot to Add Wine or View Intel. Long Press a slot to Add Multiples of the same wine or Edit slot contents. Use Add a Lineup to add whole rows or columns. Pinch the grid to Zoom In.
+          Short Press a slot to Add Wine or View Intel. Long Press a slot to Add Multiples of the same wine or Edit slot contents. Pinch the grid to Zoom In.
+        </Text>
+        <Text style={styles.rackHintLine2}>
+          <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add 6 bottles at a time
         </Text>
 
         {winesInRack.length > 0 && (
@@ -1560,20 +1545,6 @@ export default function RackGridScreen() {
           </GestureDetector>
         </View>
 
-        {/* Add a lineup straight into this storage — photograph up to 6
-            bottles and onboard them via the same flow as Add a Wine. */}
-        <TouchableOpacity
-          style={styles.addLineupBtn}
-          onPress={() => {
-            // Pick the start slot + orientation first. Fridges are always
-            // horizontal, so they skip the toggle and force Horizontal.
-            setLineupOrientation(rack.storage_type === 'fridge' ? 'Horizontal' : 'Vertical');
-            setLineupSetup(true);
-          }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.addLineupBtnText}>Add A Lineup (up to 6 bottles)</Text>
-        </TouchableOpacity>
 
         {/* Edit bubble — opens the rack-management modal (wipe / rename /
             delete). Sits at the bottom of the page so destructive actions
@@ -2069,9 +2040,6 @@ const styles = StyleSheet.create({
   titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
   navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
-  rotateBtn: { alignItems: 'flex-end', width: 80 },
-  // Cormorant — button text
-  rotateBtnText: { fontSize: 12, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter-rack swipe bar — small gold arrows + count, sits directly
   // below the rack-name header so the user sees the swipe affordance
   // before they reach for the grid.
@@ -2144,8 +2112,6 @@ const styles = StyleSheet.create({
   // Inter — cancel link (not a button)
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // Add-a-lineup CTA — gold to read as a primary action, above the Edit pill.
-  addLineupBtn: { alignSelf: 'center', marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 20, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  addLineupBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 1, textTransform: 'uppercase' },
   editRackBtn: { alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.lg, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
   // Cormorant — button text
   editRackBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', letterSpacing: 1, textTransform: 'uppercase' },
@@ -2228,7 +2194,9 @@ const styles = StyleSheet.create({
   multiBarPlaceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.surface },
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   // Inter — hint
-  rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md, lineHeight: 20 },
+  rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 4, lineHeight: 20 },
+  rackHintLine2: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, lineHeight: 20 },
+  rackHintLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
