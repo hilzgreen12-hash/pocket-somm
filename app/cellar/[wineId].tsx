@@ -1494,6 +1494,11 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>
           )}
+          {bottlesInCellar > 0 && !isArchived ? (
+            <TouchableOpacity onPress={() => setArchiveModalOpen(true)}>
+              <Text style={styles.statAction}>I drank some →</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Archive</Text>
