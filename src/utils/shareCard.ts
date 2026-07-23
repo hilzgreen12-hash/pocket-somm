@@ -1,16 +1,18 @@
 import { Platform, Share } from 'react-native';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import { VINSTER_APP_STORE_URL } from '../constants/share';
 
 // One place that shares a captured/generated Vinster "result" (image or PDF) so
 // EVERY outbound share is consistent:
 //  - a MEANINGFUL filename ("<name> has shared a Vinster result with you.<ext>")
 //  - iOS: the branded file PLUS a tappable message with the App Store link, so
 //    a recipient can actually install Vinster from the message.
-//  - Android: the branded file (there's no public Android build to link to yet;
-//    an iOS App Store link wouldn't help an Android recipient install).
+//  - Android: expo-sharing can't attach text to a file share, so RN Share
+//    ignores the file. We can't send image + tappable link together on Android
+//    with these libraries — see shareResult for how that's handled.
 
-const APP_STORE_URL = 'https://apps.apple.com/app/id6763607127';
+const APP_STORE_URL = VINSTER_APP_STORE_URL;
 
 // Resolve the sharer's display name (display_name -> email prefix -> "Someone").
 export function sharerNameFrom(
