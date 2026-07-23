@@ -354,37 +354,26 @@ export default function CellarStatsScreen() {
 
             {wines.length === 0 ? null : (
               <View style={styles.estimateMetaStack}>
-                {lastEstimateDate && winesWithEstimate.length > 0 ? (
-                  <Text style={styles.lastEstimate}>Last estimate: {lastEstimateDate}</Text>
-                ) : null}
-
-                {winesWithEstimate.length === 0 && winesNotYetValued.length > 0 ? (
-                  <TouchableOpacity style={styles.calcBtn} onPress={handleCalculate} activeOpacity={0.8}>
-                    <Text style={styles.calcBtnText}>Calculate</Text>
+                {/* Last estimate date + Recalculate on ONE left-indented line
+                    (·-separated, mirroring the Missing Values line). */}
+                {winesWithEstimate.length > 0 ? (
+                  <TouchableOpacity style={styles.missingValueRow} onPress={handleCalculate} activeOpacity={0.7}>
+                    <Text style={styles.missingValueText}>
+                      {lastEstimateDate ? `Last estimate: ${lastEstimateDate} · ` : ''}<Text style={styles.missingIntelLink}>Recalculate</Text>
+                    </Text>
                   </TouchableOpacity>
                 ) : winesNotYetValued.length > 0 ? (
-                  <>
-                    <Text style={styles.estimateUpdateNote}>
-                      You've added {winesNotYetValued.length} wine{winesNotYetValued.length === 1 ? '' : 's'} since your last valuation
-                    </Text>
-                    <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                      <Text style={styles.recalcLink}>
-                        Add {winesNotYetValued.length} wine{winesNotYetValued.length === 1 ? '' : 's'} to total cellar value
-                      </Text>
-                    </TouchableOpacity>
-                  </>
-                ) : winesWithEstimate.length > 0 ? (
-                  <TouchableOpacity onPress={handleCalculate} activeOpacity={0.7}>
-                    <Text style={styles.recalcLink}>Recalculate</Text>
+                  <TouchableOpacity style={styles.missingValueRow} onPress={handleCalculate} activeOpacity={0.7}>
+                    <Text style={styles.missingValueText}><Text style={styles.missingIntelLink}>Calculate cellar value</Text></Text>
                   </TouchableOpacity>
                 ) : null}
 
-                {/* Wines Vinster tried to value but had no market data for —
-                    the user can supply their own figure. Same treatment as the
-                    Purchase Value block. */}
+                {/* Missing Values — only wines Vinster couldn't value from
+                    Wine-Searcher OR its own estimate; left-indented under Last
+                    estimate. */}
                 {winesUnvaluable.length > 0 ? (
-                  <TouchableOpacity style={styles.missingIntelRow} onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
-                    <Text style={styles.missingIntelText}>
+                  <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
+                    <Text style={styles.missingValueText}>
                       {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
                     </Text>
                   </TouchableOpacity>
