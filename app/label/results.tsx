@@ -1005,7 +1005,7 @@ export default function LabelResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
-      <Text style={styles.pageTitle}>{isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
+      <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
       <View style={styles.header}>
         <Text style={styles.producer}>{wine.producer}</Text>
@@ -1267,7 +1267,7 @@ export default function LabelResultsScreen() {
       <Modal visible={addingToCellar} transparent animationType="slide">
         <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Add to Cellar</Text>
+            <Text style={styles.modalTitle}>{context === 'add-location' ? 'Add to Location' : 'Add to Cellar'}</Text>
             <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
 
             {/* Came in from a tapped empty slot — ask how many bottles and
@@ -1501,7 +1501,7 @@ export default function LabelResultsScreen() {
                       : selectedLocationId
                         ? `Save to ${cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'Location'}`
                         : context === 'add-location'
-                          ? 'Save'
+                          ? 'Save to Location'
                           : 'Save to Cellar List'}
               </Text>
             </TouchableOpacity>
