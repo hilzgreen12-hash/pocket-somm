@@ -25,6 +25,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing } from '../../src/services/pricing';
+import { getWineIntelligence } from '../../src/api/label';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -219,6 +220,9 @@ export default function LabelResultsScreen() {
   // Fetch a real Wine-Searcher market price directly so the Estimated Purchase
   // Price/Bottle is populated in EVERY add flow. Runs once; a user-typed price
   // is left untouched.
+  // Estimate stamped onto the saved wine when full Wine Intel was skipped, so
+  // add-to-location wines still contribute to Total Estimated Current Value.
+  const [prefetchedValue, setPrefetchedValue] = useState<{ value: number; source: string } | null>(null);
   const pricePrefetchedRef = useRef(false);
   useEffect(() => {
     if (!isAddFlow || pricePrefetchedRef.current) return;
@@ -229,13 +233,30 @@ export default function LabelResultsScreen() {
     if (!queryName) return;
     pricePrefetchedRef.current = true;
     const vintageNum = w.vintage && w.vintage !== 'NV' ? Number(w.vintage) : null;
-    fetchPricing(queryName, Number.isFinite(vintageNum as number) ? (vintageNum as number) : null, userCurrency)
-      .then((p) => {
+    const vint = Number.isFinite(vintageNum as number) ? (vintageNum as number) : null;
+    (async () => {
+      try {
+        // 1) Wine-Searcher — real market price.
+        const p = await fetchPricing(queryName, vint, userCurrency);
         if (p.source === 'wine-searcher' && p.matched !== false && p.averageMarketPrice != null) {
           setPurchasePrice((prev) => prev || String(p.averageMarketPrice));
+          setPrefetchedValue({ value: p.averageMarketPrice, source: 'wine-searcher' });
+          return;
         }
-      })
-      .catch(() => {});
+        // 2) Wine-Searcher has no price → Vinster estimates one from the
+        //    producer / region / vintage (Claude), so every wine gets a value
+        //    bar the genuinely un-estimable.
+        const intel = await getWineIntelligence(
+          { producer: w.producer ?? '', region: w.region ?? '', wineName: w.wineName ?? null, vintage: w.vintage || 'NV', style: (w as any).style ?? null },
+          userCurrency,
+          null,
+        );
+        if (intel.estimatedValue != null) {
+          setPurchasePrice((prev) => prev || String(Math.round(intel.estimatedValue as number)));
+          setPrefetchedValue({ value: intel.estimatedValue, source: 'vinster' });
+        }
+      } catch { /* leave blank on failure */ }
+    })();
   }, [isAddFlow, wineDetailsConfirmed, intelligence?.estimatedValue, userCurrency]);
 
   // Add flow has no intel card — drop the user straight onto the Add-to-Cellar
@@ -355,12 +376,15 @@ export default function LabelResultsScreen() {
       label_image_path: null,
       user_notes: null,
       is_wishlist: false,
-      estimated_value: intel.estimatedValue,
+      // Prefer the intel estimate; otherwise fall back to the value we pre-fetched
+      // for the add card (Wine-Searcher, or Vinster's own estimate) so add flows
+      // that skip full intel still contribute to Total Estimated Current Value.
+      estimated_value: intel.estimatedValue ?? prefetchedValue?.value ?? null,
       estimated_value_currency: userCurrency,
-      estimated_value_at: intel.estimatedValue != null ? new Date().toISOString() : null,
+      estimated_value_at: (intel.estimatedValue != null || prefetchedValue != null) ? new Date().toISOString() : null,
       // Real Wine-Searcher market price vs Claude estimate — drives the card's
-      // value source label. Set by generateWineIntel in the confirm step.
-      estimated_value_source: intel.valueSource ?? 'vinster',
+      // value source label.
+      estimated_value_source: intel.estimatedValue != null ? (intel.valueSource ?? 'vinster') : (prefetchedValue?.source ?? null),
       purchase_price: validPrice,
       purchase_price_currency: userCurrency,
       bottle_size_ml: bottleSizeMl,
