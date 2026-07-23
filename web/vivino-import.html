@@ -1,0 +1,333 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Import your Vivino cellar · Vinster</title>
+<style>
+  :root {
+    --bg: #14100d;
+    --panel: #1e1813;
+    --line: rgba(212,176,96,0.22);
+    --gold: #d4b060;
+    --gold-soft: rgba(212,176,96,0.12);
+    --text: #f4ebe0;
+    --muted: #a99e8e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: Georgia, 'Times New Roman', serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    padding: 40px 20px 80px;
+  }
+  .wrap { width: 100%; max-width: 720px; }
+  header { text-align: center; margin-bottom: 32px; }
+  .brand { font-size: 13px; letter-spacing: 5px; text-transform: uppercase; color: var(--gold); }
+  h1 { font-size: 30px; margin: 10px 0 6px; font-weight: 600; }
+  .sub { color: var(--muted); font-size: 16px; margin: 0; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 28px; }
+  .rule { display:flex; align-items:center; gap:10px; margin: 26px 0; }
+  .rule::before, .rule::after { content:''; flex:1; height:1px; background: var(--line); }
+  .rule span { color: var(--gold); font-size: 12px; }
+  label.fld { display:block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
+  input[type=email] {
+    width: 100%; padding: 12px 14px; font-size: 16px; border-radius: 10px;
+    border: 1px solid var(--line); background: #17120e; color: var(--text); font-family: inherit;
+  }
+  .btn {
+    display: inline-flex; align-items:center; justify-content:center; gap:8px;
+    width: 100%; padding: 14px; margin-top: 16px; cursor: pointer;
+    background: transparent; color: var(--gold); font-family: inherit; font-size: 16px; font-weight: 600;
+    border: 1px solid var(--gold); border-radius: 12px; letter-spacing: 0.3px;
+  }
+  .btn.solid { background: var(--gold); color: #14100d; }
+  .btn:disabled { opacity: 0.45; cursor: default; }
+  .btn.secondary { border-color: var(--line); color: var(--text); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .note { color: var(--muted); font-size: 13px; font-style: italic; margin-top: 14px; text-align:center; }
+  .msg { border-radius: 10px; padding: 12px 14px; margin-top: 16px; font-size: 15px; }
+  .msg.ok { background: var(--gold-soft); border: 1px solid var(--line); color: var(--text); }
+  .msg.err { background: rgba(192,57,43,0.12); border: 1px solid rgba(192,57,43,0.4); color: #f0c9c4; }
+  .rowuser { display:flex; align-items:center; justify-content:space-between; margin-bottom: 20px; font-size: 14px; color: var(--muted); }
+  .link { color: var(--gold); cursor: pointer; text-decoration: underline; background:none; border:none; font-family:inherit; font-size:14px; }
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: 12px; padding: 34px; text-align:center; cursor:pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .drop:hover, .drop.over { border-color: var(--gold); background: var(--gold-soft); }
+  .drop strong { color: var(--gold); }
+  .list { margin-top: 8px; max-height: 46vh; overflow:auto; border-top: 1px solid var(--line); }
+  .item { display:flex; align-items:flex-start; gap:12px; padding: 11px 4px; border-bottom: 1px solid var(--line); }
+  .item.off { opacity: 0.42; }
+  .item input { margin-top: 4px; width:18px; height:18px; accent-color: var(--gold); }
+  .iname { font-size: 15px; font-weight: 600; }
+  .imeta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .tag { color: var(--gold); font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px; margin-left: 8px; }
+  .count { color: var(--gold); font-size: 13px; text-transform: uppercase; letter-spacing: 1px; margin: 6px 0 2px; }
+  .steps { margin: 0; padding-left: 20px; color: var(--text); }
+  .steps li { margin: 8px 0; }
+  .hide { display: none !important; }
+  .center { text-align:center; }
+  .spin { width:26px; height:26px; border:3px solid var(--line); border-top-color: var(--gold); border-radius:50%; animation: sp 0.8s linear infinite; margin: 8px auto; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">Vinster</div>
+    <h1>Import your Vivino cellar</h1>
+    <p class="sub">Upload the CSV you exported from Vivino — it lands straight in your Vinster cellar.</p>
+  </header>
+
+  <!-- Loading -->
+  <div id="loading" class="panel center">
+    <div class="spin"></div>
+    <p class="muted">Loading…</p>
+  </div>
+
+  <!-- Sign in -->
+  <div id="signin" class="panel hide">
+    <label class="fld" for="email">Your Vinster email</label>
+    <input id="email" type="email" placeholder="you@example.com" autocomplete="email" />
+    <button id="sendLink" class="btn solid">Email me a sign-in link</button>
+    <p class="note">Use the same email you sign in with on the Vinster app. We'll send a one-tap link — no password needed, and it works whether you signed up with email, Google, or Apple.</p>
+    <div id="signinMsg"></div>
+
+    <div class="rule"><span>◇</span></div>
+    <p class="count">How to export from Vivino</p>
+    <ol class="steps">
+      <li>Sign in at <strong>vivino.com</strong> on this computer.</li>
+      <li>Click your profile icon (top-right corner).</li>
+      <li>Go to <strong>Settings</strong>.</li>
+      <li>Scroll to the bottom of the page — there's an <strong>“Export your cellar list”</strong> option that downloads a CSV.</li>
+    </ol>
+  </div>
+
+  <!-- Upload -->
+  <div id="upload" class="panel hide">
+    <div class="rowuser">
+      <span>Signed in as <span id="whoami" style="color:var(--text)"></span></span>
+      <button id="signout" class="link">Sign out</button>
+    </div>
+    <div id="drop" class="drop">
+      <p style="margin:0 0 6px"><strong>Choose your Vivino CSV</strong></p>
+      <p class="muted" style="margin:0">or drag &amp; drop it here</p>
+      <input id="file" type="file" accept=".csv,text/csv,text/plain" class="hide" />
+    </div>
+    <p class="note">Your ratings and tasting notes come across in the file too — importing those into your reviews is coming soon.</p>
+    <div id="uploadMsg"></div>
+  </div>
+
+  <!-- Review -->
+  <div id="review" class="panel hide">
+    <div class="rowuser">
+      <span id="foundLabel"></span>
+      <button id="reviewCancel" class="link">Choose another file</button>
+    </div>
+    <p id="dedupNote" class="note hide" style="text-align:left">Wines already in your cellar (or repeated in this file) are unticked to avoid duplicates — tick them to add anyway.</p>
+    <div id="list" class="list"></div>
+    <button id="doImport" class="btn solid">Add to my cellar</button>
+    <div id="reviewMsg"></div>
+  </div>
+
+  <!-- Done -->
+  <div id="done" class="panel center hide">
+    <p class="count">Cellar imported</p>
+    <h1 id="doneCount" style="margin-top:4px"></h1>
+    <p class="muted">Open the Vinster app to see your wines — pull to refresh your Cellar List if they're not showing yet.</p>
+    <button id="importMore" class="btn secondary" style="max-width:260px;margin-left:auto;margin-right:auto">Import another file</button>
+  </div>
+
+  <p class="note">Vinster · Your AI sommelier</p>
+</div>
+
+<script type="module">
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Public project URL + publishable (anon) key — the same pair shipped in the
+// Vinster app. Safe to expose: Row Level Security limits every write to the
+// signed-in user's own cellar.
+const SUPABASE_URL = 'https://skwfykendnhnhhbdrfbr.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_wsa6cGlrAaULP_YA1JwDlQ_h-qaHTke';
+const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+});
+
+const $ = (id) => document.getElementById(id);
+const show = (id) => { for (const s of ['loading','signin','upload','review','done']) $(s).classList.toggle('hide', s !== id); };
+const msg = (el, text, kind) => { el.innerHTML = text ? `<div class="msg ${kind||'ok'}">${text}</div>` : ''; };
+
+// ---- CSV parser (mirrors src/utils/vivinoCsv.ts) ----
+function parseCsv(text) {
+  const rows = []; let row = [], cell = '', inQ = false;
+  const s = text.replace(/^﻿/, '');
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (inQ) { if (c === '"') { if (s[i+1] === '"') { cell += '"'; i++; } else inQ = false; } else cell += c; }
+    else if (c === '"') inQ = true;
+    else if (c === ',') { row.push(cell); cell = ''; }
+    else if (c === '\n') { row.push(cell); rows.push(row); row = []; cell = ''; }
+    else if (c !== '\r') cell += c;
+  }
+  if (cell.length || row.length) { row.push(cell); rows.push(row); }
+  return rows.filter((r) => r.some((c) => c.trim() !== ''));
+}
+const SYN = {
+  producer: ['winery','producer','domaine','estate','wine maker','winemaker'],
+  wine: ['wine name','wine','name','full name','wine full name','label'],
+  vintage: ['vintage','year'],
+  region: ['region','appellation','sub-region','subregion','area'],
+  quantity: ['count','quantity','qty','bottles','number of bottles','bottle count','inventory'],
+  price: ['price paid','purchase price','price','bottle price','cost'],
+  currency: ['currency'],
+};
+function findCol(header, syns) {
+  const norm = header.map((h) => h.trim().toLowerCase());
+  for (const s of syns) { const i = norm.indexOf(s); if (i >= 0) return i; }
+  for (let i = 0; i < norm.length; i++) if (syns.some((s) => norm[i].includes(s))) return i;
+  return -1;
+}
+function parseVivino(text) {
+  const rows = parseCsv(text);
+  if (rows.length < 2) return [];
+  const h = rows[0];
+  const col = { producer: findCol(h, SYN.producer), wine: findCol(h, SYN.wine), vintage: findCol(h, SYN.vintage),
+    region: findCol(h, SYN.region), quantity: findCol(h, SYN.quantity), price: findCol(h, SYN.price), currency: findCol(h, SYN.currency) };
+  const at = (r, i) => (i >= 0 && i < r.length ? (r[i] || '').trim() : '');
+  const out = [];
+  for (let ri = 1; ri < rows.length; ri++) {
+    const r = rows[ri];
+    const producer = at(r, col.producer);
+    const wine_name = at(r, col.wine) || producer;
+    if (!producer && !wine_name) continue;
+    const vRaw = at(r, col.vintage);
+    const vintage = vRaw ? (vRaw.replace(/[^0-9A-Za-z]/g, '') || null) : null;
+    const q = parseInt(at(r, col.quantity).replace(/[^0-9]/g, ''), 10);
+    const pRaw = at(r, col.price).replace(/[^0-9.]/g, '');
+    const price = pRaw ? parseFloat(pRaw) : NaN;
+    out.push({ producer, wine_name, region: at(r, col.region),
+      vintage, quantity: (Number.isFinite(q) && q > 0) ? q : 1,
+      purchase_price: Number.isFinite(price) ? price : null, currency: at(r, col.currency) || null });
+  }
+  return out;
+}
+const keyOf = (w) => `${(w.producer||'').trim().toLowerCase()}|${(w.wine_name||'').trim().toLowerCase()}|${(w.vintage||'').trim()}`;
+
+// ---- State ----
+let parsed = [], keep = [], flags = [];
+
+// ---- Auth ----
+async function refresh() {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session) { $('whoami').textContent = session.user.email || ''; show('upload'); }
+  else show('signin');
+}
+supabase.auth.onAuthStateChange((_e, session) => { if (session) { $('whoami').textContent = session.user.email || ''; show('upload'); } });
+
+$('sendLink').addEventListener('click', async () => {
+  const email = $('email').value.trim();
+  if (!email) { msg($('signinMsg'), 'Enter your email first.', 'err'); return; }
+  $('sendLink').disabled = true;
+  const redirectTo = window.location.href.split('#')[0];
+  const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: redirectTo, shouldCreateUser: false } });
+  $('sendLink').disabled = false;
+  if (error) { msg($('signinMsg'), error.message, 'err'); return; }
+  msg($('signinMsg'), `Check <b>${email}</b> and tap the link — then come back to this tab.`, 'ok');
+});
+$('signout').addEventListener('click', async () => { await supabase.auth.signOut(); show('signin'); });
+
+// ---- Upload ----
+const drop = $('drop');
+drop.addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', (e) => { if (e.target.files[0]) readFile(e.target.files[0]); });
+['dragover','dragenter'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave','drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', (e) => { const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+
+async function readFile(file) {
+  msg($('uploadMsg'), '');
+  try {
+    const text = await file.text();
+    const wines = parseVivino(text);
+    if (!wines.length) { msg($('uploadMsg'), "That doesn't look like a Vivino cellar export. Make sure you exported the CSV from vivino.com.", 'err'); return; }
+    // Dedup against the existing cellar.
+    const { data: { session } } = await supabase.auth.getSession();
+    let existing = new Set();
+    try {
+      const { data } = await supabase.from('cellar_wines').select('producer,wine_name,vintage').eq('user_id', session.user.id).eq('is_wishlist', false).is('archived_at', null);
+      existing = new Set((data || []).map(keyOf));
+    } catch {}
+    const seen = new Set();
+    parsed = wines; keep = []; flags = [];
+    for (const w of wines) {
+      const k = keyOf(w);
+      const flag = existing.has(k) ? 'Already in cellar' : seen.has(k) ? 'Repeated above' : null;
+      seen.add(k); flags.push(flag); keep.push(flag === null);
+    }
+    renderReview();
+  } catch (err) { msg($('uploadMsg'), err.message || 'Could not read that file.', 'err'); }
+}
+
+function renderReview() {
+  $('foundLabel').textContent = `Found ${parsed.length} wine${parsed.length === 1 ? '' : 's'}`;
+  $('dedupNote').classList.toggle('hide', !flags.some(Boolean));
+  const list = $('list'); list.innerHTML = '';
+  parsed.forEach((w, i) => {
+    const div = document.createElement('label');
+    div.className = 'item' + (keep[i] ? '' : ' off');
+    const name = [w.vintage, w.producer, w.wine_name].filter(Boolean).join(' ') || 'Unnamed wine';
+    div.innerHTML = `<input type="checkbox" ${keep[i] ? 'checked' : ''} />
+      <div><div class="iname">${escapeHtml(name)} <span style="color:var(--gold);font-size:13px">${w.quantity}×</span></div>
+      <div class="imeta">${escapeHtml(w.region || '')}${flags[i] ? `<span class="tag">${flags[i]}</span>` : ''}</div></div>`;
+    div.querySelector('input').addEventListener('change', (e) => { keep[i] = e.target.checked; div.classList.toggle('off', !keep[i]); updateImportBtn(); });
+    list.appendChild(div);
+  });
+  updateImportBtn();
+  show('review');
+}
+function updateImportBtn() {
+  const n = keep.filter(Boolean).length;
+  $('doImport').disabled = n === 0;
+  $('doImport').textContent = n === 0 ? 'Nothing selected' : `Add ${n} wine${n === 1 ? '' : 's'} to my cellar`;
+}
+function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, (c) => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
+
+$('reviewCancel').addEventListener('click', () => { $('file').value = ''; show('upload'); });
+$('importMore').addEventListener('click', () => { $('file').value = ''; show('upload'); });
+
+$('doImport').addEventListener('click', async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session) { show('signin'); return; }
+  const today = new Date().toISOString().split('T')[0];
+  const rows = parsed.filter((_, i) => keep[i]).map((w) => ({
+    user_id: session.user.id,
+    wine_name: w.wine_name || w.producer,
+    producer: w.producer || null,
+    region: w.region || null,
+    vintage: w.vintage || null,
+    quantity: w.quantity,
+    date_received: today,
+    is_wishlist: false,
+    bottle_size_ml: 750,
+    purchase_price: w.purchase_price,
+    purchase_price_currency: w.purchase_price != null ? (w.currency || null) : null,
+  }));
+  $('doImport').disabled = true; msg($('reviewMsg'), 'Adding your wines…', 'ok');
+  const { error } = await supabase.from('cellar_wines').insert(rows);
+  if (error) { $('doImport').disabled = false; msg($('reviewMsg'), error.message, 'err'); return; }
+  const bottles = rows.reduce((s, r) => s + (r.quantity || 1), 0);
+  $('doneCount').textContent = `${bottles} bottle${bottles === 1 ? '' : 's'} added`;
+  show('done');
+});
+
+refresh();
+</script>
+</body>
+</html>
