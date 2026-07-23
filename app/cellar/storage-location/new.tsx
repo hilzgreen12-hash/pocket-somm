@@ -74,7 +74,7 @@ export default function NewStorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.notice}>Add a photo of the space — any orientation is fine.</Text>
+        <Text style={styles.notice}>Add a visual and a name to begin.</Text>
 
         {photoUri ? (
           <View style={styles.previewWrap}>
@@ -116,19 +116,20 @@ const styles = StyleSheet.create({
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  notice: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', lineHeight: 19, marginBottom: spacing.lg },
+  notice: { fontSize: 15, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, marginBottom: spacing.lg },
   photoButtons: { gap: spacing.sm },
   photoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
   photoBtnSecondary: { borderColor: '#FFFFFF' },
   photoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   photoBtnTextSecondary: { color: '#FFFFFF' },
   previewWrap: { alignItems: 'center' },
-  preview: { width: '100%', height: 280, borderRadius: 14, backgroundColor: colors.surface },
+  // Portrait-shaped preview — a location photo reads best upright.
+  preview: { width: '62%', aspectRatio: 3 / 4, borderRadius: 14, backgroundColor: colors.surface },
   retakeBtn: { marginTop: spacing.sm, paddingVertical: 6, paddingHorizontal: spacing.md },
   retakeText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.xl, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
-  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  saveBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
+  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF', letterSpacing: 0.3 },
   btnDisabled: { opacity: 0.5 },
 });
