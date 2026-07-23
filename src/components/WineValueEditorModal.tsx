@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet, ActivityIndicator } from 'react-native';
+import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { updateCellarWine } from '../api/cellar';
 import { bottleSizeCl } from './BottleSizePicker';
 import { CURRENCIES } from '../constants/currency';
@@ -104,7 +105,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>
-      <View style={styles.overlay}>
+      <KeyboardAvoidingView style={styles.overlay} behavior="padding">
         <View style={styles.sheet}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
@@ -136,7 +137,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
           </TouchableOpacity>
           <TouchableOpacity style={[styles.cancelBtn, saving && { opacity: 0.5 }]} onPress={close} disabled={saving}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

@@ -105,6 +105,9 @@ export default function RacksScreen() {
   const locationBottles = storageLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
   const totalBottles = rackBottles + binBottles + locationBottles;
   const totalLocations = racks.length + bins.length + storageLocations.length;
+  // `racks` holds both racks and fridges (storage_type); split for the stats bar.
+  const rackCount = racks.filter((r) => r.storage_type !== 'fridge').length;
+  const fridgeCount = racks.filter((r) => r.storage_type === 'fridge').length;
 
   // Straight into the corner-pull sizer — the photograph/manual chooser is
   // retired for both racks and fridges.
@@ -201,9 +204,14 @@ export default function RacksScreen() {
           </Text>
 
           {totalLocations > 0 && (
-            <Text style={styles.homeSummary}>
-              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
-            </Text>
+            <>
+              <Text style={styles.homeSummary}>
+                {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
+              </Text>
+              <Text style={styles.homeSummary}>
+                {rackCount} {rackCount === 1 ? 'Rack' : 'Racks'} · {fridgeCount} {fridgeCount === 1 ? 'Fridge' : 'Fridges'} · {bins.length} {bins.length === 1 ? 'Bin' : 'Bins'} · {storageLocations.length} Other {storageLocations.length === 1 ? 'Location' : 'Locations'}
+              </Text>
+            </>
           )}
 
           <View style={styles.divider} />
@@ -212,7 +220,7 @@ export default function RacksScreen() {
               a permanent "+ Add" tile at the end. */}
           <Text style={styles.blockHeader}>Racks, Fridges & Bins</Text>
           <Text style={styles.blockBlurb}>
-            Add a wine rack or fridge by photographing or manually inputting it's layout. Once you have your grid set up you can input individual wines, multiples of the same wine, or lineups of up to 6 bottles at a time.
+            A Rack is a horizontal/vertical grid, not to be confused with a Fridge which is roughly the same shape but colder. Bins are diamond shaped, with half diamonds at the edges.
           </Text>
           {racks.length > 0 && <Text style={styles.swipeHint}>Swipe to see all, and add more →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
