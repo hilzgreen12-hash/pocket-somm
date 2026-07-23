@@ -102,7 +102,7 @@ export default function RackResizeScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.intro}>Pull the corner to size your {isFridge ? 'fridge' : 'rack'} — each pull adds a row or column of bottles.{isFridge ? ' For each row create a space for bottles facing forward and backward.' : ''}</Text>
+        <Text style={styles.intro}>Drag the handle out from the centre to size your {isFridge ? 'fridge' : 'rack'} — pull right/down to add, in toward the centre to remove. Lift and pull again for larger sizes.{isFridge ? ' For each row create a space for bottles facing forward and backward.' : ''}</Text>
 
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{rows} × {cols}</Text>
@@ -131,14 +131,12 @@ export default function RackResizeScreen() {
                 style={[
                   styles.handle,
                   {
-                    left: originLeft + gridW - HANDLE / 2,
-                    top: originTop + gridH - HANDLE / 2,
+                    left: originLeft + gridW / 2 - HANDLE / 2,
+                    top: originTop + gridH / 2 - HANDLE / 2,
                     transform: [{ translateX: handleTX }, { translateY: handleTY }],
                   },
                 ]}
-              >
-                <Text style={styles.handleGlyph}>⤡</Text>
-              </Animated.View>
+              />
             </GestureDetector>
           </View>
         </GestureHandlerRootView>
@@ -193,7 +191,6 @@ const styles = StyleSheet.create({
   canvas: { flex: 1, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, overflow: 'hidden' },
   slot: { flex: 1, borderRadius: 5, borderWidth: 1, borderColor: colors.gold, backgroundColor: colors.surfaceElevated },
   handle: { position: 'absolute', width: HANDLE, height: HANDLE, borderRadius: HANDLE / 2, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
-  handleGlyph: { fontSize: 22, color: colors.background, fontFamily: fonts.bodyBold },
   nudgeRow: { flexDirection: 'row', justifyContent: 'space-around', marginTop: spacing.lg },
   nudgeGroup: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   nudgeLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginRight: 4 },
