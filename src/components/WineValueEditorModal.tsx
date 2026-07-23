@@ -103,8 +103,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
                 <View style={styles.rowMain}>
                   <Text style={styles.rowName} numberOfLines={1}>{[w.producer, w.wine_name].filter(Boolean).join(' ') || w.wine_name}</Text>
                   <Text style={styles.rowMeta} numberOfLines={1}>
-                    {[w.vintage, w.region].filter(Boolean).join(' · ')}
-                    {(w.quantity ?? 1) > 1 ? `  ·  ×${w.quantity}` : ''}  ·  {bottleSizeCl(w.bottle_size_ml ?? 750)}cl
+                    {[w.vintage, w.region].filter(Boolean).join(' · ')}  ·  {bottleSizeCl(w.bottle_size_ml ?? 750)}cl
                   </Text>
                 </View>
                 <View style={styles.inputWrap}>
@@ -122,7 +121,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
             ))}
           </ScrollView>
           <TouchableOpacity style={[styles.saveBtn, (saving || parsed.length === 0) && { opacity: 0.5 }]} onPress={handleSave} disabled={saving || parsed.length === 0} activeOpacity={0.85}>
-            {saving ? <ActivityIndicator color={colors.background} /> : <Text style={styles.saveBtnText}>{parsed.length > 0 ? `Save ${parsed.length} ${parsed.length === 1 ? 'value' : 'values'}` : 'Enter a value to save'}</Text>}
+            {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>Save Updates</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={close}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
         </View>
@@ -144,8 +143,8 @@ const styles = StyleSheet.create({
   inputWrap: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.sm, backgroundColor: colors.surface, minWidth: 96 },
   sym: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginRight: 2 },
   input: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm, minWidth: 56 },
-  saveBtn: { borderWidth: 1, borderColor: colors.gold, backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
-  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
+  saveBtn: { borderWidth: 1, borderColor: colors.gold, backgroundColor: 'transparent', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   cancelBtn: { alignItems: 'center', paddingVertical: spacing.md },
   cancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });

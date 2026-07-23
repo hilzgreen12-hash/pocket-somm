@@ -456,7 +456,7 @@ export default function CellarStatsScreen() {
       <WineValueEditorModal
         visible={valueEditor !== null}
         field={valueEditor === 'purchase' || valueEditor === 'purchase-estimated' ? 'purchase_price' : 'estimated_value'}
-        title={valueEditor === 'purchase' ? 'Add purchase prices' : valueEditor === 'purchase-estimated' ? 'Review estimated prices' : 'Update estimated values'}
+        title={valueEditor === 'purchase' ? 'Add Purchase Prices' : valueEditor === 'purchase-estimated' ? 'Review Estimated Prices' : 'Update Estimated Values'}
         subtitle={valueEditor === 'purchase'
           ? 'Enter what you paid per bottle — this adds to your Total Purchase Value.'
           : valueEditor === 'purchase-estimated'
