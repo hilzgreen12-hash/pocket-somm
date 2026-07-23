@@ -5,7 +5,7 @@ import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-g
 import { showAlert } from '../../../src/components/AppAlert';
 import { detectPlacementMismatch, placementWarningBody } from '../../../src/components/BottleSizePicker';
 import { useLocalSearchParams, router, useNavigation } from 'expo-router';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
 import { useRackStore } from '../../../src/stores/rackStore';
@@ -14,6 +14,7 @@ import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
+import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
@@ -115,6 +116,14 @@ export default function RackGridScreen() {
   const [archiveModal, setArchiveModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
   const [archiveCount, setArchiveCount] = useState('1');
   const [archiving, setArchiving] = useState(false);
+  // Moving an already-placed wine INTO this rack via "Select from Cellar List".
+  const { data: allLocations = [] } = useQuery({
+    queryKey: ['storage-locations', session?.user.id],
+    queryFn: () => fetchStorageLocations(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+  const [rackMove, setRackMove] = useState<{ wine: CellarWine; currentName: string; max: number; rid: string; row: number; col: number } | null>(null);
+  const [rackMoveQty, setRackMoveQty] = useState('');
   // "Delete Wine (Permanent)" on a multi-bottle wine → ask how many (or Delete All).
   const [deleteModal, setDeleteModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
   const [deleteCount, setDeleteCount] = useState('1');
@@ -635,6 +644,31 @@ export default function RackGridScreen() {
   async function placeExistingWine(wine: CellarWine) {
     if (!pendingSlot) return;
     const { rackId: rid, row, col } = pendingSlot;
+    // If the wine is filed in a home storage location or bin, offer to MOVE it
+    // here (clearing the source) rather than double-counting it in both.
+    const inLocOrBin = !!wine.storage_location_id || !!wine.bin_cell_id;
+    if (inLocOrBin) {
+      setCellarPickerOpen(false);
+      const where = wine.storage_location_id
+        ? (allLocations.find((l) => l.id === wine.storage_location_id)?.name ?? 'a home storage location')
+        : 'a wine bin';
+      const N = wine.quantity ?? 1;
+      if (N <= 1) {
+        showAlert({
+          title: 'Move this wine?',
+          body: `${wine.wine_name} is in ${where}. Move it to this rack?`,
+          buttons: [
+            { text: 'Cancel', style: 'cancel', onPress: () => { setPendingSlot(null); setPendingSlots(null); } },
+            { text: `Move from ${where}`, onPress: () => void moveIntoRack(wine, 1, rid, row, col) },
+          ],
+        });
+      } else {
+        setRackMoveQty(String(N));
+        setRackMove({ wine, currentName: where, max: N, rid, row, col });
+      }
+      return;
+    }
+    // Unplaced (or already in a rack) → map the tapped slot(s), as before.
     const targets = pendingSlots && pendingSlots.length > 0 ? pendingSlots : [{ row, col }];
     try {
       await assignSlots(rid, targets, wine.id);
@@ -651,6 +685,43 @@ export default function RackGridScreen() {
       setCellarPickerOpen(false);
       setPendingSlot(null);
       setPendingSlots(null);
+    }
+  }
+
+  // Move `count` bottles of a located/binned wine into free slots of THIS rack,
+  // running from the tapped slot. A partial move splits the remainder off into a
+  // new row that stays in the source location.
+  async function moveIntoRack(wine: CellarWine, count: number, rid: string, row: number, col: number) {
+    const N = wine.quantity ?? 1;
+    const run = computePlacementSlots(row, col, count, 'Vertical');
+    const free = run.filter((s) => !slotMap[`${s.row},${s.col}`]?.cellar_wine_id);
+    const M = Math.min(count, free.length, N);
+    if (M < 1) {
+      showAlert({ title: 'No free slots', body: 'There are no free slots from here to place into. Try a different starting slot.' });
+      setRackMove(null); setPendingSlot(null); setPendingSlots(null);
+      return;
+    }
+    try {
+      if (M >= N) {
+        await updateWine.mutateAsync({ id: wine.id, updates: { storage_location_id: null, bin_cell_id: null, case_id: null } });
+        await assignSlots(rid, free.slice(0, M), wine.id);
+      } else {
+        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: N - M } });
+        const { id: _id, created_at: _c, updated_at: _u, ...rest } = wine;
+        const created = await addCellarWine({ ...rest, quantity: M, storage_location_id: null, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
+        await assignSlots(rid, free.slice(0, M), created.id);
+      }
+      qc.invalidateQueries({ queryKey: ['rack-slots', rid] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      qc.invalidateQueries({ queryKey: ['bin-cells'] });
+      setSavedMsg(M > 1 ? `${M} bottles moved to this rack` : 'Bottle moved to this rack');
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setRackMove(null); setPendingSlot(null); setPendingSlots(null);
     }
   }
 
@@ -1607,9 +1678,43 @@ export default function RackGridScreen() {
 
       <CellarWinePicker
         visible={cellarPickerOpen}
+        allowPlaced
         onClose={() => { setCellarPickerOpen(false); setPendingSlot(null); setPendingSlots(null); }}
         onSelect={placeExistingWine}
       />
+
+      {/* Move quantity — "You have N bottles, how many are we moving?" */}
+      <Modal visible={rackMove !== null} transparent animationType="fade" onRequestClose={() => { setRackMove(null); setPendingSlot(null); }}>
+        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>Move to this rack</Text>
+            <Text style={styles.placeBody}>
+              You have {rackMove?.max} bottles of {rackMove?.wine.wine_name} in {rackMove?.currentName}. How many are we moving? They fill free slots from the tapped position.
+            </Text>
+            <TextInput
+              style={styles.placeInput}
+              value={rackMoveQty}
+              onChangeText={(t) => setRackMoveQty(t.replace(/[^0-9]/g, '').slice(0, 3))}
+              keyboardType="number-pad"
+              placeholder="1"
+              placeholderTextColor={colors.textMuted}
+              maxLength={3}
+              autoFocus
+              selectTextOnFocus
+            />
+            <TouchableOpacity
+              style={styles.placeConfirmBtn}
+              onPress={() => { const n = parseInt(rackMoveQty, 10); if (rackMove && Number.isFinite(n) && n > 0) void moveIntoRack(rackMove.wine, Math.min(n, rackMove.max), rackMove.rid, rackMove.row, rackMove.col); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.placeConfirmText}>Move</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => { setRackMove(null); setPendingSlot(null); setPendingSlots(null); }} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* OCR-in-progress overlay while an uploaded label is read. */}
       <Modal visible={slotUploading} transparent animationType="fade">
