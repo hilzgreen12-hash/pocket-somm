@@ -716,7 +716,9 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
       </View>
 
-      {isLoading ? null : !hasAnything ? (
+      {isLoading ? (
+        <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
+      ) : !hasAnything ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>Nothing here yet</Text>
           <Text style={styles.emptyBody}>

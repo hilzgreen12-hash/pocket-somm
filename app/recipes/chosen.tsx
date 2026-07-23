@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router } from 'expo-router';
@@ -145,7 +145,9 @@ export default function ChosenRecipesScreen() {
             <Text style={styles.signInBtnText}>Sign In</Text>
           </TouchableOpacity>
         </View>
-      ) : isLoading ? null : filteredRecipes.length === 0 ? (
+      ) : isLoading ? (
+        <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
+      ) : filteredRecipes.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'Nothing here yet' : 'Nothing here'}</Text>
           <Text style={styles.emptyBody}>

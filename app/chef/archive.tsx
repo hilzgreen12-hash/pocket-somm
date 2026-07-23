@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
@@ -295,7 +295,9 @@ export default function ChefArchiveScreen() {
           title="Sign in to view your archive"
           body="Save your recipes and wine pairings to your account — sign in to keep them."
         />
-      ) : isLoading ? null : filteredItems.length === 0 ? (
+      ) : isLoading ? (
+        <View style={styles.empty}><ActivityIndicator size="large" color={colors.gold} /></View>
+      ) : filteredItems.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>{filter === FILTER_ALL ? 'Your Cookbook is Empty' : 'Nothing here'}</Text>
           <Text style={styles.emptyBody}>

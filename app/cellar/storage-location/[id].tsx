@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
@@ -66,6 +66,7 @@ export default function StorageLocationScreen() {
   const qc = useQueryClient();
   const { session } = useAuth();
   const userId = session?.user.id;
+  const navigation = useNavigation();
   const { setPendingStorageLocationId, setPendingCaseId } = useRackStore();
   const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
@@ -189,6 +190,20 @@ export default function StorageLocationScreen() {
     } finally {
       setUploading(false);
     }
+  }
+
+  // Back navigation. The add-a-wine flow (camera → confirm → results) ends in a
+  // router.replace back to this same location route, landing a second copy of
+  // this screen on top of the original. dismissTo('/cellar/racks') collapses
+  // both onto the Home Storage overview in one tap — but only when a racks
+  // route actually exists below us; otherwise (reached directly from a wine
+  // card) plain back(), mirroring the rack screen's handleBack.
+  function handleBack() {
+    const state = navigation.getState?.();
+    const hasRacks = state?.routes?.some((r) => r.name === 'cellar/racks') ?? false;
+    if (hasRacks) router.dismissTo('/cellar/racks');
+    else if (router.canGoBack()) router.back();
+    else router.replace('/(tabs)/cellar');
   }
 
   // "+ Add Wine" header link → the same chooser the rack/bin flows use.
@@ -604,7 +619,7 @@ export default function StorageLocationScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={handleBack}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
         <TouchableOpacity style={{ flex: 1 }} onLongPress={handleLongPressHeader} delayLongPress={400} activeOpacity={1}>
