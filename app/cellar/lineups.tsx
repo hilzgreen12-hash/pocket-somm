@@ -332,7 +332,7 @@ export default function LineupLibraryScreen() {
       </View>
 
       <Text style={styles.blurb}>
-        A visual record of your vinous exploits. Lineups photographed in Archive a Night under Cellar will appear here.
+        A visual record of your vinous exploits. Lineups photographed in Archive a Night will appear here, or add lineups directly.
       </Text>
 
       {isLoading ? (
@@ -553,7 +553,7 @@ const styles = StyleSheet.create({
   headerSpacer: { width: 40 },
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md },
+  blurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 21, paddingHorizontal: spacing.xl, paddingTop: spacing.md, textAlign: 'center' },
   // Gold whole-library tally, same treatment as the Full Cellar List summary.
   lineupSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.md },
   lineupAwaiting: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 4 },
