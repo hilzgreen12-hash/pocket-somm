@@ -7,7 +7,7 @@ export function useRacks() {
   const userId = session?.user.id ?? '';
   const qc = useQueryClient();
 
-  const { data: racks = [], isLoading } = useQuery({
+  const { data: racks = [], isLoading, isError } = useQuery({
     queryKey: ['racks', userId],
     queryFn: () => getRacks(userId),
     enabled: !!userId,
@@ -50,7 +50,7 @@ export function useRacks() {
     },
   });
 
-  return { racks, isLoading, create, remove, rename, wipe, resize };
+  return { racks, isLoading, isError, create, remove, rename, wipe, resize };
 }
 
 export function useRack(rackId: string) {

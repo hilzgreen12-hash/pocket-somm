@@ -30,6 +30,7 @@ import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
+import { evictCachedLabel } from '../../src/api/labelImageCache';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
@@ -814,6 +815,7 @@ export default function CellarWineDetail() {
       await clearWineFromRacks(wine.id);
       const { error } = await supabase.from('cellar_wines').delete().eq('id', wine.id);
       if (error) throw error;
+      evictCachedLabel(wine.label_image_path); // drop the local cached label
       if (delLocId) {
         await deleteEmptyCasesForLocation(delLocId).catch(() => {});
         qc.invalidateQueries({ queryKey: ['storage-location-wines', delLocId] });
@@ -1457,7 +1459,9 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
-          {wineRacks.map(({ rack, count }) => (
+          {/* Hide the rack shortcut when we arrived FROM a rack slot — it would
+              just point back to where the user already is (cameFromRack). */}
+          {!cameFromRack && wineRacks.map(({ rack, count }) => (
             <TouchableOpacity key={rack.id} onPress={() => router.push(`/cellar/rack/${rack.id}?highlight=${wine.id}`)}>
               <Text style={styles.statAction}>{count} bottle{count === 1 ? '' : 's'} in {rack.name} →</Text>
             </TouchableOpacity>

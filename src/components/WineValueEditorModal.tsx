@@ -65,17 +65,23 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
     let anySaved = false;
     try {
       for (const e of parsed) {
+        const w = winesRef.current.find((x) => x.id === e.id);
         if (field === 'estimated_value') {
+          // Match the wine's existing purchase-price currency when it has one,
+          // so the pair stays like-for-like for the "change since purchase" %
+          // (a mismatched currency would silently drop it from that figure).
+          const cur = w?.purchase_price != null && w.purchase_price_currency ? w.purchase_price_currency : currency;
           await updateCellarWine(e.id, {
             estimated_value: e.n,
-            estimated_value_currency: currency,
+            estimated_value_currency: cur,
             estimated_value_source: 'user',
             estimated_value_at: new Date().toISOString(),
           });
         } else {
+          const cur = w?.estimated_value != null && w.estimated_value_currency ? w.estimated_value_currency : currency;
           await updateCellarWine(e.id, {
             purchase_price: e.n,
-            purchase_price_currency: currency,
+            purchase_price_currency: cur,
             // The user has now confirmed/entered it — no longer an estimate.
             purchase_price_estimated: false,
           });
