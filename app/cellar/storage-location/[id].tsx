@@ -31,9 +31,9 @@ const STATUS_SEARCH: { status: string; terms: string[] }[] = [
 const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'All' },
   { value: 'too_young', label: 'Too Young' },
-  { value: 'approaching', label: 'Approaching' },
-  { value: 'peak', label: 'Peak' },
-  { value: 'declining', label: 'Declining' },
+  { value: 'approaching', label: 'Early but Approachable' },
+  { value: 'peak', label: 'Sweet Spot' },
+  { value: 'declining', label: 'In Decline' },
 ];
 
 // Cases filter — by packaging kind (migration 073).

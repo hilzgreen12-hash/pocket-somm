@@ -389,22 +389,22 @@ export default function CellarStatsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Condition</Text>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Peak</Text>
-              <Text style={styles.breakdownCount}>{peakCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(peakCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Approaching</Text>
-              <Text style={styles.breakdownCount}>{approachingCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(approachingCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
               <Text style={styles.breakdownLabel}>Too Young</Text>
               <Text style={styles.breakdownCount}>{tooYoungCount}</Text>
               <Text style={styles.breakdownPct}>{pct(tooYoungCount, totalBottles)}</Text>
             </View>
             <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Declining</Text>
+              <Text style={styles.breakdownLabel}>Early but Approachable</Text>
+              <Text style={styles.breakdownCount}>{approachingCount}</Text>
+              <Text style={styles.breakdownPct}>{pct(approachingCount, totalBottles)}</Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>Sweet Spot</Text>
+              <Text style={styles.breakdownCount}>{peakCount}</Text>
+              <Text style={styles.breakdownPct}>{pct(peakCount, totalBottles)}</Text>
+            </View>
+            <View style={styles.breakdownRow}>
+              <Text style={styles.breakdownLabel}>In Decline</Text>
               <Text style={styles.breakdownCount}>{decliningCount}</Text>
               <Text style={styles.breakdownPct}>{pct(decliningCount, totalBottles)}</Text>
             </View>
@@ -436,11 +436,6 @@ export default function CellarStatsScreen() {
                 <Text style={styles.breakdownPct}>{pct(styleBuckets[bucket], totalBottles)}</Text>
               </View>
             ))}
-            {styleBuckets.Other > 0 && (
-              <Text style={styles.muted}>
-                "Other" includes rosé, fortified, and wines without enough info to classify.
-              </Text>
-            )}
           </View>
 
         </ScrollView>
