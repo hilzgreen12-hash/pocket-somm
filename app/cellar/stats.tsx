@@ -346,12 +346,6 @@ export default function CellarStatsScreen() {
                 </View>
               </View>
             ) : null}
-            {changePartial ? (
-              <Text style={styles.valueHint}>
-                Compares the {matchedCount} wine{matchedCount === 1 ? '' : 's'} with both a purchase price and a current value. Fill in the missing values above for the full picture.
-              </Text>
-            ) : null}
-
             {wines.length === 0 ? null : (
               <View style={styles.estimateMetaStack}>
                 {/* Last estimate date + Recalculate on ONE left-indented line
