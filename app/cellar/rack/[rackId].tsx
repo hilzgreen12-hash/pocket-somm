@@ -72,7 +72,7 @@ function Counter({ label, value, onChange }: { label: string; value: number; onC
 }
 
 export default function RackGridScreen() {
-  const { rackId, highlight, lineup } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string }>();
+  const { rackId, highlight, lineup, placed } = useLocalSearchParams<{ rackId: string; highlight?: string; lineup?: string; placed?: string }>();
   const navigation = useNavigation();
   const { session } = useAuth();
   const { slots, isLoading, assign } = useRack(rackId);
@@ -161,6 +161,13 @@ export default function RackGridScreen() {
     const t = setTimeout(() => setSavedMsg(null), 3000);
     return () => clearTimeout(t);
   }, [savedMsg]);
+
+  // Arrived here from placing a wine into a slot → show the brief auto-fading
+  // "Added to your cellar" banner (no popup with commands). Fires once.
+  const placedShownRef = useRef(false);
+  useEffect(() => {
+    if (placed && !placedShownRef.current) { placedShownRef.current = true; setSavedMsg('Added to your cellar'); }
+  }, [placed]);
 
 
   // Unlock landscape for this screen; restore portrait on leave
