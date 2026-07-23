@@ -237,6 +237,52 @@ export default function FullCellarListScreen() {
     qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
   }
 
+  // Long-press a wine → a per-wine action popup (replaces the bottom select
+  // bar). Edit opens the Confirm Wine Details screen (updates the wine wherever
+  // it's placed); the rest act on this one wine.
+  function openWineActions(w: CellarWine) {
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
+      buttons: [
+        { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
+        { text: 'Archive Wine', onPress: () => confirmArchiveOne(w) },
+        { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
+        { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${w.id}` as any) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function confirmArchiveOne(w: CellarWine) {
+    showAlert({
+      title: 'Archive this wine?',
+      body: 'It moves to Your Archive and leaves any rack or location it was placed in. Your reviews and history stay.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Archive', onPress: async () => {
+          setBusy(true);
+          try { await clearWineFromRacks(w.id); await archiveCellarWine(w.id); invalidateCellar(); }
+          catch (err) { showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' }); }
+          finally { setBusy(false); }
+        } },
+      ],
+    });
+  }
+  function confirmDeleteOne(w: CellarWine) {
+    showAlert({
+      title: 'Delete this wine?',
+      body: "Permanently remove it from your records. This can't be undone.",
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete (permanent)', style: 'destructive', onPress: async () => {
+          setBusy(true);
+          try { await clearWineFromRacks(w.id); await deleteCellarWine(w.id); invalidateCellar(); }
+          catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); }
+          finally { setBusy(false); }
+        } },
+      ],
+    });
+  }
+
   function confirmArchiveSelected() {
     const ids = [...selectedIds];
     if (ids.length === 0) return;
@@ -925,8 +971,8 @@ export default function FullCellarListScreen() {
               <TouchableOpacity
                 key={w.id}
                 style={[styles.row, isSelected && styles.rowSelected]}
-                onPress={() => { if (selectMode) toggleSelected(w.id); else router.push(`/cellar/${w.id}`); }}
-                onLongPress={() => { if (!selectMode) enterSelect(w.id); }}
+                onPress={() => router.push(`/cellar/${w.id}`)}
+                onLongPress={() => openWineActions(w)}
                 delayLongPress={350}
                 activeOpacity={0.7}
               >

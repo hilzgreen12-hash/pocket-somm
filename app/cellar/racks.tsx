@@ -133,19 +133,10 @@ export default function RacksScreen() {
     });
   }
 
-  // The "+ Add" tile in the Other Home Storage carousel. Grid = yes →
-  // treat it like a rack and reuse the rack build flow. Grid = no → the bespoke
-  // photo-a-space flow (built separately).
+  // The "+ Add" tile in the Other Home Storage carousel → straight into the
+  // bespoke photo-a-space location flow (grid layouts are set up as racks).
   function handleAddLocationPrompt() {
-    showAlert({
-      title: 'New location',
-      body: "Does this location have a horizontal & vertical grid layout you'd like to replicate?",
-      buttons: [
-        { text: 'Yes', onPress: () => handleAddType('rack') },
-        { text: 'No', onPress: () => router.push('/cellar/storage-location/new' as any) },
-        { text: 'Cancel', style: 'cancel' as const },
-      ],
-    });
+    router.push('/cellar/storage-location/new' as any);
   }
 
   // Clear any stale "place this wine" intent left over from an earlier,

@@ -214,7 +214,7 @@ export default function BinDetailScreen() {
       body: 'What would you like to do?',
       buttons: [
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${w.id}` as any) },
-        { text: 'Edit Wine', onPress: () => router.push(`/cellar/${w.id}` as any) },
+        { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
         { text: 'Move to Another Diamond', onPress: () => { setMovingWine({ id: w.id, name: w.wine_name }); setListOpen(false); setSearchQuery(''); setHighlightedWineId(null); } },
         {
           text: 'Archive Wine',
