@@ -15,6 +15,7 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
 import { topRegionsAdaptive } from '../../src/utils/wineRegionGroup';
+import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
 import type { CellarWine } from '../../src/types/wine';
@@ -123,6 +124,8 @@ export default function CellarStatsScreen() {
 
   // Which value-editor sheet is open (user fills in what Vinster couldn't find).
   const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | null>(null);
+  // Which Condition bucket is expanded to show its wines.
+  const [expandedCondition, setExpandedCondition] = useState<string | null>(null);
   const editorCurrency = preferences?.defaultCurrency ?? 'GBP';
   function onEditorSaved() {
     if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
@@ -382,26 +385,41 @@ export default function CellarStatsScreen() {
           {/* Condition */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Condition</Text>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Too Young</Text>
-              <Text style={styles.breakdownCount}>{tooYoungCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(tooYoungCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Early but Approachable</Text>
-              <Text style={styles.breakdownCount}>{approachingCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(approachingCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>Sweet Spot</Text>
-              <Text style={styles.breakdownCount}>{peakCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(peakCount, totalBottles)}</Text>
-            </View>
-            <View style={styles.breakdownRow}>
-              <Text style={styles.breakdownLabel}>In Decline</Text>
-              <Text style={styles.breakdownCount}>{decliningCount}</Text>
-              <Text style={styles.breakdownPct}>{pct(decliningCount, totalBottles)}</Text>
-            </View>
+            {([
+              { status: 'too_young', label: 'Too Young', count: tooYoungCount },
+              { status: 'approaching', label: 'Early but Approachable', count: approachingCount },
+              { status: 'peak', label: 'Sweet Spot', count: peakCount },
+              { status: 'declining', label: 'In Decline', count: decliningCount },
+            ] as const).map((c) => {
+              const expanded = expandedCondition === c.status;
+              return (
+                <View key={c.status}>
+                  <TouchableOpacity
+                    style={styles.breakdownRow}
+                    onPress={() => setExpandedCondition(expanded ? null : c.status)}
+                    disabled={c.count === 0}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.conditionChevron, c.count === 0 && { opacity: 0.25 }]}>{expanded ? '▴' : '▾'}</Text>
+                    <Text style={styles.breakdownLabel}>{c.label}</Text>
+                    <Text style={styles.breakdownCount}>{c.count}</Text>
+                    <Text style={styles.breakdownPct}>{pct(c.count, totalBottles)}</Text>
+                  </TouchableOpacity>
+                  {expanded ? (
+                    <View style={styles.conditionWines}>
+                      {wines.filter((w) => w.drinking_window_status === c.status).map((w) => (
+                        <TouchableOpacity key={w.id} style={styles.conditionWineRow} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.7}>
+                          <Text style={styles.conditionWineName} numberOfLines={1}>{[w.producer, w.wine_name, w.vintage].filter(Boolean).join(' ')}</Text>
+                          <Text style={styles.conditionWineMeta} numberOfLines={1}>
+                            {[w.region, `${w.quantity ?? 1} × ${bottleSizeLabel(w.bottle_size_ml ?? 750)}`].filter(Boolean).join(' · ')}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
           </View>
 
           {/* Most Represented Regions */}
@@ -519,6 +537,11 @@ const styles = StyleSheet.create({
   breakdownCount: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, width: 50, textAlign: 'right' },
   // Inter — percentage value
   breakdownPct: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.gold, width: 60, textAlign: 'right' },
+  conditionChevron: { fontSize: 12, color: colors.gold, width: 18 },
+  conditionWines: { paddingLeft: 18, paddingBottom: spacing.sm },
+  conditionWineRow: { paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
+  conditionWineName: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
+  conditionWineMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   // Inter — muted hint
   muted: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 17, marginTop: spacing.xs },
   // Cormorant — processing screen title
