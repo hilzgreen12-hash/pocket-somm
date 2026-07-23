@@ -44,6 +44,7 @@ export default function ArchiveNightScreen() {
   // done screen attach a "memory" note to it. Plus the note draft + save state.
   const [savedLineup, setSavedLineup] = useState<LineupArchive | null>(null);
   const [note, setNote] = useState('');
+  const [showInstruction, setShowInstruction] = useState(true);
   const [savingNote, setSavingNote] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
   // "Where did you enjoy these bottles?" — Private Location is just selectable
@@ -242,14 +243,18 @@ export default function ArchiveNightScreen() {
           <View style={styles.cameraWrap}>
             <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" autofocus="on" />
             {/* Simple instruction over the scanner. The fuller "what is Archive
-                a Night" blurb now lives on the button's long-press in Cellar. */}
-            <View style={styles.instructionCard}>
-              <Text style={styles.instructionText}>Photograph up to 8 bottles with their front labels facing the camera.</Text>
-            </View>
+                a Night" blurb now lives on the button's long-press in Cellar.
+                Dismissible so it never blocks framing a shot. */}
+            {showInstruction ? (
+              <View style={styles.instructionCard}>
+                <TouchableOpacity style={styles.instructionClose} onPress={() => setShowInstruction(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.instructionCloseText}>✕</Text>
+                </TouchableOpacity>
+                <Text style={styles.instructionText}>Photograph up to 8 bottles with their front labels facing the camera.</Text>
+              </View>
+            ) : null}
             <View style={styles.cameraControls}>
-              <TouchableOpacity style={styles.sideAction} onPress={pickFromLibrary} activeOpacity={0.8}>
-                <Text style={styles.sideActionText}>Upload</Text>
-              </TouchableOpacity>
+              <View style={styles.sideAction} />
               <TouchableOpacity style={styles.captureBtn} onPress={handleCapture} activeOpacity={0.85}>
                 <View style={styles.captureBtnInner} />
               </TouchableOpacity>
@@ -455,7 +460,9 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, borderWidth: 1, borderColor: colors.gold,
     paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
   },
-  instructionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 21 },
+  instructionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, paddingHorizontal: spacing.md },
+  instructionClose: { position: 'absolute', top: 2, right: 4, padding: 6, zIndex: 2 },
+  instructionCloseText: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.gold },
   cameraControls: {
     position: 'absolute', bottom: 40, left: 0, right: 0,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl,
