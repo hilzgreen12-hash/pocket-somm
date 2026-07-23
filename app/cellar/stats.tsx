@@ -114,9 +114,13 @@ export default function CellarStatsScreen() {
     b.v += Number(w.estimated_value) * w.quantity;
     matchedByCode[pc] = b;
   }
+  // Compare the WHOLE-unit rounded totals (the app displays currency to zero
+  // decimals). Otherwise a stored estimate of e.g. 100.10 against a purchase of
+  // 100 — which read as identical on screen — shows a phantom 0.1% change.
   const changeEntries = Object.entries(matchedByCode)
-    .filter(([, b]) => b.p > 0)
-    .map(([code, b]) => ({ code, pct: ((b.v - b.p) / b.p) * 100 }));
+    .map(([code, b]) => ({ code, p: Math.round(b.p), v: Math.round(b.v) }))
+    .filter((e) => e.p > 0)
+    .map((e) => ({ code: e.code, pct: ((e.v - e.p) / e.p) * 100 }));
   // The change is computed ONLY on wines that have both a purchase price and a
   // current value IN THE SAME CURRENCY. If some wines are missing one value, or
   // have both but in mismatched currencies (so they're excluded from the %),
@@ -331,7 +335,7 @@ export default function CellarStatsScreen() {
             {winesEstimatedPurchase.length > 0 ? (
               <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('purchase-estimated')} activeOpacity={0.7}>
                 <Text style={styles.missingValueText}>
-                  {winesEstimatedPurchase.length} Estimated Value{winesEstimatedPurchase.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
+                  {winesEstimatedPurchase.length} Estimated value{winesEstimatedPurchase.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Add Precise Purchase Value</Text>
                 </Text>
               </TouchableOpacity>
             ) : null}
@@ -343,22 +347,19 @@ export default function CellarStatsScreen() {
               </Text>
             </View>
 
-            {changeEntries.length > 0 ? (
-              <View style={styles.valueRow}>
-                <Text style={styles.valueLabel}>Change since purchase</Text>
-                <View style={styles.changeStack}>
-                  {changeEntries.map((e) => (
-                    <Text key={e.code} style={[styles.changePct, { color: e.pct >= 0 ? '#5FA463' : '#C0603A' }]}>
-                      {e.pct >= 0 ? '▲' : '▼'} {Math.abs(e.pct).toFixed(1)}%{changeEntries.length > 1 ? ` ${e.code}` : ''}
-                    </Text>
-                  ))}
-                </View>
-              </View>
-            ) : null}
             {wines.length === 0 ? null : (
               <View style={styles.estimateMetaStack}>
-                {/* Last estimate date + Recalculate on ONE left-indented line
-                    (·-separated, mirroring the Missing Values line). */}
+                {/* Wines Vinster couldn't value — left-indented directly under
+                    Total Estimated Current Value. */}
+                {winesUnvaluable.length > 0 ? (
+                  <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
+                    <Text style={styles.missingValueText}>
+                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* Last estimate date + Recalculate on ONE left-indented line. */}
                 {winesWithEstimate.length > 0 ? (
                   <TouchableOpacity style={styles.missingValueRow} onPress={handleCalculate} activeOpacity={0.7}>
                     <Text style={styles.missingValueText}>
@@ -370,19 +371,21 @@ export default function CellarStatsScreen() {
                     <Text style={styles.missingValueText}><Text style={styles.missingIntelLink}>Calculate cellar value</Text></Text>
                   </TouchableOpacity>
                 ) : null}
-
-                {/* Missing Values — only wines Vinster couldn't value from
-                    Wine-Searcher OR its own estimate; left-indented under Last
-                    estimate. */}
-                {winesUnvaluable.length > 0 ? (
-                  <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
-                    <Text style={styles.missingValueText}>
-                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
-                    </Text>
-                  </TouchableOpacity>
-                ) : null}
               </View>
             )}
+
+            {changeEntries.length > 0 ? (
+              <View style={styles.valueRow}>
+                <Text style={styles.valueLabel}>Change Since Purchase</Text>
+                <View style={styles.changeStack}>
+                  {changeEntries.map((e) => (
+                    <Text key={e.code} style={[styles.changePct, { color: colors.gold }]}>
+                      {e.pct >= 0 ? '▲' : '▼'} {Math.abs(e.pct).toFixed(1)}%{changeEntries.length > 1 ? ` ${e.code}` : ''}
+                    </Text>
+                  ))}
+                </View>
+              </View>
+            ) : null}
           </View>
 
           {/* Condition */}
@@ -403,10 +406,10 @@ export default function CellarStatsScreen() {
                     disabled={c.count === 0}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.conditionChevron, c.count === 0 && { opacity: 0.25 }]}>{expanded ? '▴' : '▾'}</Text>
                     <Text style={styles.breakdownLabel}>{c.label}</Text>
                     <Text style={styles.breakdownCount}>{c.count}</Text>
                     <Text style={styles.breakdownPct}>{pct(c.count, totalBottles)}</Text>
+                    <Text style={[styles.conditionChevron, c.count === 0 && { opacity: 0.25 }]}>{expanded ? '⌃' : '⌄'}</Text>
                   </TouchableOpacity>
                   {expanded ? (
                     <View style={styles.conditionWines}>
@@ -540,7 +543,7 @@ const styles = StyleSheet.create({
   breakdownCount: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, width: 50, textAlign: 'right' },
   // Inter — percentage value
   breakdownPct: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.gold, width: 60, textAlign: 'right' },
-  conditionChevron: { fontSize: 12, color: colors.gold, width: 18 },
+  conditionChevron: { fontSize: 15, color: colors.gold, width: 20, textAlign: 'right', marginLeft: spacing.sm },
   conditionWines: { paddingLeft: 18, paddingBottom: spacing.sm },
   conditionWineRow: { paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   conditionWineName: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
