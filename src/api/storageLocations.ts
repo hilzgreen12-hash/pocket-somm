@@ -94,7 +94,8 @@ export async function fetchStorageLocationWines(locationId: string): Promise<Cel
     // Wishlist wines aren't physically here — exclude them so the location list
     // and its count match the racks (S2).
     .eq('is_wishlist', false)
-    .order('created_at', { ascending: false });
+    // Default list reads in the order wines were added (oldest first).
+    .order('created_at', { ascending: true });
   if (error) throw error;
   return (data ?? []) as CellarWine[];
 }
