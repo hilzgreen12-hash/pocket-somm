@@ -4,7 +4,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../../../src/hooks/useAuth';
-import { getBinCell, removeWineFromCell } from '../../../../src/api/bins';
+import { getBins, getBinCell, removeWineFromCell, binCellLabel } from '../../../../src/api/bins';
 import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
 import { clearWineFromRacks } from '../../../../src/api/racks';
 import { prepareImageBase64, scanLabel } from '../../../../src/api/label';
@@ -51,6 +51,15 @@ export default function BinCellScreen() {
   });
   const cell = data?.cell;
   const wines = data?.wines ?? [];
+
+  // The bin's geometry gives this cell its grid reference (D2B / HD3C).
+  const { data: bins = [] } = useQuery({
+    queryKey: ['bins', userId],
+    queryFn: () => getBins(userId!),
+    enabled: !!userId,
+  });
+  const bin = cell ? bins.find((b) => b.id === cell.bin_id) : undefined;
+  const cellRef = bin && cell ? binCellLabel(bin.diamonds_across ?? 1, bin.diamonds_down ?? 1, cell.kind, cell.idx) : null;
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -250,7 +259,8 @@ export default function BinCellScreen() {
     });
   }
 
-  const kindLabel = cell ? (cell.kind === 'triangle' ? 'Triangle' : 'Diamond') : 'Diamond';
+  const kindLabel = cell ? (cell.kind === 'triangle' ? 'Half Diamond' : 'Diamond') : 'Diamond';
+  const headerTitle = cellRef ? `${kindLabel} ${cellRef}` : kindLabel;
 
   return (
     <View style={styles.container}>
@@ -258,7 +268,7 @@ export default function BinCellScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{kindLabel}</Text>
+        <Text style={styles.title} numberOfLines={1} adjustsFontSizeToFit>{headerTitle}</Text>
         <View style={{ width: 40 }} />
       </View>
 
