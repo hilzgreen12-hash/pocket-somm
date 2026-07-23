@@ -62,6 +62,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
     if (saving) return;
     if (parsed.length === 0) { onClose(); return; }
     setSaving(true);
+    let anySaved = false;
     try {
       for (const e of parsed) {
         if (field === 'estimated_value') {
@@ -79,10 +80,14 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
             purchase_price_estimated: false,
           });
         }
+        anySaved = true;
       }
       setValues({});
       onSaved();
     } catch (err) {
+      // A mid-loop failure still persisted the earlier writes — invalidate so
+      // Stats reflects them instead of showing stale pre-edit totals.
+      if (anySaved) onSaved();
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSaving(false);
@@ -123,7 +128,7 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
           <TouchableOpacity style={[styles.saveBtn, (saving || parsed.length === 0) && { opacity: 0.5 }]} onPress={handleSave} disabled={saving || parsed.length === 0} activeOpacity={0.85}>
             {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>Save Updates</Text>}
           </TouchableOpacity>
-          <TouchableOpacity style={styles.cancelBtn} onPress={close}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
+          <TouchableOpacity style={[styles.cancelBtn, saving && { opacity: 0.5 }]} onPress={close} disabled={saving}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
         </View>
       </View>
     </Modal>
