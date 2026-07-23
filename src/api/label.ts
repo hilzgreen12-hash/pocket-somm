@@ -49,6 +49,10 @@ export interface WineKnowledge {
   regionProfile: string;
   vintageProfile: string;
   grapeProfile: string;
+  producerStats?: { founded: string | null; annualBottles: string | null; hectares: string | null } | null;
+  regionStats?: { climate: string | null; soil: string | null; altitude: string | null } | null;
+  vintageStats?: { comparableVintages: string | null; describedAs: string | null } | null;
+  grapeStats?: { characteristics: string | null; grownIn: string | null } | null;
 }
 
 // "Dive Deeper" — four editorial profiles for a wine (producer, region,

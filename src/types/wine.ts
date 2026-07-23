@@ -422,6 +422,13 @@ export interface WineKnowledgeData {
   regionProfile: string;
   vintageProfile: string;
   grapeProfile: string;
+  // Structured "stats bar" facts per section (added later — optional so cached
+  // prose-only rows stay valid until regenerated). Each field is a short string
+  // or null when genuinely unknown (never fabricated).
+  producerStats?: { founded: string | null; annualBottles: string | null; hectares: string | null } | null;
+  regionStats?: { climate: string | null; soil: string | null; altitude: string | null } | null;
+  vintageStats?: { comparableVintages: string | null; describedAs: string | null } | null;
+  grapeStats?: { characteristics: string | null; grownIn: string | null } | null;
 }
 
 export interface PricingData {
