@@ -387,7 +387,13 @@ export default function BinDetailScreen() {
                       <TouchableOpacity
                         key={wine.id}
                         style={[styles.wineRow, active && styles.wineRowActive]}
-                        onPress={() => { setHighlightedWineId(wine.id); setActiveCustomFilterId(null); setSearchQuery(''); setListOpen(false); }}
+                        onPress={() => {
+                          // Toggle: tapping the highlighted wine again clears it.
+                          const alreadyOn = highlightedWineId === wine.id;
+                          setHighlightedWineId(alreadyOn ? null : wine.id);
+                          setActiveCustomFilterId(null); setSearchQuery('');
+                          if (!alreadyOn) setListOpen(false);
+                        }}
                         onLongPress={() => openWineMenu(wine)}
                         delayLongPress={400}
                         activeOpacity={0.7}

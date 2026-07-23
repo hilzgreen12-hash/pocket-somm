@@ -144,6 +144,11 @@ export default function ChosenWinesScreen() {
   // Local uri of a scanned/uploaded label, retained through the Add-a-Review
   // modal so the new review can carry its label photo (Part 3). Null for Manual.
   const [pendingReviewLabelUri, setPendingReviewLabelUri] = useState<string | null>(null);
+  // Set when the Add-a-Review modal is opened from Your Label Library, where the
+  // wine identity is already confirmed — the modal then shows a review CARD
+  // (name header + editable date + thumbnail) rather than the blank manual form.
+  const [addConfirmed, setAddConfirmed] = useState(false);
+  const [addLabelPath, setAddLabelPath] = useState<string | null>(null);
   // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
   // chosen path takes over (manual reuses the existing AddChosenWineModal;
   // scan + upload feed into the label flow with context=reviews).
@@ -209,7 +214,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
@@ -250,6 +255,10 @@ export default function ChosenWinesScreen() {
       handledParamRef.current = key;
       setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null });
       setPendingReviewLabelUri(null);
+      // From the Label Library: identity is confirmed → review-card presentation,
+      // carrying the label's existing photo path (slp).
+      setAddConfirmed(true);
+      setAddLabelPath(params.slp || null);
       setAddOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -566,6 +575,8 @@ export default function ChosenWinesScreen() {
     setChooserOpen(false);
     setAddInitial(null);
     setPendingReviewLabelUri(null);
+    setAddConfirmed(false);
+    setAddLabelPath(null);
     setAddOpen(true);
   }
 
@@ -597,6 +608,8 @@ export default function ChosenWinesScreen() {
       }
       setAddInitial(ocr);
       setPendingReviewLabelUri(uri);
+      setAddConfirmed(false);
+      setAddLabelPath(null);
       // The scanned photo rides onto the review itself (AddChosenWineModal's
       // labelImageUri). It no longer ALSO spawns a Your Label Library row —
       // the label library (Scan Archive) is fed only by actual label scans,
@@ -627,8 +640,10 @@ export default function ChosenWinesScreen() {
         visible={addOpen}
         initial={addInitial}
         labelImageUri={pendingReviewLabelUri}
-        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
-        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
+        confirmedIdentity={addConfirmed}
+        labelImagePath={addLabelPath}
+        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
+        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
       />
 
       {/* "+ Add" chooser — Scan / Upload run the same label recognise+confirm

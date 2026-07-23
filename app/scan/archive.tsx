@@ -6,13 +6,14 @@ import { captureRef } from 'react-native-view-shot';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { router } from 'expo-router';
 import { useLabels } from '../../src/hooks/useLabels';
-import { useCellar, useWishList } from '../../src/hooks/useCellar';
+import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { findMatchingChosenWine } from '../../src/api/chosenWines';
+import { findMatchingChosenWine, deleteChosenWine } from '../../src/api/chosenWines';
+import { useLabelImageUrl } from '../../src/hooks/useLabelImageUrl';
 import { generateWineIntel } from '../../src/services/pricing';
 import { showAlert } from '../../src/components/AppAlert';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -30,7 +31,7 @@ const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
   { value: 'thumbnails', label: 'Thumbnails' },
   { value: 'enlarge', label: 'Enlarge' },
 ];
-const VIEW_COLS: Record<ViewMode, number> = { thumbnails: 3, enlarge: 1 };
+const VIEW_COLS: Record<ViewMode, number> = { thumbnails: 2, enlarge: 1 };
 
 type DateSort = 'desc' | 'asc';
 const DATE_OPTIONS: { value: DateSort; label: string }[] = [
@@ -72,18 +73,42 @@ function intelFromCellar(w: CellarWine): WineIntelligence {
   };
 }
 
+// Full-screen viewer for a short-tapped thumbnail — resolves the cached image
+// and shows it with the name + date; tap anywhere to dismiss.
+function ExpandedLabelModal({ label, onClose }: { label: LibraryLabel; onClose: () => void }) {
+  const uri = useLabelImageUrl(label.label_image_path);
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <TouchableOpacity style={styles.expandOverlay} activeOpacity={1} onPress={onClose}>
+        {uri ? (
+          <Image source={{ uri }} style={styles.expandImage} resizeMode="contain" />
+        ) : (
+          <ActivityIndicator color={colors.gold} />
+        )}
+        <View style={styles.expandCaptionWrap} pointerEvents="none">
+          <Text style={styles.expandCaption} numberOfLines={2}>
+            {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
+          </Text>
+          <Text style={styles.expandDate}>{new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
+        </View>
+      </TouchableOpacity>
+    </Modal>
+  );
+}
+
 export default function MyLabelsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
   const { labels, isLoading, remove, setFavourite, create } = useLabels();
   const { wines: cellarWines, addWine } = useCellar();
-  const { addWine: addWishListWine } = useWishList();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { width } = useWindowDimensions();
 
   const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
   const [dateSort, setDateSort] = useState<DateSort>('desc');
+  const [favOnly, setFavOnly] = useState(false);
+  const [expandedLabel, setExpandedLabel] = useState<LibraryLabel | null>(null);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [selectCellarOpen, setSelectCellarOpen] = useState(false);
@@ -100,12 +125,13 @@ export default function MyLabelsScreen() {
   const { setImage, setWineDetails, setError } = useLabelStore();
 
   const shown = useMemo(() => {
-    return [...labels].sort((a, b) => {
+    const base = favOnly ? labels.filter((l) => l.is_favourite) : labels;
+    return [...base].sort((a, b) => {
       const ta = new Date(a.created_at).getTime();
       const tb = new Date(b.created_at).getTime();
       return dateSort === 'asc' ? ta - tb : tb - ta;
     });
-  }, [labels, dateSort]);
+  }, [labels, dateSort, favOnly]);
 
   // Cellar wines that have a label photo — the pool for "Select from Cellar".
   const cellarWithPhotos = useMemo(() => cellarWines.filter((w) => w.label_image_path), [cellarWines]);
@@ -186,9 +212,8 @@ export default function MyLabelsScreen() {
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
         { text: 'Add/Edit/View Review', onPress: () => goToReview(existingId, label) },
         { text: 'Add to Full Cellar List', onPress: () => void addLabelToCellar(label) },
-        { text: 'Add to Wish List', onPress: () => void addLabelToWishList(label) },
         { text: 'Share Thumbnail', onPress: () => { setShareNote(''); setShareLabel(label); } },
-        { text: 'Remove from Archive', style: 'destructive', onPress: () => confirmRemove(label) },
+        { text: 'Delete from Library', style: 'destructive', onPress: () => confirmRemove(label) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -235,47 +260,6 @@ export default function MyLabelsScreen() {
     }
   }
 
-  // Same as addLabelToCellar but flags the row is_wishlist (a wish-list entry
-  // is a cellar_wines row with is_wishlist=true — see useWishList). Carries the
-  // captured identity + intel so the wish-list card is pre-populated.
-  async function addLabelToWishList(label: LibraryLabel) {
-    if (!userId) return;
-    const today = new Date().toISOString().split('T')[0];
-    const intel = label.intel;
-    try {
-      await addWishListWine.mutateAsync({
-        user_id: userId,
-        wine_name: label.wine_name || label.producer || 'Wine',
-        producer: label.producer,
-        region: label.region,
-        vintage: label.vintage != null ? String(label.vintage) : null,
-        quantity: 1,
-        storage_location: null,
-        date_received: today,
-        critic_score: intel?.criticScore ?? null,
-        critic_score_note: intel?.criticScoreNote ?? null,
-        drinking_window_from: intel?.drinkingWindowFrom ?? null,
-        drinking_window_to: intel?.drinkingWindowTo ?? null,
-        drinking_window_status: intel?.drinkingWindowStatus ?? 'unknown',
-        tasting_notes: intel?.tastingNotes ?? null,
-        grape_variety: intel?.grapeVariety ?? null,
-        label_image_path: label.label_image_path,
-        user_notes: null,
-        estimated_value: intel?.estimatedValue ?? null,
-        estimated_value_currency: intel?.estimatedValue != null ? currency : null,
-        estimated_value_source: intel?.valueSource ?? null,
-        bottle_size_ml: 750,
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any);
-      showAlert({
-        title: wineHeaderLine(label.producer, label.wine_name, label.vintage) || (label.wine_name ?? 'Wine'),
-        body: 'Added to your Wish List.',
-      });
-    } catch (err) {
-      showAlert({ title: 'Could not add to wish list', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
   function goToReview(existingId: string | null, label: LibraryLabel) {
     if (existingId) { router.push(`/wines/chosen?openReview=${existingId}`); return; }
     const q = [
@@ -284,6 +268,7 @@ export default function MyLabelsScreen() {
       `sw=${encodeURIComponent(label.wine_name ?? '')}`,
       `sv=${encodeURIComponent(label.vintage != null ? String(label.vintage) : '')}`,
       `sr=${encodeURIComponent(label.region ?? '')}`,
+      `slp=${encodeURIComponent(label.label_image_path ?? '')}`,
     ].join('&');
     router.push(`/wines/chosen?${q}`);
   }
@@ -314,14 +299,42 @@ export default function MyLabelsScreen() {
   }
 
   function confirmRemove(label: LibraryLabel) {
+    const header = wineHeaderLine(label.producer, label.wine_name, label.vintage) || (label.wine_name ?? 'this label');
     showAlert({
-      title: 'Remove from Library?',
-      body: `${wineHeaderLine(label.producer, label.wine_name, label.vintage)}\n\nThis removes the scan from your Label Scan Library. Your cellar wine and any review stay put.`,
+      title: 'Delete from Library',
+      body: `${header}\n\nDelete just this label, or also its wine review?`,
       buttons: [
+        {
+          text: 'Delete All Records',
+          style: 'destructive',
+          onPress: () => showAlert({
+            title: 'Delete all records?',
+            body: 'This removes the label from your Library AND deletes its matching wine review. This can\'t be undone.',
+            buttons: [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Delete All', style: 'destructive', onPress: () => void deleteAllRecords(label) },
+            ],
+          }),
+        },
+        { text: 'Delete from Library (keep reviews, etc)', onPress: () => remove.mutate(label.id) },
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Remove', style: 'destructive', onPress: () => remove.mutate(label.id) },
       ],
     });
+  }
+
+  // "Delete All Records" — remove the library label AND its matching wine review
+  // (chosen_wines, matched by identity). Cellar bottles / wish-list entries are
+  // physical inventory managed elsewhere, so they're intentionally left alone.
+  async function deleteAllRecords(label: LibraryLabel) {
+    try {
+      if (userId) {
+        const match = await findMatchingChosenWine(userId, { producer: label.producer, wineName: label.wine_name ?? '', vintage: label.vintage });
+        if (match?.id) await deleteChosenWine(match.id);
+      }
+      await remove.mutateAsync(label.id);
+    } catch (err) {
+      showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   // Capture the branded LabelShareCard (with the label photo, name, stamp and
@@ -391,7 +404,7 @@ export default function MyLabelsScreen() {
         </View>
       ) : (
         <>
-          <Text style={styles.filterHint}>Listed by Recency · Tap a label for intel & your review</Text>
+          <Text style={styles.filterHint}>Tap a label to enlarge · Hold for intel, review & options</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -412,6 +425,12 @@ export default function MyLabelsScreen() {
               </View>
               <Text style={[styles.filterChipValue, dateSort === 'asc' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateLabel}</Text>
             </TouchableOpacity>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setFavOnly((v) => !v)}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Favourites</Text>
+              </View>
+              <Text style={[styles.filterChipValue, favOnly && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favOnly ? '★ Only' : 'All'}</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           <ScrollView style={styles.listScroll} contentContainerStyle={styles.grid}>
@@ -419,7 +438,9 @@ export default function MyLabelsScreen() {
                 <TouchableOpacity
                   key={label.id}
                   style={[styles.tile, { width: tileWidth, marginRight: gap, marginBottom: gap }]}
-                  onPress={() => onTapLabel(label)}
+                  onPress={() => setExpandedLabel(label)}
+                  onLongPress={() => onTapLabel(label)}
+                  delayLongPress={300}
                   activeOpacity={0.7}
                 >
                   <View style={{ width: tileWidth, height: tileHeight }}>
@@ -428,20 +449,20 @@ export default function MyLabelsScreen() {
                       fallbackText={label.wine_name}
                       style={{ width: tileWidth, height: tileHeight }}
                     />
-                    {viewMode === 'enlarge' && (
-                      <TouchableOpacity
-                        style={styles.favStar}
-                        onPress={() => toggleFav(label)}
-                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        activeOpacity={0.7}
-                      >
-                        <Text style={[styles.favStarText, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
-                      </TouchableOpacity>
-                    )}
+                    {/* Favourite star — top-right of every thumbnail. */}
+                    <TouchableOpacity
+                      style={styles.favStar}
+                      onPress={() => toggleFav(label)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.favStarText, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
+                    </TouchableOpacity>
                   </View>
                   <Text style={styles.caption} numberOfLines={2}>
-                    {label.is_favourite ? '★ ' : ''}{wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
+                    {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                   </Text>
+                  <Text style={styles.captionDate}>{new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -551,6 +572,11 @@ export default function MyLabelsScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Short-tap a thumbnail → view it full screen. */}
+      {expandedLabel ? (
+        <ExpandedLabelModal label={expandedLabel} onClose={() => setExpandedLabel(null)} />
+      ) : null}
+
       {/* Off-screen branded card, mounted only while a share is in flight. */}
       {sharing && shareLabel ? (
         <View style={styles.shareCardWrap} pointerEvents="none">
@@ -595,7 +621,13 @@ const styles = StyleSheet.create({
   listScroll: { flex: 1 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
-  caption: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.text, marginTop: spacing.xs, alignSelf: 'stretch' },
+  caption: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: spacing.xs, alignSelf: 'stretch' },
+  captionDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 1, alignSelf: 'stretch' },
+  expandOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+  expandImage: { width: '100%', height: '78%' },
+  expandCaptionWrap: { position: 'absolute', bottom: 48, left: spacing.xl, right: spacing.xl, alignItems: 'center' },
+  expandCaption: { fontSize: 17, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center' },
+  expandDate: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', marginTop: 4 },
   favStar: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   favStarText: { fontSize: 24, color: '#FFFFFF', lineHeight: 26 },
   favStarActive: { color: colors.gold },
