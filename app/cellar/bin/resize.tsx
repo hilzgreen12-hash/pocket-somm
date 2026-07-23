@@ -116,7 +116,7 @@ export default function BinResizeScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.intro}>Pull the corner to size your bin — each pull adds diamonds, and the edge triangles fill in against the frame.</Text>
+        <Text style={styles.intro}>Drag the handle out from the centre to size your bin — pull right/down to add diamonds, in toward the centre to remove. The edge triangles fill in against the frame. Lift and pull again for larger sizes.</Text>
 
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{diamonds} {diamonds === 1 ? 'diamond' : 'diamonds'} · {triangles} triangles</Text>
@@ -153,11 +153,9 @@ export default function BinResizeScreen() {
               <Animated.View
                 style={[
                   styles.handle,
-                  { left: originLeft + W - HANDLE / 2, top: originTop + H - HANDLE / 2, transform: [{ translateX: handleTX }, { translateY: handleTY }] },
+                  { left: originLeft + W / 2 - HANDLE / 2, top: originTop + H / 2 - HANDLE / 2, transform: [{ translateX: handleTX }, { translateY: handleTY }] },
                 ]}
-              >
-                <Text style={styles.handleGlyph}>⤡</Text>
-              </Animated.View>
+              />
             </GestureDetector>
           </View>
         </GestureHandlerRootView>
@@ -206,7 +204,6 @@ const styles = StyleSheet.create({
   // The bin's cubic frame — diamonds are clipped to it, forming the edge triangles.
   frame: { position: 'absolute', overflow: 'hidden', borderWidth: 2, borderColor: colors.gold, borderRadius: 3, backgroundColor: colors.surface },
   handle: { position: 'absolute', width: HANDLE, height: HANDLE, borderRadius: HANDLE / 2, backgroundColor: colors.gold, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 4, shadowOffset: { width: 0, height: 2 }, elevation: 4 },
-  handleGlyph: { fontSize: 22, color: colors.background, fontFamily: fonts.bodyBold },
   capRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.lg },
   capLabel: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, flex: 1 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
