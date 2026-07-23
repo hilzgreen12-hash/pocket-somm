@@ -123,6 +123,9 @@ export default function LabelResultsScreen() {
   // destination — mutually exclusive with a rack/fridge selection.
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(null);
   const [purchasePrice, setPurchasePrice] = useState('');
+  // True once the user types in the price field — so an untouched auto-filled
+  // estimate is saved as an estimate, and a hand-entered price is not.
+  const [purchasePriceUserEdited, setPurchasePriceUserEdited] = useState(false);
   // Pre-populate the bottle size picker from the label scanner. Lazy init
   // reads the labelStore once at mount; the user can still adjust the
   // chip selection afterwards on the Add modals.
@@ -387,6 +390,9 @@ export default function LabelResultsScreen() {
       estimated_value_source: intel.estimatedValue != null ? (intel.valueSource ?? 'vinster') : (prefetchedValue?.source ?? null),
       purchase_price: validPrice,
       purchase_price_currency: userCurrency,
+      // A price the user never touched came from the auto-estimate → flag it so
+      // they can review it later on the Cellar Value screen.
+      purchase_price_estimated: validPrice != null && !purchasePriceUserEdited,
       bottle_size_ml: bottleSizeMl,
     };
   }
@@ -1468,7 +1474,7 @@ export default function LabelResultsScreen() {
               <TextInput
                 style={styles.priceInput}
                 value={purchasePrice}
-                onChangeText={setPurchasePrice}
+                onChangeText={(t) => { setPurchasePrice(t); setPurchasePriceUserEdited(true); }}
                 placeholder="0.00"
                 placeholderTextColor={colors.textSubtle}
                 keyboardType="decimal-pad"

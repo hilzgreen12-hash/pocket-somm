@@ -94,6 +94,8 @@ export default function CellarStatsScreen() {
   // Wines with no purchase price recorded — the user can fill these in to grow
   // Total Purchase Value and the change comparison below.
   const winesNoPurchase = wines.filter((w) => w.purchase_price == null);
+  // Wines whose purchase price is an auto-estimate the user hasn't confirmed.
+  const winesEstimatedPurchase = wines.filter((w) => w.purchase_price != null && w.purchase_price_estimated);
 
   // % change from purchase to estimated current value, on the wines that have
   // BOTH (and in the same currency, so the comparison is like-for-like).
@@ -119,7 +121,7 @@ export default function CellarStatsScreen() {
   const changePartial = changeEntries.length > 0 && (winesNoPurchase.length > 0 || winesNeedingEstimate.length > 0);
 
   // Which value-editor sheet is open (user fills in what Vinster couldn't find).
-  const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | null>(null);
+  const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | null>(null);
   const editorCurrency = preferences?.defaultCurrency ?? 'GBP';
   function onEditorSaved() {
     if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
@@ -326,6 +328,13 @@ export default function CellarStatsScreen() {
                 </Text>
               </TouchableOpacity>
             ) : null}
+            {winesEstimatedPurchase.length > 0 ? (
+              <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('purchase-estimated')} activeOpacity={0.7}>
+                <Text style={styles.missingValueText}>
+                  {winesEstimatedPurchase.length} Estimated Value{winesEstimatedPurchase.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
+                </Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.valueRow}>
               <Text style={styles.valueLabel}>Total Estimated Current Value</Text>
@@ -439,12 +448,14 @@ export default function CellarStatsScreen() {
 
       <WineValueEditorModal
         visible={valueEditor !== null}
-        field={valueEditor === 'purchase' ? 'purchase_price' : 'estimated_value'}
-        title={valueEditor === 'purchase' ? 'Add purchase prices' : 'Update estimated values'}
+        field={valueEditor === 'purchase' || valueEditor === 'purchase-estimated' ? 'purchase_price' : 'estimated_value'}
+        title={valueEditor === 'purchase' ? 'Add purchase prices' : valueEditor === 'purchase-estimated' ? 'Review estimated prices' : 'Update estimated values'}
         subtitle={valueEditor === 'purchase'
           ? 'Enter what you paid per bottle — this adds to your Total Purchase Value.'
-          : "Enter your own estimated value per bottle for the wines Vinster couldn't price."}
-        wines={valueEditor === 'purchase' ? winesNoPurchase : winesUnvaluable}
+          : valueEditor === 'purchase-estimated'
+            ? 'These purchase prices are Vinster estimates. Check them and enter what you actually paid per bottle where you know it.'
+            : "Enter your own estimated value per bottle for the wines Vinster couldn't price."}
+        wines={valueEditor === 'purchase' ? winesNoPurchase : valueEditor === 'purchase-estimated' ? winesEstimatedPurchase : winesUnvaluable}
         currency={editorCurrency}
         onClose={() => setValueEditor(null)}
         onSaved={onEditorSaved}
