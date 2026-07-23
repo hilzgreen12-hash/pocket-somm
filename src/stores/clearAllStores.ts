@@ -40,8 +40,6 @@ export function clearAllStores() {
   // leaves alone — see the note above.
   useRackStore.setState({
     imageUri: null,
-    detectedRows: 4,
-    detectedCols: 6,
     pendingSlot: null,
     pendingSlots: null,
     pendingWineId: null,

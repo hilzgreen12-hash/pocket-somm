@@ -2,7 +2,6 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { showAddedToCellar } from '../../src/utils/addCellarConfirm';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -516,12 +515,6 @@ export default function LabelResultsScreen() {
   // (which references `wine.wineName`) to re-render with a null wine,
   // crashing into the ErrorBoundary as "Something Went Wrong". The store
   // will be naturally replaced on the next label scan.
-  // Close every add with a confirmation that names the Cellar List (and the
-  // rack/location, where relevant). When the user lands somewhere other than
-  // the list (a rack), offer a link across to it.
-  function confirmSaved(body: string, includeListLink: boolean) {
-    void showAddedToCellar(body, includeListLink ? () => router.replace('/cellar/list') : undefined);
-  }
 
   async function performSaveFlow(savedWineId: string, mode: 'new' | 'merge', baseQuantity: number) {
     // Home storage location: the label flow was entered from a location's "add
@@ -658,9 +651,8 @@ export default function LabelResultsScreen() {
       qc.invalidateQueries({ queryKey: ['cellar-locations', session?.user.id] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setAddingToCellar(false);
-      const locName = cellarLocations.find((l) => l.id === selectedLocationId)?.name ?? 'your location';
-      router.replace('/cellar/list');
-      confirmSaved(`${qty} bottle${qty === 1 ? '' : 's'} added to your Full Cellar List and filed under ${locName}.`, false);
+      // Land on the Full Cellar List with a brief auto-fading toast (no popup).
+      router.replace('/cellar/list?added=1');
       return;
     }
 
@@ -706,15 +698,27 @@ export default function LabelResultsScreen() {
       }
     }
 
-    // Build a brand-new rack, then place there.
+    // "+ New Location" — the wine is saved to the cellar; ask what kind of
+    // storage location to set up, then route to its builder. Rack/Fridge carry
+    // the wine as pending so the new grid prompts "tap a slot to place it";
+    // Bin / Other Location leave it in the cellar to file afterwards.
     if (selectedRackId === '__new__') {
       if (mode === 'merge') {
         await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + qty } });
       }
-      setPendingWineId(savedWineId);
-      setPendingStorageType('rack');
+      qc.invalidateQueries({ queryKey: ['cellar'] });
       setAddingToCellar(false);
-      router.replace('/cellar/rack/camera?intro=1');
+      showAlert({
+        title: 'What Kind of Storage Location?',
+        body: 'Your wine is saved to the cellar — set up where it lives.',
+        buttons: [
+          { text: 'Rack', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('rack'); router.replace('/cellar/rack/resize' as any); } },
+          { text: 'Fridge', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('fridge'); router.replace('/cellar/rack/resize' as any); } },
+          { text: 'Bin (diamonds)', onPress: () => router.replace('/cellar/bin/resize' as any) },
+          { text: 'Other Location', onPress: () => router.replace('/cellar/storage-location/new' as any) },
+          { text: 'Cancel', style: 'cancel', onPress: () => router.replace('/cellar/list?added=1' as any) },
+        ],
+      });
       return;
     }
 
@@ -725,8 +729,8 @@ export default function LabelResultsScreen() {
       await updateWine.mutateAsync({ id: savedWineId, updates: { quantity: baseQuantity + qty } });
     }
     setAddingToCellar(false);
-    router.replace('/cellar/list');
-    confirmSaved(`${qty} bottle${qty === 1 ? '' : 's'} added to your Full Cellar List.`, false);
+    // Land on the Full Cellar List with a brief auto-fading toast (no popup).
+    router.replace('/cellar/list?added=1');
   }
 
   async function performNewEntry() {
@@ -931,7 +935,7 @@ export default function LabelResultsScreen() {
 
   // Compact Add-to-Cellar field dropdowns.
   const storageLabel = selectedRackId === '__new__'
-    ? '+ Create new rack'
+    ? '+ New Location'
     : selectedRackId
       ? (racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack')
       : selectedLocationId
@@ -946,7 +950,7 @@ export default function LabelResultsScreen() {
           { label: 'Cellar List', value: 'none', onSelect: () => { setSelectedRackId(null); setSelectedLocationId(null); } },
           ...racks.map((r) => ({ label: `Save to ${r.name}`, value: r.id, onSelect: () => { setSelectedRackId(r.id); setSelectedLocationId(null); } })),
           ...cellarLocations.map((l) => ({ label: `Save to ${l.name}`, value: `loc:${l.id}`, onSelect: () => { setSelectedLocationId(l.id); setSelectedRackId(null); } })),
-          { label: '+ Create new rack', value: '__new__', onSelect: () => { setSelectedRackId('__new__'); setSelectedLocationId(null); } },
+          { label: '+ New Location', value: '__new__', onSelect: () => { setSelectedRackId('__new__'); setSelectedLocationId(null); } },
         ]
       : openField === 'bottle'
         ? [
@@ -1345,7 +1349,7 @@ export default function LabelResultsScreen() {
                     onPress={() => { setSelectedRackId('__new__'); setSelectedLocationId(null); }}
                     activeOpacity={0.8}
                   >
-                    <Text style={[styles.storageChipText, styles.storageChipNewText, selectedRackId === '__new__' && styles.storageChipTextActive]}>+ New rack</Text>
+                    <Text style={[styles.storageChipText, styles.storageChipNewText, selectedRackId === '__new__' && styles.storageChipTextActive]}>+ New Location</Text>
                   </TouchableOpacity>
                 </ScrollView>
 
@@ -1491,7 +1495,7 @@ export default function LabelResultsScreen() {
                 {saving
                   ? 'Saving…'
                   : selectedRackId === '__new__'
-                    ? 'Save & Build a New Rack'
+                    ? 'Save & Add New Location'
                     : selectedRackId
                       ? `Save & Place in ${racks.find((r) => r.id === selectedRackId)?.name ?? 'Rack'}`
                       : selectedLocationId
