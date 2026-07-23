@@ -6,7 +6,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../../../../src/hooks/useAuth';
 import { getBins, getBinCell, removeWineFromCell, binCellLabel } from '../../../../src/api/bins';
 import { addCellarWine, updateCellarWine } from '../../../../src/api/cellar';
-import { clearWineFromRacks } from '../../../../src/api/racks';
+import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../../src/api/racks';
+import { fetchStorageLocations } from '../../../../src/api/storageLocations';
+import { useRacks } from '../../../../src/hooks/useRacks';
 import { prepareImageBase64, scanLabel } from '../../../../src/api/label';
 import { ensureMediaPermission } from '../../../../src/utils/mediaPermissions';
 import { BottleSizePicker, bottleSizeCl } from '../../../../src/components/BottleSizePicker';
@@ -60,6 +62,53 @@ export default function BinCellScreen() {
   });
   const bin = cell ? bins.find((b) => b.id === cell.bin_id) : undefined;
   const cellRef = bin && cell ? binCellLabel(bin.diamonds_across ?? 1, bin.diamonds_down ?? 1, cell.kind, cell.idx) : null;
+
+  // "Select from Cellar List" → place/move an existing wine into this cell.
+  const { racks } = useRacks();
+  const rackIds = racks.map((r) => r.id);
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+  const { data: allLocations = [] } = useQuery({
+    queryKey: ['storage-locations', userId],
+    queryFn: () => fetchStorageLocations(userId!),
+    enabled: !!userId,
+  });
+  const [moveModal, setMoveModal] = useState<{ wine: CellarWine; currentName: string; max: number } | null>(null);
+  const [moveQty, setMoveQty] = useState('');
+
+  function currentPlacement(w: CellarWine): string | null {
+    if (w.bin_cell_id && w.bin_cell_id !== cellId) return 'another wine bin';
+    if (w.storage_location_id) return allLocations.find((l) => l.id === w.storage_location_id)?.name ?? 'a location';
+    const slot = slotAssignments.find((s) => s.cellar_wine_id === w.id);
+    if (slot) return racks.find((r) => r.id === slot.rack_id)?.name ?? 'a rack';
+    return null;
+  }
+
+  async function executeMove(w: CellarWine, count: number) {
+    const N = w.quantity ?? 1;
+    const M = Math.max(1, Math.min(count, N));
+    try {
+      if (M >= N) {
+        await clearWineFromRacks(w.id);
+        await updateCellarWine(w.id, { bin_cell_id: cellId, storage_location_id: null, case_id: null });
+      } else {
+        await updateCellarWine(w.id, { quantity: N - M });
+        if (slotAssignments.some((s) => s.cellar_wine_id === w.id)) await removeSlotsForWine(w.id, M);
+        const { id: _id, created_at: _c, updated_at: _u, ...rest } = w;
+        await addCellarWine({ ...rest, quantity: M, bin_cell_id: cellId, storage_location_id: null, case_id: null, is_wishlist: false } as any);
+      }
+      invalidate();
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      setMoveModal(null);
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   const [draft, setDraft] = useState<Draft | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -142,15 +191,26 @@ export default function BinCellScreen() {
   }
 
   // "Select from Cellar List" — file an existing cellar wine into this cell.
-  async function addFromCellar(wine: CellarWine) {
+  function addFromCellar(wine: CellarWine) {
     setPickerOpen(false);
     if (!cellId) return;
-    try {
-      await clearWineFromRacks(wine.id);
-      await updateCellarWine(wine.id, { bin_cell_id: cellId, storage_location_id: null, case_id: null });
-      invalidate();
-    } catch (err) {
-      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
+    const header = [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
+    if (wine.bin_cell_id === cellId) { showAlert({ title: 'Already here', body: `${header} is already in this diamond.` }); return; }
+    const where = currentPlacement(wine);
+    const qty = wine.quantity ?? 1;
+    if (!where) { void executeMove(wine, qty); return; } // unplaced → file it here
+    if (qty <= 1) {
+      showAlert({
+        title: 'Move this wine?',
+        body: `${header} is in ${where}. Move it here?`,
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: `Move from ${where}`, onPress: () => void executeMove(wine, 1) },
+        ],
+      });
+    } else {
+      setMoveQty(String(qty));
+      setMoveModal({ wine, currentName: where, max: qty });
     }
   }
 
@@ -365,7 +425,31 @@ export default function BinCellScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <CellarWinePicker visible={pickerOpen} onClose={() => setPickerOpen(false)} onSelect={addFromCellar} />
+      <CellarWinePicker visible={pickerOpen} allowPlaced onClose={() => setPickerOpen(false)} onSelect={addFromCellar} />
+
+      {/* Move quantity — "You have N bottles, how many are we moving?" */}
+      <Modal visible={moveModal !== null} transparent animationType="fade" onRequestClose={() => setMoveModal(null)}>
+        <View style={styles.overlay}>
+          <View style={styles.sheet}>
+            <Text style={styles.sheetTitle}>Move to this {cell?.kind === 'triangle' ? 'half diamond' : 'diamond'}</Text>
+            <Text style={[styles.sheetLabel, { textAlign: 'center', textTransform: 'none', letterSpacing: 0 }]}>
+              You have {moveModal?.max} bottles of {moveModal ? [moveModal.wine.producer, moveModal.wine.wine_name, moveModal.wine.vintage].filter(Boolean).join(' ') : ''} in {moveModal?.currentName}. How many are we moving?
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={moveQty}
+              onChangeText={(t) => setMoveQty(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              keyboardType="number-pad"
+              placeholder="Number of bottles"
+              placeholderTextColor={colors.textMuted}
+            />
+            <TouchableOpacity style={styles.saveBtn} onPress={() => { const n = parseInt(moveQty, 10); if (moveModal && Number.isFinite(n) && n > 0) void executeMove(moveModal.wine, Math.min(n, moveModal.max)); }} activeOpacity={0.85}>
+              <Text style={styles.saveBtnText}>Move</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cancelBtn} onPress={() => setMoveModal(null)}><Text style={styles.cancelBtnText}>Cancel</Text></TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
