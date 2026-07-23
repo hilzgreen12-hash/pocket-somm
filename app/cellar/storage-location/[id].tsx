@@ -6,8 +6,11 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
-import { archiveCellarWine, deleteCellarWine, updateCellarWine } from '../../../src/api/cellar';
-import { clearWineFromRacks } from '../../../src/api/racks';
+import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
+import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../src/api/racks';
+import { fetchStorageLocations } from '../../../src/api/storageLocations';
+import { useRacks } from '../../../src/hooks/useRacks';
+import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { useLabelStore } from '../../../src/stores/labelStore';
@@ -117,6 +120,93 @@ export default function StorageLocationScreen() {
   }, [id]);
   const photoUrl = useLabelImageUrl(location?.photo_path ?? null);
 
+  // "Select from Cellar List" → place/move an existing cellar wine here.
+  const { racks } = useRacks();
+  const rackIds = racks.map((r) => r.id);
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+  const { data: allLocations = [] } = useQuery({
+    queryKey: ['storage-locations', userId],
+    queryFn: () => fetchStorageLocations(userId!),
+    enabled: !!userId,
+  });
+  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  const [moveModal, setMoveModal] = useState<{ wine: CellarWine; currentName: string; max: number } | null>(null);
+  const [moveQty, setMoveQty] = useState('');
+
+  // Where the picked wine currently lives (null = unplaced), for the move prompt.
+  function currentPlacement(w: CellarWine): string | null {
+    if (w.storage_location_id && w.storage_location_id !== id) {
+      return allLocations.find((l) => l.id === w.storage_location_id)?.name ?? 'another location';
+    }
+    if (w.bin_cell_id) return 'a wine bin';
+    const slot = slotAssignments.find((s) => s.cellar_wine_id === w.id);
+    if (slot) return racks.find((r) => r.id === slot.rack_id)?.name ?? 'a rack';
+    return null;
+  }
+
+  function invalidateAfterMove(w: CellarWine) {
+    qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+    qc.invalidateQueries({ queryKey: ['storage-location', id] });
+    qc.invalidateQueries({ queryKey: ['storage-locations'] });
+    if (w.storage_location_id) qc.invalidateQueries({ queryKey: ['storage-location-wines', w.storage_location_id] });
+    qc.invalidateQueries({ queryKey: ['cellar'] });
+    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    qc.invalidateQueries({ queryKey: ['rack-slots'] });
+    qc.invalidateQueries({ queryKey: ['bins'] });
+    qc.invalidateQueries({ queryKey: ['bin-cells'] });
+  }
+
+  async function executeMove(w: CellarWine, count: number, _fromName: string | null) {
+    const N = w.quantity ?? 1;
+    const M = Math.max(1, Math.min(count, N));
+    try {
+      if (M >= N) {
+        // Whole listing moves here — clear any rack slots / bin cell / case.
+        await clearWineFromRacks(w.id);
+        await updateCellarWine(w.id, { storage_location_id: id, bin_cell_id: null, case_id: null });
+      } else {
+        // Partial — split M bottles into a new row here; source keeps the rest.
+        await updateCellarWine(w.id, { quantity: N - M });
+        if (slotAssignments.some((s) => s.cellar_wine_id === w.id)) await removeSlotsForWine(w.id, M);
+        const { id: _id, created_at: _c, updated_at: _u, ...rest } = w;
+        await addCellarWine({ ...rest, quantity: M, storage_location_id: id, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
+      }
+      invalidateAfterMove(w);
+      setMoveModal(null);
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  function onPickCellarWine(w: CellarWine) {
+    setCellarPickerOpen(false);
+    const header = wineHeaderLine(w.producer, w.wine_name, w.vintage);
+    if (w.storage_location_id === id) {
+      showAlert({ title: 'Already here', body: `${header} is already in this location.` });
+      return;
+    }
+    const where = currentPlacement(w);
+    const qty = w.quantity ?? 1;
+    if (!where) { void executeMove(w, qty, null); return; } // unplaced → file it here
+    if (qty <= 1) {
+      showAlert({
+        title: 'Move this wine?',
+        body: `${header} is in ${where}. Move it here?`,
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { text: `Move from ${where}`, onPress: () => void executeMove(w, 1, where) },
+        ],
+      });
+    } else {
+      setMoveQty(String(qty));
+      setMoveModal({ wine: w, currentName: where, max: qty });
+    }
+  }
+
   // wine → its case's packaging kind, for the Cases filter.
   const caseKindById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -213,6 +303,7 @@ export default function StorageLocationScreen() {
       buttons: [
         { text: 'Scan a Label', onPress: () => handleScan() },
         { text: 'Upload Photo', onPress: () => handleUpload() },
+        { text: 'Select from Cellar List', onPress: () => setCellarPickerOpen(true) },
         { text: 'Manual Input', onPress: () => handleManual() },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -929,6 +1020,37 @@ export default function StorageLocationScreen() {
             <TouchableOpacity style={styles.caseModalCancel} onPress={() => setFilterModalOpen(false)}>
               <Text style={styles.caseModalCancelText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Select from Cellar List — pick an existing wine to place/move here. */}
+      <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
+
+      {/* Move quantity — "You have N bottles, how many are we moving?" */}
+      <Modal visible={moveModal !== null} transparent animationType="fade" onRequestClose={() => setMoveModal(null)}>
+        <View style={styles.caseModalOverlay}>
+          <View style={styles.caseModalSheet}>
+            <Text style={styles.caseModalTitle}>Move to {location?.name ?? 'this location'}</Text>
+            <Text style={[styles.caseModalLabel, { textAlign: 'center' }]}>
+              You have {moveModal?.max} bottles of {moveModal ? wineHeaderLine(moveModal.wine.producer, moveModal.wine.wine_name, moveModal.wine.vintage) : ''} in {moveModal?.currentName}. How many are we moving?
+            </Text>
+            <TextInput
+              style={styles.caseModalInput}
+              value={moveQty}
+              onChangeText={(t) => setMoveQty(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              keyboardType="number-pad"
+              placeholder="Number of bottles"
+              placeholderTextColor={colors.textSubtle}
+            />
+            <TouchableOpacity
+              style={styles.caseModalSave}
+              onPress={() => { const n = parseInt(moveQty, 10); if (moveModal && Number.isFinite(n) && n > 0) void executeMove(moveModal.wine, Math.min(n, moveModal.max), moveModal.currentName); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.caseModalSaveText}>Move</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.caseModalCancel} onPress={() => setMoveModal(null)}><Text style={styles.caseModalCancelText}>Cancel</Text></TouchableOpacity>
           </View>
         </View>
       </Modal>
