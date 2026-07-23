@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { evictCachedLabel } from './labelImageCache';
 import type { StorageLocation, StorageCase, CellarWine } from '../types/wine';
 
 // Home storage locations (migration 064) — non-grid spaces the user photographs
@@ -80,6 +81,7 @@ export async function deleteStorageLocation(id: string): Promise<void> {
   if (row?.user_id) paths.add(`${row.user_id}/locations/${id}.jpg`);
   if (paths.size > 0) {
     try { await supabase.storage.from('wine-labels').remove([...paths]); } catch { /* best-effort cleanup */ }
+    for (const p of paths) evictCachedLabel(p); // drop local cached copies too
   }
   if (readErr) { /* tolerated: the row delete above is the operation that matters */ }
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -41,7 +41,8 @@ function RackCard({ rack, count, onLongPress }: { rack: WineRack; count: number;
 
 export default function RacksScreen() {
   const { session } = useAuth();
-  const { racks, isLoading, remove: removeRack } = useRacks();
+  const { racks, isLoading, isError, remove: removeRack } = useRacks();
+  const qc = useQueryClient();
   const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
   const userId = session?.user.id;
   // Home storage locations (non-grid, photo-a-space) — shown in the Other Home
@@ -163,6 +164,20 @@ export default function RacksScreen() {
     );
   }
 
+  // Distinct from the empty state: a failed fetch also yields an empty racks
+  // list, and showing "nothing set up yet" then reads as data loss.
+  if (session && isError) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.errorTitle}>Couldn&apos;t load your storage</Text>
+        <Text style={styles.errorBody}>Check your connection and try again. Your wines are safe.</Text>
+        <TouchableOpacity style={styles.retryBtn} onPress={() => qc.invalidateQueries({ queryKey: ['racks', userId] })} activeOpacity={0.85}>
+          <Text style={styles.retryBtnText}>Try again</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -262,7 +277,11 @@ export default function RacksScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, paddingHorizontal: spacing.xl, gap: spacing.md },
+  errorTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  errorBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  retryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  retryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Inter — back/nav link
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },

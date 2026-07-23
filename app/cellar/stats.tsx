@@ -118,9 +118,12 @@ export default function CellarStatsScreen() {
     .filter(([, b]) => b.p > 0)
     .map(([code, b]) => ({ code, pct: ((b.v - b.p) / b.p) * 100 }));
   // The change is computed ONLY on wines that have both a purchase price and a
-  // current value. If some wines are missing one of those, the headline totals
-  // cover different sets than the %, so we caption the basis to keep it honest.
-  const changePartial = changeEntries.length > 0 && (winesNoPurchase.length > 0 || winesNeedingEstimate.length > 0);
+  // current value IN THE SAME CURRENCY. If some wines are missing one value, or
+  // have both but in mismatched currencies (so they're excluded from the %),
+  // the headline totals cover a different set than the %, so we caption the
+  // basis to keep it honest.
+  const bothValuesCount = wines.filter((w) => w.purchase_price != null && w.estimated_value != null).length;
+  const changePartial = changeEntries.length > 0 && (winesNoPurchase.length > 0 || winesNeedingEstimate.length > 0 || matchedCount < bothValuesCount);
 
   // Which value-editor sheet is open (user fills in what Vinster couldn't find).
   const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | null>(null);

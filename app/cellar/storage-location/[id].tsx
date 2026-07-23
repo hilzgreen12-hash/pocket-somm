@@ -495,10 +495,22 @@ export default function StorageLocationScreen() {
 
   function openAddToCase(c: StorageCase) {
     const buttons: { text: string; style?: 'cancel'; onPress?: () => void }[] = [];
-    // Single-wine case: adding more is just +N bottles of the wine already in it,
-    // so lead with a button (not a statement) that runs the quantity flow.
-    if (c.kind !== 'mixed') {
-      buttons.push({ text: 'Add more bottles of this wine', onPress: () => { setAddBottlesQty(1); setAddBottlesCase(c); } });
+    const caseWine = wines.find((w) => w.case_id === c.id);
+    // A complete case (OWC / non-OWC) is ONE wine. Once it holds that wine, the
+    // only valid add is more bottles of the same wine — offering Scan/Upload/
+    // Manual here would file a *different* bottle under the same case_id and
+    // corrupt it. Only a mixed case (or a not-yet-populated complete case) may
+    // take a fresh scan.
+    if (c.kind !== 'mixed' && caseWine) {
+      showAlert({
+        title: `Add to ${c.name}`,
+        body: `This is a complete case of ${caseWine.wine_name}. Add more bottles of it?`,
+        buttons: [
+          { text: 'Add more bottles', onPress: () => { setAddBottlesQty(1); setAddBottlesCase(c); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
     }
     buttons.push(
       { text: 'Scan a Label', onPress: () => handleScan(c.id) },
@@ -508,7 +520,7 @@ export default function StorageLocationScreen() {
     );
     showAlert({
       title: `Add a wine to ${c.name}`,
-      body: c.kind === 'mixed' ? 'Add another wine to this mixed case.' : 'Add bottles to this case.',
+      body: c.kind === 'mixed' ? 'Add another wine to this mixed case.' : 'Add the wine for this case.',
       buttons,
     });
   }

@@ -1,5 +1,6 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { supabase } from './supabase';
+import { evictCachedLabel } from './labelImageCache';
 
 // Lineup photos share the wine-labels bucket (per-user-folder RLS already
 // covers the lineups/ subfolder). Records live in public.lineup_archives.
@@ -138,6 +139,7 @@ export async function deleteLineupArchive(id: string): Promise<void> {
   const path = (row as { image_path?: string | null } | null)?.image_path;
   if (path) {
     try { await supabase.storage.from(BUCKET).remove([path]); } catch { /* best-effort cleanup */ }
+    evictCachedLabel(path); // drop the local cached copy too
   }
 }
 

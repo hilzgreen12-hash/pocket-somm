@@ -266,7 +266,11 @@ export default function RestaurantReviewsScreen() {
     }
   }
 
-  function closeRestaurantReview() {
+  // `pop` controls the deep-link back-pop. It MUST be false when the close is
+  // immediately followed by opening a sibling in-page modal (Edit/Review Wine):
+  // router.back() there pops THIS screen instance, so the subsequent state set
+  // lands on a buried instance and the edit modal never appears ("did nothing").
+  function closeRestaurantReview(pop = true) {
     // Drop an unsaved manual draft so empty rows don't pile up in the list.
     if (manualDraftIdRef.current && !manualSavedRef.current) {
       removeArchiveItem.mutate(manualDraftIdRef.current);
@@ -274,7 +278,7 @@ export default function RestaurantReviewsScreen() {
     manualDraftIdRef.current = null;
     manualSavedRef.current = false;
     setEditing(null);
-    if (editingFromLink) {
+    if (pop && editingFromLink) {
       setEditingFromLink(false);
       router.back();
     }
@@ -333,6 +337,10 @@ export default function RestaurantReviewsScreen() {
       const backTo = returnToSession ? `&backTo=${encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`)}` : '';
       router.push(`/label/results?context=intel${backTo}` as any);
     } catch (err) {
+      // Intel failed and we'd already closed the review to let it open — reopen
+      // the same visit so the user isn't dead-ended on the bare restaurant list.
+      const visit = returnToSession ? archive.find((a) => a.id === returnToSession) : null;
+      if (visit) setEditing(visit);
       showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setGenIntel(false);
@@ -760,7 +768,9 @@ export default function RestaurantReviewsScreen() {
               // deleting it. The modal's silent autosave persists the
               // restaurant note/ratings as it unmounts.
               manualSavedRef.current = true;
-              closeRestaurantReview();
+              // pop=false: keep this screen instance mounted so the editingWine
+              // modal we open next actually renders here (see closeRestaurantReview).
+              closeRestaurantReview(false);
               setEditWineIdentity(false);
               setEditingWine(cw);
             }
@@ -769,7 +779,7 @@ export default function RestaurantReviewsScreen() {
             const cw = findChosenForVisit(editing)[i];
             if (cw) {
               manualSavedRef.current = true; // keep the draft — see onReviewWine
-              closeRestaurantReview();
+              closeRestaurantReview(false); // keep this instance — see onReviewWine
               setEditWineIdentity(true);
               setEditingWine(cw);
             }
@@ -791,7 +801,7 @@ export default function RestaurantReviewsScreen() {
             const cw = findChosenForVisit(editing)[i];
             if (cw) confirmDeleteWine(cw);
           }}
-          onClose={closeRestaurantReview}
+          onClose={() => closeRestaurantReview()}
           onSaved={() => { manualSavedRef.current = true; closeRestaurantReview(); }}
         />
       )}
