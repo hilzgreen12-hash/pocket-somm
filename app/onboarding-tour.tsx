@@ -50,16 +50,6 @@ export default function OnboardingTour() {
     router.replace('/onboarding');
   }
 
-  function handleNext() {
-    if (index === SLIDES.length - 1) {
-      finish();
-      return;
-    }
-    const nextIndex = index + 1;
-    scrollRef.current?.scrollTo({ x: width * nextIndex, animated: true });
-    setIndex(nextIndex);
-  }
-
   function onScrollEnd(e: { nativeEvent: { contentOffset: { x: number } } }) {
     const newIndex = Math.round(e.nativeEvent.contentOffset.x / width);
     if (newIndex !== index) setIndex(newIndex);
@@ -97,8 +87,8 @@ export default function OnboardingTour() {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.nextButton} onPress={handleNext} activeOpacity={0.8}>
-          <Text style={styles.nextText}>{isLast ? 'Get Started' : 'Next'}</Text>
+        <TouchableOpacity style={styles.nextButton} onPress={finish} activeOpacity={0.8}>
+          <Text style={styles.nextText}>{isLast ? 'Get Started' : 'Skip Carousel'}</Text>
         </TouchableOpacity>
       </View>
     </View>
