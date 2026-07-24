@@ -39,19 +39,28 @@ const SYNONYMS = {
   wine: ['wine name', 'wine', 'name', 'full name', 'wine full name', 'label'],
   vintage: ['vintage', 'year'],
   region: ['region', 'appellation', 'sub-region', 'subregion', 'area'],
-  quantity: ['count', 'quantity', 'qty', 'bottles', 'number of bottles', 'bottle count', 'inventory'],
+  // "User cellar count" is Vivino's own bottle count. Specific phrases lead so
+  // they win the exact-match pass before the bare-'count' substring fallback.
+  quantity: ['user cellar count', 'cellar count', 'bottles in cellar', 'count', 'quantity', 'qty', 'bottles', 'number of bottles', 'bottle count', 'inventory'],
   price: ['price paid', 'purchase price', 'price', 'bottle price', 'cost'],
   currency: ['currency'],
   rating: ['your rating', 'my rating', 'rating', 'score', 'personal rating'],
   note: ['your review', 'tasting note', 'personal note', 'note', 'notes', 'review', 'comment'],
 } as const;
 
-function findCol(header: string[], synonyms: readonly string[]): number {
+// Community-stat columns that must never be mistaken for a per-user bottle count
+// or the user's own rating — e.g. Vivino's "Average rating" and "Wine ratings
+// count" both contain substrings our synonyms would otherwise grab.
+const QTY_EXCLUDE = /average|rating|review/;
+const RATING_EXCLUDE = /average|count/;
+
+function findCol(header: string[], synonyms: readonly string[], exclude?: RegExp): number {
   const norm = header.map((h) => h.trim().toLowerCase());
-  for (const syn of synonyms) { const i = norm.indexOf(syn); if (i >= 0) return i; }
+  const ok = (i: number) => !exclude || !exclude.test(norm[i]);
+  for (const syn of synonyms) { const i = norm.indexOf(syn); if (i >= 0 && ok(i)) return i; }
   // Fall back to a substring match ("Your rating (1-5)", "Price paid (GBP)"…).
   for (let i = 0; i < norm.length; i++) {
-    if (synonyms.some((syn) => norm[i].includes(syn))) return i;
+    if (ok(i) && synonyms.some((syn) => norm[i].includes(syn))) return i;
   }
   return -1;
 }
@@ -80,10 +89,10 @@ export function parseVivinoCsv(text: string): VivinoParseResult {
     wine: findCol(header, SYNONYMS.wine),
     vintage: findCol(header, SYNONYMS.vintage),
     region: findCol(header, SYNONYMS.region),
-    quantity: findCol(header, SYNONYMS.quantity),
+    quantity: findCol(header, SYNONYMS.quantity, QTY_EXCLUDE),
     price: findCol(header, SYNONYMS.price),
     currency: findCol(header, SYNONYMS.currency),
-    rating: findCol(header, SYNONYMS.rating),
+    rating: findCol(header, SYNONYMS.rating, RATING_EXCLUDE),
     note: findCol(header, SYNONYMS.note),
   };
   const cell = (r: string[], i: number) => (i >= 0 && i < r.length ? (r[i] ?? '').trim() : '');
