@@ -195,14 +195,9 @@ export default function RacksScreen() {
           </Text>
 
           {totalLocations > 0 && (
-            <>
-              <Text style={styles.homeSummary}>
-                {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
-              </Text>
-              <Text style={styles.homeSummary}>
-                {rackCount} {rackCount === 1 ? 'Rack' : 'Racks'} · {fridgeCount} {fridgeCount === 1 ? 'Fridge' : 'Fridges'} · {bins.length} {bins.length === 1 ? 'Bin' : 'Bins'} · {storageLocations.length} Other {storageLocations.length === 1 ? 'Location' : 'Locations'}
-              </Text>
-            </>
+            <Text style={styles.homeSummary}>
+              {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
+            </Text>
           )}
 
           <View style={styles.divider} />
@@ -210,6 +205,11 @@ export default function RacksScreen() {
           {/* Wine Racks & Fridges — a horizontal carousel of racks/fridges with
               a permanent "+ Add" tile at the end. */}
           <Text style={styles.blockHeader}>Racks, Fridges & Bins</Text>
+          {(rackCount + fridgeCount + bins.length) > 0 && (
+            <Text style={styles.homeSummary}>
+              {rackCount} {rackCount === 1 ? 'Rack' : 'Racks'} · {fridgeCount} {fridgeCount === 1 ? 'Fridge' : 'Fridges'} · {bins.length} {bins.length === 1 ? 'Bin' : 'Bins'}
+            </Text>
+          )}
           <Text style={styles.blockBlurb}>
             Racks and Fridges display individual bottles in horizontal/vertical grids. Bins are Diamond shaped and hold multiple bottles per slot.
           </Text>
@@ -246,6 +246,11 @@ export default function RacksScreen() {
               places (shed, under the bed…). A distinct concept from the Cellar
               List "Locations" filter, so those are NOT shown here. */}
           <Text style={styles.blockHeader}>Other Home Storage</Text>
+          {storageLocations.length > 0 && (
+            <Text style={styles.homeSummary}>
+              {storageLocations.length} Home Storage {storageLocations.length === 1 ? 'Location' : 'Locations'}
+            </Text>
+          )}
           <Text style={styles.blockBlurb}>
             Add bespoke locations: In the shed, under the bed…
           </Text>
