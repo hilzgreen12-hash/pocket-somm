@@ -1,6 +1,6 @@
 import type { CellarListLine } from '../components/CellarListShareCard';
 import { wineHeaderLine } from './wineHeader';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
+import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 
 // Build a print-ready HTML document for the Full Cellar List (rendered to a PDF
 // via expo-print). A PDF stays crisp and paginates however long the list is —
@@ -41,9 +41,10 @@ export function buildCellarListHtml(opts: {
   tr:last-child td { border-bottom: 0; }
   td.name { color: #fff; font-size: 13.5px; line-height: 1.35; }
   td.qty { color: #E0B84A; font-weight: bold; text-align: right; white-space: nowrap; font-size: 13px; }
-  .footer { text-align: center; margin-top: 22px; }
+  .footer { text-align: center; margin-top: 22px; display: block; text-decoration: none; }
   .footer .get { color: #E0B84A; font-weight: bold; letter-spacing: 3px; font-size: 14px; }
   .footer .cta { color: rgba(255,255,255,.7); font-style: italic; font-size: 13px; margin-top: 4px; }
+  .footer .url { color: #E0B84A; font-size: 12px; margin-top: 6px; text-decoration: underline; }
 </style></head><body>
   <div class="wrap">
     <div class="brand">VINSTER</div>
@@ -53,7 +54,7 @@ export function buildCellarListHtml(opts: {
     <div class="count">${opts.wineCount} ${opts.wineCount === 1 ? 'wine' : 'wines'} · ${opts.bottleCount} ${opts.bottleCount === 1 ? 'bottle' : 'bottles'}</div>
     ${opts.filterSummary ? `<div class="filter">${esc(opts.filterSummary)}</div>` : ''}
     <table>${rows}</table>
-    <div class="footer"><div class="get">${esc(VINSTER_GET_LABEL)}</div><div class="cta">${esc(VINSTER_TAGLINE)}</div></div>
+    <a class="footer" href="${VINSTER_APP_STORE_URL}"><div class="get">${esc(VINSTER_GET_LABEL)}</div><div class="cta">${esc(VINSTER_TAGLINE)}</div><div class="url">${esc(VINSTER_APP_STORE_URL.replace(/^https?:\/\//, ''))}</div></a>
   </div>
 </body></html>`;
 }
