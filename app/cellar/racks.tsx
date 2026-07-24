@@ -5,8 +5,8 @@ import { router } from 'expo-router';
 import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
-import { getRackBottleCounts } from '../../src/api/racks';
-import { getBins, getBinBottleCounts, deleteBin } from '../../src/api/bins';
+import { getRackBottleCounts, getSlotAssignments } from '../../src/api/racks';
+import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../../src/api/bins';
 import { fetchStorageLocations, deleteStorageLocation, fetchStorageLocationWines } from '../../src/api/storageLocations';
 import { deleteCellarWine } from '../../src/api/cellar';
 import { showAlert } from '../../src/components/AppAlert';
@@ -67,17 +67,27 @@ export default function RacksScreen() {
     enabled: binIds.length > 0,
   });
   function handleLongPressRack(rack: WineRack) {
+    const noun = rack.storage_type === 'fridge' ? 'Fridge' : 'Rack';
+    const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     showAlert({
       title: rack.name,
-      body: `Permanently remove this ${rack.storage_type === 'fridge' ? 'fridge' : 'rack'}? Wines stay in your cellar — they're just no longer mapped to it.`,
       buttons: [
         {
-          text: `Delete ${rack.storage_type === 'fridge' ? 'fridge' : 'rack'}`,
+          text: `Delete ${noun}`,
           style: 'destructive',
-          onPress: () => {
-            removeRack.mutate(rack.id, {
-              onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
-            });
+          onPress: () => { removeRack.mutate(rack.id, { onError }); },
+        },
+        {
+          text: `Delete ${noun} & Contents`,
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const slots = await getSlotAssignments([rack.id]);
+              const wineIds = Array.from(new Set(slots.map((s) => s.cellar_wine_id)));
+              for (const id of wineIds) await deleteCellarWine(id);
+              await new Promise<void>((resolve, reject) => removeRack.mutate(rack.id, { onSuccess: () => resolve(), onError: reject }));
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+            } catch (err) { onError(err); }
           },
         },
         { text: 'Cancel', style: 'cancel' },
@@ -88,22 +98,33 @@ export default function RacksScreen() {
   // Long-press a bin — same affordance as racks/fridges: a confirm sheet that
   // frees its wines (they stay loose in the cellar) rather than deleting them.
   function handleLongPressBin(bin: WineRack) {
+    const invalidate = () => {
+      qc.invalidateQueries({ queryKey: ['bins', userId] });
+      qc.invalidateQueries({ queryKey: ['bins', 'counts'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+    };
+    const onError = (err: unknown) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     showAlert({
       title: bin.name,
-      body: "Permanently remove this bin? Wines stay in your cellar — they're just no longer mapped to it.",
       buttons: [
         {
           text: 'Delete Bin',
           style: 'destructive',
           onPress: async () => {
+            try { await deleteBin(bin.id); invalidate(); } catch (err) { onError(err); }
+          },
+        },
+        {
+          text: 'Delete Bin & Contents',
+          style: 'destructive',
+          onPress: async () => {
             try {
+              const cells = await getBinCells(bin.id);
+              const wineIds = Array.from(new Set(cells.flatMap((c) => (c.wines ?? []).map((w) => w.id))));
+              for (const id of wineIds) await deleteCellarWine(id);
               await deleteBin(bin.id);
-              qc.invalidateQueries({ queryKey: ['bins', userId] });
-              qc.invalidateQueries({ queryKey: ['bins', 'counts'] });
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-            } catch (err) {
-              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
-            }
+              invalidate();
+            } catch (err) { onError(err); }
           },
         },
         { text: 'Cancel', style: 'cancel' },
