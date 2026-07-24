@@ -73,8 +73,9 @@ export default function NewStorageLocationScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.xl * 3, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         <Text style={styles.notice}>Add a visual and a name to begin.</Text>
+        <Text style={styles.noticeSub}>Landscape images work best.</Text>
 
         {photoUri ? (
           <View style={styles.previewWrap}>
@@ -116,7 +117,8 @@ const styles = StyleSheet.create({
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  notice: { fontSize: 15, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, marginBottom: spacing.lg },
+  notice: { fontSize: 15, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, marginBottom: spacing.xs },
+  noticeSub: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 18, marginBottom: spacing.lg },
   photoButtons: { gap: spacing.sm },
   photoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
   photoBtnSecondary: { borderColor: '#FFFFFF' },
