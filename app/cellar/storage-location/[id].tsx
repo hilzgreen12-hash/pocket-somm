@@ -739,13 +739,13 @@ export default function StorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {/* Layout: line under the header, stats bar, the (portrait) photo,
-            another line, then the filters/search/list. */}
-        <View style={styles.sectionLine} />
-
+        {/* Layout: header (with its own underline), stats bar, a separator
+            line, the (landscape) photo, another line, then filters/search/list. */}
         <Text style={styles.statsBar}>
           {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'} · {totalBottles} Total {totalBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
+
+        <View style={styles.sectionLine} />
 
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
