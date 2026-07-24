@@ -547,20 +547,29 @@ export default function LabelResultsScreen() {
         if (pendingCaseId) {
           await assignWineToCase(savedWineId, pendingCaseId);
         } else if (storageKind !== 'loose' && session?.user.id) {
-          const created = await createStorageCase(session.user.id, {
-            storageLocationId: pendingStorageLocationId,
-            name: caseName,
-            kind: storageKind,
-            note: caseNote,
-          });
-          try {
-            await assignWineToCase(savedWineId, created.id);
-          } catch (assignErr) {
-            // Roll back the just-created case — a create that succeeds followed
-            // by a failed assign otherwise commits a zero-member case that (per
-            // D1) is invisible and undeletable (D2).
-            try { await deleteStorageCase(created.id); } catch { /* best-effort */ }
-            throw assignErr;
+          // If a case of this name already exists in the location, file into it
+          // rather than spawning a second same-named case. Typing a name that
+          // matches an existing case should behave like picking its bubble.
+          const wanted = caseName.trim().toLowerCase();
+          const existingCase = wanted ? locationCases.find((c) => c.name.trim().toLowerCase() === wanted) : undefined;
+          if (existingCase) {
+            await assignWineToCase(savedWineId, existingCase.id);
+          } else {
+            const created = await createStorageCase(session.user.id, {
+              storageLocationId: pendingStorageLocationId,
+              name: caseName,
+              kind: storageKind,
+              note: caseNote,
+            });
+            try {
+              await assignWineToCase(savedWineId, created.id);
+            } catch (assignErr) {
+              // Roll back the just-created case — a create that succeeds followed
+              // by a failed assign otherwise commits a zero-member case that (per
+              // D1) is invisible and undeletable (D2).
+              try { await deleteStorageCase(created.id); } catch { /* best-effort */ }
+              throw assignErr;
+            }
           }
         }
       } catch { /* wine is still filed in the location */ }
