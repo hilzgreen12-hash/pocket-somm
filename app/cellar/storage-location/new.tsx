@@ -123,8 +123,8 @@ const styles = StyleSheet.create({
   photoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   photoBtnTextSecondary: { color: '#FFFFFF' },
   previewWrap: { alignItems: 'center' },
-  // Portrait-shaped preview — a location photo reads best upright.
-  preview: { width: '62%', aspectRatio: 3 / 4, borderRadius: 14, backgroundColor: colors.surface },
+  // Landscape-shaped preview — matches how the photo displays on the location screen.
+  preview: { width: '85%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface },
   retakeBtn: { marginTop: spacing.sm, paddingVertical: 6, paddingHorizontal: spacing.md },
   retakeText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.xl, marginBottom: 6 },

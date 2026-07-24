@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
   headerActions: { alignItems: 'flex-end', gap: 4 },
   headerLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   // Portrait photo, ~2/3 the old footprint, centred.
-  areaPhoto: { alignSelf: 'center', width: '58%', aspectRatio: 3 / 4, borderRadius: 14, backgroundColor: colors.surface, marginVertical: spacing.md },
+  areaPhoto: { alignSelf: 'center', width: '85%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface, marginVertical: spacing.md },
   sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
   statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.md, paddingHorizontal: spacing.xl },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
