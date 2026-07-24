@@ -833,22 +833,9 @@ export default function FullCellarListScreen() {
         style={styles.filterScroll}
         contentContainerStyle={styles.filterRow}
       >
-        {/* Archive folder — enters the dedicated archived-bottles view
-            (?archived=1). A navigation "folder" rather than a filter dropdown
-            (note the › vs the ▾ chevrons), so it reads as a place you go into.
-            Hidden while already in the Archive. */}
-        {!isArchiveView && (
-          <TouchableOpacity style={styles.filterChip} onPress={() => router.push('/cellar/list?archived=1')}>
-            <View style={styles.filterChipHeadingRow}>
-              <Text style={styles.filterChipLabel}>Archive</Text>
-              <Text style={styles.filterChipChevron}>›</Text>
-            </View>
-            <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">Archived bottles</Text>
-          </TouchableOpacity>
-        )}
-
-        {/* Location filtering is a Full Cellar List affordance — the Archive
-            has no racks/locations to filter by, so hide the chip there. */}
+        {/* Order: Location · Maturity · Score · Price · Favourites · Country ·
+            Colour · Archive. Location/Maturity/Archive are Full-Cellar-List-only
+            (hidden in the Archive view). */}
         {!isArchiveView && (
           <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
             <View style={styles.filterChipHeadingRow}>
@@ -858,19 +845,28 @@ export default function FullCellarListScreen() {
             <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Price</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'price' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>
-        </TouchableOpacity>
+        {!isArchiveView && (
+          <TouchableOpacity style={[styles.filterChip, maturityFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('maturity')}>
+            <View style={styles.filterChipHeadingRow}>
+              <Text style={styles.filterChipLabel}>Maturity</Text>
+              <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
+            </View>
+            <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity style={[styles.filterChip, scoreActive && styles.sortChip]} onPress={() => setOpenDropdown('score')}>
           <View style={styles.filterChipHeadingRow}>
             <Text style={styles.filterChipLabel}>Score</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'score' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, scoreActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{scoreLabel}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
+          <View style={styles.filterChipHeadingRow}>
+            <Text style={styles.filterChipLabel}>Price</Text>
+            <Text style={styles.filterChipChevron}>{openDropdown === 'price' ? '▴' : '▾'}</Text>
+          </View>
+          <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, favouriteFilter !== 'all' && styles.sortChip]} onPress={() => setOpenDropdown('favourite')}>
           <View style={styles.filterChipHeadingRow}>
@@ -893,15 +889,15 @@ export default function FullCellarListScreen() {
           </View>
           <Text style={[styles.filterChipValue, colourFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
         </TouchableOpacity>
-        {/* Maturity (drinking readiness) is irrelevant once bottles are
-            archived, so the Archive view hides this chip. */}
+        {/* Archive folder — enters the dedicated archived-bottles view
+            (?archived=1); a navigation "folder" (› not ▾). Hidden in the Archive. */}
         {!isArchiveView && (
-          <TouchableOpacity style={[styles.filterChip, maturityFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('maturity')}>
+          <TouchableOpacity style={styles.filterChip} onPress={() => router.push('/cellar/list?archived=1')}>
             <View style={styles.filterChipHeadingRow}>
-              <Text style={styles.filterChipLabel}>Maturity</Text>
-              <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
+              <Text style={styles.filterChipLabel}>Archive</Text>
+              <Text style={styles.filterChipChevron}>›</Text>
             </View>
-            <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
+            <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">Archived bottles</Text>
           </TouchableOpacity>
         )}
       </ScrollView>
