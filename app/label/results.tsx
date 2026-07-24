@@ -15,7 +15,7 @@ import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
-import { createStorageCase, assignWineToCase, deleteStorageCase } from '../../src/api/storageLocations';
+import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases } from '../../src/api/storageLocations';
 import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -182,6 +182,16 @@ export default function LabelResultsScreen() {
     queryKey: ['cellar-locations', session?.user.id],
     queryFn: () => fetchCellarLocations(session!.user.id),
     enabled: !!session?.user.id,
+  });
+
+  // Existing case names in the target location, offered as quick-pick chips when
+  // naming a case — so a user can drop a wine into a case they've already made
+  // (e.g. add another bottle to "Meyney Case"). Empty cases are auto-removed, so
+  // only cases that still hold wine appear here.
+  const { data: locationCases = [] } = useQuery({
+    queryKey: ['storage-location-cases', pendingStorageLocationId],
+    queryFn: () => fetchStorageLocationCases(pendingStorageLocationId!),
+    enabled: !!pendingStorageLocationId && context === 'add-location',
   });
 
   // Across-all-racks placement map, so the duplicate prompt can tell the user
@@ -1489,13 +1499,21 @@ export default function LabelResultsScreen() {
                           placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. OWC'}
                           placeholderTextColor={colors.textSubtle}
                         />
-                        <View style={styles.caseSuggestRow}>
-                          {(storageKind === 'mixed' ? ['Mixed Burgundy', 'New World Whites'] : ['OWC', 'Meyney Case']).map((s) => (
-                            <TouchableOpacity key={s} style={styles.caseSuggestChip} onPress={() => setCaseName(s)} activeOpacity={0.7}>
-                              <Text style={styles.caseSuggestText}>{s}</Text>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
+                        {/* Quick-pick from the case names already used in this
+                            location (deduped, excluding the one being typed). */}
+                        {(() => {
+                          const names = Array.from(new Set(locationCases.map((c) => c.name.trim()).filter(Boolean)))
+                            .filter((n) => n.toLowerCase() !== caseName.trim().toLowerCase());
+                          return names.length ? (
+                            <View style={styles.caseSuggestRow}>
+                              {names.map((s) => (
+                                <TouchableOpacity key={s} style={styles.caseSuggestChip} onPress={() => setCaseName(s)} activeOpacity={0.7}>
+                                  <Text style={styles.caseSuggestText}>{s}</Text>
+                                </TouchableOpacity>
+                              ))}
+                            </View>
+                          ) : null;
+                        })()}
                         <Text style={styles.modalLabel}>Note <Text style={styles.modalLabelHint}>(optional)</Text></Text>
                         <View style={styles.caseNoteRow}>
                           <TextInput
