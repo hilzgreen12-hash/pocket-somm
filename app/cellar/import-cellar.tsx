@@ -115,16 +115,18 @@ export default function ImportCellarScreen() {
     setStage('review');
   }
 
-  // "How to import from Vivino" — the exact export steps (Vivino only exports on
-  // the web, so these are desktop steps).
+  // "How to import from Vivino" — the exact export steps. This is Vivino's
+  // "Export Your Data" route (under Account Management), which works on the free
+  // tier too — unlike the Premium-only desktop cellar view. Vivino processes the
+  // request and emails a download link; the file contains a cellar CSV.
   function showVivinoSteps() {
     showAlert({
       title: 'How to import from Vivino',
       body:
-        '1.  Sign in at vivino.com on a computer.\n\n' +
-        '2.  Click your profile icon (top-right corner).\n\n' +
-        '3.  Go to Settings.\n\n' +
-        '4.  Scroll to the bottom of the page — there’s an "Export your cellar list" option that downloads a CSV.',
+        '1.  Sign in at vivino.com.\n\n' +
+        '2.  Go to Settings → Account Management.\n\n' +
+        '3.  Tap "Export Your Data".\n\n' +
+        '4.  Wait for your download link, then download the file — it contains your cellar as a CSV. Come back here and upload it.',
       buttons: [{ text: 'Got it' }],
     });
   }
