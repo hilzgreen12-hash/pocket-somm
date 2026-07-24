@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
-import { parseVivinoCsv } from '../../src/utils/vivinoCsv';
+import { parseCellarCsv } from '../../src/utils/vivinoCsv';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
 import type { CellarWine } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -21,6 +21,50 @@ type Stage = 'capture' | 'analyzing' | 'review' | 'adding' | 'done';
 // Why a row is pre-unticked: it already exists in the cellar, or it repeats an
 // earlier row in this same import. null = a fresh wine, ticked by default.
 type DupFlag = 'cellar' | 'import' | null;
+
+type CsvSource = 'vivino' | 'cellartracker' | 'file';
+
+// Per-source copy for the shared CSV/spreadsheet import flow. `steps` is null for
+// a generic file upload (no vendor to instruct). `note` shows in the steps popup.
+const CSV_SOURCES: Record<CsvSource, {
+  name: string;
+  lead: string;
+  hint: string;
+  steps: string | null;
+  stepsNote?: string;
+  hasLabelImages: boolean; // whether the source stores label photos (none do today)
+}> = {
+  vivino: {
+    name: 'Vivino',
+    lead: 'Bring your Vivino cellar across.',
+    hint: 'Vivino only exports on the web. Once the file is on your phone, choose it below.',
+    steps:
+      '1.  Sign in at vivino.com.\n\n' +
+      '2.  Go to Settings → Account Management.\n\n' +
+      '3.  Tap "Export Your Data".\n\n' +
+      '4.  Wait for your download link, then download the file — it contains your cellar as a CSV. Come back here and upload it.',
+    stepsNote: 'It can take quite some time for your Vivino document to prep.',
+    hasLabelImages: false,
+  },
+  cellartracker: {
+    name: 'CellarTracker',
+    lead: 'Bring your CellarTracker cellar across.',
+    hint: 'CellarTracker only exports from the full desktop website. Once the file is on your phone, choose it below.',
+    steps:
+      '1.  Sign in at cellartracker.com on a computer.\n\n' +
+      '2.  Open "My Cellar" and choose the "Wines" view so your bottle counts come across.\n\n' +
+      '3.  Click "Export" (top-right).\n\n' +
+      '4.  Choose CSV as the format and download the file — then come back here and upload it.',
+    hasLabelImages: false,
+  },
+  file: {
+    name: 'File',
+    lead: 'Upload a cellar spreadsheet.',
+    hint: 'Choose a CSV or tab-delimited file (.csv, .tsv, .txt). Exported an Excel, Numbers or Google Sheet? Save it as CSV first.',
+    steps: null,
+    hasLabelImages: false,
+  },
+};
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 // Case-insensitive identity key — mirrors findMatchingWishlistWine in the
@@ -36,8 +80,11 @@ export default function ImportCellarScreen() {
   const defaultCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   // Entry source from the "Upload Cellar Document" chooser: camera / library
   // (photo → OCR) or vivino (a Vivino CSV export → parse).
-  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' }>();
-  const isVivino = source === 'vivino';
+  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' }>();
+  // The three CSV/spreadsheet sources share one flow; only the on-screen copy
+  // (name, export steps, label-image caveat) differs — driven by CSV_SOURCES.
+  const csv = source && source in CSV_SOURCES ? CSV_SOURCES[source as CsvSource] : null;
+  const isCsv = csv !== null;
 
   const [stage, setStage] = useState<Stage>('capture');
   const [wines, setWines] = useState<ImportedCellarWine[]>([]);
@@ -127,40 +174,39 @@ export default function ImportCellarScreen() {
     setStage('review');
   }
 
-  // "How to import from Vivino" — the exact export steps. This is Vivino's
-  // "Export Your Data" route (under Account Management), which works on the free
-  // tier too — unlike the Premium-only desktop cellar view. Vivino processes the
-  // request and emails a download link; the file contains a cellar CSV.
-  function showVivinoSteps() {
+  // "How to import from {source}" — the exact export steps for the current CSV
+  // source. Vivino's route (Settings → Account Management → Export Your Data)
+  // works on the free tier; CellarTracker's is My Cellar → Export on desktop.
+  function showCsvSteps() {
+    if (!csv?.steps) return;
     showAlert({
-      title: 'How to import from Vivino',
-      body:
-        '1.  Sign in at vivino.com.\n\n' +
-        '2.  Go to Settings → Account Management.\n\n' +
-        '3.  Tap "Export Your Data".\n\n' +
-        '4.  Wait for your download link, then download the file — it contains your cellar as a CSV. Come back here and upload it.',
-      note: 'It can take quite some time for your Vivino document to prep.',
+      title: `How to import from ${csv.name}`,
+      body: csv.steps,
+      note: csv.stepsNote,
       buttons: [{ text: 'Got it' }],
     });
   }
 
-  // Import Vivino: pick the CSV the user exported from Vivino's website and parse
-  // it (reviews are captured too, for the later reviews-import feature).
-  async function pickVivinoFile() {
+  // Pick the CSV/spreadsheet the user exported and parse it (reviews are captured
+  // too, for the later reviews-import feature). Shared by Vivino, CellarTracker
+  // and generic file uploads — the parser is format-agnostic.
+  async function pickCsvFile() {
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'application/vnd.ms-excel', 'text/plain', '*/*'],
+        type: ['text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'application/vnd.ms-excel', 'text/plain', '*/*'],
         copyToCacheDirectory: true,
         multiple: false,
       });
       if (res.canceled || !res.assets?.[0]) return;
       setStage('analyzing');
       const text = await new File(res.assets[0].uri).text();
-      const parsed = parseVivinoCsv(text);
+      const parsed = parseCellarCsv(text);
       if (parsed.wines.length === 0) {
         showAlert({
           title: "Couldn't read that file",
-          body: 'That doesn\'t look like a Vivino cellar export. Make sure you exported your cellar as a CSV from vivino.com and try again.',
+          body: csv?.name === 'File'
+            ? "We couldn't find any wines in that file. Make sure it's a CSV or tab-delimited spreadsheet with a header row (producer, wine, vintage, quantity…) and try again."
+            : `That doesn't look like a ${csv?.name ?? ''} cellar export. Make sure you exported your cellar as a CSV and try again.`,
         });
         setStage('capture');
         return;
@@ -270,23 +316,27 @@ export default function ImportCellarScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{isVivino ? 'Import from Vivino' : 'Import a Cellar'}</Text>
+        <Text style={styles.title}>{csv ? `Import from ${csv.name}` : 'Import a Cellar'}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       {stage === 'capture' ? (
-        isVivino ? (
+        csv ? (
           <ScrollView contentContainerStyle={styles.content}>
-            <Text style={styles.lead}>Bring your Vivino cellar across.</Text>
-            <Text style={styles.hint}>Vivino only exports on a computer. Once the file is on your phone, choose it below.</Text>
-            <TouchableOpacity onPress={showVivinoSteps} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Text style={styles.howToLink}>How to import from Vivino</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryBtn} onPress={pickVivinoFile} activeOpacity={0.85}>
-              <Text style={styles.primaryBtnText}>Choose Vivino export file</Text>
+            <Text style={styles.lead}>{csv.lead}</Text>
+            <Text style={styles.hint}>{csv.hint}</Text>
+            {csv.steps ? (
+              <TouchableOpacity onPress={showCsvSteps} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.howToLink}>How to import from {csv.name}</Text>
+              </TouchableOpacity>
+            ) : null}
+            <TouchableOpacity style={styles.primaryBtn} onPress={pickCsvFile} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>{csv.name === 'File' ? 'Choose a file' : `Choose ${csv.name} export file`}</Text>
             </TouchableOpacity>
             <Text style={styles.footnote}>Your ratings and tasting notes come across in the file too — importing those into your reviews is coming soon.</Text>
-            <Text style={styles.footnote}>As Vivino does not save label images you will have to update your labels in Vinster later.</Text>
+            {!csv.hasLabelImages ? (
+              <Text style={styles.footnote}>As {csv.name === 'File' ? 'spreadsheets do' : `${csv.name} does`} not save label images you will have to update your labels in Vinster later.</Text>
+            ) : null}
           </ScrollView>
         ) : (
           <ScrollView contentContainerStyle={styles.content}>
@@ -378,7 +428,7 @@ export default function ImportCellarScreen() {
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>{isVivino ? 'Choose another file' : 'Choose another image'}</Text>
+            <Text style={styles.secondaryBtnText}>{isCsv ? 'Choose another file' : 'Choose another image'}</Text>
           </TouchableOpacity>
         </ScrollView>
       )}
