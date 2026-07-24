@@ -37,8 +37,9 @@ export default function CellarTab() {
     pendingActionRef.current = null;
   }
 
-  // "Import Cellar Document" → choose the source: a photo or a screenshot (OCR).
-  // Vivino now has its own dedicated button beneath this one.
+  // "Import Cellar Document" → choose the source: a photo or screenshot (OCR),
+  // or a spreadsheet file (CSV/TSV). Vivino & CellarTracker have their own
+  // dedicated buttons beneath this one.
   function openImportChooser() {
     showAlert({
       title: 'Import Cellar Document',
@@ -46,6 +47,7 @@ export default function CellarTab() {
       buttons: [
         { text: 'Scan Photo', onPress: () => router.push('/cellar/import-cellar?source=camera' as any) },
         { text: 'Upload Screenshot', onPress: () => router.push('/cellar/import-cellar?source=library' as any) },
+        { text: 'Upload File', onPress: () => router.push('/cellar/import-cellar?source=file' as any) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -124,6 +126,9 @@ export default function CellarTab() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(() => router.push('/cellar/import-cellar?source=vivino' as any))}>
           <Text style={styles.buttonVivinoText}>Import Vivino</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(() => router.push('/cellar/import-cellar?source=cellartracker' as any))}>
+          <Text style={styles.buttonVivinoText}>Import CellarTracker</Text>
         </TouchableOpacity>
       </View>
 

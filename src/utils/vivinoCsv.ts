@@ -7,8 +7,25 @@ import type { ImportedCellarWine } from '../api/label';
 // columns are matched by SYNONYM rather than a fixed schema — this keeps working
 // across export variants and is trivial to extend when we see a new header.
 
+// Sniff the field delimiter from the header line so we handle comma-CSV,
+// tab-delimited (CellarTracker "text" export, Excel "Save As Tab"), and the
+// semicolon CSVs some locales produce — whichever appears most, outside quotes.
+function detectDelimiter(text: string): string {
+  const firstLine = text.replace(/^﻿/, '').split(/\r?\n/)[0] ?? '';
+  const counts: Record<string, number> = { '\t': 0, ';': 0, ',': 0 };
+  let inQuotes = false;
+  for (const c of firstLine) {
+    if (c === '"') inQuotes = !inQuotes;
+    else if (!inQuotes && c in counts) counts[c]++;
+  }
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return best && best[1] > 0 ? best[0] : ',';
+}
+
 // RFC-4180-ish CSV: quoted fields, doubled quotes ("" → "), CRLF or LF breaks.
+// Delimiter is auto-detected (comma / tab / semicolon).
 function parseCsv(text: string): string[][] {
+  const delim = detectDelimiter(text);
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = '';
@@ -22,7 +39,7 @@ function parseCsv(text: string): string[][] {
       } else cell += c;
     } else if (c === '"') {
       inQuotes = true;
-    } else if (c === ',') {
+    } else if (c === delim) {
       row.push(cell); cell = '';
     } else if (c === '\n') {
       row.push(cell); rows.push(row); row = []; cell = '';
@@ -80,7 +97,9 @@ export interface VivinoParseResult {
   matchedColumns: string[]; // which fields we recognised in the header
 }
 
-export function parseVivinoCsv(text: string): VivinoParseResult {
+// Named for Vivino historically, but the synonym-based matching is format-
+// agnostic — it also handles CellarTracker and generic cellar CSV exports.
+export function parseCellarCsv(text: string): VivinoParseResult {
   const rows = parseCsv(text);
   if (rows.length < 2) return { wines: [], reviews: [], rowCount: 0, matchedColumns: [] };
   const header = rows[0];
