@@ -9,7 +9,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
 import { parseVivinoCsv } from '../../src/utils/vivinoCsv';
-import { addCellarWine, getCellarWines } from '../../src/api/cellar';
+import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
+import type { CellarWine } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
@@ -43,6 +44,13 @@ export default function ImportCellarScreen() {
   const [keep, setKeep] = useState<boolean[]>([]);
   const [dupFlags, setDupFlags] = useState<DupFlag[]>([]);
   const [addedCount, setAddedCount] = useState(0);
+  // How many bottles were merged into wines already in the cellar (for the
+  // done-screen summary). Set on a successful import.
+  const [mergedBottles, setMergedBottles] = useState(0);
+  // Existing cellar wines keyed by identity, so a 'cellar' duplicate can be
+  // merged into its existing row (bottle count += imported qty) rather than
+  // spawning a parallel cellar line.
+  const existingByKey = useRef<Map<string, CellarWine>>(new Map());
 
   // Auto-open the right picker so the chooser → this screen → picker feels like
   // one action. Vivino stays on the instructions screen (the user needs to have
@@ -87,27 +95,31 @@ export default function ImportCellarScreen() {
     }
   }
 
-  // Pre-tick logic shared by every import source: by default everything is
-  // ticked, but pre-untick wines already in the cellar or repeated earlier in
-  // this import, so a re-import doesn't silently create parallel cellar lines.
+  // Pre-tick logic shared by every import source. Everything is ticked by
+  // default. Wines already in the cellar stay ticked but are flagged 'cellar' —
+  // on confirm their bottles are MERGED into the existing listing rather than
+  // creating a parallel line. Wines repeated within this same import are
+  // pre-unticked ('import') so we don't double-count the same row twice.
   async function presentWines(all: ImportedCellarWine[]) {
-    let existingKeys = new Set<string>();
+    const map = new Map<string, CellarWine>();
     const userId = session?.user.id;
     if (userId) {
       try {
         const existing = await getCellarWines(userId);
-        existingKeys = new Set(existing.map(wineKey));
+        for (const e of existing) { const k = wineKey(e); if (!map.has(k)) map.set(k, e); }
       } catch { /* best-effort — don't block the import if the cellar can't be read */ }
     }
+    existingByKey.current = map;
     const seen = new Set<string>();
     const flags: DupFlag[] = [];
     const initialKeep: boolean[] = [];
     for (const w of all) {
       const k = wineKey(w);
-      const flag: DupFlag = existingKeys.has(k) ? 'cellar' : seen.has(k) ? 'import' : null;
+      const flag: DupFlag = map.has(k) ? 'cellar' : seen.has(k) ? 'import' : null;
       seen.add(k);
       flags.push(flag);
-      initialKeep.push(flag === null);
+      // Tick new wines and cellar-merges; untick within-import repeats.
+      initialKeep.push(flag !== 'import');
     }
     setWines(all);
     setDupFlags(flags);
@@ -173,6 +185,10 @@ export default function ImportCellarScreen() {
     const keptIndices = wines.map((_, i) => i).filter((i) => keep[i]);
     const succeeded: number[] = [];
     let bottlesAdded = 0;
+    let mergedBottlesRun = 0;
+    // Running per-existing-wine target quantity, so several imported rows that
+    // map to the same cellar wine accumulate instead of clobbering each other.
+    const mergeTotals = new Map<string, number>();
     try {
       // Bulk add identity + quantity + price. No per-wine AI enrichment here —
       // a cellar import can be dozens of wines; the user can generate intel on
@@ -180,6 +196,19 @@ export default function ImportCellarScreen() {
       for (const i of keptIndices) {
         const w = wines[i];
         const qty = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
+        // Duplicate of an existing cellar wine → add these bottles to that
+        // listing rather than creating a new one.
+        const existing = dupFlags[i] === 'cellar' ? existingByKey.current.get(wineKey(w)) : undefined;
+        if (existing) {
+          const base = mergeTotals.get(existing.id) ?? (existing.quantity ?? 0);
+          const next = base + qty;
+          mergeTotals.set(existing.id, next);
+          await updateCellarWine(existing.id, { quantity: next });
+          succeeded.push(i);
+          bottlesAdded += qty;
+          mergedBottlesRun += qty;
+          continue;
+        }
         await addCellarWine({
           user_id: userId,
           wine_name: w.wine_name || w.producer,
@@ -213,6 +242,7 @@ export default function ImportCellarScreen() {
       }
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
       setAddedCount((prev) => prev + bottlesAdded);
+      setMergedBottles((prev) => prev + mergedBottlesRun);
       setStage('done');
     } catch (err) {
       console.warn('import-cellar: partial failure after', succeeded.length, 'of', keptIndices.length, err);
@@ -223,6 +253,7 @@ export default function ImportCellarScreen() {
         setKeep((prev) => prev.filter((_, i) => !done.has(i)));
         setDupFlags((prev) => prev.filter((_, i) => !done.has(i)));
         setAddedCount((prev) => prev + bottlesAdded);
+        setMergedBottles((prev) => prev + mergedBottlesRun);
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
       }
       showAlert({
@@ -286,7 +317,7 @@ export default function ImportCellarScreen() {
         <View style={styles.centerBlock}>
           <Text style={styles.doneTitle}>Cellar imported</Text>
           <Text style={styles.hint}>
-            {addedCount} bottle{addedCount === 1 ? '' : 's'} added. Open each wine in your Cellar List to place the wines, or add them to a Location filter.
+            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}. Open each wine in your Cellar List to place the wines, or add them to a Location filter.
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>View Cellar List</Text>
@@ -305,7 +336,7 @@ export default function ImportCellarScreen() {
               <Text style={styles.sectionLabel}>Found {wines.length} wine{wines.length === 1 ? '' : 's'} — tap to include or skip</Text>
               {dupFlags.some(Boolean) ? (
                 <Text style={styles.dedupNote}>
-                  Wines already in your cellar (or repeated in this import) are unticked to avoid duplicates — tap to add them anyway.
+                  Wines already in your cellar stay ticked — their bottles are added to your existing listing, not duplicated. Wines repeated within this import are unticked to avoid double-counting. Tap any row to change it.
                 </Text>
               ) : null}
               {wines.map((w, i) => {
@@ -327,7 +358,7 @@ export default function ImportCellarScreen() {
                       <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}  <Text style={styles.qtyFormat}>{qtyFormat}</Text></Text>
                       <View style={styles.rowMetaRow}>
                         {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
-                        {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? 'Already in cellar' : 'Repeated above'}</Text> : null}
+                        {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? `Already in cellar · +${qty} to existing` : 'Repeated above'}</Text> : null}
                       </View>
                     </View>
                   </TouchableOpacity>
