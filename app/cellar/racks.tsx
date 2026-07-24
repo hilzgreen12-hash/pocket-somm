@@ -211,7 +211,7 @@ export default function RacksScreen() {
               a permanent "+ Add" tile at the end. */}
           <Text style={styles.blockHeader}>Racks, Fridges & Bins</Text>
           <Text style={styles.blockBlurb}>
-            A Rack is a horizontal/vertical grid, not to be confused with a Fridge which is roughly the same shape but colder. Bins are diamond shaped, with half diamonds at the edges.
+            Racks and Fridges display individual bottles in horizontal/vertical grids. Bins are Diamond shaped and hold multiple bottles per slot.
           </Text>
           {racks.length > 0 && <Text style={styles.swipeHint}>Swipe to see all, and add more →</Text>}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
