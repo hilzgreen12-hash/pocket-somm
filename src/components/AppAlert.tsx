@@ -22,9 +22,40 @@ export type AppAlertOptions = {
 
 let setAlertImpl: ((opts: AppAlertOptions | null) => void) | null = null;
 
+// Any connectivity failure — whatever raw wording the underlying fetch / Supabase
+// edge-function call produced — surfaces as ONE friendly popup app-wide, instead
+// of "scan label: failed to send a request to the edge function" and the like.
+export const OFFLINE_ALERT: AppAlertOptions = {
+  title: 'No Connection',
+  body: 'Please move into a wifi zone to complete this function.',
+};
+const OFFLINE_PATTERNS = [
+  'failed to send a request to the edge function',
+  'network request failed',
+  'failed to fetch',
+  'load failed',
+  'the internet connection appears to be offline',
+  'could not connect to the server',
+  'connection appears to be offline',
+  'networkerror',
+  'timed out',
+  'timeout',
+  'econnrefused',
+  'enotfound',
+  'econnreset',
+  'econnaborted',
+];
+
+export function isOfflineText(s: string | null | undefined): boolean {
+  const t = (s ?? '').toLowerCase();
+  return !!t && OFFLINE_PATTERNS.some((p) => t.includes(p));
+}
+
 export function showAlert(options: AppAlertOptions) {
-  if (setAlertImpl) setAlertImpl(options);
-  else if (__DEV__) console.warn('AppAlertHost not mounted; alert dropped:', options.title);
+  // Collapse any raw connectivity error into the single offline popup.
+  const opts = (isOfflineText(options.body) || isOfflineText(options.title)) ? OFFLINE_ALERT : options;
+  if (setAlertImpl) setAlertImpl(opts);
+  else if (__DEV__) console.warn('AppAlertHost not mounted; alert dropped:', opts.title);
 }
 
 function isCancelStyle(s?: AppAlertButtonStyle) {
