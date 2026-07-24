@@ -1486,11 +1486,6 @@ export default function LabelResultsScreen() {
 
                     {storageKind !== 'loose' && (
                       <>
-                        <Text style={styles.caseHelp}>
-                          {storageKind !== 'mixed'
-                            ? 'A case of this one wine — its bottles are boxed together.'
-                            : 'A box of different wines. Save this one, then add the rest to the same case from the location.'}
-                        </Text>
                         <Text style={styles.modalLabel}>Case name</Text>
                         <TextInput
                           style={styles.caseInput}
@@ -1702,7 +1697,6 @@ const styles = StyleSheet.create({
   caseKindBtnOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },
   caseKindText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
   caseKindTextOn: { color: colors.gold },
-  caseHelp: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, lineHeight: 17, marginBottom: spacing.sm },
   caseInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, marginBottom: spacing.sm },
   caseSuggestRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
   caseSuggestChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 999, paddingVertical: 5, paddingHorizontal: spacing.md },
