@@ -320,11 +320,6 @@ export default function CellarStatsScreen() {
                 {purchaseTotal || '—'}
               </Text>
             </View>
-            {!purchaseTotal && (
-              <Text style={styles.valueHint}>
-                Add a purchase price to individual wines from their wine card to see this total.
-              </Text>
-            )}
             {winesNoPurchase.length > 0 ? (
               <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('purchase')} activeOpacity={0.7}>
                 <Text style={styles.missingValueText}>
@@ -518,7 +513,6 @@ const styles = StyleSheet.create({
   // Inter — muted variant of value
   valueAmountMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
   // Inter — hint
-  valueHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 17, marginTop: 4 },
   valueDivider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   calcBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
   // Cormorant — button text
