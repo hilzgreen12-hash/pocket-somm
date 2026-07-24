@@ -44,7 +44,7 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
 
 // Packaging filter — loose bottles vs. the case packaging kinds (migration 073).
 const PACKAGING_OPTIONS: { value: string; label: string }[] = [
-  { value: '', label: 'Packaging' },
+  { value: '', label: 'Packed As' },
   { value: 'loose', label: 'Loose Bottles' },
   { value: 'mixed', label: 'Mixed Cases' },
   { value: 'non_owc', label: 'Complete Cases' },
@@ -771,7 +771,7 @@ export default function StorageLocationScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, packaging ? styles.filterChipTextActive : null]}>
-              {packaging ? (PACKAGING_OPTIONS.find((o) => o.value === packaging)?.label ?? 'Packaging') : 'Packaging'} {packagingOpen ? '▴' : '▾'}
+              {packaging ? (PACKAGING_OPTIONS.find((o) => o.value === packaging)?.label ?? 'Packed As') : 'Packed As'} {packagingOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
