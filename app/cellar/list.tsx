@@ -356,11 +356,6 @@ export default function FullCellarListScreen() {
   const [locModal, setLocModal] = useState<{ open: boolean; stage: 'choose' | 'name'; wineIds: string[] }>({ open: false, stage: 'choose', wineIds: [] });
   const [locNameDraft, setLocNameDraft] = useState('');
 
-  function openAddLocationFromFilter() {
-    // From the filter dropdown: create a brand-new (initially empty) location.
-    setLocNameDraft('');
-    setLocModal({ open: true, stage: 'name', wineIds: [] });
-  }
   // "Add to Location" on the multi-select bar — adds the selected wines to a
   // cellar-wide bespoke Location (created in the Full Cellar List). Rack/fridge
   // filters are scoped to their rack and are added from within the rack itself.
@@ -657,7 +652,6 @@ export default function FullCellarListScreen() {
     for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
     for (const s of storageLocations) opts.push({ value: `sloc:${s.id}`, label: s.name });
     opts.push({ value: 'Unassigned', label: 'Not in a rack' });
-    opts.push({ value: '__add__', label: '＋ Add Location' });
     return opts;
   }, [racks, locations, storageLocations]);
 
@@ -684,7 +678,7 @@ export default function FullCellarListScreen() {
         title: 'Filter by location',
         options: locationOptions,
         selected: locationFilter,
-        onSelect: (v) => { if (v === '__add__') openAddLocationFromFilter(); else setLocationFilter(v); },
+        onSelect: (v) => setLocationFilter(v),
       };
     }
     if (field === 'country') {

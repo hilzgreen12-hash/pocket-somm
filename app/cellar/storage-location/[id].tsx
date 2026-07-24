@@ -78,6 +78,9 @@ export default function StorageLocationScreen() {
   const [packaging, setPackaging] = useState('');
   const [packagingOpen, setPackagingOpen] = useState(false);
   const [listView, setListView] = useState<'default' | 'bottles' | 'cases'>('bottles');
+  // When set, the flat list is narrowed to a single case (picked from the List
+  // dropdown, below the view-mode options). Cleared by any view-mode choice.
+  const [caseFilter, setCaseFilter] = useState('');
   const [listOpen, setListOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingImage, setEditingImage] = useState(false);
@@ -229,6 +232,7 @@ export default function StorageLocationScreen() {
       if (packaging === 'loose') { if (w.case_id) return false; }
       else if (packaging) { if (!w.case_id || caseKindById[w.case_id] !== packaging) return false; }
       if (activeFilterWineIds && !activeFilterWineIds.has(w.id)) return false;
+      if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
         const hay = [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase();
         const statusTerms = STATUS_SEARCH.find((s) => s.status === w.drinking_window_status)?.terms ?? [];
@@ -236,7 +240,7 @@ export default function StorageLocationScreen() {
       }
       return true;
     });
-  }, [wines, search, maturity, packaging, caseKindById, activeFilterWineIds]);
+  }, [wines, search, maturity, packaging, caseKindById, activeFilterWineIds, caseFilter]);
 
   // Stats bar figures — cases, loose (un-cased) bottles, and the grand total.
   const caseCount = cases.length;
@@ -757,12 +761,12 @@ export default function StorageLocationScreen() {
             filters, then + Add, mirroring the rack/fridge affordance. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
-            style={[styles.filterChip, listView !== 'bottles' && styles.filterChipActive]}
+            style={[styles.filterChip, (listView !== 'bottles' || caseFilter) && styles.filterChipActive]}
             onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, listView !== 'bottles' && styles.filterChipTextActive]}>
-              {LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List'} {listOpen ? '▴' : '▾'}
+            <Text style={[styles.filterChipText, (listView !== 'bottles' || caseFilter) && styles.filterChipTextActive]}>
+              {caseFilter ? (cases.find((c) => c.id === caseFilter)?.name ?? 'Case') : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List')} {listOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -799,10 +803,21 @@ export default function StorageLocationScreen() {
         {listOpen ? (
           <View style={styles.maturityDropdown}>
             {LIST_VIEW_OPTIONS.map((o) => {
-              const active = listView === o.value;
+              const active = listView === o.value && !caseFilter;
               return (
-                <TouchableOpacity key={o.value} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setListView(o.value); setListOpen(false); }} activeOpacity={0.7}>
+                <TouchableOpacity key={o.value} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setListView(o.value); setCaseFilter(''); setListOpen(false); }} activeOpacity={0.7}>
                   <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
+                </TouchableOpacity>
+              );
+            })}
+            {/* Individual case names — picking one narrows the flat list to that
+                case's bottles. */}
+            {cases.length > 0 ? <View style={styles.dropdownDivider} /> : null}
+            {cases.map((c) => {
+              const active = caseFilter === c.id;
+              return (
+                <TouchableOpacity key={c.id} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCaseFilter(c.id); setListView('bottles'); setListOpen(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>{c.name}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -1107,6 +1122,7 @@ const styles = StyleSheet.create({
   filterChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
   filterChipTextActive: { color: colors.gold },
   maturityDropdown: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
+  dropdownDivider: { height: 1, backgroundColor: colors.border },
   maturityOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
   maturityOptionText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text },

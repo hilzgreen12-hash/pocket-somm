@@ -34,7 +34,7 @@ import { evictCachedLabel } from '../../src/api/labelImageCache';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
-import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation } from '../../src/api/storageLocations';
+import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageLocationCases } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { MicButton } from '../../src/components/MicButton';
@@ -161,6 +161,14 @@ export default function CellarWineDetail() {
     enabled: !!session?.user.id,
   });
   const wineStorageLocation = storageLocations.find((l) => l.id === wine?.storage_location_id) ?? null;
+  // If this wine is boxed in a case within its home storage location, resolve the
+  // case so the placement line can read "Location Name - Case name".
+  const { data: storageCases = [] } = useQuery({
+    queryKey: ['storage-location-cases', wine?.storage_location_id],
+    queryFn: () => fetchStorageLocationCases(wine!.storage_location_id!),
+    enabled: !!wine?.storage_location_id && !!wine?.case_id,
+  });
+  const wineCase = wine?.case_id ? storageCases.find((c) => c.id === wine.case_id) ?? null : null;
   // The location whose membership a pending add/remove applies to.
   const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
   const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
@@ -1486,7 +1494,7 @@ export default function CellarWineDetail() {
           ))}
           {wineStorageLocation && (
             <TouchableOpacity onPress={() => router.push(`/cellar/storage-location/${wineStorageLocation.id}` as any)}>
-              <Text style={styles.statAction}>In {wineStorageLocation.name} →</Text>
+              <Text style={styles.statAction}>In {wineStorageLocation.name}{wineCase ? ` - ${wineCase.name}` : ''} →</Text>
             </TouchableOpacity>
           )}
           {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !wine?.bin_cell_id && !isArchived && !isWishlist && (
