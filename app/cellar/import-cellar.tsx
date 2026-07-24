@@ -127,6 +127,7 @@ export default function ImportCellarScreen() {
         '2.  Go to Settings → Account Management.\n\n' +
         '3.  Tap "Export Your Data".\n\n' +
         '4.  Wait for your download link, then download the file — it contains your cellar as a CSV. Come back here and upload it.',
+      note: 'It can take quite some time for your Vivino document to prep.',
       buttons: [{ text: 'Got it' }],
     });
   }
@@ -254,6 +255,7 @@ export default function ImportCellarScreen() {
               <Text style={styles.primaryBtnText}>Choose Vivino export file</Text>
             </TouchableOpacity>
             <Text style={styles.footnote}>Your ratings and tasting notes come across in the file too — importing those into your reviews is coming soon.</Text>
+            <Text style={styles.footnote}>As Vivino does not save label images you will have to update your labels in Vinster later.</Text>
           </ScrollView>
         ) : (
           <ScrollView contentContainerStyle={styles.content}>

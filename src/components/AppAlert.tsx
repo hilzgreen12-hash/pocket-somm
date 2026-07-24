@@ -14,6 +14,9 @@ export type AppAlertButton = {
 export type AppAlertOptions = {
   title: string;
   body?: string;
+  // An italicised note rendered below the body — for secondary asides (e.g.
+  // "this can take a while") that shouldn't read with the same weight as the body.
+  note?: string;
   buttons?: AppAlertButton[];
   dismissable?: boolean;
   // Show a close "✕" in the top-right of the sheet (in addition to any buttons).
@@ -97,6 +100,7 @@ export function AppAlertHost() {
           ) : null}
           {opts?.title ? <Text style={styles.title}>{opts.title}</Text> : null}
           {opts?.body ? <Text style={styles.body}>{opts.body}</Text> : null}
+          {opts?.note ? <Text style={styles.note}>{opts.note}</Text> : null}
 
           <View style={styles.primaryStack}>
             {primary.map((btn, i) => {
@@ -161,6 +165,15 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     textAlign: 'center',
     lineHeight: 22,
+    marginBottom: spacing.lg,
+  },
+  note: {
+    fontFamily: fonts.bodyItalic,
+    fontSize: 14,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginTop: -spacing.sm,
     marginBottom: spacing.lg,
   },
   primaryStack: { gap: spacing.sm },
