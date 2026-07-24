@@ -7,7 +7,8 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getRackBottleCounts } from '../../src/api/racks';
 import { getBins, getBinBottleCounts, deleteBin } from '../../src/api/bins';
-import { fetchStorageLocations, deleteStorageLocation } from '../../src/api/storageLocations';
+import { fetchStorageLocations, deleteStorageLocation, fetchStorageLocationWines } from '../../src/api/storageLocations';
+import { deleteCellarWine } from '../../src/api/cellar';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
@@ -110,11 +111,16 @@ export default function RacksScreen() {
     });
   }
 
-  // Long-press an Other Home Storage location — same affordance again.
+  // Long-press an Other Home Storage location. Two destructive choices:
+  //  • Delete Location — removes the location; its wines stay loose in the cellar.
+  //  • Delete Location & Contents — also deletes every bottle filed in it.
   function handleLongPressLocation(loc: { id: string; name: string }) {
+    const invalidate = () => {
+      qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+    };
     showAlert({
       title: loc.name,
-      body: "Permanently remove this location? Wines stay in your cellar — they're just no longer mapped to it.",
       buttons: [
         {
           text: 'Delete Location',
@@ -122,8 +128,21 @@ export default function RacksScreen() {
           onPress: async () => {
             try {
               await deleteStorageLocation(loc.id);
-              qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
-              qc.invalidateQueries({ queryKey: ['cellar'] });
+              invalidate();
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        {
+          text: 'Delete Location & Contents',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const wines = await fetchStorageLocationWines(loc.id);
+              for (const w of wines) await deleteCellarWine(w.id);
+              await deleteStorageLocation(loc.id);
+              invalidate();
             } catch (err) {
               showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
             }
