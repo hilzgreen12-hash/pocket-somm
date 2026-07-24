@@ -6,8 +6,8 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useRackStore } from '../../src/stores/rackStore';
 import { getRackBottleCounts } from '../../src/api/racks';
-import { getBins, getBinBottleCounts } from '../../src/api/bins';
-import { fetchStorageLocations } from '../../src/api/storageLocations';
+import { getBins, getBinBottleCounts, deleteBin } from '../../src/api/bins';
+import { fetchStorageLocations, deleteStorageLocation } from '../../src/api/storageLocations';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { colors, spacing } from '../../src/constants/theme';
@@ -77,6 +77,56 @@ export default function RacksScreen() {
             removeRack.mutate(rack.id, {
               onError: (err) => showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }),
             });
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Long-press a bin — same affordance as racks/fridges: a confirm sheet that
+  // frees its wines (they stay loose in the cellar) rather than deleting them.
+  function handleLongPressBin(bin: WineRack) {
+    showAlert({
+      title: bin.name,
+      body: "Permanently remove this bin? Wines stay in your cellar — they're just no longer mapped to it.",
+      buttons: [
+        {
+          text: 'Delete Bin',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteBin(bin.id);
+              qc.invalidateQueries({ queryKey: ['bins', userId] });
+              qc.invalidateQueries({ queryKey: ['bins', 'counts'] });
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Long-press an Other Home Storage location — same affordance again.
+  function handleLongPressLocation(loc: { id: string; name: string }) {
+    showAlert({
+      title: loc.name,
+      body: "Permanently remove this location? Wines stay in your cellar — they're just no longer mapped to it.",
+      buttons: [
+        {
+          text: 'Delete Location',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteStorageLocation(loc.id);
+              qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
           },
         },
         { text: 'Cancel', style: 'cancel' },
@@ -228,6 +278,8 @@ export default function RacksScreen() {
                 key={bin.id}
                 style={styles.storageCard}
                 onPress={() => router.push(`/cellar/bin/${bin.id}` as any)}
+                onLongPress={() => handleLongPressBin(bin)}
+                delayLongPress={400}
                 activeOpacity={0.85}
               >
                 <Text style={styles.storageCardType}>Bin</Text>
@@ -261,6 +313,8 @@ export default function RacksScreen() {
                 key={loc.id}
                 style={styles.storageCard}
                 onPress={() => router.push(`/cellar/storage-location/${loc.id}` as any)}
+                onLongPress={() => handleLongPressLocation(loc)}
+                delayLongPress={400}
                 activeOpacity={0.85}
               >
                 <Text style={styles.storageCardType}>Location</Text>
