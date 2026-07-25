@@ -13,6 +13,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { assignSlots, getRackSlots } from '../../src/api/racks';
+import { getBinCell } from '../../src/api/bins';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -66,8 +67,11 @@ export default function LabelConfirmScreen() {
   const { preferences } = usePreferences();
   // Rack-placement context: when the user reached here by tapping an empty rack
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
-  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots } = useRackStore();
+  const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, pendingBinCell, setPendingBinCell } = useRackStore();
   const isMultiSlot = (pendingSlots?.length ?? 0) > 1;
+  // Bin-diamond placement (context=place-bin): quantity + bottle format are
+  // collected inline on this screen so the whole add is one step.
+  const isPlaceBin = context === 'place-bin' && !!pendingBinCell;
   const { addWine, updateWine } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -87,6 +91,9 @@ export default function LabelConfirmScreen() {
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [placing, setPlacing] = useState(false);
+  // Inline bin-diamond quantity + format (place-bin context only).
+  const [binQty, setBinQty] = useState('1');
+  const [binFormat, setBinFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
 
   async function handleConfirm() {
     if (!producer.trim() || !region.trim()) {
@@ -114,6 +121,13 @@ export default function LabelConfirmScreen() {
     };
 
     setWineDetailsConfirmed(confirmed);
+
+    // Bin diamond placement: quantity + format were set inline above, so save
+    // straight into the cell — one step, no separate placement popup.
+    if (isPlaceBin) {
+      await handlePlaceBinConfirm(confirmed);
+      return;
+    }
 
     // Rack placement: arrived from an empty rack slot (context=place guards
     // against a stale pendingSlot hijacking an unrelated add). Instead of saving
@@ -262,6 +276,84 @@ export default function LabelConfirmScreen() {
     }
   }
 
+  // Save the wine straight into the bin diamond with the inline quantity +
+  // format. Merges into an existing same-wine+format entry in the cell rather
+  // than spawning a duplicate row (mirrors the old inline form).
+  async function handlePlaceBinConfirm(confirmed: WineDetailsComplete) {
+    if (!pendingBinCell) return;
+    const userId = session?.user.id;
+    if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
+    const cellId = pendingBinCell.cellId;
+    const binId = pendingBinCell.binId;
+    const qty = Math.max(1, parseInt(binQty) || 1);
+    setPlacing(true);
+    try {
+      const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+      const { wines: cellWines } = await getBinCell(cellId);
+      const existing = cellWines.find((w) =>
+        norm(w.producer) === norm(confirmed.producer) &&
+        norm(w.wine_name) === norm(confirmed.wineName ?? confirmed.producer) &&
+        (w.vintage ?? '').trim() === confirmed.vintage.trim() &&
+        (w.bottle_size_ml ?? 750) === binFormat,
+      );
+      let savedId: string;
+      if (existing) {
+        await updateWine.mutateAsync({ id: existing.id, updates: { quantity: (existing.quantity ?? 0) + qty } });
+        savedId = existing.id;
+      } else {
+        const saved = await addWine.mutateAsync({
+          user_id: userId,
+          wine_name: confirmed.wineName?.trim() || confirmed.producer,
+          producer: confirmed.producer,
+          region: confirmed.region,
+          vintage: confirmed.vintage,
+          style: confirmed.style ?? null,
+          quantity: qty,
+          storage_location: null,
+          date_received: new Date().toISOString().split('T')[0],
+          critic_score: null,
+          critic_score_note: null,
+          drinking_window_from: null,
+          drinking_window_to: null,
+          drinking_window_status: 'unknown',
+          tasting_notes: null,
+          grape_variety: null,
+          label_image_path: null,
+          user_notes: null,
+          is_wishlist: false,
+          estimated_value: null,
+          estimated_value_currency: null,
+          estimated_value_at: null,
+          estimated_value_source: null,
+          purchase_price: null,
+          purchase_price_currency: null,
+          bin_cell_id: cellId,
+          storage_location_id: null,
+          case_id: null,
+          bottle_size_ml: binFormat,
+        } as any);
+        savedId = saved.id;
+        // Attach the scanned label thumbnail when there was one (non-fatal).
+        const labelUri = useLabelStore.getState().imageUri;
+        if (labelUri) {
+          try {
+            const path = await uploadLabelImage(userId, labelUri, savedId);
+            await updateWine.mutateAsync({ id: savedId, updates: { label_image_path: path } });
+          } catch { /* placed without a thumbnail */ }
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['bin-cell', cellId] });
+      qc.invalidateQueries({ queryKey: ['bin-cells', binId] });
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      setPendingBinCell(null);
+      router.replace(`/cellar/bin/cell/${cellId}` as any);
+    } catch (err) {
+      showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
+      setPlacing(false);
+    }
+  }
+
   return (
     <>
     <KeyboardAwareScrollView
@@ -327,13 +419,28 @@ export default function LabelConfirmScreen() {
         autoCapitalize="words"
       />
 
+      {/* Bin diamond add: quantity + bottle format inline (one-step), so the
+          diamond add mirrors the rack Confirm screen plus these two fields. */}
+      {isPlaceBin ? (
+        <>
+          <Text style={[styles.label, styles.binFieldLabel]}>Bottles</Text>
+          <View style={styles.binQtyRow}>
+            <TouchableOpacity style={styles.binStep} onPress={() => setBinQty((q) => String(Math.max(1, (parseInt(q) || 1) - 1)))}><Text style={styles.binStepText}>−</Text></TouchableOpacity>
+            <TextInput style={styles.binQtyInput} value={binQty} onChangeText={(t) => setBinQty(t.replace(/[^0-9]/g, '').slice(0, 4))} keyboardType="number-pad" textAlign="center" />
+            <TouchableOpacity style={styles.binStep} onPress={() => setBinQty((q) => String((parseInt(q) || 1) + 1))}><Text style={styles.binStepText}>+</Text></TouchableOpacity>
+          </View>
+          <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
+          <BottleSizePicker value={binFormat} onChange={setBinFormat} />
+        </>
+      ) : null}
+
       <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
+        style={[styles.button, (loading || placing) && styles.buttonDisabled]}
         onPress={handleConfirm}
-        disabled={loading}
+        disabled={loading || placing}
       >
         <Text style={styles.buttonText}>
-          {loading ? 'Loading wine details…' : 'Confirm'}
+          {placing ? 'Adding…' : loading ? 'Loading wine details…' : isPlaceBin ? 'Add to Diamond' : 'Confirm'}
         </Text>
       </TouchableOpacity>
 
@@ -450,6 +557,13 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surface,
   },
+  // Bin diamond inline quantity + format — labels in gold to signal the
+  // bin-specific fields added to this shared screen.
+  binFieldLabel: { color: colors.gold },
+  binQtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  binStep: { width: 44, height: 44, borderRadius: 8, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  binStepText: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, lineHeight: 24 },
+  binQtyInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
   button: {
     borderWidth: 1,
     borderColor: '#FFFFFF',

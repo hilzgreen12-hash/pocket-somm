@@ -10,6 +10,8 @@ import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../.
 import { fetchStorageLocations } from '../../../../src/api/storageLocations';
 import { useRacks } from '../../../../src/hooks/useRacks';
 import { prepareImageBase64, scanLabel } from '../../../../src/api/label';
+import { useRackStore } from '../../../../src/stores/rackStore';
+import { useLabelStore } from '../../../../src/stores/labelStore';
 import { ensureMediaPermission } from '../../../../src/utils/mediaPermissions';
 import { BottleSizePicker, bottleSizeCl } from '../../../../src/components/BottleSizePicker';
 import { CellarWinePicker } from '../../../../src/components/CellarWinePicker';
@@ -53,6 +55,43 @@ export default function BinCellScreen() {
   });
   const cell = data?.cell;
   const wines = data?.wines ?? [];
+  const { setPendingBinCell } = useRackStore();
+  const { setImage: setLabelImage, setWineDetails } = useLabelStore();
+
+  // Route a bin-diamond add through the shared Confirm screen (context=place-bin),
+  // where the quantity + format are collected inline. `source` picks camera vs
+  // library; 'manual' opens Confirm blank.
+  function startBinAdd(source: 'camera' | 'library' | 'manual') {
+    setChooserOpen(false);
+    if (!cell || !cellId) return;
+    setPendingBinCell({ binId: cell.bin_id, cellId });
+    if (source === 'manual') { router.push('/label/confirm?context=place-bin&manual=1' as any); return; }
+    if (source === 'camera') { router.push('/label/camera?context=place-bin' as any); return; }
+    void uploadForBin();
+  }
+
+  // Library upload → scan → Confirm (mirrors the rack slot's upload path).
+  async function uploadForBin() {
+    if (!(await ensureMediaPermission('library'))) return;
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      setScanning(true);
+      try {
+        const base64 = await prepareImageBase64(res.assets[0].uri);
+        const details = await scanLabel(base64);
+        setLabelImage(res.assets[0].uri, base64);
+        setWineDetails(details);
+        router.push('/label/confirm?context=place-bin' as any);
+      } catch {
+        showAlert({ title: 'Could not read label', body: 'Enter the details by hand instead.' });
+      } finally {
+        setScanning(false);
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not open library', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   // The bin's geometry gives this cell its grid reference (D2B / HD3C).
   const { data: bins = [] } = useQuery({
@@ -123,7 +162,6 @@ export default function BinCellScreen() {
     qc.invalidateQueries({ queryKey: ['cellar'] });
   }
 
-  function openAdd() { setDraft({ ...EMPTY_DRAFT }); }
   function openEdit(w: CellarWine) {
     setDraft({
       id: w.id,
@@ -160,33 +198,6 @@ export default function BinCellScreen() {
       }
     } catch (err) {
       showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
-  // Upload a label from the library to fill the draft (mirrors handleScan).
-  async function handleUpload() {
-    if (!(await ensureMediaPermission('library'))) return;
-    try {
-      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
-      if (res.canceled || !res.assets[0]) return;
-      setScanning(true);
-      try {
-        const base64 = await prepareImageBase64(res.assets[0].uri);
-        const details = await scanLabel(base64);
-        setDraft((d) => d && ({
-          ...d,
-          producer: details.producer ?? d.producer,
-          wineName: details.wineName ?? d.wineName,
-          region: details.region ?? d.region,
-          vintage: details.vintage ?? d.vintage,
-        }));
-      } catch {
-        showAlert({ title: 'Could not read label', body: 'Enter the details by hand instead.' });
-      } finally {
-        setScanning(false);
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not open library', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -406,16 +417,16 @@ export default function BinCellScreen() {
         <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
             <Text style={styles.chooserTitle}>Add a wine to this {kindLabel.toLowerCase()}</Text>
-            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setDraft({ ...EMPTY_DRAFT }); void handleScan(); }} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('camera')} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Scan a Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setPickerOpen(true); }} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Select from Cellar List</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); setDraft({ ...EMPTY_DRAFT }); void handleUpload(); }} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('library')} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Upload Photo</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setChooserOpen(false); openAdd(); }} activeOpacity={0.8}>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('manual')} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Manual Input</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserCancel} onPress={() => setChooserOpen(false)}>
