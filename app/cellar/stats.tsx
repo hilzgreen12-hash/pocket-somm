@@ -336,7 +336,7 @@ export default function CellarStatsScreen() {
             ) : null}
 
             <View style={styles.valueRow}>
-              <Text style={styles.valueLabel}>Total Estimated Current Value</Text>
+              <Text style={styles.valueLabel}>Total Current Value</Text>
               <Text style={[styles.valueAmount, !valueTotal && styles.valueAmountMuted]}>
                 {valueTotal || '—'}
               </Text>
@@ -358,7 +358,7 @@ export default function CellarStatsScreen() {
                 {winesWithEstimate.length > 0 ? (
                   <TouchableOpacity style={styles.missingValueRow} onPress={handleCalculate} activeOpacity={0.7}>
                     <Text style={styles.missingValueText}>
-                      {lastEstimateDate ? `Last estimate: ${lastEstimateDate} · ` : ''}<Text style={styles.missingIntelLink}>Recalculate</Text>
+                      {lastEstimateDate ? `Last valuation: ${lastEstimateDate} · ` : ''}<Text style={styles.missingIntelLink}>Recalculate</Text>
                     </Text>
                   </TouchableOpacity>
                 ) : winesNotYetValued.length > 0 ? (
