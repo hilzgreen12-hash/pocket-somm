@@ -12,6 +12,7 @@ import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
+import { isoToYmd } from '../utils/reviewDate';
 import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -142,8 +143,11 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         await doSave('update', existing);
         return;
       }
-      const existingDay = existing.chosen_at ? new Date(existing.chosen_at).toISOString().slice(0, 10) : '';
-      const todayDay = new Date().toISOString().slice(0, 10);
+      // Compare LOCAL calendar days (not UTC) so the same-day vs earlier-date
+      // prompt is right for non-UTC users near midnight. isoToYmd + todayIso
+      // are both local.
+      const existingDay = isoToYmd(existing.chosen_at);
+      const todayDay = todayIso();
       if (existingDay === todayDay) {
         showAlert({
           title: 'Already in Your Reviews today',
