@@ -547,11 +547,13 @@ export default function LabelResultsScreen() {
         if (pendingCaseId) {
           await assignWineToCase(savedWineId, pendingCaseId);
         } else if (storageKind !== 'loose' && session?.user.id) {
-          // If a case of this name already exists in the location, file into it
-          // rather than spawning a second same-named case. Typing a name that
-          // matches an existing case should behave like picking its bubble.
+          // Merge into an existing case of the same name only for MIXED cases —
+          // they're the only kind another wine can join. Complete/OWC cases are
+          // single-wine, so they always create a fresh case even on a name clash.
           const wanted = caseName.trim().toLowerCase();
-          const existingCase = wanted ? locationCases.find((c) => c.name.trim().toLowerCase() === wanted) : undefined;
+          const existingCase = wanted && storageKind === 'mixed'
+            ? locationCases.find((c) => c.kind === 'mixed' && c.name.trim().toLowerCase() === wanted)
+            : undefined;
           if (existingCase) {
             await assignWineToCase(savedWineId, existingCase.id);
           } else {
@@ -907,6 +909,13 @@ export default function LabelResultsScreen() {
 
   async function handleAddToCellar() {
     if (!session?.user.id) return;
+    // A case must be named — Vinster no longer silently saves it as "Case".
+    // Skipped when filing into an already-chosen case (pendingCaseId), which
+    // carries its own name.
+    if (context === 'add-location' && storageKind !== 'loose' && !pendingCaseId && !caseName.trim()) {
+      showAlert({ title: 'Case name needed', body: 'Give this case a name before adding — e.g. "Mixed Burgundy".' });
+      return;
+    }
     // Scanning a wine to add to a home storage location, but that wine already
     // sits UNPLACED in the cellar → offer to place the existing listing here
     // (rather than duplicating it) or just bump the existing count.
@@ -1503,10 +1512,12 @@ export default function LabelResultsScreen() {
                           placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. OWC'}
                           placeholderTextColor={colors.textSubtle}
                         />
-                        {/* Quick-pick from the case names already used in this
-                            location (deduped, excluding the one being typed). */}
-                        {(() => {
-                          const names = Array.from(new Set(locationCases.map((c) => c.name.trim()).filter(Boolean)))
+                        {/* Quick-pick from existing MIXED case names in this
+                            location — only mixed cases can take another wine, so
+                            complete/OWC cases are never offered as a destination.
+                            (deduped, excluding the one being typed). */}
+                        {storageKind === 'mixed' && (() => {
+                          const names = Array.from(new Set(locationCases.filter((c) => c.kind === 'mixed').map((c) => c.name.trim()).filter(Boolean)))
                             .filter((n) => n.toLowerCase() !== caseName.trim().toLowerCase());
                           return names.length ? (
                             <View style={styles.caseSuggestRow}>
