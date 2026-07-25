@@ -87,7 +87,10 @@ export default function LabelConfirmScreen() {
   // before the wine is saved and dropped into the tapped slot (and the slots
   // that follow). No Location step — the slot already fixes where it lives.
   const [placeModalOpen, setPlaceModalOpen] = useState(false);
-  const [placeFormat, setPlaceFormat] = useState(750);
+  const [placeFormat, setPlaceFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
+  // Multi-slot rack/fridge placement collects the bottle format inline on this
+  // screen (no "Confirm Placement" popup — the slot count is already fixed).
+  const isPlaceRackMulti = !!pendingSlot && context === 'place' && isMultiSlot;
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [placing, setPlacing] = useState(false);
@@ -135,14 +138,20 @@ export default function LabelConfirmScreen() {
     // popup — the save + slot assignment happens in handlePlaceConfirm. No
     // Location step: the tapped slot already fixes where the wine lives.
     if (pendingSlot && context === 'place') {
-      // Seed the format from a large-format slot's configured size, else from
-      // anything the scanner read, else a standard 75cl bottle.
+      // Multi-slot: the format was chosen inline on this screen and the slot
+      // count is already fixed — place straight in, no Confirm Placement popup.
+      if (isMultiSlot) {
+        await handlePlaceConfirm();
+        return;
+      }
+      // Single slot still needs bottle count + fill direction → popup. Seed the
+      // format from a large-format slot's size, else what the scanner read.
       setPlaceFormat(
         pendingSlot.row === -1
           ? (pendingSlot.largeFormatBottleSizeMl ?? confirmed.bottleSizeMl ?? 1500)
           : (confirmed.bottleSizeMl ?? 750),
       );
-      setPlaceCount(isMultiSlot ? String(pendingSlots!.length) : '1');
+      setPlaceCount('1');
       setPlaceOrientation('Vertical');
       setPlaceModalOpen(true);
       return;
@@ -197,7 +206,7 @@ export default function LabelConfirmScreen() {
     if (!pendingSlot) return;
     const userId = session?.user.id;
     if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
-    const requested = Math.max(1, parseInt(placeCount) || 1);
+    const requested = isMultiSlot ? (pendingSlots?.length ?? 1) : Math.max(1, parseInt(placeCount) || 1);
     setPlacing(true);
     try {
       const existing = await getRackSlots(pendingSlot.rackId);
@@ -431,6 +440,15 @@ export default function LabelConfirmScreen() {
           </View>
           <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
           <BottleSizePicker value={binFormat} onChange={setBinFormat} />
+        </>
+      ) : null}
+
+      {/* Multi-slot rack/fridge placement: bottle format inline so there's no
+          separate Confirm Placement popup (the slot count is already fixed). */}
+      {isPlaceRackMulti ? (
+        <>
+          <Text style={[styles.label, styles.binFieldLabel]}>Bottle format</Text>
+          <BottleSizePicker value={placeFormat} onChange={setPlaceFormat} />
         </>
       ) : null}
 
