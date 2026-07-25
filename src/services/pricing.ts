@@ -118,5 +118,8 @@ export async function generateWineIntel(
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
     grapeVariety: intel.grapeVariety ?? pricing.grape ?? null,
     valueSource: useWs ? 'wine-searcher' : 'vinster',
+    // Verified = Wine-Searcher found a real record. When false, the score/value
+    // are Vinster estimates (labelled as such) and disambiguation is offered.
+    verified: wsMatched,
   };
 }

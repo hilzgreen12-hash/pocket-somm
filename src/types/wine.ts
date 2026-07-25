@@ -129,6 +129,11 @@ export interface WineIntelligence {
   // 'wine-searcher' = real market average (in the user's currency), 'vinster' =
   // Claude estimate. Set by generateWineIntel; persisted to estimated_value_source.
   valueSource?: 'wine-searcher' | 'vinster' | null;
+  // True when Wine-Searcher found a real record for this wine. When false the
+  // critic score / value are Vinster (Claude) estimates, not verified against a
+  // real listing — the card labels them "Estimated by Vinster" and the weak-
+  // intel disambiguation ("which wine is this?") is offered.
+  verified?: boolean;
 }
 
 export interface Recipe {

@@ -124,8 +124,10 @@ export default function LabelResultsScreen() {
   useEffect(() => {
     if (candidatesTriedRef.current) return;
     if (!isIntelOnlyFlow || !intelligence || !wineDetailsConfirmed) return;
-    const weak = intelligence.criticScore == null && intelligence.estimatedValue == null;
-    if (!weak) return;
+    // Offer disambiguation whenever Wine-Searcher couldn't verify the wine — the
+    // score/value are then Vinster estimates, and the label reading may be off
+    // (a missed cuvée). A verified real record means no need to ask.
+    if (intelligence.verified) return;
     candidatesTriedRef.current = true;
     (async () => {
       try {
@@ -1184,6 +1186,18 @@ export default function LabelResultsScreen() {
               <Text style={[styles.statValue, intel.criticScore == null && styles.statValueMuted]}>
                 {intel.criticScore != null ? intel.criticScore : '—'}
               </Text>
+              {intel.verified === false && (intel.criticScore != null || intel.estimatedValue != null) ? (
+                <TouchableOpacity
+                  onPress={() => showAlert({
+                    title: 'Estimated by Vinster',
+                    body: "Vinster couldn't find this exact wine in Wine-Searcher's live database, so this score and value are Vinster's own estimates — based on the producer, region, style and vintage — not verified against a real listing. Check the wine name is complete (a missed cuvée is the usual cause), or pick the exact bottling if Vinster asked which wine this is.",
+                  })}
+                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.estimatedByLink}>Estimated by Vinster</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
             <View style={styles.statCell}>
               <Text style={styles.statLabel}>Estimated Value</Text>
@@ -1743,6 +1757,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
   statSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  estimatedByLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: 3 },
   estimatedValueGold: { color: colors.gold },
   // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
   deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
