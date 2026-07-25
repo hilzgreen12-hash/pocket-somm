@@ -186,6 +186,10 @@ export interface CellarWine {
   // Wine colour / style (red, white, rosé…), migration 026. Nullable.
   style: string | null;
   label_image_path: string | null;
+  // Migration 076. True when label_image_path was pulled from the open web via
+  // "Find label online" rather than the user's own photo — kept private
+  // (excluded from shareable/community cards) as it's third-party imagery.
+  label_image_fetched?: boolean;
   // Migration 064. The home-storage location (non-grid, e.g. "the shed") this
   // wine physically lives in, if any. Distinct from rack placement and from the
   // Cellar List "Locations" filter. Optional (nullable column, DB-defaulted) so

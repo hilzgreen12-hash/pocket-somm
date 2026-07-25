@@ -1,4 +1,5 @@
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
+import { File, Paths } from 'expo-file-system';
 import { supabase } from './supabase';
 import { primeCachedLabel } from './labelImageCache';
 
@@ -65,6 +66,17 @@ export async function uploadLabelImage(userId: string, localUri: string, wineId:
   // the image instantly (and a retake overwrites the stale local copy).
   primeCachedLabel(path, bytes);
   return path;
+}
+
+// Download a web image (from "Find label online") to a local file, then run it
+// through the same resize/compress/upload pipeline as a user photo. Returns the
+// stored path to persist in cellar_wines.label_image_path. Native fetch/download
+// has no CORS restriction, so cross-origin image URLs work here.
+export async function uploadLabelImageFromUrl(userId: string, imageUrl: string, wineId: string): Promise<string> {
+  const dest = new File(Paths.cache, `fetched-label-${wineId}.img`);
+  try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
+  const file = await File.downloadFileAsync(imageUrl, dest);
+  return uploadLabelImage(userId, file.uri, wineId);
 }
 
 // Upload a home-storage-location's portrait photo to

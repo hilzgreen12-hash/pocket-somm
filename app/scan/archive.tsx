@@ -134,7 +134,9 @@ export default function MyLabelsScreen() {
   }, [labels, dateSort, favOnly]);
 
   // Cellar wines that have a label photo — the pool for "Select from Cellar".
-  const cellarWithPhotos = useMemo(() => cellarWines.filter((w) => w.label_image_path), [cellarWines]);
+  // Web-fetched labels are excluded: they're third-party imagery kept private,
+  // so they never reach the shareable Label Library.
+  const cellarWithPhotos = useMemo(() => cellarWines.filter((w) => w.label_image_path && !w.label_image_fetched), [cellarWines]);
 
   async function toggleFav(label: LibraryLabel) {
     try {

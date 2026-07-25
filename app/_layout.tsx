@@ -168,6 +168,7 @@ export default function RootLayout() {
             <Stack.Screen name="label/camera" />
             <Stack.Screen name="label/confirm" />
             <Stack.Screen name="label/results" />
+            <Stack.Screen name="label/find-label" />
             <Stack.Screen name="chef/camera" />
             <Stack.Screen name="chef/confirm" />
             <Stack.Screen name="chef/review-requirements" />

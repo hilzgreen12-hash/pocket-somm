@@ -25,6 +25,24 @@ export async function scanLabel(base64Image: string): Promise<WineDetails> {
   return data;
 }
 
+export interface LabelImageCandidate {
+  url: string;
+  thumbnail: string;
+  source: string;
+  width: number | null;
+  height: number | null;
+}
+
+// Find candidate bottle-label images on the open web for a wine with no photo.
+// Producer + name only (vintage deliberately ignored — a close vintage is fine).
+export async function searchLabelImages(input: { producer?: string | null; wineName?: string | null }): Promise<LabelImageCandidate[]> {
+  const data = await invokeFunction('label-image-search', {
+    producer: input.producer ?? '',
+    wineName: input.wineName ?? '',
+  }) as { images?: LabelImageCandidate[] };
+  return data.images ?? [];
+}
+
 export async function getWineIntelligence(
   wine: WineDetailsComplete,
   currency: string = 'GBP',
