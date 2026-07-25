@@ -401,10 +401,12 @@ export default function CellarStatsScreen() {
                     disabled={c.count === 0}
                     activeOpacity={0.7}
                   >
-                    <Text style={styles.breakdownLabel}>{c.label}</Text>
+                    <View style={styles.conditionLabelWrap}>
+                      <Text style={styles.conditionLabelText}>{c.label}</Text>
+                      <Text style={[styles.conditionChevron, c.count === 0 && { opacity: 0.25 }]}>{expanded ? '⌃' : '⌄'}</Text>
+                    </View>
                     <Text style={styles.breakdownCount}>{c.count}</Text>
                     <Text style={styles.breakdownPct}>{pct(c.count, totalBottles)}</Text>
-                    <Text style={[styles.conditionChevron, c.count === 0 && { opacity: 0.25 }]}>{expanded ? '⌃' : '⌄'}</Text>
                   </TouchableOpacity>
                   {expanded ? (
                     <View style={styles.conditionWines}>
@@ -537,7 +539,11 @@ const styles = StyleSheet.create({
   breakdownCount: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, width: 50, textAlign: 'right' },
   // Inter — percentage value
   breakdownPct: { fontFamily: fonts.bodyBold, fontSize: 15, color: colors.gold, width: 60, textAlign: 'right' },
-  conditionChevron: { fontSize: 15, color: colors.gold, width: 20, textAlign: 'right', marginLeft: spacing.sm },
+  // Label + chevron grouped on the left, so the chevron reads as "Too Young ⌄"
+  // rather than sitting at the far right next to the percentage.
+  conditionLabelWrap: { flex: 1, flexDirection: 'row', alignItems: 'center' },
+  conditionLabelText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  conditionChevron: { fontSize: 15, color: colors.gold, marginLeft: spacing.xs },
   conditionWines: { paddingLeft: 18, paddingBottom: spacing.sm },
   conditionWineRow: { paddingVertical: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.border },
   conditionWineName: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text },
