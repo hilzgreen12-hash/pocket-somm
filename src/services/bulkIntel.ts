@@ -4,11 +4,14 @@ import type { CellarWine } from '../types/wine';
 
 const CONCURRENCY = 3;
 
-// A cellar wine is "missing intel" when Vinster has never valued it — the
-// valuation stamp (estimated_value_at) is only written once intel has run, so
-// its absence is the reliable "never downloaded" signal.
+// A cellar wine is "missing intel" when it has never been valued (no
+// estimated_value_at stamp) OR it carries no critic score. The score check
+// matters because some wines were valued without a critic score landing (an
+// older run, or a valuation-only path), so they'd show no score on the Full
+// Cellar List yet never get flagged for an update. updateCellarIntelBatch
+// writes the critic score, so "Update all" fills these in.
 export function isMissingIntel(w: CellarWine): boolean {
-  return !w.estimated_value_at;
+  return !w.estimated_value_at || w.critic_score == null;
 }
 
 // Bulk-refresh critic score + market value (pricing) for a set of cellar wines.
