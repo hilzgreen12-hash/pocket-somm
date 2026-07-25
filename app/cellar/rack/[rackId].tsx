@@ -148,6 +148,10 @@ export default function RackGridScreen() {
   // slots, then place the SAME wine into all of them. Keys are "row,col".
   const [multiSlots, setMultiSlots] = useState<Set<string>>(new Set());
   const multiSelectMode = multiSlots.size > 0;
+  // "Add More Bottles" of an already-placed wine: enter a slot-select mode
+  // (bottom bar) — short-press empty slots, one bottle each, then Save. No
+  // "how many?" popup, no orientation.
+  const [addMoreWine, setAddMoreWine] = useState<{ wineId: string; wineName: string } | null>(null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
   // "Add a Lineup" setup: pick the start slot + orientation before scanning.
@@ -559,14 +563,42 @@ export default function RackGridScreen() {
     setPendingSlots(null);
   }
 
+  // Save for "Add More Bottles": drop one bottle of the chosen wine into each
+  // selected empty slot and bump the wine's quantity to match.
+  async function placeMoreIntoSelected() {
+    if (!addMoreWine || !rack || multiSlots.size === 0) return;
+    const slots = Array.from(multiSlots)
+      .map((k) => { const [r, c] = k.split(',').map(Number); return { row: r, col: c }; });
+    try {
+      await assignSlots(rackId, slots, addMoreWine.wineId);
+      const wine = wines.find((w) => w.id === addMoreWine.wineId);
+      if (wine) await updateWine.mutateAsync({ id: wine.id, updates: { quantity: (wine.quantity ?? 0) + slots.length } });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      const n = slots.length;
+      setSavedMsg(n === 1 ? 'Saved to rack & Cellar List' : `${n} bottles saved to rack & Cellar List`);
+    } catch (err) {
+      showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setAddMoreWine(null);
+      setMultiSlots(new Set());
+    }
+  }
+
+  function cancelAddMore() {
+    setAddMoreWine(null);
+    setMultiSlots(new Set());
+  }
+
   function openSlot(row: number, col: number) {
     // `rack` is racks.find(...) so it is Rack | undefined, and the empty-slot
     // branch below dereferences rack.rows/.cols. There is no render-level
     // guard, so a stale link to a deleted rack would throw here.
     if (!rack) return;
-    // Multi-select in progress: taps toggle empty slots in/out of the set
-    // rather than opening or navigating.
-    if (multiSelectMode) { toggleMultiSlot(row, col); return; }
+    // Multi-select in progress (new wine OR "add more bottles"): taps toggle
+    // empty slots in/out of the set rather than opening or navigating.
+    if (multiSelectMode || addMoreWine) { toggleMultiSlot(row, col); return; }
     // Lineup setup: the user is choosing the starting slot for "Add a Lineup".
     // Only an empty slot can be the start; record it + the orientation, then go
     // to scan/upload — which places the whole lineup from here.
@@ -860,11 +892,10 @@ export default function RackGridScreen() {
         // how many), which bumps the wine's quantity to match.
         text: 'Add More Bottles',
         onPress: () => {
-          // Ask how many up front (one pop-up); the tap that follows places
-          // them straight away — no second modal.
-          setPlaceCount('1');
-          setPlaceOrientation('Vertical');
-          setAddMoreUpfront({ wineId, wineName: wine.wine_name });
+          // Enter slot-select mode: short-press empty slots to add one bottle
+          // each, running total, then Save. No "how many?" popup.
+          setAddMoreWine({ wineId, wineName: wine.wine_name });
+          setMultiSlots(new Set());
         },
       },
       {
@@ -1632,7 +1663,7 @@ export default function RackGridScreen() {
 
       {/* Multi-slot selection bar — floats above the grid while the user is
           hand-picking a set of empty slots to fill with one wine. */}
-      {multiSelectMode ? (
+      {multiSelectMode && !addMoreWine ? (
         <View style={styles.multiBar} pointerEvents="box-none">
           <View style={styles.multiBarInner}>
             <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
@@ -1643,6 +1674,25 @@ export default function RackGridScreen() {
               </TouchableOpacity>
               <TouchableOpacity style={styles.multiBarPlace} onPress={placeIntoSelected} activeOpacity={0.8}>
                 <Text style={styles.multiBarPlaceText}>Place a wine →</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : null}
+
+      {/* Add More Bottles bar — short-press empty slots to add one bottle each
+          of the chosen wine, running total, then Save. */}
+      {addMoreWine ? (
+        <View style={styles.multiBar} pointerEvents="box-none">
+          <View style={styles.multiBarInner}>
+            <Text style={styles.multiBarHeader} numberOfLines={1}>Add more {addMoreWine.wineName}</Text>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'bottle' : 'bottles'} · short press the empty slots to fill</Text>
+            <View style={styles.multiBarBtns}>
+              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelAddMore} activeOpacity={0.8}>
+                <Text style={styles.multiBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.multiBarPlace, multiSlots.size === 0 && { opacity: 0.4 }]} onPress={placeMoreIntoSelected} disabled={multiSlots.size === 0} activeOpacity={0.8}>
+                <Text style={styles.multiBarPlaceText}>Save</Text>
               </TouchableOpacity>
             </View>
           </View>
