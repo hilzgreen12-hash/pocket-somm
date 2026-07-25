@@ -416,29 +416,49 @@ export default function BinDetailScreen() {
           <View style={styles.canvasWrap}>
             <View style={styles.canvas} onLayout={(e) => setVpw(e.nativeEvent.layout.width)}>
               {W > 0 && H > 0 ? (
-                <Pressable
-                  style={[styles.frame, { left: originLeft, top: originTop, width: W, height: H }]}
-                  onPress={(e) => onTapFrame(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-                  onLongPress={(e) => onLongPressFrame(e.nativeEvent.locationX, e.nativeEvent.locationY)}
-                  delayLongPress={400}
-                >
-                  {laid.map((p) => {
-                    const hot = highlightedCellIds.has(p.cell.id);
-                    const dim = highlightedCellIds.size > 0 && !hot;
-                    return (
-                      <View key={p.cell.id} pointerEvents="none" style={{ opacity: dim ? 0.3 : 1 }}>
+                <>
+                  <Pressable
+                    style={[styles.frame, { left: originLeft, top: originTop, width: W, height: H }]}
+                    onPress={(e) => onTapFrame(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+                    onLongPress={(e) => onLongPressFrame(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+                    delayLongPress={400}
+                  >
+                    {laid.map((p) => {
+                      const hot = highlightedCellIds.has(p.cell.id);
+                      const dim = highlightedCellIds.size > 0 && !hot;
+                      return (
                         <View
-                          style={{ position: 'absolute', left: p.x * d - sd / 2, top: p.y * d - sd / 2, width: sd, height: sd, transform: [{ rotate: '45deg' }], borderWidth: hot ? 2.5 : 1.25, borderColor: hot ? '#fff2cc' : colors.gold, backgroundColor: hot ? colors.gold : fillColor(p.cell) }}
+                          key={p.cell.id}
+                          pointerEvents="none"
+                          style={{ position: 'absolute', left: p.x * d - sd / 2, top: p.y * d - sd / 2, width: sd, height: sd, opacity: dim ? 0.3 : 1, transform: [{ rotate: '45deg' }], borderWidth: hot ? 2.5 : 1.25, borderColor: hot ? '#fff2cc' : colors.gold, backgroundColor: hot ? colors.gold : fillColor(p.cell) }}
                         />
-                        {p.label ? (
-                          <Text style={{ position: 'absolute', left: p.x * d - 18, top: p.y * d - 6, width: 36, textAlign: 'center', fontSize: 8.5, fontFamily: fonts.bodySemibold, color: hot || (p.cell.bottleCount ?? 0) >= p.cell.capacity ? colors.background : colors.textMuted }}>
-                            {p.label}
-                          </Text>
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                </Pressable>
+                      );
+                    })}
+                  </Pressable>
+                  {/* Grid-reference labels rendered as a separate, NON-clipped
+                      overlay above the frame — so the D/HD refs on the edge
+                      half-diamonds (which the frame's overflow:hidden would clip)
+                      stay fully legible. Edge labels are nudged toward the frame
+                      interior so they sit on the visible part of each cell. */}
+                  <View pointerEvents="none" style={{ position: 'absolute', left: originLeft, top: originTop, width: W, height: H }}>
+                    {laid.map((p) => {
+                      if (!p.label) return null;
+                      const EDGE = 1e-6;
+                      const nx = p.x <= EDGE ? 1 : p.x >= across - EDGE ? -1 : 0;
+                      const ny = p.y <= EDGE ? 1 : p.y >= down - EDGE ? -1 : 0;
+                      const nudge = d * 0.28;
+                      const dim = highlightedCellIds.size > 0 && !highlightedCellIds.has(p.cell.id);
+                      return (
+                        <Text
+                          key={`lbl-${p.cell.id}`}
+                          style={{ position: 'absolute', left: p.x * d - 20 + nx * nudge, top: p.y * d - 7 + ny * nudge, width: 40, textAlign: 'center', fontSize: 10, fontFamily: fonts.bodySemibold, color: '#FFFFFF', opacity: dim ? 0.3 : 1, textShadowColor: 'rgba(0,0,0,0.9)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2.5 }}
+                        >
+                          {p.label}
+                        </Text>
+                      );
+                    })}
+                  </View>
+                </>
               ) : null}
             </View>
           </View>
