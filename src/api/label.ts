@@ -25,6 +25,24 @@ export async function scanLabel(base64Image: string): Promise<WineDetails> {
   return data;
 }
 
+export interface WineCandidate {
+  wineName: string;
+  region: string | null;
+  style: string | null;
+}
+
+// Ask Claude for the real, distinct wines a producer makes that could match a
+// weakly-identified scan — used to let the user confirm the exact bottling.
+export async function fetchWineCandidates(input: { producer?: string | null; region?: string | null; wineName?: string | null; vintage?: string | null }): Promise<WineCandidate[]> {
+  const data = await invokeFunction('wine-candidates', {
+    producer: input.producer ?? '',
+    region: input.region ?? '',
+    wineName: input.wineName ?? '',
+    vintage: input.vintage ?? '',
+  }) as { candidates?: WineCandidate[] };
+  return data.candidates ?? [];
+}
+
 export interface LabelImageCandidate {
   url: string;
   thumbnail: string;
