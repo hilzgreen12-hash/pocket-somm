@@ -82,17 +82,18 @@ export default function LabelConfirmScreen() {
   const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
   const [style, setStyle] = useState(wineDetails?.style ?? '');
   const [loading, setLoading] = useState(false);
-  // Rack/fridge single-slot placement confirm popup: after Confirm Wine Details
-  // the user sets the bottle format, how many bottles, and the fill direction
-  // before the wine is saved and dropped into the tapped slot (and the slots
-  // that follow). No Location step — the slot already fixes where it lives.
-  const [placeModalOpen, setPlaceModalOpen] = useState(false);
-  const [placeFormat, setPlaceFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
-  // Multi-slot rack/fridge placement collects the bottle format inline on this
-  // screen (no "Confirm Placement" popup — the slot count is already fixed).
-  const isPlaceRackMulti = !!pendingSlot && context === 'place' && isMultiSlot;
-  const [placeCount, setPlaceCount] = useState('1');
-  const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
+  // Rack/fridge slot placement (context=place). The ONLY extra input is the
+  // bottle format, collected inline on this Confirm screen — no popup, no
+  // "how many bottles", no fill direction. A short tap drops ONE bottle in the
+  // tapped slot; multiples come from long-hold multi-select (which fills exactly
+  // the chosen slots). Orientation is a lineup-only concern now.
+  const isPlaceRack = !!pendingSlot && context === 'place';
+  const [placeFormat, setPlaceFormat] = useState<number>(() =>
+    isPlaceRack && pendingSlot!.row === -1
+      ? (pendingSlot!.largeFormatBottleSizeMl ?? wineDetails?.bottleSizeMl ?? 1500)
+      : (wineDetails?.bottleSizeMl ?? 750),
+  );
+  const placeOrientation: 'Vertical' | 'Horizontal' = 'Vertical';
   const [placing, setPlacing] = useState(false);
   // Inline bin-diamond quantity + format (place-bin context only).
   const [binQty, setBinQty] = useState('1');
@@ -138,22 +139,9 @@ export default function LabelConfirmScreen() {
     // popup — the save + slot assignment happens in handlePlaceConfirm. No
     // Location step: the tapped slot already fixes where the wine lives.
     if (pendingSlot && context === 'place') {
-      // Multi-slot: the format was chosen inline on this screen and the slot
-      // count is already fixed — place straight in, no Confirm Placement popup.
-      if (isMultiSlot) {
-        await handlePlaceConfirm();
-        return;
-      }
-      // Single slot still needs bottle count + fill direction → popup. Seed the
-      // format from a large-format slot's size, else what the scanner read.
-      setPlaceFormat(
-        pendingSlot.row === -1
-          ? (pendingSlot.largeFormatBottleSizeMl ?? confirmed.bottleSizeMl ?? 1500)
-          : (confirmed.bottleSizeMl ?? 750),
-      );
-      setPlaceCount('1');
-      setPlaceOrientation('Vertical');
-      setPlaceModalOpen(true);
+      // Bottle format was set inline above — place straight in. Short tap = one
+      // bottle in the tapped slot; multi-select fills the chosen slots. No popup.
+      await handlePlaceConfirm();
       return;
     }
 
@@ -206,7 +194,8 @@ export default function LabelConfirmScreen() {
     if (!pendingSlot) return;
     const userId = session?.user.id;
     if (!userId) { showAlert({ title: 'Sign in required', body: 'Please sign in and try again.' }); return; }
-    const requested = isMultiSlot ? (pendingSlots?.length ?? 1) : Math.max(1, parseInt(placeCount) || 1);
+    // Short tap = exactly one bottle; multi-select fills the hand-picked slots.
+    const requested = isMultiSlot ? (pendingSlots?.length ?? 1) : 1;
     setPlacing(true);
     try {
       const existing = await getRackSlots(pendingSlot.rackId);
@@ -267,7 +256,6 @@ export default function LabelConfirmScreen() {
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setPendingSlot(null);
       setPendingSlots(null);
-      setPlaceModalOpen(false);
       if (free.length < requested) {
         showAlert({
           title: 'Placed what fit',
@@ -443,9 +431,9 @@ export default function LabelConfirmScreen() {
         </>
       ) : null}
 
-      {/* Multi-slot rack/fridge placement: bottle format inline so there's no
-          separate Confirm Placement popup (the slot count is already fixed). */}
-      {isPlaceRackMulti ? (
+      {/* Rack/fridge placement: bottle format is the only extra input — no
+          popup, no bottle count, no fill direction. */}
+      {isPlaceRack ? (
         <>
           <Text style={[styles.label, styles.binFieldLabel]}>Bottle format</Text>
           <BottleSizePicker value={placeFormat} onChange={setPlaceFormat} />
@@ -476,62 +464,6 @@ export default function LabelConfirmScreen() {
         </TouchableOpacity>
       )}
     </KeyboardAwareScrollView>
-
-    {/* Placement confirm — format, bottle count and fill direction for a single
-        rack/fridge slot add. No Location: the chosen slot fixes that already. */}
-    <Modal visible={placeModalOpen} transparent animationType="fade" onRequestClose={() => !placing && setPlaceModalOpen(false)}>
-      <View style={styles.placeOverlay}>
-        <View style={styles.placeSheet}>
-          <Text style={styles.placeTitle}>Confirm placement</Text>
-          <Text style={styles.label}>Bottle format</Text>
-          <BottleSizePicker value={placeFormat} onChange={setPlaceFormat} />
-          {isMultiSlot ? (
-            // Multi-slot: the count and direction are already fixed by the
-            // slots the user hand-picked — just confirm the one wine goes in all.
-            <Text style={[styles.placeNote, { marginTop: spacing.md }]}>
-              Placing this wine in the {pendingSlots!.length} slots you selected.
-            </Text>
-          ) : (
-            <>
-              <Text style={[styles.label, { marginTop: spacing.md }]}>Number of bottles</Text>
-              <TextInput
-                style={styles.input}
-                value={placeCount}
-                onChangeText={setPlaceCount}
-                keyboardType="number-pad"
-                placeholder="1"
-                placeholderTextColor={colors.textMuted}
-              />
-              <Text style={styles.label}>Fill direction</Text>
-              <View style={styles.orientRow}>
-                <TouchableOpacity
-                  style={[styles.orientBtn, placeOrientation === 'Vertical' && styles.orientBtnOn]}
-                  onPress={() => setPlaceOrientation('Vertical')}
-                >
-                  <Text style={[styles.orientText, placeOrientation === 'Vertical' && styles.orientTextOn]}>Vertical ↓</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.orientBtn, placeOrientation === 'Horizontal' && styles.orientBtnOn]}
-                  onPress={() => setPlaceOrientation('Horizontal')}
-                >
-                  <Text style={[styles.orientText, placeOrientation === 'Horizontal' && styles.orientTextOn]}>Horizontal →</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
-          <TouchableOpacity
-            style={[styles.button, placing && styles.buttonDisabled]}
-            onPress={handlePlaceConfirm}
-            disabled={placing}
-          >
-            <Text style={styles.buttonText}>{placing ? 'Adding…' : 'Add Wine'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.backButton} onPress={() => !placing && setPlaceModalOpen(false)} disabled={placing}>
-            <Text style={styles.backText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </View>
-    </Modal>
     </>
   );
 }
