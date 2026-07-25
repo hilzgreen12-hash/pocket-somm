@@ -403,15 +403,13 @@ export default function MyLabelsScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Label Scan Library</Text>
-        <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={{ width: 28 }} />
       </View>
 
       {labels.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No labels yet</Text>
-          <Text style={styles.emptyBody}>Scan a wine label — or tap + Add — and it's saved here, date and location stamped.</Text>
+          <Text style={styles.emptyBody}>Scan a wine label and it's saved here, date and location stamped.</Text>
         </View>
       ) : (
         <>
