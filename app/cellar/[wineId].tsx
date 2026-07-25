@@ -313,10 +313,11 @@ export default function CellarWineDetail() {
     };
     showAlert({
       title: wine.label_image_path ? 'Change label photo' : 'Add a label photo',
-      body: 'Take a photo of the bottle label, or choose one from your library.',
+      body: 'Take a photo of the bottle label, choose one from your library, or let Vinster find one online.',
       buttons: [
         { text: 'Take Photo', onPress: () => pick(true) },
         { text: 'Choose from Library', onPress: () => pick(false) },
+        { text: 'Find Label Online', onPress: () => router.push(`/label/find-label?wineId=${wine.id}&producer=${encodeURIComponent(wine.producer ?? '')}&wineName=${encodeURIComponent(wine.wine_name ?? '')}` as any) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
