@@ -44,7 +44,7 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 
 2. region: The wine region, appellation, or country of origin (e.g. "Margaux, Bordeaux", "Swartland, South Africa").
 
-3. wineName: The specific cuvée, vineyard, or bottling name — what distinguishes this bottle from OTHER bottles by the same producer (e.g. "Schist", "Grange", "La Tâche", "Le Montrachet"). This is often a single word, a place name, or a named blend. Set to null only when the bottle has no specific cuvée name and is sold simply under the producer's name.
+3. wineName: The specific cuvée, vineyard, or bottling name — what distinguishes this bottle from OTHER bottles by the same producer (e.g. "Schist", "Grange", "La Tâche", "Le Montrachet"). Capture the COMPLETE cuvée name, including any range/series word AND the specific bottling within it — do NOT drop part of a multi-word name. For example a "Gaston Brochet Assemblage Tome IV" must read "Assemblage Tome IV" (the range "Assemblage" plus the bottling "Tome IV"), never just "Assemblage". Set to null only when the bottle has no specific cuvée name and is sold simply under the producer's name.
 
    DISAMBIGUATION RULE: if you see two prominent names on the label, the producer is the maker's brand (often appears in a signature, logo, or as the legal/contact name) and the wine name is the specific cuvée label (often a single word or a vineyard/blend name). Do NOT swap them. If unsure, prefer the more well-known/recognisable name as the producer.
 
