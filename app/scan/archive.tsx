@@ -212,9 +212,7 @@ export default function MyLabelsScreen() {
       body: formatStamp(label),
       buttons: [
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
-        { text: 'Add/Edit/View Review', onPress: () => goToReview(existingId, label) },
-        { text: 'Add to Full Cellar List', onPress: () => void addLabelToCellar(label) },
-        { text: 'Share Thumbnail', onPress: () => { setShareNote(''); setShareLabel(label); } },
+        { text: 'Your Review', onPress: () => goToReview(existingId, label) },
         { text: 'Delete from Library', style: 'destructive', onPress: () => confirmRemove(label, existingId) },
         { text: 'Cancel', style: 'cancel' },
       ],
