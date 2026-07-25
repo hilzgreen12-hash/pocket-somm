@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
@@ -23,8 +23,8 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPricing } from '../../src/services/pricing';
-import { getWineIntelligence } from '../../src/api/label';
+import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
+import { getWineIntelligence, fetchWineCandidates, type WineCandidate } from '../../src/api/label';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -99,7 +99,7 @@ export default function LabelResultsScreen() {
   // no-intel adds — 'add-location' must be included or the guard below dead-ends
   // on "No results available" and the wine never saves (regression from 7e9deec).
   const isAddFlow = context === 'add' || context === 'add-location';
-  const { wineDetailsConfirmed, intelligence, imageUri } = useLabelStore();
+  const { wineDetailsConfirmed, intelligence, imageUri, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
@@ -114,6 +114,54 @@ export default function LabelResultsScreen() {
   // When Generate Wine Intel comes back empty (no score, no value) it's almost
   // always a misspelt / wrongly-ordered name — prompt the user to check it.
   const [noIntelDismissed, setNoIntelDismissed] = useState(false);
+  // Weak-intel disambiguation: when intel comes back empty, auto-fetch the
+  // producer's plausible bottlings so the user can confirm the exact wine.
+  const [candidates, setCandidates] = useState<WineCandidate[]>([]);
+  const [candidatesOpen, setCandidatesOpen] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
+  const candidatesTriedRef = useRef(false);
+
+  useEffect(() => {
+    if (candidatesTriedRef.current) return;
+    if (!isIntelOnlyFlow || !intelligence || !wineDetailsConfirmed) return;
+    const weak = intelligence.criticScore == null && intelligence.estimatedValue == null;
+    if (!weak) return;
+    candidatesTriedRef.current = true;
+    (async () => {
+      try {
+        const list = await fetchWineCandidates({
+          producer: wineDetailsConfirmed.producer,
+          region: wineDetailsConfirmed.region,
+          wineName: wineDetailsConfirmed.wineName,
+          vintage: wineDetailsConfirmed.vintage,
+        });
+        if (list.length > 0) { setCandidates(list); setCandidatesOpen(true); }
+      } catch { /* silent — NoIntelPrompt stays as the fallback */ }
+    })();
+  }, [intelligence, isIntelOnlyFlow, wineDetailsConfirmed]);
+
+  // Confirm a candidate → update the identity and regenerate intel for it.
+  async function pickCandidate(c: WineCandidate) {
+    if (!wineDetailsConfirmed || regenerating) return;
+    const updated = {
+      ...wineDetailsConfirmed,
+      wineName: c.wineName,
+      region: c.region ?? wineDetailsConfirmed.region,
+      style: c.style ?? wineDetailsConfirmed.style,
+    };
+    setWineDetailsConfirmed(updated);
+    setRegenerating(true);
+    try {
+      const fresh = await generateWineIntel(updated, userCurrency);
+      setIntelligence(fresh);
+      setCandidatesOpen(false);
+    } catch {
+      showAlert({ title: 'Could not update', body: 'Please try again.' });
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
   const [addingToCellar, setAddingToCellar] = useState(false);
   const [addingToWishList, setAddingToWishList] = useState(false);
   const [addingReview, setAddingReview] = useState(false);
@@ -1088,12 +1136,41 @@ export default function LabelResultsScreen() {
       </View>
 
       {/* Generate Wine Intel came back empty → prompt to check the name/format. */}
+      {/* Weak intel: if we found candidate bottlings, the disambiguation modal
+          takes over; otherwise fall back to the check-details prompt. */}
       <NoIntelPrompt
-        visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed}
+        visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed && !candidatesOpen && candidates.length === 0}
         onDismiss={() => setNoIntelDismissed(true)}
         onEdit={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
         editLabel="Check details"
       />
+
+      {/* "Which wine is this?" — Claude's list of this producer's plausible
+          bottlings, shown when intel came back weak. Picking one regenerates
+          intel for the exact wine. */}
+      <Modal visible={candidatesOpen} transparent animationType="fade" onRequestClose={() => !regenerating && setCandidatesOpen(false)}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            <Text style={styles.candTitle}>Which wine is this?</Text>
+            <Text style={styles.candBody}>We couldn't find a confident match. Pick the exact {wine.producer} wine to get accurate intel — it may be a bottling the label reading missed.</Text>
+            {regenerating ? (
+              <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Getting intel…</Text></View>
+            ) : (
+              <ScrollView style={{ maxHeight: 320 }}>
+                {candidates.map((c, i) => (
+                  <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candItem} onPress={() => pickCandidate(c)} activeOpacity={0.75}>
+                    <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
+                    {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.candCancel} onPress={() => { setCandidatesOpen(false); }} disabled={regenerating}>
+              <Text style={styles.candCancelText}>None of these — keep as is</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Intel content — hidden in the Add flow, which carries no intel (it's
           generated later, only from Generate Wine Intel). */}
@@ -1629,6 +1706,17 @@ const styles = StyleSheet.create({
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   heroImage: { alignSelf: 'center', width: 130, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginBottom: spacing.md },
+  candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
+  candTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  candBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  candLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  candLoadingText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  candItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.surface },
+  candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
+  candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   producer: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text },
   wineName: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.text, marginTop: 2 },
   detail: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
