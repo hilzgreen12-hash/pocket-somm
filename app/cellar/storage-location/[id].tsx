@@ -46,8 +46,8 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
 const PACKAGING_OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'Packed As' },
   { value: 'loose', label: 'Loose Bottles' },
-  { value: 'mixed', label: 'Mixed Cases' },
-  { value: 'non_owc', label: 'Complete Cases' },
+  { value: 'mixed', label: 'Mixed Case' },
+  { value: 'non_owc', label: 'Non-OWC Case' },
   { value: 'owc', label: 'OWC' },
 ];
 
