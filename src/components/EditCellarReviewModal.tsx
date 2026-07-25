@@ -1,19 +1,24 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share,
+  StyleSheet, Keyboard, Share, Image,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
+import { LabelThumb } from './LabelThumb';
+import { uploadLabelImage } from '../api/labelPhotos';
+import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
+import { normaliseCity } from '../utils/city';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
@@ -57,7 +62,81 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
 
+  // Edit-identity sheet (name / vintage / region / style + location + date +
+  // label photo) — the same affordance the restaurant review editor has.
+  const [identityEditOpen, setIdentityEditOpen] = useState(false);
+  const [editProducer, setEditProducer] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editVintage, setEditVintage] = useState('');
+  const [editRegion, setEditRegion] = useState('');
+  const [editStyle, setEditStyle] = useState('');
+  const [editRestaurant, setEditRestaurant] = useState('');
+  const [editCity, setEditCity] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editImageUri, setEditImageUri] = useState<string | null>(null);
+  const [savingIdentity, setSavingIdentity] = useState(false);
+
   const shareCardRef = useRef<View>(null);
+
+  function openIdentityEdit() {
+    if (!wine) return;
+    setEditProducer(wine.producer ?? '');
+    setEditName(wine.wine_name ?? '');
+    setEditVintage(wine.vintage ?? '');
+    setEditRegion(wine.region ?? '');
+    setEditStyle(wine.style ?? '');
+    const { restaurantName, city } = splitLocationString(wine.review_location);
+    if (city) { setEditRestaurant(restaurantName); setEditCity(city); }
+    else { setEditRestaurant(''); setEditCity(restaurantName); }
+    setEditDate(wine.review_date ?? todayISO());
+    setEditImageUri(null);
+    setIdentityEditOpen(true);
+  }
+
+  async function pickIdentityPhoto(source: 'camera' | 'library') {
+    if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
+    const res = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (res.canceled || !res.assets[0]) return;
+    setEditImageUri(res.assets[0].uri);
+  }
+
+  async function saveIdentity() {
+    if (!wine || !session?.user.id) return;
+    if (!editName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name.' }); return; }
+    setSavingIdentity(true);
+    try {
+      const location = [editRestaurant.trim(), editCity.trim()].filter(Boolean).join(', ') || null;
+      let labelPath: string | undefined;
+      if (editImageUri) labelPath = await uploadLabelImage(session.user.id, editImageUri, wine.id);
+      await updateWine.mutateAsync({
+        id: wine.id,
+        updates: {
+          producer: editProducer.trim() || null,
+          wine_name: editName.trim(),
+          region: editRegion.trim() || null,
+          style: editStyle.trim() || null,
+          vintage: editVintage.trim() || null,
+          review_location: location,
+          review_date: editDate.trim() || null,
+          ...(labelPath ? { label_image_path: labelPath } : {}),
+        },
+      });
+      // Keep the review form's own location/date state in step.
+      setLocName(editRestaurant.trim());
+      setLocCity(editCity.trim());
+      setReviewDate(editDate.trim());
+      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      setIdentityEditOpen(false);
+      onSaved();
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingIdentity(false);
+    }
+  }
 
   // Re-seed the form whenever a new wine is opened.
   useEffect(() => {
@@ -248,21 +327,42 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
         <View style={styles.sheet}>
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
-            {/* Top row: back (left) · Share (right). */}
+            {/* Top row: back (left) · Share · Edit (right). */}
             <View style={styles.topRow}>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Text style={styles.backText}>← Back</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-                <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
-              </TouchableOpacity>
+              <View style={styles.topRight}>
+                <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
+                  <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={openIdentityEdit} hitSlop={{ top: 6, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
+                  <Text style={styles.topEditText}>Edit</Text>
+                </TouchableOpacity>
+              </View>
             </View>
 
-            <View style={styles.header}>
-              <Text style={styles.headerLine}>{headerLine}</Text>
-              {(wine.region || wine.grape_variety) ? (
-                <Text style={styles.region}>{[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}</Text>
+            {/* Header — label thumbnail (when present) beside the identity, then
+                a date · location stamp beneath the region. */}
+            <View style={[styles.header, wine.label_image_path ? styles.headerWithThumb : null]}>
+              {wine.label_image_path ? (
+                <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
               ) : null}
+              <View style={wine.label_image_path ? styles.headerTextCol : undefined}>
+                <Text style={[styles.headerLine, wine.label_image_path ? styles.headerLineLeft : null]}>{headerLine}</Text>
+                {(wine.region || wine.grape_variety) ? (
+                  <Text style={[styles.region, wine.label_image_path ? styles.regionLeft : null]}>{[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}</Text>
+                ) : null}
+                {(() => {
+                  const { restaurantName, city } = splitLocationString(wine.review_location);
+                  const loc = [restaurantName, normaliseCity(city)].filter(Boolean).join(', ');
+                  const dateStr = wine.review_date
+                    ? new Date(wine.review_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+                    : '';
+                  const stamp = [dateStr, loc].filter(Boolean).join(' · ');
+                  return stamp ? <Text style={[styles.stampLine, wine.label_image_path ? styles.stampLineLeft : null]}>{stamp}</Text> : null;
+                })()}
+              </View>
             </View>
 
             <View style={styles.divider} />
@@ -283,6 +383,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
               onCity={(v) => { setLocCity(v); setSaved(false); }}
               locationName={locName}
               onLocationName={(v) => { setLocName(v); setSaved(false); }}
+              showLocation={false}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
               saving={saving || updateWine.isPending}
@@ -298,6 +399,67 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
           </KeyboardAwareScrollView>
         </View>
       </View>
+
+      {/* Edit the wine's identity (name / vintage / region / style), the review
+          location + date, and the label photo — the same sheet as the restaurant
+          review editor, saving to the cellar wine. */}
+      <Modal visible={identityEditOpen} transparent animationType="fade" onRequestClose={() => setIdentityEditOpen(false)}>
+        <View style={styles.confirmOverlay}>
+          <KeyboardAwareScrollView contentContainerStyle={styles.editScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+            <View style={styles.editSheet}>
+              <Text style={styles.confirmTitle}>Edit wine</Text>
+
+              <Text style={styles.editLabel}>Producer</Text>
+              <TextInput style={styles.editInput} value={editProducer} onChangeText={setEditProducer} placeholder="Producer" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Wine name</Text>
+              <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="Wine name" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Vintage</Text>
+              <TextInput style={styles.editInput} value={editVintage} onChangeText={(t) => setEditVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textSubtle} autoCapitalize="characters" maxLength={7} />
+
+              <Text style={styles.editLabel}>Region</Text>
+              <TextInput style={styles.editInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Style</Text>
+              <TextInput style={styles.editInput} value={editStyle} onChangeText={setEditStyle} placeholder="e.g. Red, White, Rosé, Sparkling" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Location</Text>
+              <TextInput style={styles.editInput} value={editRestaurant} onChangeText={setEditRestaurant} placeholder="Where you drank it" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>City</Text>
+              <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} placeholder="City" placeholderTextColor={colors.textSubtle} />
+
+              <Text style={styles.editLabel}>Date</Text>
+              <TextInput style={styles.editInput} value={editDate} onChangeText={(t) => setEditDate(t.replace(/[^0-9-]/g, '').slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" maxLength={10} />
+
+              <Text style={styles.editLabel}>Photo</Text>
+              <View style={styles.editThumbRow}>
+                {editImageUri ? (
+                  <Image source={{ uri: editImageUri }} style={styles.editThumb} />
+                ) : (
+                  <LabelThumb path={wine.label_image_path ?? null} fallbackText={wine.wine_name} style={styles.editThumb} radius={6} frame={0} />
+                )}
+                <View style={styles.editPhotoBtns}>
+                  <TouchableOpacity style={styles.editPhotoBtn} onPress={() => pickIdentityPhoto('camera')}>
+                    <Text style={styles.editPhotoBtnText}>Take Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.editPhotoBtn} onPress={() => pickIdentityPhoto('library')}>
+                    <Text style={styles.editPhotoBtnText}>Upload</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity style={[styles.confirmButton, savingIdentity && styles.btnDisabled]} onPress={saveIdentity} disabled={savingIdentity}>
+                <Text style={styles.confirmButtonText}>{savingIdentity ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.confirmCancel} onPress={() => setIdentityEditOpen(false)} disabled={savingIdentity}>
+                <Text style={styles.confirmCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAwareScrollView>
+        </View>
+      </Modal>
 
       {sharing && (
         <View style={styles.shareCardWrap} pointerEvents="none">
@@ -327,8 +489,32 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingTop: 56, paddingBottom: 60 },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
+  topRight: { alignItems: 'flex-end', gap: 2 },
   topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   header: { alignItems: 'center', marginBottom: spacing.sm },
+  headerWithThumb: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerThumb: { width: 52, height: 68 },
+  headerTextCol: { flex: 1 },
+  headerLineLeft: { textAlign: 'left' },
+  regionLeft: { textAlign: 'left' },
+  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
+  stampLineLeft: { textAlign: 'left' },
+  confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm, marginTop: spacing.sm },
+  confirmButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
+  confirmCancel: { alignItems: 'center', paddingTop: spacing.xs },
+  confirmCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  editScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },
+  editSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
+  editLabel: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.xs, marginTop: spacing.sm },
+  editInput: { backgroundColor: colors.surfaceElevated, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text },
+  editThumbRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+  editThumb: { width: 72, height: 96 },
+  editPhotoBtns: { flex: 1, gap: spacing.sm },
+  editPhotoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  editPhotoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   region: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
   grape: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginTop: 2 },
