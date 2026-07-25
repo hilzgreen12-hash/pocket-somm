@@ -1635,7 +1635,8 @@ export default function RackGridScreen() {
       {multiSelectMode ? (
         <View style={styles.multiBar} pointerEvents="box-none">
           <View style={styles.multiBarInner}>
-            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap more empty slots</Text>
+            <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional empty slots to fill</Text>
             <View style={styles.multiBarBtns}>
               <TouchableOpacity style={styles.multiBarCancel} onPress={cancelMultiSelect} activeOpacity={0.8}>
                 <Text style={styles.multiBarCancelText}>Cancel</Text>
@@ -2291,6 +2292,7 @@ const styles = StyleSheet.create({
   slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
   multiBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.md },
   multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
+  multiBarHeader: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center', letterSpacing: 0.3 },
   multiBarText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.text, textAlign: 'center' },
   multiBarBtns: { flexDirection: 'row', gap: spacing.sm },
   multiBarCancel: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
