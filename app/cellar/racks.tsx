@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
   pageIntro: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: 6, paddingBottom: spacing.md },
   // Gold whole-screen tally under the blurb — same treatment as the Full
   // Cellar List summary ("X wines · X bottles").
-  homeSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.xs },
+  homeSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'left', paddingHorizontal: spacing.xl, paddingBottom: spacing.xs },
   // Left-aligned section subheader (Wine Racks & Fridges / Other Locations).
   blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 4 },
   blockBlurb: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
