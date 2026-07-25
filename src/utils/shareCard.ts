@@ -1,16 +1,20 @@
-import { Platform, Share } from 'react-native';
+import { Platform } from 'react-native';
 import { File, Paths } from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
-import { VINSTER_APP_STORE_URL } from '../constants/share';
+import RNShare from 'react-native-share';
+import { VINSTER_APP_STORE_URL, VINSTER_TAGLINE } from '../constants/share';
 
 // One place that shares a captured/generated Vinster "result" (image or PDF) so
 // EVERY outbound share is consistent:
 //  - a MEANINGFUL filename ("<name> has shared a Vinster result with you.<ext>")
-//  - iOS: the branded file PLUS a tappable message with the App Store link, so
-//    a recipient can actually install Vinster from the message.
-//  - Android: expo-sharing can't attach text to a file share, so RN Share
-//    ignores the file. We can't send image + tappable link together on Android
-//    with these libraries — see shareResult for how that's handled.
+//  - the branded file PLUS a genuinely tappable App Store link.
+//
+// iOS's UIActivityViewController (which RN's built-in Share uses) cannot reliably
+// send an image AND a URL together — Messages drops the text when a file is
+// attached, so the App Store link vanished. We use react-native-share's iOS
+// `activityItemSources` to hand Messages the file AND the App Store URL as
+// SEPARATE items, so the link comes through as a tappable App Store card beside
+// the image. On Android the same call sends file + message text (which carries
+// the link) natively.
 
 const APP_STORE_URL = VINSTER_APP_STORE_URL;
 
@@ -60,20 +64,43 @@ export async function shareResult(
   const ext = mime === 'application/pdf' ? 'pdf' : 'png';
   const uri = renameForShare(fromUri, opts.sharerName, ext);
   const message = vinsterShareMessage(opts.sharerName);
+  const name = (opts.sharerName ?? '').trim() || 'Someone';
+  const sentence = `${name} has shared a Vinster result with you.`;
 
-  // iOS: native share sheet carries the file (url) AND the tappable-link message.
-  if (Platform.OS === 'ios') {
-    await Share.share({ url: uri, message });
-    return;
-  }
-  // Android: RN Share ignores `url`; use expo-sharing so the branded file still
-  // goes out (named meaningfully). The App Store link is added here once there's
-  // a public Android build to point at.
-  if (await Sharing.isAvailableAsync()) {
-    await Sharing.shareAsync(uri, {
-      mimeType: mime,
-      dialogTitle: opts.dialogTitle ?? 'Share a Vinster result',
-      UTI: mime === 'application/pdf' ? 'com.adobe.pdf' : 'public.png',
+  try {
+    await RNShare.open({
+      // Android + iOS fallback: file plus a caption that carries the link.
+      url: uri,
+      message,
+      type: mime,
+      // Don't reject when the user just backs out of the share sheet.
+      failOnCancel: false,
+      // iOS only: hand the sheet the file AND the App Store URL as separate
+      // items so Messages keeps both — the URL becomes a tappable App Store card.
+      activityItemSources: Platform.OS === 'ios' ? [
+        {
+          placeholderItem: { type: 'text', content: sentence },
+          item: { default: { type: 'text', content: sentence } },
+        },
+        {
+          placeholderItem: { type: 'url', content: uri },
+          item: { default: { type: 'url', content: uri } },
+        },
+        {
+          placeholderItem: { type: 'url', content: APP_STORE_URL },
+          item: {
+            default: { type: 'url', content: APP_STORE_URL },
+            message: { type: 'url', content: APP_STORE_URL },
+          },
+          subject: { default: 'Get Vinster' },
+          linkMetadata: { originalUrl: APP_STORE_URL, url: APP_STORE_URL, title: `Vinster — ${VINSTER_TAGLINE}` },
+        },
+      ] : undefined,
     });
+  } catch (err) {
+    // Swallow the user-cancelled case; surface anything genuinely wrong.
+    const msg = err instanceof Error ? err.message.toLowerCase() : '';
+    if (msg.includes('cancel') || msg.includes('dismiss') || msg.includes('user did not share')) return;
+    throw err;
   }
 }
