@@ -96,11 +96,17 @@ Deno.serve(async (req) => {
       style = await inferStyle(parsed.producer, parsed.region, parsed.wineName, parsed.vintage);
     }
 
+    // Sparkling wines (Champagne, cava, prosecco…) are overwhelmingly
+    // non-vintage. If the label carried no readable vintage, default to "NV"
+    // rather than leaving it blank — the user can still change it on Confirm.
+    const rawVintage = typeof parsed.vintage === 'string' ? parsed.vintage.trim() : parsed.vintage;
+    const vintage = (!rawVintage && style === 'Sparkling') ? 'NV' : (rawVintage || null);
+
     return new Response(JSON.stringify({
       producer: parsed.producer ?? null,
       region: parsed.region ?? null,
       wineName: parsed.wineName ?? null,
-      vintage: parsed.vintage ?? null,
+      vintage,
       style,
       bottleSizeMl,
     }), { headers: { 'Content-Type': 'application/json' } });
