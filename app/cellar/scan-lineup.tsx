@@ -102,23 +102,6 @@ export default function ScanLineupScreen() {
   // fridge-only photo tip (popup + blurb paragraph).
   const isFridge = racks.find((r) => r.id === originRackId)?.storage_type === 'fridge';
   const [placing, setPlacing] = useState(false);
-  // Fridge-lineup photo tip: shown once on the capture screen unless the user
-  // has ticked "don't show me this again".
-  const [showFridgeTip, setShowFridgeTip] = useState(false);
-  const [dontShowFridgeTip, setDontShowFridgeTip] = useState(false);
-  useEffect(() => {
-    if (!isFridge) return;
-    let active = true;
-    AsyncStorage.getItem(FRIDGE_TIP_KEY)
-      .then((v) => { if (active && v !== '1') setShowFridgeTip(true); })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [isFridge]);
-
-  function dismissFridgeTip() {
-    if (dontShowFridgeTip) AsyncStorage.setItem(FRIDGE_TIP_KEY, '1').catch(() => {});
-    setShowFridgeTip(false);
-  }
   // Quick batch confirm: each row is ticked once reviewed/edited; "Add Bottles"
   // unlocks when all are ticked.
   const [confirmed, setConfirmed] = useState<Set<number>>(new Set());
@@ -494,21 +477,9 @@ export default function ScanLineupScreen() {
       </View>
 
       {stage === 'capture' ? (
-        <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.lead}>
-            Adding several bottles? Photograph the lineup and Vinster will identify each one and add them for you.
-          </Text>
-          {isFridge && (
-            <Text style={styles.hint}>Line up all bottles from the row, including those facing the back, with all labels right side up — you will likely need to remove the bottles from your fridge and line them up for an accurate photo.</Text>
-          )}
-          <Text style={styles.hint}>Stand up to 6 bottles up with their front labels facing the camera. Get your photo as close up to the labels as possible.</Text>
-          <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
-            <Text style={styles.primaryBtnText}>Take a photo</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.secondaryBtn} onPress={() => pickFrom('library')} activeOpacity={0.85}>
-            <Text style={styles.secondaryBtnText}>Upload a Photo</Text>
-          </TouchableOpacity>
-        </ScrollView>
+        // The "Before you photograph" modal (below) is the capture entry — Take
+        // a Photo / Upload a Photo scan directly, so no instruction screen here.
+        <View style={{ flex: 1 }} />
       ) : stage === 'analyzing' ? (
         <View style={styles.centerBlock}>
           {imageUri ? <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="contain" /> : null}
@@ -673,20 +644,22 @@ export default function ScanLineupScreen() {
         </View>
       </Modal>
 
-      {/* Fridge-lineup photo tip — fridges are often packed in deep rows, so a
-          good lineup photo usually means pulling the bottles out first. Shown
-          once unless dismissed for good. */}
-      <Modal visible={showFridgeTip} transparent animationType="fade" onRequestClose={dismissFridgeTip}>
+      {/* "Before you photograph" — the lineup capture entry. It IS the chooser:
+          Take a Photo / Upload a Photo start the scan directly, so there's no
+          separate instruction screen after it. */}
+      <Modal visible={stage === 'capture'} transparent animationType="fade" onRequestClose={() => router.back()}>
         <View style={styles.tipOverlay}>
           <View style={styles.tipSheet}>
             <Text style={styles.tipTitle}>Before you photograph</Text>
-            <Text style={styles.tipBody}>Line up all bottles from the row, including those facing the back, with all labels right side up — you will likely need to remove the bottles from your fridge and line them up for an accurate photo.</Text>
-            <TouchableOpacity style={styles.tipCheckRow} onPress={() => setDontShowFridgeTip((v) => !v)} activeOpacity={0.7}>
-              <Text style={[styles.tipCheckbox, dontShowFridgeTip && styles.tipCheckboxOn]}>{dontShowFridgeTip ? '☑' : '☐'}</Text>
-              <Text style={styles.tipCheckLabel}>Don't show me this message again</Text>
+            <Text style={styles.tipBody}>Lineup up to 6 bottles with all the front labels facing forward and right side up.</Text>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Take a Photo</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.primaryBtn} onPress={dismissFridgeTip} activeOpacity={0.85}>
-              <Text style={styles.primaryBtnText}>Got it</Text>
+            <TouchableOpacity style={[styles.primaryBtn, { marginTop: spacing.sm }]} onPress={() => pickFrom('library')} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Upload a Photo</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.tipCancel} onPress={() => router.back()} activeOpacity={0.7}>
+              <Text style={styles.tipCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -764,4 +737,6 @@ const styles = StyleSheet.create({
   tipCheckbox: { fontSize: 20, color: colors.textMuted },
   tipCheckboxOn: { color: colors.gold },
   tipCheckLabel: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  tipCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
+  tipCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });
