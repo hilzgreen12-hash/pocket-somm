@@ -47,6 +47,11 @@ interface RackStore {
   // storage location — the saved wine is filed straight into this existing
   // case (migration 069) instead of prompting for a new one.
   pendingCaseId: string | null;
+  // Set when the add flow was entered from a bin diamond's "+ Add wine" — the
+  // saved wine is filed straight into that bin cell (via cellar_wines.bin_cell_id)
+  // through the shared Confirm screen (context=place-bin), which also collects
+  // the quantity + bottle format inline.
+  pendingBinCell: { binId: string; cellId: string } | null;
   // True when the user entered the rack placement flow via "+ Add bottles"
   // on the wine card. The placement modal uses this to INCREMENT the
   // wine's quantity rather than overwrite it (the default behaviour for
@@ -63,6 +68,7 @@ interface RackStore {
   setPendingMove: (m: PendingMove | null) => void;
   setPendingStorageLocationId: (id: string | null) => void;
   setPendingCaseId: (id: string | null) => void;
+  setPendingBinCell: (v: { binId: string; cellId: string } | null) => void;
   reset: () => void;
 }
 
@@ -76,6 +82,7 @@ export const useRackStore = create<RackStore>((set) => ({
   pendingMove: null,
   pendingStorageLocationId: null,
   pendingCaseId: null,
+  pendingBinCell: null,
   setImage: (uri) => set({ imageUri: uri }),
   setPendingSlot: (slot) => set({ pendingSlot: slot }),
   setPendingSlots: (slots) => set({ pendingSlots: slots }),
@@ -85,6 +92,7 @@ export const useRackStore = create<RackStore>((set) => ({
   setPendingMove: (m) => set({ pendingMove: m }),
   setPendingStorageLocationId: (id) => set({ pendingStorageLocationId: id }),
   setPendingCaseId: (id) => set({ pendingCaseId: id }),
+  setPendingBinCell: (v) => set({ pendingBinCell: v }),
   // Resets only the transient image. pendingSlot, pendingWineId and
   // pendingStorageType are cross-flow signals that should persist until their
   // consumer clears them — clearing them here breaks the "Add wine → New
