@@ -102,7 +102,7 @@ export default function RackResizeScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.intro}>Drag the handle out from the centre to size your {isFridge ? 'fridge' : 'rack'} — pull right/down to add, in toward the centre to remove. Lift and pull again for larger sizes.{isFridge ? ' For each row create a space for bottles facing forward and backward.' : ''}</Text>
+        <Text style={styles.intro}>Drag the bubble in the middle of the grid to size your {isFridge ? 'fridge' : 'rack'}.{isFridge ? ' For each row create a space for bottles facing forward and backward.' : ''}</Text>
 
         <View style={styles.badge}>
           <Text style={styles.badgeText}>{rows} × {cols}</Text>
