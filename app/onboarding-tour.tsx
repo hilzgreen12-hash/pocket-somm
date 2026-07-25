@@ -13,18 +13,18 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     badge: 'Scan',
-    title: 'Scan any wine list',
-    body: 'Point your camera at any wine list and Vinster will dive deep into online resources to find the best wines for your tastes based on critic scores, value for money, rarity, vintage quality and drinkability. Don\'t ever sweat a wine pairing again.',
+    title: 'Wine Lists & Labels',
+    body: 'Photograph restaurant wine lists to generate bottle recommendations based on your tastes, wine labels to generate intel and keep you informed.',
   },
   {
     badge: 'Dine',
-    title: 'Cook & Drink better',
-    body: 'Tell Vinster what you\'re cooking and it offers you a wine, scan a label and it serves up three chef-inspired recipes. Save, edit and organise your recipes in your Cookbook for future reference.',
+    title: 'Cook, Drink, Review, Repeat',
+    body: 'Pair your favourite bottles, generate chef inspired recipes, review your restaurants and bottles.',
   },
   {
     badge: 'Cellar',
     title: 'Save & Track',
-    body: 'Photograph your wine racks and fridges for in app storage that mirrors your own. Scan wine labels to input your collection while generating wine and market intel. Voice dictate wine reviews and have all of your wine stats at your fingertips. Vinster can even show you where each bottle is hiding in your IRL cellar.',
+    body: 'Replicate your home storage by creating visual racks & fridges in Vinster. Photograph labels & lineups to populate so you can always find your bottles.',
   },
   {
     badge: 'You',
