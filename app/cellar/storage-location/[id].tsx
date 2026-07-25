@@ -20,6 +20,7 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { useLocationFilters } from '../../../src/hooks/useLocationFilters';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
+import { effectiveMaturity } from '../../../src/utils/maturity';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { MicButton } from '../../../src/components/MicButton';
@@ -226,7 +227,7 @@ export default function StorageLocationScreen() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return wines.filter((w) => {
-      if (maturity && w.drinking_window_status !== maturity) return false;
+      if (maturity && effectiveMaturity(w) !== maturity) return false;
       // Packaging filter: "loose" keeps only un-cased bottles; a case kind keeps
       // only wines boxed in a case of that kind.
       if (packaging === 'loose') { if (w.case_id) return false; }
@@ -235,7 +236,7 @@ export default function StorageLocationScreen() {
       if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
         const hay = [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase();
-        const statusTerms = STATUS_SEARCH.find((s) => s.status === w.drinking_window_status)?.terms ?? [];
+        const statusTerms = STATUS_SEARCH.find((s) => s.status === effectiveMaturity(w))?.terms ?? [];
         if (!hay.includes(q) && !statusTerms.some((t) => t.includes(q))) return false;
       }
       return true;
