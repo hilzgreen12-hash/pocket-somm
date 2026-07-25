@@ -651,7 +651,7 @@ export default function FullCellarListScreen() {
     for (const r of racks) opts.push({ value: r.id, label: r.name });
     for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
     for (const s of storageLocations) opts.push({ value: `sloc:${s.id}`, label: s.name });
-    opts.push({ value: 'Unassigned', label: 'Not in a rack' });
+    opts.push({ value: 'Unassigned', label: 'Not Placed in a Storage Location' });
     return opts;
   }, [racks, locations, storageLocations]);
 

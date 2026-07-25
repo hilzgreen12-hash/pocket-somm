@@ -722,7 +722,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wine Reviews</Text>
+        <Text style={styles.title}>Your Wines</Text>
         <TouchableOpacity
           onPress={() => setChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
@@ -753,20 +753,26 @@ export default function ChosenWinesScreen() {
                   const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
                   return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
                 }));
-                const r = filtered.length, n = wineKeys.size;
-                return `${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`;
+                const r = filtered.length;
+                // Total wines counts reviewed AND awaiting (they're distinct sets).
+                const a = awaitingReview.length;
+                const n = wineKeys.size + a;
+                return (
+                  <>
+                    {`${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`}
+                    {a > 0 ? (
+                      <Text> · <Text style={styles.summaryLink} onPress={() => listScrollRef.current?.scrollTo({ y: Math.max(0, awaitingY - 12), animated: true })}>{`${a} ${a === 1 ? 'Wine' : 'Wines'} awaiting your review`}</Text></Text>
+                    ) : null}
+                  </>
+                );
               })()}
             </Text>
-            <TouchableOpacity
-              onPress={() => { if (awaitingReview.length > 0) listScrollRef.current?.scrollTo({ y: Math.max(0, awaitingY - 12), animated: true }); }}
-              disabled={awaitingReview.length === 0}
-              activeOpacity={0.7}
-            >
-              <Text style={[styles.summaryText, awaitingReview.length > 0 && styles.summaryLink]}>
-                {awaitingReview.length} {awaitingReview.length === 1 ? 'wine' : 'wines'} awaiting your review
-              </Text>
-            </TouchableOpacity>
           </View>
+
+          {/* Sub-header for the reviews slice — the awaiting slice has its own
+              header further down. */}
+          <Text style={styles.subHeader}>Wine Reviews</Text>
+
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
@@ -904,19 +910,31 @@ export default function ChosenWinesScreen() {
           {awaitingReview.length > 0 ? (
             <View style={styles.awaitingSection} onLayout={(e) => setAwaitingY(e.nativeEvent.layout.y)}>
               <Text style={styles.awaitingHeader}>Restaurant Wines Awaiting Review</Text>
-              {awaitingReview.map((w) => (
-                <TouchableOpacity
-                  key={`await-${w.id}`}
-                  style={styles.awaitingRow}
-                  onPress={() => setEditingWine(w)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.awaitingName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-                  <Text style={styles.awaitingMeta} numberOfLines={1}>
-                    {[locationLine(w), formatDate(w.chosen_at)].filter(Boolean).join(' · ')}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {awaitingReview.map((w) => {
+                const thumbPath = w.label_image_path
+                  ?? cellarByIdentity.get(wineIdentityKey(w.producer, w.wine_name, w.vintage))?.label_image_path
+                  ?? null;
+                return (
+                  <TouchableOpacity
+                    key={`await-${w.id}`}
+                    style={styles.awaitingRow}
+                    onPress={() => setEditingWine(w)}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.cardCompactOuter}>
+                      {thumbPath ? (
+                        <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
+                      ) : null}
+                      <View style={styles.cardCompactBody}>
+                        <Text style={styles.awaitingName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                        <Text style={styles.awaitingMeta} numberOfLines={1}>
+                          {[locationLine(w), formatDate(w.chosen_at)].filter(Boolean).join(' · ')}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
           ) : null}
         </ScrollView>
@@ -1002,6 +1020,7 @@ const styles = StyleSheet.create({
   // Bottle Picks Awaiting Review section.
   awaitingSection: { marginTop: spacing.xl },
   awaitingHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginBottom: spacing.sm },
+  subHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   awaitingRow: { marginHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   awaitingName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   awaitingMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
