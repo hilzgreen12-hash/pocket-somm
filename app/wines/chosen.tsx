@@ -199,7 +199,7 @@ export default function ChosenWinesScreen() {
   // is a phantom (e.g. a legacy duplicate) and must NOT show as "awaiting", so a
   // wine you've reviewed never appears in the awaiting list too.
   const idKey = (w: { producer?: string | null; wine_name?: string | null; vintage?: string | number | null }) =>
-    `${(w.producer ?? '').trim().toLowerCase()}|${(w.wine_name ?? '').trim().toLowerCase()}|${w.vintage ?? ''}`;
+    `${(w.producer ?? '').trim().toLowerCase()}|${(w.wine_name ?? '').trim().toLowerCase()}|${String(w.vintage ?? '').trim().toLowerCase()}`;
   const reviewedIdentityKeys = new Set<string>();
   for (const w of chosenWines) if (chosenHasReview(w)) reviewedIdentityKeys.add(idKey(w));
   for (const w of cellarReviews) reviewedIdentityKeys.add(idKey(w));

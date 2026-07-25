@@ -14,6 +14,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
+import { isoToYmd } from '../utils/reviewDate';
 import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
@@ -96,8 +97,22 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     Keyboard.dismiss();
     const existing = findExistingReview(chosenWines, { producer, wineName, vintage });
     if (existing) {
-      const existingDay = existing.chosen_at ? new Date(existing.chosen_at).toISOString().slice(0, 10) : '';
-      const todayDay = new Date().toISOString().slice(0, 10);
+      // A bottle pick added from the list starts as an empty row (no note,
+      // score or observations). Reviewing it should just fill that row in —
+      // not prompt "you've reviewed this before". Mirrors ChosenWineModal.
+      const hasContent = !!(
+        (existing.tasting_note ?? '').trim() ||
+        existing.user_score != null ||
+        (existing.other_observations ?? '').trim()
+      );
+      if (!hasContent) {
+        await doSave('update', existing);
+        return;
+      }
+      // Compare LOCAL calendar days (not UTC) so the same-day vs earlier-date
+      // prompt is right for non-UTC users near midnight.
+      const existingDay = isoToYmd(existing.chosen_at);
+      const todayDay = isoToYmd(new Date().toISOString());
       if (existingDay === todayDay) {
         // Same-day duplicate — keep both is allowed (e.g. two bottles that day).
         showAlert({
