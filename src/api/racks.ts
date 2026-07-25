@@ -9,7 +9,10 @@ export async function getRacks(userId: string): Promise<WineRack[]> {
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
   if (error) throw error;
-  return data ?? [];
+  // Bins live in wine_racks too (storage_type='bin') but have their own list/
+  // screens — exclude them here so they don't also render as grid-less "rack"
+  // cards. Filtered client-side to keep any legacy null-storage_type racks.
+  return (data ?? []).filter((r) => r.storage_type !== 'bin');
 }
 
 // Optional large-format row spec — passed when the user enabled "Insert
