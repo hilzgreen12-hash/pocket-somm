@@ -493,7 +493,7 @@ const styles = StyleSheet.create({
   missingIntelRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
   missingIntelText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
   // Left-aligned, borderless variant — sits directly under Total Purchase Value.
-  missingValueRow: { paddingHorizontal: spacing.xl, paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
+  missingValueRow: { paddingLeft: spacing.xl + spacing.md, paddingRight: spacing.xl, paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
   missingValueText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted },
   missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
