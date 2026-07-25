@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
@@ -99,7 +99,7 @@ export default function LabelResultsScreen() {
   // no-intel adds — 'add-location' must be included or the guard below dead-ends
   // on "No results available" and the wine never saves (regression from 7e9deec).
   const isAddFlow = context === 'add' || context === 'add-location';
-  const { wineDetailsConfirmed, intelligence } = useLabelStore();
+  const { wineDetailsConfirmed, intelligence, imageUri } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
@@ -1078,6 +1078,9 @@ export default function LabelResultsScreen() {
       <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
       <View style={styles.header}>
+        {/* When the result came from a scan/upload, show that label photo on the
+            card. Manual entries have no imageUri, so nothing renders. */}
+        {imageUri ? <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" /> : null}
         <Text style={styles.producer}>{wine.producer}</Text>
         {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
         <Text style={styles.detail}>{wine.region} · {wine.vintage}</Text>
@@ -1625,6 +1628,7 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  heroImage: { alignSelf: 'center', width: 130, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginBottom: spacing.md },
   producer: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text },
   wineName: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.text, marginTop: 2 },
   detail: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
