@@ -116,10 +116,10 @@ export default function BinResizeScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.intro}>Drag the handle out from the centre to size your bin — pull right/down to add diamonds, in toward the centre to remove. The edge triangles fill in against the frame. Lift and pull again for larger sizes.</Text>
+        <Text style={styles.intro}>Drag the handle out from the centre to size your bin — pull right/down to add diamonds, in toward the centre to remove. The edge half diamonds fill in against the frame. Lift and pull again for larger sizes.</Text>
 
         <View style={styles.badge}>
-          <Text style={styles.badgeText}>{diamonds} {diamonds === 1 ? 'diamond' : 'diamonds'} · {triangles} triangles</Text>
+          <Text style={styles.badgeText}>{diamonds} {diamonds === 1 ? 'Diamond' : 'Diamonds'} · {triangles} {triangles === 1 ? 'Half Diamond' : 'Half Diamonds'}</Text>
           <Text style={styles.badgeSub}>{total} bottle capacity</Text>
         </View>
 
