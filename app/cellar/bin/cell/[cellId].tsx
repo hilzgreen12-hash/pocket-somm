@@ -369,11 +369,14 @@ export default function BinCellScreen() {
             {draft ? <BottleSizePicker value={draft.bottleSizeMl} onChange={(ml) => setDraft((d) => d && ({ ...d, bottleSizeMl: ml }))} /> : null}
 
             <Text style={styles.sheetLabel}>Quantity</Text>
-            <View style={styles.qtyRow}>
-              <TouchableOpacity style={styles.stepBtn} onPress={() => setDraft((d) => d && ({ ...d, quantity: Math.max(1, d.quantity - 1) }))}><Text style={styles.stepBtnText}>−</Text></TouchableOpacity>
-              <Text style={styles.qtyValue}>{draft?.quantity ?? 1}</Text>
-              <TouchableOpacity style={styles.stepBtn} onPress={() => setDraft((d) => d && ({ ...d, quantity: d.quantity + 1 }))}><Text style={styles.stepBtnText}>+</Text></TouchableOpacity>
-            </View>
+            <TextInput
+              style={[styles.input, { width: 120 }]}
+              value={draft?.quantity ? String(draft.quantity) : ''}
+              onChangeText={(t) => setDraft((d) => d && ({ ...d, quantity: parseInt(t.replace(/[^0-9]/g, ''), 10) || 0 }))}
+              keyboardType="number-pad"
+              placeholder="e.g. 6"
+              placeholderTextColor={colors.textMuted}
+            />
 
             <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.5 }]} onPress={saveDraft} disabled={saving} activeOpacity={0.85}>
               {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>{draft?.id ? 'Save' : 'Add to bin'}</Text>}
@@ -473,10 +476,6 @@ const styles = StyleSheet.create({
   sheetLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
   inputRow: { flexDirection: 'row', gap: spacing.sm },
-  qtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
-  stepBtn: { width: 38, height: 38, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  stepBtnText: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
-  qtyValue: { fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, minWidth: 32, textAlign: 'center' },
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   removeBtn: { alignItems: 'center', paddingTop: spacing.md },

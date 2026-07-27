@@ -535,11 +535,15 @@ export default function LabelConfirmScreen() {
       {isPlaceBin ? (
         <>
           <Text style={[styles.label, styles.binFieldLabel]}>Bottles</Text>
-          <View style={styles.binQtyRow}>
-            <TouchableOpacity style={styles.binStep} onPress={() => setBinQty((q) => String(Math.max(1, (parseInt(q) || 1) - 1)))}><Text style={styles.binStepText}>−</Text></TouchableOpacity>
-            <TextInput style={styles.binQtyInput} value={binQty} onChangeText={(t) => setBinQty(t.replace(/[^0-9]/g, '').slice(0, 4))} keyboardType="number-pad" textAlign="center" />
-            <TouchableOpacity style={styles.binStep} onPress={() => setBinQty((q) => String((parseInt(q) || 1) + 1))}><Text style={styles.binStepText}>+</Text></TouchableOpacity>
-          </View>
+          <TextInput
+            style={styles.binQtyInput}
+            value={binQty}
+            onChangeText={(t) => setBinQty(t.replace(/[^0-9]/g, '').slice(0, 4))}
+            keyboardType="number-pad"
+            placeholder="e.g. 6"
+            placeholderTextColor={colors.textMuted}
+          />
+          <View style={{ height: spacing.md }} />
           <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
           <BottleSizePicker value={binFormat} onChange={setBinFormat} />
         </>
@@ -655,10 +659,7 @@ const styles = StyleSheet.create({
   // Bin diamond inline quantity + format — labels in gold to signal the
   // bin-specific fields added to this shared screen.
   binFieldLabel: { color: colors.gold },
-  binQtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  binStep: { width: 44, height: 44, borderRadius: 8, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
-  binStepText: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, lineHeight: 24 },
-  binQtyInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
+  binQtyInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.md, fontSize: 18, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
   button: {
     borderWidth: 1,
     borderColor: '#FFFFFF',
