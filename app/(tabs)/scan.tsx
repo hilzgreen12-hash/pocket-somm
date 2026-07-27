@@ -130,7 +130,9 @@ export default function ScanTab() {
     } finally {
       setScanningLabel(false);
     }
-    router.push(`/label/confirm?context=intel&backTo=${encodeURIComponent('/(tabs)/scan')}`);
+    // via=upload → the confirm screen shows "Cancel" (back to Scan) instead of
+    // "Scan Again" (which reopens the camera — only right for the camera flow).
+    router.push(`/label/confirm?context=intel&via=upload&backTo=${encodeURIComponent('/(tabs)/scan')}`);
   }
 
   return (

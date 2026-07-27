@@ -55,7 +55,11 @@ function computeFreeSlots(
 
 export default function LabelConfirmScreen() {
   useKeepAwake();
-  const { context, manual, backTo } = useLocalSearchParams<{ context?: string; manual?: string; backTo?: string }>();
+  const { context, manual, backTo, via } = useLocalSearchParams<{ context?: string; manual?: string; backTo?: string; via?: string }>();
+  // Reached by uploading a photo (not the camera): the bottom link is "Cancel"
+  // and returns to the Scan screen — "Scan Again" (reopen camera) only belongs
+  // to the camera flow.
+  const isUpload = via === 'upload';
   // Forward any context (wishlist / reviews / …) so /label/results knows
   // which flow we're in for back routing and which action set to show.
   const contextQuery = context ? `?context=${context}${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` : '';
@@ -492,8 +496,8 @@ export default function LabelConfirmScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/cellar/scan-lineup')}>
           <Text style={styles.backText}>Back to Lineup</Text>
         </TouchableOpacity>
-      ) : isManual ? (
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+      ) : isManual || isUpload ? (
+        <TouchableOpacity style={styles.backButton} onPress={() => (router.canGoBack() ? router.back() : router.replace((backTo as string) || '/(tabs)/scan'))}>
           <Text style={styles.backText}>Cancel</Text>
         </TouchableOpacity>
       ) : (
