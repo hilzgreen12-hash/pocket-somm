@@ -12,7 +12,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { updateCellarIntelBatch, isMissingIntel } from '../../src/services/bulkIntel';
-import { IntelProgress } from '../../src/components/IntelProgress';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
@@ -811,10 +811,17 @@ export default function FullCellarListScreen() {
         ) : null}
       </View>
 
-      {/* Full-screen percentage calculator while intel updates — the same one
-          Cellar Stats uses. Back is blocked so a mid-batch dismiss can't strand it. */}
+      {/* Full-screen progress while intel updates — the same percentage/time
+          tracker as the scan flows, for consistency. Duration scales with the
+          number of wines (3-way concurrency); the tracker's own past-cap lines
+          cover any overrun. Back is blocked so a mid-batch dismiss can't strand it. */}
       <Modal visible={intelUpdating} animationType="fade" onRequestClose={() => {}}>
-        <IntelProgress done={intelProgress.done} total={intelProgress.total} />
+        <SearchProgress
+          title="Updating wine intel…"
+          subtitle="Vinster needs a moment"
+          body="Vinster is fetching critic scores and market values for your wines."
+          durationMs={Math.max(15000, intelProgress.total * 2500)}
+        />
       </Modal>
 
       {/* Filter row — Sort first so the most common interaction (changing

@@ -8,7 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { repairRackedWines, updateCellarWine } from '../../src/api/cellar';
 import { generateWineIntel } from '../../src/services/pricing';
 import { isMissingIntel } from '../../src/services/bulkIntel';
-import { IntelProgress } from '../../src/components/IntelProgress';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -256,7 +256,14 @@ export default function CellarStatsScreen() {
   }
 
   if (calculating) {
-    return <IntelProgress done={calcProgress.done} total={calcProgress.total} title="Valuing your cellar…" />;
+    return (
+      <SearchProgress
+        title="Valuing your cellar…"
+        subtitle="Vinster needs a moment"
+        body="Vinster is fetching critic scores and market values for your wines."
+        durationMs={Math.max(15000, calcProgress.total * 2500)}
+      />
+    );
   }
 
   return (
