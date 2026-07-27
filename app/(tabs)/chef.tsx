@@ -125,14 +125,14 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Your dining record — restaurants and the wines reviewed at them. Cellar
-          wine reviews live on the wine card / Full Cellar List, not here. */}
+      {/* Your dining record — your restaurants, and Wine Reviews (restaurant,
+          cellar and other reviews, chosen via the collection selector). */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
           <Text style={styles.buttonText}>Your Restaurants</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/wines/chosen')}>
-          <Text style={styles.buttonText}>Your Restaurant Wines</Text>
+          <Text style={styles.buttonText}>Wine Reviews</Text>
         </TouchableOpacity>
       </View>
 
