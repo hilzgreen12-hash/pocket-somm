@@ -125,20 +125,20 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Your dining record — Wine Reviews and Restaurants, moved here from You
-          so the food-and-wine collections sit together above the Cookbook. */}
+      {/* Your dining record — restaurants and the wines reviewed at them. Cellar
+          wine reviews live on the wine card / Full Cellar List, not here. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/wines/chosen')}>
-          <Text style={styles.buttonText}>Wine Reviews</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/restaurants/reviews')}>
-          <Text style={styles.buttonText}>Restaurants</Text>
+          <Text style={styles.buttonText}>Your Restaurants</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/wines/chosen')}>
+          <Text style={styles.buttonText}>Your Restaurant Wines</Text>
         </TouchableOpacity>
       </View>
 
       <View style={[styles.section, { marginTop: spacing.sm }]}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
-          <Text style={styles.buttonText}>View Cookbook</Text>
+          <Text style={styles.buttonText}>Your Cookbook</Text>
         </TouchableOpacity>
       </View>
 
