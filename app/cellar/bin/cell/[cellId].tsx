@@ -175,33 +175,6 @@ export default function BinCellScreen() {
     });
   }
 
-  // Re-scan a label to fill the draft, mirroring the lineup edit sheet.
-  async function handleScan() {
-    if (!(await ensureMediaPermission('camera'))) return;
-    try {
-      const res = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
-      if (res.canceled || !res.assets[0]) return;
-      setScanning(true);
-      try {
-        const base64 = await prepareImageBase64(res.assets[0].uri);
-        const details = await scanLabel(base64);
-        setDraft((d) => d && ({
-          ...d,
-          producer: details.producer ?? d.producer,
-          wineName: details.wineName ?? d.wineName,
-          region: details.region ?? d.region,
-          vintage: details.vintage ?? d.vintage,
-        }));
-      } catch {
-        showAlert({ title: 'Could not read label', body: 'Enter the details by hand instead.' });
-      } finally {
-        setScanning(false);
-      }
-    } catch (err) {
-      showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
   // "Select from Cellar List" — file an existing cellar wine into this cell.
   function addFromCellar(wine: CellarWine) {
     setPickerOpen(false);
@@ -353,7 +326,14 @@ export default function BinCellScreen() {
             <Text style={styles.empty}>No wines in this {kindLabel.toLowerCase()} yet.</Text>
           ) : (
             wines.map((w) => (
-              <TouchableOpacity key={w.id} style={styles.row} onPress={() => openEdit(w)} activeOpacity={0.7}>
+              <TouchableOpacity
+                key={w.id}
+                style={styles.row}
+                onPress={() => router.push(`/cellar/${w.id}` as any)}
+                onLongPress={() => openEdit(w)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
                 <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} radius={4} frame={3} />
                 <Text style={styles.rowQty}>{w.quantity ?? 1}×</Text>
                 <View style={styles.rowMain}>
@@ -377,10 +357,6 @@ export default function BinCellScreen() {
         <View style={styles.overlay}>
           <View style={styles.sheet}>
             <Text style={styles.sheetTitle}>{draft?.id ? 'Edit wine' : 'Add wine'}</Text>
-
-            <TouchableOpacity style={styles.scanBtn} onPress={handleScan} activeOpacity={0.8} disabled={scanning}>
-              {scanning ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.scanBtnText}>Scan label to fill</Text>}
-            </TouchableOpacity>
 
             <TextInput style={styles.input} value={draft?.wineName} onChangeText={(t) => setDraft((d) => d && ({ ...d, wineName: t }))} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
             <TextInput style={styles.input} value={draft?.producer} onChangeText={(t) => setDraft((d) => d && ({ ...d, producer: t }))} placeholder="Producer" placeholderTextColor={colors.textMuted} />
@@ -495,8 +471,6 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
   sheetTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   sheetLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: 6 },
-  scanBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.md },
-  scanBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm },
   inputRow: { flexDirection: 'row', gap: spacing.sm },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
@@ -506,7 +480,7 @@ const styles = StyleSheet.create({
   saveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
   saveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   removeBtn: { alignItems: 'center', paddingTop: spacing.md },
-  removeBtnText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: '#c0392b', textDecorationLine: 'underline' },
+  removeBtnText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: '#FFFFFF', textDecorationLine: 'underline' },
   cancelBtn: { alignItems: 'center', paddingTop: spacing.md },
   cancelBtnText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });
