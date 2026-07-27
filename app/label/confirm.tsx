@@ -6,7 +6,8 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings } from '../../src/api/label';
+import { generatePairings, searchLabelImages } from '../../src/api/label';
+import { File, Paths } from 'expo-file-system';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { useRackStore } from '../../src/stores/rackStore';
@@ -99,6 +100,23 @@ export default function LabelConfirmScreen() {
   const [binQty, setBinQty] = useState('1');
   const [binFormat, setBinFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
 
+  // Manually-entered wines have no photo. Auto-fetch a label from the web so the
+  // Wine Intel card (and the saved cellar wine) still gets a thumbnail — the
+  // best web match, no picker (the wine-card "Find Label Online" keeps its
+  // picker for deliberate choice). Best-effort: never blocks the flow.
+  async function ensureAutoLabel(pProducer: string, pWineName: string | null) {
+    if (useLabelStore.getState().imageUri) return;
+    if (!pProducer.trim()) return;
+    try {
+      const cands = await searchLabelImages({ producer: pProducer, wineName: pWineName });
+      if (!cands.length) return;
+      const dest = new File(Paths.cache, `autolabel-${Date.now()}.img`);
+      try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
+      const file = await File.downloadFileAsync(cands[0].url, dest);
+      useLabelStore.getState().setImageUri(file.uri);
+    } catch { /* best-effort — no thumbnail is fine */ }
+  }
+
   async function handleConfirm() {
     if (!producer.trim() || !region.trim()) {
       showAlert({ title: 'Missing details', body: 'Producer and region are required.' });
@@ -151,6 +169,9 @@ export default function LabelConfirmScreen() {
     // results, with no intel generated.
     if (!context) {
       setIntelligence(null);
+      // Fetch a label in the background so the Add-to-Cellar save carries a
+      // thumbnail even for a manual entry (imageUri is read at save time).
+      void ensureAutoLabel(confirmed.producer, confirmed.wineName);
       router.replace('/label/results?context=add');
       return;
     }
@@ -160,6 +181,7 @@ export default function LabelConfirmScreen() {
     // wrong for a case label, so skip straight to the add card.
     if (context === 'add-location') {
       setIntelligence(null);
+      void ensureAutoLabel(confirmed.producer, confirmed.wineName);
       router.replace('/label/results?context=add-location');
       return;
     }
@@ -168,8 +190,12 @@ export default function LabelConfirmScreen() {
     try {
       // generateWineIntel queries Wine-Searcher first (real market price +
       // WS-anchored critic score, converted to the user's currency), falling
-      // back to the Claude estimate on a no-match.
-      const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
+      // back to the Claude estimate on a no-match. In parallel, auto-fetch a
+      // label so a manual entry still shows a thumbnail on the intel card.
+      const [intel] = await Promise.all([
+        generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP'),
+        ensureAutoLabel(confirmed.producer, confirmed.wineName),
+      ]);
       setIntelligence(intel);
       // Persist as the "last result" so the Cellar tab's View last result link
       // survives an app restart (separate from the transient label store).

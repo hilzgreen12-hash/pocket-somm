@@ -13,6 +13,9 @@ interface LabelState {
   error: string | null;
 
   setImage: (uri: string, base64: string) => void;
+  // Set only the thumbnail (no scan-state clear) — used to attach an
+  // auto-fetched or stored label so it shows on the Wine Intel card.
+  setImageUri: (uri: string | null) => void;
   setWineDetails: (details: WineDetails) => void;
   setWineDetailsConfirmed: (details: WineDetailsComplete) => void;
   setIntelligence: (intel: WineIntelligence | null) => void;
@@ -42,6 +45,7 @@ export const useLabelStore = create<LabelState>((set) => ({
     wineDetails: null, wineDetailsConfirmed: null, intelligence: null, error: null,
     stage: 'scanning',
   }),
+  setImageUri: (uri) => set({ imageUri: uri }),
   setWineDetails: (details) => set({ wineDetails: details, stage: 'confirming' }),
   setWineDetailsConfirmed: (details) => set({ wineDetailsConfirmed: details, stage: 'loading' }),
   setIntelligence: (intel) => set({ intelligence: intel }),
