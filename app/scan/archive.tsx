@@ -276,6 +276,9 @@ export default function MyLabelsScreen() {
   async function handleViewIntel(label: LibraryLabel) {
     const details = detailsFromLabel(label);
     const ls = useLabelStore.getState();
+    // Carry this label's stored photo through as the Wine Intel card thumbnail.
+    try { ls.setImageUri(label.label_image_path ? await labelSignedUrl(label.label_image_path) : null); }
+    catch { ls.setImageUri(null); }
     if (label.intel) {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(label.intel);
