@@ -430,7 +430,13 @@ export default function LabelConfirmScreen() {
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setPendingBinCell(null);
-      router.replace(`/cellar/bin/cell/${cellId}` as any);
+      // Pop back to the diamond cell we came from (it's always directly below the
+      // confirm frame — pendingBinCell is only ever set there) rather than
+      // router.replace, which stacked a SECOND cell screen on top of the
+      // original so the back sequence (diamond → bin → Other Home Storage) hit
+      // the diamond twice. The cell refreshes from the invalidated query above.
+      if (router.canGoBack()) router.back();
+      else router.replace(`/cellar/bin/cell/${cellId}` as any);
     } catch (err) {
       showAlert({ title: 'Could not add wine', body: err instanceof Error ? err.message : 'Please try again.' });
       setPlacing(false);
