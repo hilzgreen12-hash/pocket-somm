@@ -54,9 +54,11 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 
 6. bottleSizeMl: The bottle volume in millilitres as an integer. Look near the ABV / contents notice (often the lower edge of the label or the back) for text like "750ml", "75cl", "1.5L", "Magnum", "Half bottle", etc. Convert to millilitres: 75cl → 750; 37.5cl / Half → 375; 50cl → 500; 1L → 1000; 1.5L / Magnum → 1500; 3L / Jeroboam → 3000; 6L / Methuselah → 6000. Return the integer. If you can't see a clear volume on the label, return null — do NOT guess. Most standard wine bottles are 750ml; only fill this in when the label actually states it (or the bottle silhouette obviously indicates a non-standard format like a magnum).
 
-Return ONLY a valid JSON object with exactly these six keys. Set any field other than style to null if you cannot confidently identify it from the label. Do not include any explanation or markdown — only the raw JSON.
+7. confidence: How sure you are that producer + wineName together identify the EXACT bottling. Return "high" when the label is clearly legible and you're confident which specific wine this is. Return "low" when the label is blurry, partially obscured, or cropped; when text is hard to read; or when the producer makes a RANGE/SERIES of similar bottlings and you can't be certain which one this is (e.g. you can read "Assemblage" but not whether it's "Tome III" or "Tome IV"). When in doubt, prefer "low" — a low rating lets the app offer the user a list of that producer's bottlings to confirm.
 
-Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "bottleSizeMl": 750}`;
+Return ONLY a valid JSON object with exactly these seven keys. Set any field other than style and confidence to null if you cannot confidently identify it from the label. Do not include any explanation or markdown — only the raw JSON.
+
+Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "bottleSizeMl": 750, "confidence": "high"}`;
 
 Deno.serve(async (req) => {
   try {
@@ -109,6 +111,10 @@ Deno.serve(async (req) => {
       vintage,
       style,
       bottleSizeMl,
+      // 'low' when the read is uncertain or the producer makes a series of
+      // similar bottlings — the Confirm screen then auto-offers a bottling
+      // picker. Anything but an explicit "low" is treated as high confidence.
+      confidence: parsed.confidence === 'low' ? 'low' : 'high',
     }), { headers: { 'Content-Type': 'application/json' } });
 
   } catch (err) {

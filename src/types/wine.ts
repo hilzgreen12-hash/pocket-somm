@@ -78,6 +78,11 @@ export interface WineDetails {
   // Pre-seeded quantity when this wine arrives from a batched lineup entry
   // (N identical bottles). Optional — single-bottle flows omit it (=> 1).
   quantity?: number;
+  // Scanner self-assessment of how sure it is about the exact bottling. 'low'
+  // (blurry read, or a producer with a range of similar bottlings) makes the
+  // Confirm screen auto-offer a bottling picker. Undefined on older responses /
+  // non-scan flows — treated as confident.
+  confidence?: 'high' | 'low' | null;
 }
 
 export interface WineDetailsComplete {
