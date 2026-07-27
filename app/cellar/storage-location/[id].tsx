@@ -734,9 +734,6 @@ export default function StorageLocationScreen() {
           <Text style={styles.title} numberOfLines={1}>{location.name}</Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={openAddWine} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Text style={styles.headerLink}>+ Add Wine</Text>
-          </TouchableOpacity>
           <TouchableOpacity onPress={handleEditImage} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
             <Text style={styles.headerLink}>Edit Image</Text>
           </TouchableOpacity>
@@ -744,19 +741,22 @@ export default function StorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {/* Layout: header (with its own underline), stats bar, a separator
-            line, the (landscape) photo, another line, then filters/search/list. */}
+        {/* Layout: header, stats bar, the "+ Add Wine" line, a separator line,
+            the (landscape) photo, then filters/search/list (no line between the
+            photo and the filters). */}
         <Text style={styles.statsBar}>
           {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'} · {totalBottles} Total {totalBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
+
+        <TouchableOpacity onPress={openAddWine} style={styles.addWineRow} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+          <Text style={styles.addWineText}>+ Add Wine</Text>
+        </TouchableOpacity>
 
         <View style={styles.sectionLine} />
 
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
         ) : null}
-
-        <View style={styles.sectionLine} />
 
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
@@ -1093,7 +1093,11 @@ const styles = StyleSheet.create({
   // Portrait photo, ~2/3 the old footprint, centred.
   areaPhoto: { alignSelf: 'center', width: '85%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface, marginVertical: spacing.md },
   sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
-  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.md, paddingHorizontal: spacing.xl },
+  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.sm, paddingHorizontal: spacing.xl },
+  // "+ Add Wine" — its own centred line below the stats bar (moved out of the
+  // cramped top-right header stack).
+  addWineRow: { alignItems: 'center', paddingBottom: spacing.md },
+  addWineText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
