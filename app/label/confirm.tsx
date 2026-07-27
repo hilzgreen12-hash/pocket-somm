@@ -525,7 +525,7 @@ export default function LabelConfirmScreen() {
       {!isManual ? (
         <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
           <Text style={styles.candLinkText}>
-            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Not this wine? Choose from other bottlings'}
+            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Vinster detects similar bottlings, select the correct one from our list'}
           </Text>
         </TouchableOpacity>
       ) : null}
