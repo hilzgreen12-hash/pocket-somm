@@ -205,8 +205,8 @@ export default function LabelResultsScreen() {
   // the rest create a storage_cases row of that kind (migration 073).
   const PACKAGING = [
     { k: 'loose', label: 'Loose Bottle(s)' },
-    { k: 'owc', label: 'OWC Complete Case' },
-    { k: 'non_owc', label: 'Non-OWC Complete Case' },
+    { k: 'owc', label: 'OWC' },
+    { k: 'non_owc', label: 'Non-OWC Case' },
     { k: 'mixed', label: 'Mixed Case' },
   ] as const;
   // Case storage (add-to-location flow, migration 069). 'loose' files the wine

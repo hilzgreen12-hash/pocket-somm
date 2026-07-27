@@ -119,8 +119,8 @@ export type CaseKind = 'single' | 'mixed' | 'owc' | 'non_owc';
 // the location card chips and the Cases filter so the wording stays in sync.
 export function caseKindLabel(kind: string): string {
   switch (kind) {
-    case 'owc': return 'OWC Complete';
-    case 'non_owc': return 'Non-OWC Complete';
+    case 'owc': return 'OWC';
+    case 'non_owc': return 'Non-OWC Case';
     case 'mixed': return 'Mixed';
     default: return 'Case'; // legacy 'single'
   }
