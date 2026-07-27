@@ -8,7 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
-import { parseCellarCsv } from '../../src/utils/vivinoCsv';
+import { parseCellarCsv, parseCellarSpreadsheet } from '../../src/utils/vivinoCsv';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
 import type { CellarWine } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -60,7 +60,7 @@ const CSV_SOURCES: Record<CsvSource, {
   file: {
     name: 'File',
     lead: 'Upload a cellar spreadsheet.',
-    hint: 'Choose a CSV or tab-delimited file (.csv, .tsv, .txt). Exported an Excel, Numbers or Google Sheet? Save it as CSV first.',
+    hint: 'Choose an Excel spreadsheet (.xlsx, .xls), a CSV, or a tab-delimited file (.tsv). Exported from Numbers or Google Sheets? Save it as Excel or CSV first. Vinster reads the columns wherever they are, as long as the top row names them.',
     steps: null,
     hasLabelImages: false,
   },
@@ -193,19 +193,45 @@ export default function ImportCellarScreen() {
   async function pickCsvFile() {
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        type: ['text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'application/vnd.ms-excel', 'text/plain', '*/*'],
+        type: [
+          'text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'text/plain',
+          'application/vnd.ms-excel', // .xls (and, on Windows, some .csv)
+          'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+          'application/vnd.oasis.opendocument.spreadsheet', // .ods
+          '*/*',
+        ],
         copyToCacheDirectory: true,
         multiple: false,
       });
       if (res.canceled || !res.assets?.[0]) return;
       setStage('analyzing');
-      const text = await new File(res.assets[0].uri).text();
-      const parsed = parseCellarCsv(text);
+      const asset = res.assets[0];
+      const file = new File(asset.uri);
+      // Excel / OpenDocument files are binary, so they can't be read as text like
+      // a CSV. Route them to the spreadsheet parser (SheetJS) via base64; read
+      // everything else as text. Detect by extension/mime, with a byte-sniff
+      // fallback so a mislabelled file (e.g. an .xlsx with no extension) still
+      // parses: ZIP (PK, xlsx/ods) or CFB (xls) magic bytes → spreadsheet.
+      const name = (asset.name ?? '').toLowerCase();
+      const mime = asset.mimeType ?? '';
+      const looksSpreadsheet =
+        /\.(xlsx|xls|ods)$/.test(name) || /spreadsheet|officedocument|ms-excel/.test(mime);
+      let parsed = looksSpreadsheet
+        ? parseCellarSpreadsheet(await file.base64())
+        : parseCellarCsv(await file.text());
+      if (parsed.wines.length === 0 && !looksSpreadsheet) {
+        // Text parse found nothing — the file may be a binary spreadsheet with a
+        // text-ish (or missing) extension. Sniff the magic bytes and retry.
+        try {
+          const b64 = await file.base64();
+          if (/^UEsD|^0M8R/.test(b64)) parsed = parseCellarSpreadsheet(b64); // PK.. / CFB
+        } catch { /* keep the empty result */ }
+      }
       if (parsed.wines.length === 0) {
         showAlert({
           title: "Couldn't read that file",
           body: csv?.name === 'File'
-            ? "We couldn't find any wines in that file. Make sure it's a CSV or tab-delimited spreadsheet with a header row (producer, wine, vintage, quantity…) and try again."
+            ? "We couldn't find any wines in that file. Make sure it's an Excel or CSV spreadsheet with a header row naming the columns (producer, wine, vintage, quantity…) and try again."
             : `That doesn't look like a ${csv?.name ?? ''} cellar export. Make sure you exported your cellar as a CSV and try again.`,
         });
         setStage('capture');
