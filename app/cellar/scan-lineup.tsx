@@ -517,7 +517,7 @@ export default function ScanLineupScreen() {
                         {b.vintage ? `${b.vintage} ` : ''}{name}
                         <Text style={styles.formatTag}>  {bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
                       </Text>
-                      <Text style={styles.bottleLine}>{b.quantity ?? 1} {(b.quantity ?? 1) === 1 ? 'bottle' : 'bottles'} · {orientation === 'Horizontal' ? 'Vertically' : 'Horizontally'}</Text>
+                      <Text style={styles.bottleLine}>{b.quantity ?? 1} {(b.quantity ?? 1) === 1 ? 'btl' : 'btls'} · Edit to add more vertically</Text>
                       {!b.confident && !isOn ? <Text style={styles.unconfident}>Low-confidence read — check it</Text> : null}
                     </View>
                     <TouchableOpacity onPress={() => openEdit(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -695,7 +695,7 @@ const styles = StyleSheet.create({
   // Batched-bottle count shown after the region, e.g. "×2 bottles".
   qtyTag: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   unconfident: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.gold, marginTop: 2 },
-  // "X bottles · Vertically/Horizontally" under each lineup wine.
+  // "X btl · Edit to add more vertically" under each lineup wine.
   bottleLine: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   // Quantity stepper in the lineup edit sheet.
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.lg, marginTop: spacing.xs },
