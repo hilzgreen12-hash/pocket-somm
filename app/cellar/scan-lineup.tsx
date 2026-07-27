@@ -98,9 +98,6 @@ export default function ScanLineupScreen() {
   // Rack-placement lineup: launched from a rack with a chosen start slot — the
   // whole lineup is placed into the rack at once (no per-wine intel detour).
   const isRackPlacement = startSlot != null && !!originRackId;
-  // Whether this lineup is destined for a wine fridge (vs a rack) — drives the
-  // fridge-only photo tip (popup + blurb paragraph).
-  const isFridge = racks.find((r) => r.id === originRackId)?.storage_type === 'fridge';
   const [placing, setPlacing] = useState(false);
   // Quick batch confirm: each row is ticked once reviewed/edited; "Add Bottles"
   // unlocks when all are ticked.
@@ -127,11 +124,13 @@ export default function ScanLineupScreen() {
       if (result.canceled || !result.assets.length) return;
       const uri = result.assets[0].uri;
       setRawUri(uri);
-      // Rack bottles are stored neck-forward, so the photo is upside down —
-      // auto-rotate before reading. Fridges often stand upright, so not those.
-      const doFlip = isRackPlacement && !isFridge;
-      setFlipped(doFlip);
-      await analyze(uri, doFlip);
+      // Read the photo exactly as taken — never auto-rotate. A 180° flip also
+      // mirrors left↔right, so blindly flipping an already-upright rack shot both
+      // turns the preview upside down AND reverses the bottle order, placing the
+      // lineup back-to-front. Users whose bottles sit neck-forward (label upside
+      // down in frame) tap "Labels upside down? Flip & re-read" to invert.
+      setFlipped(false);
+      await analyze(uri, false);
     } catch (err) {
       showAlert({ title: 'Could not open camera', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -538,7 +537,7 @@ export default function ScanLineupScreen() {
                 </Text>
               </TouchableOpacity>
               {flipped ? (
-                <Text style={styles.hint}>Vinster turned your rack photo upright (bottles sit neck‑forward), so labels read the right way up. Wrong? Flip it back.</Text>
+                <Text style={styles.hint}>Photo turned 180° so the labels read the right way up. Note this also reverses the left‑to‑right order — flip back if the preview looks wrong.</Text>
               ) : null}
               <TouchableOpacity style={styles.secondaryBtn} onPress={handleFlip} disabled={!rawUri || placing} activeOpacity={0.85}>
                 <Text style={styles.secondaryBtnText}>{flipped ? 'Flip back & re‑read' : 'Labels upside down? Flip & re‑read'}</Text>
