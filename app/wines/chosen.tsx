@@ -182,13 +182,15 @@ export default function ChosenWinesScreen() {
     // The `source` column on chosen_wines (migration 042) drives the
     // restaurant-vs-other split here. Legacy rows default to
     // 'restaurant'; the "Review without adding" path tags 'other'.
+    // Cellar wine reviews live on the wine card / Full Cellar List — they are
+    // NOT shown here (this screen is Your Restaurant Wines). We still consult
+    // cellarReviews below so a cellar-reviewed wine isn't flagged "awaiting".
     ...chosenWines.map((w): ReviewItem => ({
       source: w.source === 'other' ? 'other' : 'restaurant',
       date: w.chosen_at,
       score: w.user_score,
       wine: w,
     })),
-    ...cellarReviews.map((w): ReviewItem => ({ source: 'cellar', date: w.review_date ?? w.created_at, score: w.review_score, wine: w })),
   ];
 
   // Restaurant bottle picks the user has NOT yet reviewed — these are excluded
@@ -722,7 +724,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wines</Text>
+        <Text style={styles.title}>Your Restaurant Wines</Text>
         <TouchableOpacity
           onPress={() => setChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}

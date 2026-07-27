@@ -1534,12 +1534,12 @@ export default function CellarWineDetail() {
       <Text style={styles.reviewsHeader}>Reviews</Text>
 
       <View style={styles.reviewSubsection}>
-        {/* Your Review — a chevron header (like Vinster's Review). Expand to
-            edit; tap the header again to auto-save and collapse. */}
+        {/* Your Review — the chevron drills through to the full review page.
+            Score + Drinking Window stay on the card below. */}
         <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={toggleReview} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+          <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
             <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-            <Ionicons name={reviewExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+            <Ionicons name="chevron-down-outline" size={16} color={colors.gold} />
           </TouchableOpacity>
         </View>
 
@@ -1564,42 +1564,6 @@ export default function CellarWineDetail() {
           </TouchableOpacity>
         )}
 
-        {reviewExpanded && (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
-          <>
-            {wine.review_note ? (
-              <Text style={styles.reviewNoteBody}>“{wine.review_note}”</Text>
-            ) : null}
-
-            {/* Share-to-community + share-outside-the-app — disabled until a
-                written review exists. Editing opens the canonical review form. */}
-            <View style={styles.reviewShareRow}>
-              <TouchableOpacity
-                style={[styles.reviewShareBtn, (!COMMUNITY_ENABLED || postingReview || reviewPosted || !wine.review_note) && styles.buttonDisabled]}
-                onPress={handlePostToCommunity}
-                disabled={!COMMUNITY_ENABLED || postingReview || reviewPosted || !wine.review_note}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.reviewShareBtnText}>
-                  {!COMMUNITY_ENABLED ? 'Share to Community' : reviewPosted ? '✓ Posted' : postingReview ? 'Posting…' : 'Share to Community'}
-                </Text>
-                {!COMMUNITY_ENABLED ? <Text style={styles.reviewShareBtnSub}>(coming soon)</Text> : null}
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.reviewShareBtn, sharingOutside && styles.buttonDisabled]}
-                onPress={handleShareReviewOutside}
-                disabled={sharingOutside}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.reviewShareBtnText}>
-                  {sharingOutside ? 'Preparing…' : 'Share'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.editReviewLink}>Edit Review</Text>
-            </TouchableOpacity>
-          </>
-        ) : null}
       </View>
 
       {!isWishlist && (
