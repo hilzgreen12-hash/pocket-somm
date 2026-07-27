@@ -210,9 +210,13 @@ export default function CellarWineDetail() {
   const [grapeDraft, setGrapeDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
 
-  // Auto-generate intel the first time an un-enriched wine card is opened — e.g.
-  // a wine added straight into a rack with no critic score / value / grape yet.
-  // Fires once per wine; the user can still re-run via the Generate buttons.
+  // Auto-generate intel whenever a wine card opens missing its key intel — the
+  // critic score or market value. A critic score is core intel; the user must
+  // never have to tap "Generate" for it. A fully-bare wine (nothing yet) shows
+  // the full-screen tracker so the card only ever appears finished; a card that
+  // already has some intel but is missing the score generates quietly in the
+  // background so a populated card isn't hidden behind a loader. Fires once per
+  // wine per open; the user can still re-run via the Generate buttons.
   const autoGenRef = useRef<string | null>(null);
   // True while a first-open auto-generation is running — drives the full-screen
   // "generating" tracker so the card only ever appears finished.
@@ -223,12 +227,15 @@ export default function CellarWineDetail() {
   const [autoGenFailed, setAutoGenFailed] = useState(false);
   useEffect(() => {
     if (!wine || isWishlist || isArchived || refreshingValue) return;
-    const ungenerated = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
-    if (ungenerated && autoGenRef.current !== wine.id) {
+    const missingKeyIntel = wine.critic_score == null || wine.estimated_value == null;
+    const fullyBare = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
+    if (missingKeyIntel && autoGenRef.current !== wine.id) {
       autoGenRef.current = wine.id;
-      setAutoGenerating(true);
+      // Only a fully-bare wine hides behind the tracker; a partially-enriched
+      // card refreshes in the background.
+      if (fullyBare) setAutoGenerating(true);
       handleRefreshEstimate()
-        .then((produced) => setAutoGenFailed(!produced))
+        .then((produced) => { if (fullyBare) setAutoGenFailed(!produced); })
         .finally(() => setAutoGenerating(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
