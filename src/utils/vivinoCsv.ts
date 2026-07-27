@@ -8,6 +8,38 @@ import type { ImportedCellarWine } from '../api/label';
 // columns are matched by SYNONYM rather than a fixed schema — this keeps working
 // across export variants and is trivial to extend when we see a new header.
 
+// Repair UTF-8-read-as-Latin-1 mojibake (e.g. "Château" → "ChÃ¢teau"). This
+// happens when the spreadsheet reader (SheetJS) runs on Hermes without a Buffer
+// to decode UTF-8, so accented cells come back as their raw bytes. We only touch
+// strings carrying the tell-tale byte signature (a UTF-8 lead byte followed by a
+// continuation byte, 0x80–0xBF) and re-decode those bytes as UTF-8 — correctly
+// decoded text never matches the signature, so this is a safe no-op there.
+const MOJIBAKE_SIGNATURE = /[\xC2-\xF4][\x80-\xBF]/;
+function fixMojibake(s: string): string {
+  if (!s || !MOJIBAKE_SIGNATURE.test(s)) return s;
+  let out = '';
+  let i = 0;
+  while (i < s.length) {
+    const c = s.charCodeAt(i) & 0xff;
+    if (c < 0x80) { out += s[i]; i += 1; continue; }
+    const d = s.charCodeAt(i + 1) & 0xff;
+    if (c >= 0xc2 && c < 0xe0 && d >= 0x80 && d < 0xc0) {
+      out += String.fromCharCode(((c & 0x1f) << 6) | (d & 0x3f)); i += 2; continue;
+    }
+    const e = s.charCodeAt(i + 2) & 0xff;
+    if (c >= 0xe0 && c < 0xf0 && d >= 0x80 && d < 0xc0 && e >= 0x80 && e < 0xc0) {
+      out += String.fromCharCode(((c & 0x0f) << 12) | ((d & 0x3f) << 6) | (e & 0x3f)); i += 3; continue;
+    }
+    const f = s.charCodeAt(i + 3) & 0xff;
+    if (c >= 0xf0 && d >= 0x80 && d < 0xc0 && e >= 0x80 && e < 0xc0 && f >= 0x80 && f < 0xc0) {
+      const w = (((c & 0x07) << 18) | ((d & 0x3f) << 12) | ((e & 0x3f) << 6) | (f & 0x3f)) - 0x10000;
+      out += String.fromCharCode(0xd800 + ((w >>> 10) & 0x3ff), 0xdc00 + (w & 0x3ff)); i += 4; continue;
+    }
+    out += s[i]; i += 1; // not a valid sequence — leave as-is
+  }
+  return out;
+}
+
 // Sniff the field delimiter from the header line so we handle comma-CSV,
 // tab-delimited (CellarTracker "text" export, Excel "Save As Tab"), and the
 // semicolon CSVs some locales produce — whichever appears most, outside quotes.
@@ -128,7 +160,10 @@ export function parseCellarSpreadsheet(base64: string): VivinoParseResult {
 // Map already-parsed rows (from a CSV or a spreadsheet) onto cellar wines. The
 // first row is the header; columns are matched by synonym so the same logic
 // serves every source and format.
-export function parseCellarRows(rows: string[][]): VivinoParseResult {
+export function parseCellarRows(rawRows: string[][]): VivinoParseResult {
+  // Repair any UTF-8-as-Latin-1 mojibake up front so headers match and names
+  // store correctly. No-op on already-correct text.
+  const rows = rawRows.map((r) => r.map(fixMojibake));
   if (rows.length < 2) return { wines: [], reviews: [], rowCount: 0, matchedColumns: [] };
   const header = rows[0];
   const col = {
