@@ -1,3 +1,4 @@
+import * as XLSX from 'xlsx';
 import type { ImportedCellarWine } from '../api/label';
 
 // Parse a Vivino "export your cellar" CSV into cellar wines (and, for the later
@@ -100,7 +101,34 @@ export interface VivinoParseResult {
 // Named for Vivino historically, but the synonym-based matching is format-
 // agnostic — it also handles CellarTracker and generic cellar CSV exports.
 export function parseCellarCsv(text: string): VivinoParseResult {
-  const rows = parseCsv(text);
+  return parseCellarRows(parseCsv(text));
+}
+
+// Parse an Excel / OpenDocument spreadsheet (.xlsx, .xls, .ods) supplied as
+// base64. Excel files are binary (a zipped bundle of XML), so they can't be read
+// as text like a CSV — SheetJS decodes the workbook into rows, which then go
+// through the exact same synonym-based column matching as a CSV. Uses the first
+// sheet that has a header + at least one data row.
+export function parseCellarSpreadsheet(base64: string): VivinoParseResult {
+  const wb = XLSX.read(base64, { type: 'base64' });
+  for (const name of wb.SheetNames) {
+    const sheet = wb.Sheets[name];
+    if (!sheet) continue;
+    // header:1 → array-of-arrays; raw:false formats dates/numbers as display
+    // strings so vintages and quantities read like they do in a CSV export.
+    const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '', blankrows: false });
+    const rows = raw
+      .map((r) => (Array.isArray(r) ? r.map((c) => (c == null ? '' : String(c))) : []))
+      .filter((r) => r.some((c) => c.trim() !== ''));
+    if (rows.length >= 2) return parseCellarRows(rows);
+  }
+  return { wines: [], reviews: [], rowCount: 0, matchedColumns: [] };
+}
+
+// Map already-parsed rows (from a CSV or a spreadsheet) onto cellar wines. The
+// first row is the header; columns are matched by synonym so the same logic
+// serves every source and format.
+export function parseCellarRows(rows: string[][]): VivinoParseResult {
   if (rows.length < 2) return { wines: [], reviews: [], rowCount: 0, matchedColumns: [] };
   const header = rows[0];
   const col = {
