@@ -48,9 +48,14 @@ interface Props {
   // (reused on save, no re-upload) so the review carries the same thumbnail.
   confirmedIdentity?: boolean;
   labelImagePath?: string | null;
+  // Which collection this review belongs to — set by the "Add a Wine Review"
+  // chooser (Restaurant Wine vs Other Wine). Both live on chosen_wines and are
+  // distinguished by the `source` column; defaults to 'other' for a hand-entered
+  // review that isn't tied to a restaurant visit.
+  source?: 'restaurant' | 'other';
 }
 
-export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null }: Props) {
+export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null, source = 'other' }: Props) {
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { saveManual, update, chosenWines } = useChosenWines();
@@ -174,9 +179,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           tastingNote, otherObservations, userScore, isFavourite,
           reviewDate: reviewDate.trim() || null,
           userDrinkingWindow: dw,
-          // Hand-entered review → 'other' so it stays in Your Wine Reviews but
-          // not under You · Your Restaurants · Bottle Picks.
-          source: 'other',
+          // Collection tag from the "Add a Wine Review" chooser: 'restaurant'
+          // (drunk at a restaurant) or 'other' (a tasting, event, or at home).
+          // Both stay in Your Wine Reviews, out of You · Your Restaurants ·
+          // Bottle Picks (which are scan-session-linked, not hand entered).
+          source,
         });
         // Persist any style the user set via the identity sheet.
         if (style.trim() && row?.id) {

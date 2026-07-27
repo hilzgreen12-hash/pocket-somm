@@ -33,6 +33,19 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// Month key + label for the Month filter. Key is 'YYYY-MM' (sortable);
+// label is "July 2026". 'all' is the no-filter sentinel.
+function monthKey(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+function monthLabel(key: string): string {
+  if (key === 'all' || !key) return 'All';
+  const [y, m] = key.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
+
 // Mic + Camera marks drawn in the same hand-drawn gold-outline style as the
 // home-screen tile motifs (List / Chef / Cellar / Community) — bordered Views,
 // no image assets.
@@ -160,14 +173,25 @@ export default function ChosenWinesScreen() {
   // common interaction. Default sort is "Recently added" (the previous
   // 'date' option, renamed for consistency with Full Cellar List).
   type SortMode = 'recent' | 'score-desc' | 'score-asc';
-  type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'wishlist' | 'other';
-  type FilterField = 'sort' | 'type' | 'location' | 'favourite' | null;
+  // Which collection to show. Wish List is gone from this screen — reviews are
+  // restaurant, cellar, or other only. Drives the centred collection selector.
+  type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
+  type FilterField = 'sort' | 'type' | 'month' | 'location' | 'favourite' | null;
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [monthFilter, setMonthFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('All');
   const [favouriteFilter, setFavouriteFilter] = useState<'all' | 'fav'>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
+  // "+ Add" is a two-step chooser: first the collection (Restaurant / Cellar /
+  // Other), then — for restaurant/other — Scan / Upload / Manual. Cellar routes
+  // to a picker over the live cellar (a cellar review must attach to a real
+  // bottle). addSource carries the chosen collection into AddChosenWineModal.
+  const [collectionChooserOpen, setCollectionChooserOpen] = useState(false);
+  const [addSource, setAddSource] = useState<'restaurant' | 'other'>('other');
+  const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  const [cellarPickerSearch, setCellarPickerSearch] = useState('');
 
   // Cellar wines that have ANY user-supplied review content count as a
   // "cellar review".
@@ -182,13 +206,20 @@ export default function ChosenWinesScreen() {
     // The `source` column on chosen_wines (migration 042) drives the
     // restaurant-vs-other split here. Legacy rows default to
     // 'restaurant'; the "Review without adding" path tags 'other'.
-    // Cellar wine reviews live on the wine card / Full Cellar List — they are
-    // NOT shown here (this screen is Your Restaurant Wines). We still consult
-    // cellarReviews below so a cellar-reviewed wine isn't flagged "awaiting".
     ...chosenWines.map((w): ReviewItem => ({
       source: w.source === 'other' ? 'other' : 'restaurant',
       date: w.chosen_at,
       score: w.user_score,
+      wine: w,
+    })),
+    // Cellar wine reviews are shown here too, selectable via the collection
+    // header (All / Restaurant / Cellar / Other). Each is derived from a
+    // cellar_wines row carrying user review content; the review date drives
+    // recency + the Month filter, the review score drives sort.
+    ...cellarReviews.map((w): ReviewItem => ({
+      source: 'cellar',
+      date: w.review_date ?? w.updated_at ?? w.created_at,
+      score: w.review_score ?? null,
       wine: w,
     })),
   ];
@@ -309,27 +340,41 @@ export default function ChosenWinesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenWines, cellarReviews]);
 
+  // Whether an item is a shown review (a written chosen review or any cellar
+  // review) rather than a bare, unreviewed bottle pick — used by the Location /
+  // Month option lists and the main filter so the three agree on what's visible.
+  function isShownReview(it: ReviewItem): boolean {
+    if (isWishlist(it)) return false;
+    if (it.source === 'restaurant' || it.source === 'other') return chosenHasReview(it.wine as ChosenWine);
+    return true; // cellar reviews are always shown
+  }
+
+  // Months surfaced by the Month chip — every month that carries a shown review,
+  // most-recent first. 'all' is the no-filter sentinel.
+  const availableMonths = useMemo(() => {
+    const set = new Set<string>();
+    for (const it of items) {
+      if (!isShownReview(it)) continue;
+      const k = monthKey(it.date);
+      if (k) set.add(k);
+    }
+    return ['all', ...Array.from(set).sort((a, b) => b.localeCompare(a))];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chosenWines, cellarReviews]);
+
   // Apply filters. Search is applied last so the chips still own the
   // visible "shape" — typing a query just narrows whatever filters
   // are on, matching Full Cellar List's behaviour.
   const q = search.trim().toLowerCase();
   const filtered = items.filter((it) => {
-    if (typeFilter === 'wishlist') {
-      if (!isWishlist(it)) return false;
-    } else if (typeFilter === 'all') {
-      // Bare bottle picks (no written review) — List or Off-List — live only in
-      // You · Your Restaurants. A pick that's since been reviewed still belongs
-      // here. (Wish-listed picks stay reachable via the Wish List slice above.)
-      if ((it.source === 'restaurant' || it.source === 'other') && !chosenHasReview(it.wine as ChosenWine)) return false;
-    } else if (typeFilter === 'restaurant') {
-      // Restaurant Wines slice — both List Bottles ('restaurant') and Off-List
-      // Bottles ('other'), and only those actually reviewed (bare picks stay in
-      // Your Restaurants).
-      if (it.source !== 'restaurant' && it.source !== 'other') return false;
-      if (!chosenHasReview(it.wine as ChosenWine)) return false;
-    } else if (it.source !== typeFilter) {
-      return false;
-    }
+    // Wish List wines never appear here, and bare (unreviewed) restaurant/other
+    // picks live in You · Your Restaurants until reviewed.
+    if (!isShownReview(it)) return false;
+    // Collection selector: All shows everything; otherwise a single source. The
+    // three collections map straight onto item.source (restaurant / cellar /
+    // other) now that they're distinct slices.
+    if (typeFilter !== 'all' && it.source !== typeFilter) return false;
+    if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
     if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
     if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
     if (q) {
@@ -367,20 +412,17 @@ export default function ChosenWinesScreen() {
     { value: 'score-desc', label: 'Descending score' },
     { value: 'score-asc',  label: 'Ascending score' },
   ];
-  // "Portfolio" — which slice of the user's reviews to show. Absorbs the old
-  // standalone Wish List filter as the "Wish List Wines" option.
-  const PORTFOLIO_OPTIONS: { value: TypeFilter; label: string }[] = [
-    { value: 'all',        label: 'All Reviews' },
-    { value: 'cellar',     label: 'Cellar Wines' },
-    // Restaurant Wines = wines reviewed at a restaurant — both List Bottles
-    // (source 'restaurant', chosen off the list) and Off-List Bottles (source
-    // 'other', brought to the visit). Bare picks with no review stay in Your
-    // Restaurants and are filtered out below.
-    { value: 'restaurant', label: 'Restaurant Wines' },
-    { value: 'wishlist',   label: 'Wish List Wines' },
+  // Collection — the centred selector above the filters. Restaurant / Cellar /
+  // Other are distinct slices mapped onto item.source; Wish List is no longer
+  // part of Wine Reviews.
+  const COLLECTION_OPTIONS: { value: TypeFilter; label: string }[] = [
+    { value: 'all',        label: 'All Wine Reviews' },
+    { value: 'restaurant', label: 'Restaurant Wine Reviews' },
+    { value: 'cellar',     label: 'Cellar Wine Reviews' },
+    { value: 'other',      label: 'Other Wine Reviews' },
   ];
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added (default)';
-  const portfolioLabel = PORTFOLIO_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Reviews';
+  const collectionLabel = COLLECTION_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Wine Reviews';
   const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'Any';
   const locationLabel = locationFilter === 'All' ? 'All' : locationFilter;
   const favouriteLabel = favouriteFilter === 'fav' ? 'Favourites' : 'All';
@@ -388,7 +430,13 @@ export default function ChosenWinesScreen() {
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'sort') return { title: 'Your Score', options: SORT_OPTIONS, selected: sortMode, onSelect: (v) => setSortMode(v as SortMode) };
-    if (field === 'type') return { title: 'Collection', options: PORTFOLIO_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
+    if (field === 'type') return { title: 'Collection', options: COLLECTION_OPTIONS, selected: typeFilter, onSelect: (v) => setTypeFilter(v as TypeFilter) };
+    if (field === 'month') return {
+      title: 'Filter by month',
+      options: availableMonths.map((k) => ({ value: k, label: monthLabel(k) })),
+      selected: monthFilter,
+      onSelect: setMonthFilter,
+    };
     if (field === 'favourite') return {
       title: 'Favourites',
       options: [{ value: 'all', label: 'All reviews' }, { value: 'fav', label: 'View Favourites' }],
@@ -644,12 +692,90 @@ export default function ChosenWinesScreen() {
         labelImageUri={pendingReviewLabelUri}
         confirmedIdentity={addConfirmed}
         labelImagePath={addLabelPath}
+        source={addSource}
         onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
         onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
       />
 
-      {/* "+ Add" chooser — Scan / Upload run the same label recognise+confirm
-          pathway as an intel scan, but land on the review input (context=reviews)
+      {/* "+ Add" step 1 — "Add a Wine Review": pick the collection. Restaurant
+          and Other both flow into the Scan / Upload / Manual chooser (tagged with
+          the chosen source); Cellar opens a picker over the live cellar, since a
+          cellar review must attach to a real bottle you own. */}
+      <Modal visible={collectionChooserOpen} transparent animationType="fade" onRequestClose={() => setCollectionChooserOpen(false)}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setCollectionChooserOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
+            <Text style={styles.chooserTitle}>Add a Wine Review</Text>
+            <Text style={styles.chooserBody}>Which kind of wine are you reviewing?</Text>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setCollectionChooserOpen(false); setAddSource('restaurant'); setChooserOpen(true); }} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Restaurant Wine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setCollectionChooserOpen(false); setCellarPickerSearch(''); setCellarPickerOpen(true); }} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Cellar Wine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setCollectionChooserOpen(false); setAddSource('other'); setChooserOpen(true); }} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Other Wine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setCollectionChooserOpen(false)} style={styles.chooserCancel}>
+              <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* "+ Add" → Cellar Wine — pick a bottle from the live cellar to review.
+          Selecting one opens EditCellarReviewModal (the same review form as the
+          wine card), which writes the review onto that cellar_wines row. */}
+      <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={() => setCellarPickerOpen(false)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setCellarPickerOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
+            <Text style={styles.dropdownTitle}>Choose a cellar wine</Text>
+            <TextInput
+              style={styles.pickerSearch}
+              value={cellarPickerSearch}
+              onChangeText={setCellarPickerSearch}
+              placeholder="Search your cellar…"
+              placeholderTextColor={colors.textMuted}
+              autoCorrect={false}
+            />
+            {(() => {
+              const pq = cellarPickerSearch.trim().toLowerCase();
+              const rows = cellarWines
+                .filter((w) => !w.is_wishlist && !w.archived_at)
+                .filter((w) => {
+                  if (!pq) return true;
+                  const hay = [w.producer, w.wine_name, w.region, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' ').toLowerCase();
+                  return hay.includes(pq);
+                })
+                .sort((a, b) => wineHeaderLine(a.producer, a.wine_name, a.vintage).localeCompare(wineHeaderLine(b.producer, b.wine_name, b.vintage)));
+              return (
+                <ScrollView style={{ maxHeight: 420 }} keyboardShouldPersistTaps="handled">
+                  {rows.length === 0 ? (
+                    <Text style={styles.pickerEmpty}>No cellar wines match.</Text>
+                  ) : rows.map((w) => (
+                    <TouchableOpacity
+                      key={w.id}
+                      style={styles.dropdownOption}
+                      onPress={() => { setCellarPickerOpen(false); setEditingCellarWine(w); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dropdownOptionText} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                      {w.review_score != null || (w.user_notes && w.user_notes.trim()) ? (
+                        <Text style={styles.pickerReviewed}>Reviewed</Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              );
+            })()}
+            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setCellarPickerOpen(false)}>
+              <Text style={styles.dropdownCancelText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* "+ Add" step 2 (restaurant / other) — Scan / Upload run the same label
+          recognise+confirm pathway as an intel scan, but land on the review input
           instead of the intel card. Manual opens the by-hand review form. */}
       <Modal visible={chooserOpen} transparent animationType="fade" onRequestClose={() => setChooserOpen(false)}>
         <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
@@ -724,9 +850,9 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Restaurant Wines</Text>
+        <Text style={styles.title}>Wine Reviews</Text>
         <TouchableOpacity
-          onPress={() => setChooserOpen(true)}
+          onPress={() => setCollectionChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Text style={styles.addLink}>+ Add</Text>
@@ -757,7 +883,10 @@ export default function ChosenWinesScreen() {
                 }));
                 const r = filtered.length;
                 // Total wines counts reviewed AND awaiting (they're distinct sets).
-                const a = awaitingReview.length;
+                // The awaiting section only shows under All / Restaurant, so its
+                // count + jump link only join the summary there.
+                const showAwaiting = typeFilter === 'all' || typeFilter === 'restaurant';
+                const a = showAwaiting ? awaitingReview.length : 0;
                 const n = wineKeys.size + a;
                 return (
                   <>
@@ -771,9 +900,13 @@ export default function ChosenWinesScreen() {
             </Text>
           </View>
 
-          {/* Sub-header for the reviews slice — the awaiting slice has its own
-              header further down. */}
-          <Text style={styles.subHeader}>Wine Reviews</Text>
+          {/* Collection selector — centred, gold, with a chevron. Tapping it
+              opens the same 'type' dropdown (All / Restaurant / Cellar / Other
+              Wine Reviews) that the old Collection chip used to. */}
+          <TouchableOpacity style={styles.collectionHeader} onPress={() => setOpenDropdown('type')} activeOpacity={0.7}>
+            <Text style={styles.collectionHeaderText}>{collectionLabel}</Text>
+            <Text style={styles.collectionChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
+          </TouchableOpacity>
 
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
@@ -789,12 +922,12 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, yourScoreLabel !== 'Any' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Collection</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Month</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'month' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, typeFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{portfolioLabel}</Text>
+              <Text style={[styles.filterChipValue, monthFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{monthLabel(monthFilter)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
               <View style={styles.filterChipHeadingRow}>
@@ -908,8 +1041,9 @@ export default function ChosenWinesScreen() {
           )}
 
           {/* Bottle Picks Awaiting Review — restaurant picks not yet reviewed.
-              Tapping one opens the same review flow as Your Restaurants. */}
-          {awaitingReview.length > 0 ? (
+              Tapping one opens the same review flow as Your Restaurants. Only
+              relevant under the All / Restaurant collections. */}
+          {awaitingReview.length > 0 && (typeFilter === 'all' || typeFilter === 'restaurant') ? (
             <View style={styles.awaitingSection} onLayout={(e) => setAwaitingY(e.nativeEvent.layout.y)}>
               <Text style={styles.awaitingHeader}>Restaurant Wines Awaiting Review</Text>
               {awaitingReview.map((w) => {
@@ -1023,6 +1157,15 @@ const styles = StyleSheet.create({
   awaitingSection: { marginTop: spacing.xl },
   awaitingHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginBottom: spacing.sm },
   subHeader: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  // Centred collection selector (All / Restaurant / Cellar / Other Wine Reviews)
+  // that sits where the old "Wine Reviews" sub-header was — gold, with a chevron.
+  collectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
+  collectionHeaderText: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  collectionChevron: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold },
+  // Cellar-wine picker (+ Add → Cellar Wine).
+  pickerSearch: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.sm },
+  pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
+  pickerReviewed: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, marginLeft: spacing.sm },
   awaitingRow: { marginHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   awaitingName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   awaitingMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
