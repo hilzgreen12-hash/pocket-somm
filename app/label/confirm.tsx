@@ -1,12 +1,12 @@
-import { useState } from 'react';
-import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View } from 'react-native';
+import { useState, useEffect, useRef } from 'react';
+import { Text, TextInput, TouchableOpacity, StyleSheet, Modal, View, ScrollView, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings, searchLabelImages } from '../../src/api/label';
+import { generatePairings, searchLabelImages, fetchWineCandidates, type WineCandidate } from '../../src/api/label';
 import { File, Paths } from 'expo-file-system';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -104,6 +104,61 @@ export default function LabelConfirmScreen() {
   // Inline bin-diamond quantity + format (place-bin context only).
   const [binQty, setBinQty] = useState('1');
   const [binFormat, setBinFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
+
+  // Bottling picker — "Not this wine? Choose from other bottlings". Lists the
+  // real, distinct wines this producer makes so the user can correct a misread
+  // cuvée (e.g. the wrong wine in a multi-cuvée series) before confirming. Only
+  // offered on label-derived flows (manual entry has its own predictive search).
+  const [candidates, setCandidates] = useState<WineCandidate[]>([]);
+  const [candidatesOpen, setCandidatesOpen] = useState(false);
+  const [loadingCandidates, setLoadingCandidates] = useState(false);
+  // Auto-open once when the scan came back low-confidence (undefined confidence
+  // — older scan-label responses / non-scan flows — never auto-opens).
+  const autoTriedRef = useRef(false);
+
+  async function loadCandidates(auto = false) {
+    if (loadingCandidates) return;
+    if (!producer.trim()) {
+      if (!auto) showAlert({ title: 'Add the producer first', body: 'Enter the producer so Vinster can list its wines.' });
+      return;
+    }
+    setLoadingCandidates(true);
+    if (!auto) setCandidatesOpen(true);
+    try {
+      const list = await fetchWineCandidates({ producer, region, wineName, vintage });
+      if (list.length > 0) {
+        setCandidates(list);
+        setCandidatesOpen(true);
+      } else if (!auto) {
+        setCandidatesOpen(false);
+        showAlert({ title: 'No bottlings found', body: `Vinster couldn't list other wines for ${producer.trim()}. Edit the fields directly instead.` });
+      }
+    } catch {
+      if (!auto) {
+        setCandidatesOpen(false);
+        showAlert({ title: 'Could not load bottlings', body: 'Please try again, or edit the fields directly.' });
+      }
+    } finally {
+      setLoadingCandidates(false);
+    }
+  }
+
+  useEffect(() => {
+    if (autoTriedRef.current || isManual) return;
+    if (wineDetails?.confidence !== 'low') return;
+    autoTriedRef.current = true;
+    void loadCandidates(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wineDetails?.confidence, isManual]);
+
+  // Apply a picked bottling: the producer stays, the cuvée (and region / style
+  // when the candidate carries them) fill in. The user still Confirms after.
+  function pickCandidate(c: WineCandidate) {
+    setWineName(c.wineName);
+    if (c.region) setRegion(c.region);
+    if (c.style) setStyle(c.style);
+    setCandidatesOpen(false);
+  }
 
   // Manually-entered wines have no photo. Auto-fetch a label from the web so the
   // Wine Intel card (and the saved cellar wine) still gets a thumbnail — the
@@ -458,6 +513,17 @@ export default function LabelConfirmScreen() {
         autoCapitalize="words"
       />
 
+      {/* Bottling picker affordance — for label-derived flows, let the user
+          correct a misread cuvée by choosing from this producer's real wines
+          (manual entry already has predictive search). */}
+      {!isManual ? (
+        <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
+          <Text style={styles.candLinkText}>
+            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Not this wine? Choose from other bottlings'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
       {/* Bin diamond add: quantity + bottle format inline (one-step), so the
           diamond add mirrors the rack Confirm screen plus these two fields. */}
       {isPlaceBin ? (
@@ -505,6 +571,37 @@ export default function LabelConfirmScreen() {
           <Text style={styles.backText}>Scan Again</Text>
         </TouchableOpacity>
       )}
+
+      {/* "Which wine is this?" — this producer's plausible bottlings, so the
+          user can fix a misread cuvée before confirming. Opens automatically on
+          a low-confidence scan; also reachable via the link above. */}
+      <Modal visible={candidatesOpen} transparent animationType="fade" onRequestClose={() => setCandidatesOpen(false)}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            <Text style={styles.candTitle}>Which wine is this?</Text>
+            <Text style={styles.candBody}>
+              {producer.trim()
+                ? `Pick the exact ${producer.trim()} bottling — the label reading may have missed part of the name.`
+                : 'Pick the exact bottling — the label reading may have missed part of the name.'}
+            </Text>
+            {loadingCandidates ? (
+              <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Finding bottlings…</Text></View>
+            ) : (
+              <ScrollView style={{ maxHeight: 320 }}>
+                {candidates.map((c, i) => (
+                  <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candItem} onPress={() => pickCandidate(c)} activeOpacity={0.75}>
+                    <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
+                    {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.candCancel} onPress={() => setCandidatesOpen(false)} disabled={loadingCandidates}>
+              <Text style={styles.candCancelText}>None of these — keep as is</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAwareScrollView>
     </>
   );
@@ -577,6 +674,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyRegular,
     fontSize: 14,
   },
+  // "Not this wine? Choose from other bottlings" — a gold link under the fields.
+  candLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  candLinkText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  // Bottling picker modal (matches the results-screen "Which wine is this?").
+  candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
+  candTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  candBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  candLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
+  candLoadingText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  candItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.surface },
+  candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
+  candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },
   placeSheet: { backgroundColor: colors.background, borderRadius: 18, padding: spacing.xl },
   placeTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
