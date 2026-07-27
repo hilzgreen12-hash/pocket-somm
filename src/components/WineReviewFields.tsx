@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MicButton } from './MicButton';
 import { showAlert } from './AppAlert';
@@ -68,6 +69,26 @@ export function WineReviewFields({
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
   const currencySymbol = formatCurrency(0, currency, { decimals: 0 }).replace(/[\d.,\s]/g, '') || currency;
+
+  // Drinking window as TWO year fields (From / To) — no free text like
+  // "until 2050". Stored as a single "YYYY - YYYY" string via drinkingWindow, so
+  // callers don't change. Sync local state from the prop only on EXTERNAL
+  // changes (a new wine loading), not on our own edits.
+  const dwYears = (drinkingWindow ?? '').match(/\d{4}/g) ?? [];
+  const [fromYear, setFromYear] = useState(dwYears[0] ?? '');
+  const [toYear, setToYear] = useState(dwYears[1] ?? '');
+  const lastEmitted = useRef<string | null>(null);
+  useEffect(() => {
+    if (drinkingWindow === lastEmitted.current) return; // our own edit — ignore
+    const years = (drinkingWindow ?? '').match(/\d{4}/g) ?? [];
+    setFromYear(years[0] ?? '');
+    setToYear(years[1] ?? '');
+  }, [drinkingWindow]);
+  function emitDrinkingWindow(f: string, t: string) {
+    const combined = f && t ? `${f} - ${t}` : (f || t || '');
+    lastEmitted.current = combined;
+    onDrinkingWindow(combined);
+  }
 
   return (
     <>
@@ -144,15 +165,29 @@ export function WineReviewFields({
         multiline numberOfLines={4} textAlignVertical="top"
       />
 
-      {/* Drinking Window — the user's own call. */}
+      {/* Drinking Window — the user's own call, as a start + end year. */}
       <Text style={styles.fieldLabel}>Drinking Window — your call (optional)</Text>
-      <TextInput
-        style={styles.input}
-        value={drinkingWindow}
-        onChangeText={onDrinkingWindow}
-        placeholder="e.g. drinking well now, or hold to 2030"
-        placeholderTextColor={colors.textMuted}
-      />
+      <View style={styles.dwRow}>
+        <TextInput
+          style={[styles.input, styles.dwInput]}
+          value={fromYear}
+          onChangeText={(t) => { const v = t.replace(/[^0-9]/g, '').slice(0, 4); setFromYear(v); emitDrinkingWindow(v, toYear); }}
+          placeholder="From (e.g. 2026)"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="number-pad"
+          maxLength={4}
+        />
+        <Text style={styles.dwDash}>–</Text>
+        <TextInput
+          style={[styles.input, styles.dwInput]}
+          value={toYear}
+          onChangeText={(t) => { const v = t.replace(/[^0-9]/g, '').slice(0, 4); setToYear(v); emitDrinkingWindow(fromYear, v); }}
+          placeholder="To (e.g. 2032)"
+          placeholderTextColor={colors.textMuted}
+          keyboardType="number-pad"
+          maxLength={4}
+        />
+      </View>
 
       {/* Price Paid | Estimated Value — often already known, so kept low. */}
       <View style={styles.pairRow}>
@@ -244,6 +279,9 @@ export function WineReviewFields({
 const styles = StyleSheet.create({
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
+  dwRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  dwInput: { flex: 1, textAlign: 'center' },
+  dwDash: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.textMuted, marginBottom: spacing.md },
   // Location row: 📍 pin + stacked city / place-name inputs.
   locRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginBottom: spacing.md },
   locPin: { fontSize: 18, marginTop: 8 },
