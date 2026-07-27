@@ -17,6 +17,7 @@ import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { getBinCell } from '../../src/api/bins';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
+import { WineSearchInput } from '../../src/components/WineSearchInput';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -390,9 +391,20 @@ export default function LabelConfirmScreen() {
       <Text style={styles.heading}>Confirm Wine Details</Text>
       <Text style={styles.subheading}>
         {isManual
-          ? "Enter the wine's details below."
+          ? 'Search for your wine, or enter the details below.'
           : 'Check the details we extracted and correct anything that looks wrong.'}
       </Text>
+
+      {/* Manual entry: predictive search fills producer/name/region/style from a
+          real wine — the fields below stay editable. */}
+      {isManual ? (
+        <WineSearchInput onSelect={(r) => {
+          setProducer(r.producer);
+          setWineName(r.wineName ?? '');
+          setRegion(r.region ?? '');
+          setStyle(r.style ?? '');
+        }} />
+      ) : null}
 
       <Text style={styles.label}>Producer</Text>
       <TextInput

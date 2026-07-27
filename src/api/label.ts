@@ -25,6 +25,20 @@ export async function scanLabel(base64Image: string): Promise<WineDetails> {
   return data;
 }
 
+export interface WineSearchResult {
+  producer: string;
+  wineName: string | null;
+  region: string | null;
+  style: string | null;
+}
+
+// Predictive wine typeahead for manual entry — returns real wines matching the
+// partial query, with clean/consistent formatting, to fill the identity fields.
+export async function searchWines(query: string): Promise<WineSearchResult[]> {
+  const data = await invokeFunction('wine-search', { query }) as { results?: WineSearchResult[] };
+  return data.results ?? [];
+}
+
 export interface WineCandidate {
   wineName: string;
   region: string | null;
