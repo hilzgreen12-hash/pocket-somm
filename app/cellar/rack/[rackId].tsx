@@ -1419,19 +1419,6 @@ export default function RackGridScreen() {
         {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
       </Text>
 
-      {lineupSetup && (
-        <View style={styles.lineupBanner}>
-          <Text style={styles.lineupBannerTitle}>
-            {rack.storage_type === 'fridge'
-              ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right'
-              : 'Select the slot for the first bottle of the lineup — bottles place left to right from there'}
-          </Text>
-          <TouchableOpacity onPress={() => setLineupSetup(false)} style={styles.lineupBannerCancel}>
-            <Text style={styles.lineupBannerCancelText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {/* Functionality statement — replaces the old hint + the swipe bar. */}
         <Text style={styles.rackHint}>
@@ -1440,6 +1427,20 @@ export default function RackGridScreen() {
         <Text style={styles.rackHintLine2}>
           <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add 6 bottles at a time
         </Text>
+
+        {/* When "Add a Lineup" is tapped, a single yellow prompt sits directly
+            below the blurb. Tapping an empty slot records the start and clears
+            this (the "Before you photograph" step then opens on scan-lineup). */}
+        {lineupSetup && (
+          <View style={styles.lineupPrompt}>
+            <Text style={styles.lineupPromptText}>
+              {rack.storage_type === 'fridge'
+                ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right.'
+                : 'Select the slot for the first bottle of the lineup — bottles place left to right from there.'}
+            </Text>
+            <Text style={styles.lineupPromptCancel} onPress={() => setLineupSetup(false)}>Cancel</Text>
+          </View>
+        )}
 
         {winesInRack.length > 0 && (
           <>
@@ -2153,11 +2154,11 @@ const styles = StyleSheet.create({
   slotChooserCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   slotUploadingOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   slotUploadingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: '#FFFFFF' },
-  // "Add a Lineup" setup banner (pick the start slot + orientation).
-  lineupBanner: { backgroundColor: colors.background, borderBottomWidth: 1, borderBottomColor: colors.gold, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, alignItems: 'center' },
-  lineupBannerTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, textAlign: 'center' },
-  lineupBannerCancel: { marginTop: spacing.sm },
-  lineupBannerCancelText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
+  // Active "Add a Lineup" prompt — a single gold line beneath the blurb (not a
+  // top banner). Tapping a slot fulfils it; a small Cancel backs out.
+  lineupPrompt: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  lineupPromptText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, lineHeight: 21 },
+  lineupPromptCancel: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline', marginTop: spacing.xs },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — back/nav link
@@ -2325,7 +2326,7 @@ const styles = StyleSheet.create({
   // Inter — hint
   rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 4, lineHeight: 20 },
   rackHintLine2: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, lineHeight: 20 },
-  rackHintLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
+  rackHintLink: { fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline' },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
