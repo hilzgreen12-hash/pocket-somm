@@ -30,7 +30,7 @@ export const useLineupStore = create<LineupState>((set) => ({
   imageUri: null,
   originRackId: null,
   startSlot: null,
-  orientation: 'Vertical',
+  orientation: 'Horizontal',
   start: (originRackId) => set({ wines: [], imageUri: null, originRackId, startSlot: null, orientation: 'Vertical' }),
   setLineup: (wines, imageUri) => set({ wines, imageUri }),
   setPlacement: (startSlot, orientation) => set({ startSlot, orientation }),

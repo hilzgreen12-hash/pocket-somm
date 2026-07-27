@@ -154,9 +154,10 @@ export default function RackGridScreen() {
   const [addMoreWine, setAddMoreWine] = useState<{ wineId: string; wineName: string } | null>(null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
-  // "Add a Lineup" setup: pick the start slot + orientation before scanning.
+  // "Add a Lineup" setup: pick the start slot before scanning. Lineups always
+  // run horizontally (left to right) from that slot, so there's no orientation
+  // question — extra bottles of a wine stack down its column.
   const [lineupSetup, setLineupSetup] = useState(false);
-  const [lineupOrientation, setLineupOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   // Edit-rack modal — Wipe Contents / Rename / Resize / Delete.
   const [editOpen, setEditOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -227,16 +228,14 @@ export default function RackGridScreen() {
   useEffect(() => {
     if (lineup === '1' && rack && !lineupParamHandled.current) {
       lineupParamHandled.current = true;
-      setLineupOrientation(rack.storage_type === 'fridge' ? 'Horizontal' : 'Vertical');
       setLineupSetup(true);
     }
   }, [lineup, rack]);
 
-  // Start the "Add a Lineup" flow — pick the start slot + orientation, then
-  // scan up to 6 bottles. Fridges are always horizontal, so force it.
+  // Start the "Add a Lineup" flow — pick the start slot, then scan up to 6
+  // bottles. Lineups are always horizontal (left to right).
   function startLineup() {
     if (!rack) return;
-    setLineupOrientation(rack.storage_type === 'fridge' ? 'Horizontal' : 'Vertical');
     setLineupSetup(true);
   }
 
@@ -600,12 +599,12 @@ export default function RackGridScreen() {
     // empty slots in/out of the set rather than opening or navigating.
     if (multiSelectMode || addMoreWine) { toggleMultiSlot(row, col); return; }
     // Lineup setup: the user is choosing the starting slot for "Add a Lineup".
-    // Only an empty slot can be the start; record it + the orientation, then go
-    // to scan/upload — which places the whole lineup from here.
+    // Only an empty slot can be the start; record it, then go to scan/upload —
+    // which places the whole lineup horizontally from here.
     if (lineupSetup) {
       if (slotMap[`${row},${col}`]) return; // occupied — must start on a free slot
       useLineupStore.getState().start(rackId);
-      useLineupStore.getState().setPlacement({ row, col }, lineupOrientation);
+      useLineupStore.getState().setPlacement({ row, col }, 'Horizontal');
       setLineupSetup(false);
       router.push('/cellar/scan-lineup');
       return;
@@ -1425,29 +1424,8 @@ export default function RackGridScreen() {
           <Text style={styles.lineupBannerTitle}>
             {rack.storage_type === 'fridge'
               ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right'
-              : 'Select the slot for the first bottle in your rack'}
+              : 'Select the slot for the first bottle of the lineup — bottles place left to right from there'}
           </Text>
-          {rack.storage_type !== 'fridge' && (
-            <>
-              <Text style={styles.lineupBannerLabel}>Lineup orientation</Text>
-              <View style={styles.lineupOrientRow}>
-                <TouchableOpacity
-                  style={[styles.lineupOrientBtn, lineupOrientation === 'Vertical' && styles.lineupOrientBtnActive]}
-                  onPress={() => setLineupOrientation('Vertical')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.lineupOrientText, lineupOrientation === 'Vertical' && styles.lineupOrientTextActive]}>Vertical</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.lineupOrientBtn, lineupOrientation === 'Horizontal' && styles.lineupOrientBtnActive]}
-                  onPress={() => setLineupOrientation('Horizontal')}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[styles.lineupOrientText, lineupOrientation === 'Horizontal' && styles.lineupOrientTextActive]}>Horizontal</Text>
-                </TouchableOpacity>
-              </View>
-            </>
-          )}
           <TouchableOpacity onPress={() => setLineupSetup(false)} style={styles.lineupBannerCancel}>
             <Text style={styles.lineupBannerCancelText}>Cancel</Text>
           </TouchableOpacity>
@@ -2178,12 +2156,6 @@ const styles = StyleSheet.create({
   // "Add a Lineup" setup banner (pick the start slot + orientation).
   lineupBanner: { backgroundColor: colors.background, borderBottomWidth: 1, borderBottomColor: colors.gold, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, alignItems: 'center' },
   lineupBannerTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, textAlign: 'center' },
-  lineupBannerLabel: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.sm },
-  lineupOrientRow: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.xs },
-  lineupOrientBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, paddingVertical: 6, paddingHorizontal: spacing.lg },
-  lineupOrientBtnActive: { backgroundColor: colors.gold },
-  lineupOrientText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
-  lineupOrientTextActive: { color: colors.background },
   lineupBannerCancel: { marginTop: spacing.sm },
   lineupBannerCancelText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
