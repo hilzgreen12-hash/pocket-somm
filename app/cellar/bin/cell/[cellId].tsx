@@ -15,6 +15,7 @@ import { useLabelStore } from '../../../../src/stores/labelStore';
 import { ensureMediaPermission } from '../../../../src/utils/mediaPermissions';
 import { BottleSizePicker, bottleSizeCl } from '../../../../src/components/BottleSizePicker';
 import { CellarWinePicker } from '../../../../src/components/CellarWinePicker';
+import { LabelThumb } from '../../../../src/components/LabelThumb';
 import { showAlert } from '../../../../src/components/AppAlert';
 import { colors, spacing } from '../../../../src/constants/theme';
 import { fonts } from '../../../../src/constants/fonts';
@@ -353,6 +354,7 @@ export default function BinCellScreen() {
           ) : (
             wines.map((w) => (
               <TouchableOpacity key={w.id} style={styles.row} onPress={() => openEdit(w)} activeOpacity={0.7}>
+                <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} radius={4} frame={3} />
                 <Text style={styles.rowQty}>{w.quantity ?? 1}×</Text>
                 <View style={styles.rowMain}>
                   <Text style={styles.rowName} numberOfLines={1}>{w.wine_name}</Text>
@@ -474,6 +476,7 @@ const styles = StyleSheet.create({
   summary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginBottom: spacing.lg },
   empty: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowThumb: { width: 40, height: 52 },
   rowQty: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.gold, minWidth: 34 },
   rowMain: { flex: 1 },
   rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
