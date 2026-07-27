@@ -192,6 +192,22 @@ export default function ChosenWinesScreen() {
   const [addSource, setAddSource] = useState<'restaurant' | 'other'>('other');
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [cellarPickerSearch, setCellarPickerSearch] = useState('');
+  // Bespoke "Other" filters (e.g. "BBR Tasting") — named tags the user creates
+  // and assigns to Other-wine reviews, then filters by. Held per-user in
+  // AsyncStorage (no server column): `otherTags` is the ordered tag list,
+  // `tagAssign` maps a chosen_wines review id → the tags on it. `tagFilter` is
+  // the active tag (only meaningful while the Other collection is selected).
+  const [otherTags, setOtherTags] = useState<string[]>([]);
+  const [tagAssign, setTagAssign] = useState<Record<string, string[]>>({});
+  const [tagFilter, setTagFilter] = useState<string>('all');
+  const [newTagOpen, setNewTagOpen] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  // Review id whose tag-assignment sheet is open (null = closed).
+  const [assignForId, setAssignForId] = useState<string | null>(null);
+  // Remembers the review being tagged while the "New filter" sheet is open, so
+  // creating a tag mid-assign files it onto that review (only one modal shows at
+  // a time — we close the assign sheet, create, then reopen it).
+  const pendingAssignRef = useRef<string | null>(null);
 
   // Cellar wines that have ANY user-supplied review content count as a
   // "cellar review".
@@ -241,6 +257,81 @@ export default function ChosenWinesScreen() {
   // One-time, dismissible prompt nudging the user to review a waiting pick.
   const { session } = useAuth();
   const promptKey = `vinster-bottle-pick-prompt-dismissed:${session?.user.id ?? 'anon'}`;
+
+  // Load this user's bespoke Other filters + assignments from local storage.
+  const tagsKey = `vinster-other-tags:${session?.user.id ?? 'anon'}`;
+  const assignKey = `vinster-other-tag-assign:${session?.user.id ?? 'anon'}`;
+  useEffect(() => {
+    let cancelled = false;
+    AsyncStorage.multiGet([tagsKey, assignKey])
+      .then((pairs) => {
+        if (cancelled) return;
+        const tagsRaw = pairs.find(([k]) => k === tagsKey)?.[1];
+        const assignRaw = pairs.find(([k]) => k === assignKey)?.[1];
+        if (tagsRaw) { try { const v = JSON.parse(tagsRaw); if (Array.isArray(v)) setOtherTags(v); } catch { /* ignore */ } }
+        if (assignRaw) { try { const v = JSON.parse(assignRaw); if (v && typeof v === 'object') setTagAssign(v); } catch { /* ignore */ } }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.user.id]);
+
+  function persistTags(next: string[]) {
+    setOtherTags(next);
+    AsyncStorage.setItem(tagsKey, JSON.stringify(next)).catch(() => {});
+  }
+  function persistAssign(next: Record<string, string[]>) {
+    setTagAssign(next);
+    AsyncStorage.setItem(assignKey, JSON.stringify(next)).catch(() => {});
+  }
+  // Toggle a tag on/off for a given review id.
+  function toggleTagForReview(reviewId: string, tag: string) {
+    const current = tagAssign[reviewId] ?? [];
+    const next = current.includes(tag) ? current.filter((t) => t !== tag) : [...current, tag];
+    const map = { ...tagAssign };
+    if (next.length) map[reviewId] = next; else delete map[reviewId];
+    persistAssign(map);
+  }
+  // Create a bespoke Other filter. Trims, ignores blanks + case-insensitive dupes.
+  function createTag(name: string): string | null {
+    const clean = name.trim();
+    if (!clean) return null;
+    const existing = otherTags.find((t) => t.toLowerCase() === clean.toLowerCase());
+    if (existing) return existing;
+    persistTags([...otherTags, clean]);
+    return clean;
+  }
+  // Confirm the "New filter" sheet. If it was opened mid-assign (from a review's
+  // "Add to a filter" sheet), file the new tag onto that review and reopen the
+  // assign sheet; otherwise just make it the active filter.
+  function commitNewTag() {
+    const t = createTag(newTagName);
+    const target = pendingAssignRef.current;
+    pendingAssignRef.current = null;
+    setNewTagOpen(false);
+    if (!t) return;
+    if (target) { toggleTagForReview(target, t); setAssignForId(target); }
+    else setTagFilter(t);
+  }
+  // Cancel the "New filter" sheet. If it was opened mid-assign, return to that
+  // review's assign sheet rather than dropping the user back to the list.
+  function cancelNewTag() {
+    const target = pendingAssignRef.current;
+    pendingAssignRef.current = null;
+    setNewTagOpen(false);
+    if (target) setAssignForId(target);
+  }
+  // Remove a bespoke filter entirely — drop it from the list and off every review.
+  function deleteTag(tag: string) {
+    persistTags(otherTags.filter((t) => t !== tag));
+    const map: Record<string, string[]> = {};
+    for (const [id, tags] of Object.entries(tagAssign)) {
+      const kept = tags.filter((t) => t !== tag);
+      if (kept.length) map[id] = kept;
+    }
+    persistAssign(map);
+    if (tagFilter === tag) setTagFilter('all');
+  }
   const [reviewPrompt, setReviewPrompt] = useState<ChosenWine | null>(null);
   const [dontShowPrompt, setDontShowPrompt] = useState(false);
   const promptShownRef = useRef(false);
@@ -374,6 +465,8 @@ export default function ChosenWinesScreen() {
     // three collections map straight onto item.source (restaurant / cellar /
     // other) now that they're distinct slices.
     if (typeFilter !== 'all' && it.source !== typeFilter) return false;
+    // Bespoke Other filter — only bites while the Other collection is active.
+    if (typeFilter === 'other' && tagFilter !== 'all' && !(tagAssign[it.wine.id] ?? []).includes(tagFilter)) return false;
     if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
     if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
     if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
@@ -483,11 +576,29 @@ export default function ChosenWinesScreen() {
     return cellarByIdentity.get(key)?.label_image_path ?? null;
   }
 
-  // Long-press a review to delete it. A restaurant review is its own
-  // chosen_wines row, so it's deleted outright. A cellar review lives on
-  // the cellar_wines row, so we only clear the review fields — the bottle
-  // stays in the cellar.
+  // Long-press a review. Other reviews get a first step so the user can file
+  // them under a bespoke filter (e.g. "BBR Tasting") as well as delete; every
+  // other source goes straight to the delete confirm.
   function handleLongPressReview(item: ReviewItem) {
+    if (item.source === 'other') {
+      const w = item.wine;
+      showAlert({
+        title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+        buttons: [
+          { text: 'Add to a filter', onPress: () => setAssignForId(w.id) },
+          { text: 'Delete review', style: 'destructive', onPress: () => confirmDeleteReview(item) },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    confirmDeleteReview(item);
+  }
+
+  // Delete a review. A restaurant review is its own chosen_wines row, so it's
+  // deleted outright. A cellar review lives on the cellar_wines row, so we only
+  // clear the review fields — the bottle stays in the cellar.
+  function confirmDeleteReview(item: ReviewItem) {
     const w = item.wine;
     const label = wineHeaderLine(w.producer, w.wine_name, w.vintage);
     const onError = (err: unknown) => showAlert({
@@ -798,6 +909,72 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Create a bespoke Other filter (e.g. "BBR Tasting"). */}
+      <Modal visible={newTagOpen} transparent animationType="fade" onRequestClose={cancelNewTag}>
+        <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={cancelNewTag}>
+          <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
+            <Text style={styles.chooserTitle}>New filter</Text>
+            <Text style={styles.chooserBody}>Name a bespoke filter for your Other wine reviews — a tasting, an event, a merchant. You'll then file reviews under it.</Text>
+            <TextInput
+              style={styles.pickerSearch}
+              value={newTagName}
+              onChangeText={setNewTagName}
+              placeholder="e.g. BBR Tasting"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={commitNewTag}
+            />
+            <TouchableOpacity style={styles.chooserBtn} onPress={commitNewTag} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Create filter</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={cancelNewTag} style={styles.chooserCancel}>
+              <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Assign a review to bespoke filters — tick the tags it belongs to, or
+          create a new one on the spot. */}
+      <Modal visible={!!assignForId} transparent animationType="fade" onRequestClose={() => setAssignForId(null)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setAssignForId(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
+            <Text style={styles.dropdownTitle}>Add to a filter</Text>
+            {otherTags.length === 0 ? (
+              <Text style={styles.pickerEmpty}>No filters yet — create one below.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 340 }}>
+                {otherTags.map((t) => {
+                  const on = !!(assignForId && (tagAssign[assignForId] ?? []).includes(t));
+                  return (
+                    <TouchableOpacity
+                      key={t}
+                      style={[styles.dropdownOption, on && styles.dropdownOptionActive]}
+                      onPress={() => { if (assignForId) toggleTagForReview(assignForId, t); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.dropdownOptionText, on && styles.dropdownOptionTextActive]}>{t}</Text>
+                      {on && <Text style={styles.dropdownOptionCheck}>✓</Text>}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={styles.chooserBtn}
+              onPress={() => { pendingAssignRef.current = assignForId; setAssignForId(null); setNewTagName(''); setNewTagOpen(true); }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.chooserBtnText}>＋ New filter</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setAssignForId(null)}>
+              <Text style={styles.dropdownCancelText}>Done</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* On-open nudge to review a waiting restaurant bottle pick. */}
       <Modal visible={!!reviewPrompt} transparent animationType="fade" onRequestClose={() => setReviewPrompt(null)}>
         <View style={styles.promptOverlay}>
@@ -907,6 +1084,48 @@ export default function ChosenWinesScreen() {
             <Text style={styles.collectionHeaderText}>{collectionLabel}</Text>
             <Text style={styles.collectionChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
           </TouchableOpacity>
+
+          {/* Bespoke Other filters — create named tags (e.g. "BBR Tasting") and
+              file Other reviews under them (long-press a review → "Add to a
+              filter"). Only shown while the Other collection is selected. */}
+          {typeFilter === 'other' ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.tagScroll}
+              contentContainerStyle={styles.tagRow}
+            >
+              <TouchableOpacity
+                style={[styles.tagChip, tagFilter === 'all' && styles.tagChipActive]}
+                onPress={() => setTagFilter('all')}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.tagChipText, tagFilter === 'all' && styles.tagChipTextActive]}>All</Text>
+              </TouchableOpacity>
+              {otherTags.map((t) => (
+                <TouchableOpacity
+                  key={t}
+                  style={[styles.tagChip, tagFilter === t && styles.tagChipActive]}
+                  onPress={() => setTagFilter(t)}
+                  onLongPress={() => showAlert({
+                    title: t,
+                    body: 'Remove this filter? Your reviews stay — only the filter is deleted.',
+                    buttons: [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete filter', style: 'destructive', onPress: () => deleteTag(t) },
+                    ],
+                  })}
+                  delayLongPress={400}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.tagChipText, tagFilter === t && styles.tagChipTextActive]}>{t}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity style={styles.tagChipNew} onPress={() => { pendingAssignRef.current = null; setNewTagName(''); setNewTagOpen(true); }} activeOpacity={0.7}>
+                <Text style={styles.tagChipNewText}>＋ New filter</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          ) : null}
 
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
@@ -1162,6 +1381,15 @@ const styles = StyleSheet.create({
   collectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
   collectionHeaderText: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   collectionChevron: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold },
+  // Bespoke Other filter chips (pill row under the collection header).
+  tagScroll: { flexGrow: 0, flexShrink: 0 },
+  tagRow: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xs, gap: spacing.xs, alignItems: 'center' },
+  tagChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: 6, marginRight: spacing.xs },
+  tagChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },
+  tagChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted },
+  tagChipTextActive: { color: colors.gold },
+  tagChipNew: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 999, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  tagChipNewText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   // Cellar-wine picker (+ Add → Cellar Wine).
   pickerSearch: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.sm },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
