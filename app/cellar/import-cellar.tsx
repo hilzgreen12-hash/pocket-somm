@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
@@ -11,32 +11,49 @@ import { importCellarDocument, prepareImageBase64, parseCellarImport, type Impor
 import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
-import type { CellarWine } from '../../src/types/wine';
+import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
+import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'adding' | 'done';
+type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done';
 
-// Map the intelligent parser's rich wine onto the existing bottle-based review
-// row. Names: a wine with a separate cuvée keeps producer + cuvée; one with a
-// single description string goes wholly into wine_name so it isn't doubled up.
-// (Case structure is carried for the materialization step; the counts are
-// already the total individual bottles.)
-function toImported(w: CellarImportWine): ImportedCellarWine {
-  const name = (w.wineName || w.producer || '').trim();
-  const producer = w.wineName ? (w.producer || '').trim() : '';
+// The review + save now work on the rich CellarImportWine (carrying the case
+// structure). The photo/screenshot path returns the simpler bottle shape, so
+// lift it into a loose CellarImportWine.
+function fromImported(w: ImportedCellarWine): CellarImportWine {
   return {
-    wine_name: name,
-    producer,
-    region: w.region || '',
-    vintage: w.vintage,
-    quantity: Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? w.totalBottles : 1,
-    bottle_size_ml: w.bottleSizeMl,
-    purchase_price: w.purchasePricePerBottle,
-    currency: w.currency,
+    producer: w.producer || null,
+    wineName: w.wine_name || null,
+    vintage: w.vintage ?? null,
+    region: w.region || null,
+    country: null,
+    colour: null,
+    bottleSizeMl: w.bottle_size_ml ?? 750,
+    totalBottles: Number.isFinite(w.quantity) && w.quantity > 0 ? w.quantity : 1,
+    packaging: 'loose',
+    bottlesPerCase: null,
+    cases: null,
+    looseBottles: w.quantity,
+    drinkingWindowFrom: null,
+    drinkingWindowTo: null,
+    purchasePricePerBottle: w.purchase_price ?? null,
+    currency: w.currency ?? null,
+    notes: null,
   };
+}
+
+// True when a holding is a real case (a complete case of >1 bottle) — a single
+// bottle sold "as a case" of 1 is treated as loose.
+function isCased(w: CellarImportWine): boolean {
+  return (w.packaging === 'owc' || w.packaging === 'non_owc') && (w.bottlesPerCase ?? 0) > 1;
+}
+function caseSummary(w: CellarImportWine, cl: (ml: number) => string): string {
+  const kind = w.packaging === 'non_owc' ? 'Non-OWC' : 'OWC';
+  const prefix = w.cases && w.cases > 1 ? `${w.cases} × ` : '';
+  return `${prefix}${kind} of ${w.bottlesPerCase} · ${cl(w.bottleSizeMl)}cl`;
 }
 
 // Why a row is pre-unticked: it already exists in the cellar, or it repeats an
@@ -88,10 +105,12 @@ const CSV_SOURCES: Record<CsvSource, {
 };
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-// Case-insensitive identity key — mirrors findMatchingWishlistWine in the
-// cellar API (producer + name + vintage).
-function wineKey(w: { producer?: string | null; wine_name?: string | null; vintage?: string | null }): string {
-  return `${norm(w.producer)}|${norm(w.wine_name)}|${(w.vintage ?? '').trim()}`;
+// Case-insensitive identity key. Producer + name are combined into one string
+// so a wine whose full name sits in `producer` (merchant lists) still matches
+// the same wine held as producer + wine_name (cellar rows / cuvée splits).
+function wineKey(w: { producer?: string | null; wineName?: string | null; wine_name?: string | null; vintage?: string | number | null }): string {
+  const name = [w.producer, w.wineName ?? w.wine_name].map(norm).filter(Boolean).join(' ');
+  return `${name}|${String(w.vintage ?? '').trim()}`;
 }
 
 export default function ImportCellarScreen() {
@@ -108,7 +127,7 @@ export default function ImportCellarScreen() {
   const isCsv = csv !== null;
 
   const [stage, setStage] = useState<Stage>('capture');
-  const [wines, setWines] = useState<ImportedCellarWine[]>([]);
+  const [wines, setWines] = useState<CellarImportWine[]>([]);
   const [keep, setKeep] = useState<boolean[]>([]);
   const [dupFlags, setDupFlags] = useState<DupFlag[]>([]);
   const [addedCount, setAddedCount] = useState(0);
@@ -123,6 +142,11 @@ export default function ImportCellarScreen() {
   // user choose which lists to import before parsing.
   const [sheets, setSheets] = useState<ImportSheet[]>([]);
   const [sheetKeep, setSheetKeep] = useState<boolean[]>([]);
+  // Storage location the import is filed into (cased holdings become OWC cases
+  // there; loose bottles are filed to it; "unplaced" skips it entirely).
+  const [locations, setLocations] = useState<StorageLocation[]>([]);
+  const [newLocationName, setNewLocationName] = useState('');
+  const [savingLocation, setSavingLocation] = useState(false);
 
   // Auto-open the right picker so the chooser → this screen → picker feels like
   // one action. Vivino stays on the instructions screen (the user needs to have
@@ -160,7 +184,7 @@ export default function ImportCellarScreen() {
         return w ?? [];
       }));
       const all = results.flat();
-      await presentWines(all);
+      await presentWines(all.map(fromImported));
     } catch (err) {
       showAlert({ title: 'Could not read the screenshot', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
@@ -172,7 +196,7 @@ export default function ImportCellarScreen() {
   // on confirm their bottles are MERGED into the existing listing rather than
   // creating a parallel line. Wines repeated within this same import are
   // pre-unticked ('import') so we don't double-count the same row twice.
-  async function presentWines(all: ImportedCellarWine[]) {
+  async function presentWines(all: CellarImportWine[]) {
     const map = new Map<string, CellarWine>();
     const userId = session?.user.id;
     if (userId) {
@@ -273,7 +297,7 @@ export default function ImportCellarScreen() {
         setStage('capture');
         return;
       }
-      await presentWines(all.map(toImported));
+      await presentWines(all);
     } catch (err) {
       showAlert({ title: 'Could not read the list', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
@@ -281,8 +305,44 @@ export default function ImportCellarScreen() {
   }
 
   const keptCount = keep.filter(Boolean).length;
+  // Whether any kept wine is a real case — drives whether the location step is
+  // worth showing (loose-only imports can just go unplaced).
+  const keptHasCase = wines.some((w, i) => keep[i] && isCased(w));
 
-  async function confirmImport() {
+  async function loadLocations() {
+    const userId = session?.user.id;
+    if (!userId) return;
+    try { setLocations(await fetchStorageLocations(userId)); } catch { /* offer create-new only */ }
+  }
+
+  // Move from the review to the location step (fetches existing locations first).
+  function goToLocationStep() {
+    if (keptCount === 0) return;
+    setNewLocationName('');
+    void loadLocations();
+    setStage('location');
+  }
+
+  // Create a new storage location, then import into it.
+  async function createLocationAndImport() {
+    const userId = session?.user.id;
+    const name = newLocationName.trim();
+    if (!userId || !name || savingLocation) return;
+    setSavingLocation(true);
+    try {
+      const loc = await createStorageLocation(userId, name);
+      await confirmImport(loc.id);
+    } catch (err) {
+      showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingLocation(false);
+    }
+  }
+
+  // Materialize the import. `locationId` null → wines land unplaced (loose, no
+  // location); otherwise every wine is filed into that location and each cased
+  // holding also becomes an OWC / non-OWC case there.
+  async function confirmImport(locationId: string | null) {
     if (!session?.user.id || keptCount === 0) return;
     setStage('adding');
     const userId = session.user.id;
@@ -303,7 +363,7 @@ export default function ImportCellarScreen() {
       // any wine later from its card.
       for (const i of keptIndices) {
         const w = wines[i];
-        const qty = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
+        const qty = Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? Math.round(w.totalBottles) : 1;
         // Duplicate of an existing cellar wine → add these bottles to that
         // listing rather than creating a new one.
         const existing = dupFlags[i] === 'cellar' ? existingByKey.current.get(wineKey(w)) : undefined;
@@ -317,19 +377,22 @@ export default function ImportCellarScreen() {
           mergedBottlesRun += qty;
           continue;
         }
-        await addCellarWine({
+        const dwFrom = w.drinkingWindowFrom ? parseInt(w.drinkingWindowFrom, 10) : null;
+        const dwTo = w.drinkingWindowTo ? parseInt(w.drinkingWindowTo, 10) : null;
+        const saved = await addCellarWine({
           user_id: userId,
-          wine_name: w.wine_name || w.producer,
-          producer: w.producer,
+          wine_name: (w.wineName || w.producer || '').trim(),
+          producer: w.wineName ? (w.producer ?? null) : null,
           region: w.region ?? null,
           vintage: w.vintage ?? null,
           quantity: qty,
           storage_location: null,
+          storage_location_id: locationId ?? null,
           date_received: new Date().toISOString().split('T')[0],
           critic_score: null,
           critic_score_note: null,
-          drinking_window_from: null,
-          drinking_window_to: null,
+          drinking_window_from: Number.isFinite(dwFrom as number) ? dwFrom : null,
+          drinking_window_to: Number.isFinite(dwTo as number) ? dwTo : null,
           drinking_window_status: 'unknown',
           tasting_notes: null,
           grape_variety: null,
@@ -339,16 +402,30 @@ export default function ImportCellarScreen() {
           estimated_value: null,
           estimated_value_currency: null,
           estimated_value_at: null,
-          purchase_price: w.purchase_price ?? null,
-          purchase_price_currency: w.purchase_price != null ? (w.currency ?? defaultCurrency) : null,
-          // Use the detected format (magnum/half/etc.) when the document showed
-          // one; default to standard 750ml otherwise.
-          bottle_size_ml: w.bottle_size_ml ?? 750,
+          purchase_price: w.purchasePricePerBottle ?? null,
+          purchase_price_currency: w.purchasePricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
+          bottle_size_ml: w.bottleSizeMl ?? 750,
         } as any);
+        // Cased holding + a chosen location → create the OWC/non-OWC case and
+        // file the wine into it. Non-fatal: a failure still leaves the wine
+        // filed loose in the location.
+        if (locationId && isCased(w)) {
+          try {
+            const kind = w.packaging === 'non_owc' ? 'non_owc' : 'owc';
+            const name = caseSummary(w, bottleSizeCl);
+            const created = await createStorageCase(userId, { storageLocationId: locationId, name, kind });
+            await assignWineToCase(saved.id, created.id);
+          } catch { /* wine stays loose in the location */ }
+        }
         succeeded.push(i);
         bottlesAdded += qty;
       }
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      if (locationId) {
+        qc.invalidateQueries({ queryKey: ['storage-location-wines', locationId] });
+        qc.invalidateQueries({ queryKey: ['storage-location-cases', locationId] });
+        qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+      }
       setAddedCount((prev) => prev + bottlesAdded);
       setMergedBottles((prev) => prev + mergedBottlesRun);
       setStage('done');
@@ -452,6 +529,43 @@ export default function ImportCellarScreen() {
           <ActivityIndicator color={colors.gold} />
           <Text style={styles.hint}>Vinster is reading your cellar list…</Text>
         </View>
+      ) : stage === 'location' ? (
+        <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <Text style={styles.sectionLabel}>Where are these stored?</Text>
+          <Text style={styles.dedupNote}>
+            {keptHasCase
+              ? 'Filed into this location — full cases become OWC cases here, loose bottles are filed alongside. Or import them unplaced and organise later.'
+              : 'File these into a storage location, or import them unplaced and organise later.'}
+          </Text>
+          {locations.map((loc) => (
+            <TouchableOpacity key={loc.id} style={styles.locRow} onPress={() => confirmImport(loc.id)} activeOpacity={0.7}>
+              <Text style={styles.locName} numberOfLines={1}>{loc.name}</Text>
+              <Text style={styles.locChevron}>›</Text>
+            </TouchableOpacity>
+          ))}
+          <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>New location</Text>
+          <TextInput
+            style={styles.newLocInput}
+            value={newLocationName}
+            onChangeText={setNewLocationName}
+            placeholder="e.g. Octavian Bond"
+            placeholderTextColor={colors.textMuted}
+          />
+          <TouchableOpacity
+            style={[styles.primaryBtn, (!newLocationName.trim() || savingLocation) && styles.primaryBtnDisabled]}
+            onPress={createLocationAndImport}
+            disabled={!newLocationName.trim() || savingLocation}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryBtnText}>{savingLocation ? 'Creating…' : 'Create & import here'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => confirmImport(null)} activeOpacity={0.85}>
+            <Text style={styles.secondaryBtnText}>Import unplaced</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.backLink} onPress={() => setStage('review')} activeOpacity={0.7}>
+            <Text style={styles.backLinkText}>← Back to review</Text>
+          </TouchableOpacity>
+        </ScrollView>
       ) : stage === 'adding' ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
@@ -486,10 +600,10 @@ export default function ImportCellarScreen() {
               {wines.map((w, i) => {
                 const on = keep[i];
                 const flag = dupFlags[i];
-                const qty = Number.isFinite(w.quantity) && w.quantity > 0 ? Math.round(w.quantity) : 1;
-                const label = [w.vintage, w.producer, w.wine_name].filter(Boolean).join(' ');
+                const qty = Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? Math.round(w.totalBottles) : 1;
+                const label = [w.vintage, w.producer, w.wineName].filter(Boolean).join(' ');
                 // quantity x format, matching the cellar list (e.g. 1x75, 2x150).
-                const qtyFormat = `${qty}x${bottleSizeCl(w.bottle_size_ml ?? 750)}`;
+                const qtyFormat = `${qty}x${bottleSizeCl(w.bottleSizeMl)}`;
                 return (
                   <TouchableOpacity
                     key={i}
@@ -501,6 +615,7 @@ export default function ImportCellarScreen() {
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}  <Text style={styles.qtyFormat}>{qtyFormat}</Text></Text>
                       <View style={styles.rowMetaRow}>
+                        {isCased(w) ? <Text style={styles.rowCase}>{caseSummary(w, bottleSizeCl)}</Text> : null}
                         {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
                         {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? `Already in cellar · +${qty} to existing` : 'Repeated above'}</Text> : null}
                       </View>
@@ -513,12 +628,12 @@ export default function ImportCellarScreen() {
 
           <TouchableOpacity
             style={[styles.primaryBtn, keptCount === 0 && styles.primaryBtnDisabled]}
-            onPress={confirmImport}
+            onPress={goToLocationStep}
             disabled={keptCount === 0}
             activeOpacity={0.85}
           >
             <Text style={styles.primaryBtnText}>
-              {keptCount === 0 ? 'Nothing selected' : `Add ${keptCount} wine${keptCount === 1 ? '' : 's'} to cellar`}
+              {keptCount === 0 ? 'Nothing selected' : `Continue with ${keptCount} wine${keptCount === 1 ? '' : 's'}`}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
@@ -563,5 +678,14 @@ const styles = StyleSheet.create({
   rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
   // Small pill explaining why a row was pre-unticked (dup of cellar / import).
   rowTag: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5 },
+  // Case breakdown line under a wine on the review screen.
+  rowCase: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   dedupNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, lineHeight: 18, marginBottom: spacing.md },
+  // Storage-location step.
+  locRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 12, marginBottom: spacing.sm },
+  locName: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
+  locChevron: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold },
+  newLocInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.md },
+  backLink: { alignItems: 'center', paddingTop: spacing.md },
+  backLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });
