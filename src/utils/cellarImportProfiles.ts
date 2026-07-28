@@ -258,6 +258,33 @@ function parseGoedhuis(rows: string[][]): CellarImportWine[] | null {
   return out.length ? out : null;
 }
 
+// London City Bond — "Product List". SPC = bottles in the holding, SS = bottle
+// size in LITRES (0.75 → 750ml, 1.5 → magnum, 6 → 6L). Name is BRAND +
+// DESCRIPTION, vintage in YEAR. Header sits below a "Product List" title row.
+function parseLCB(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['spc', 'ss', 'description', 'brand']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = { brand: ci(cols, 'brand'), desc: ci(cols, 'description'), year: ci(cols, 'year'), spc: ci(cols, 'spc'), ss: ci(cols, 'ss') };
+  const out: CellarImportWine[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    const producer = [get(r, c.brand), get(r, c.desc)].filter(Boolean).join(' ').trim();
+    if (!producer) continue;
+    const spc = intOf(get(r, c.spc)) ?? 1;
+    if (spc < 1) continue;
+    const litres = numOf(get(r, c.ss));
+    const ml = litres ? Math.round(litres * 1000) : 750;
+    const bottleSizeMl = ml >= 50 && ml <= 30000 ? ml : 750;
+    const cased = spc > 1;
+    out.push(mkWine({
+      producer, vintage: yr(get(r, c.year)), bottleSizeMl, totalBottles: spc,
+      packaging: cased ? 'owc' : 'loose', bottlesPerCase: cased ? spc : null, cases: cased ? 1 : null, looseBottles: cased ? null : spc,
+    }));
+  }
+  return out.length ? out : null;
+}
+
 const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[] | null }[] = [
   { source: 'Justerini & Brooks', parse: parseJB },
   { source: 'Berry Bros & Rudd', parse: parseBerryBros },
@@ -265,6 +292,7 @@ const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[
   { source: 'Corney & Barrow', parse: parseCorneyBarrow },
   { source: 'Cru World Wine', parse: parseCru },
   { source: 'Goedhuis (Private Reserves)', parse: parseGoedhuis },
+  { source: 'London City Bond', parse: parseLCB },
 ];
 
 // Try every known-merchant profile against a sheet. Returns the matched source
