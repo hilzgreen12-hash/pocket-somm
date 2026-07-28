@@ -136,40 +136,22 @@ export function baseRegionGroup(region: string | null | undefined): string | nul
   return (region ?? '').trim() || null;
 }
 
-// "Most Represented Regions" with ADAPTIVE granularity: group to the base level,
-// then, for any group the collector clearly has depth in (>= threshold bottles
-// AND it genuinely splits into 2+ sub-regions), show its finer wine sub-regions
-// instead — so a German-heavy cellar surfaces Mosel / Rheingau / Pfalz, while a
-// broad cellar stays at country / headline-region level.
-export function topRegionsAdaptive(
+// "Most Represented Regions" — rank the cellar at a CONSISTENT base granularity
+// (France/Italy split into headline regions; every other country aggregates as
+// the country). Counting at one level keeps the tally fair: Germany is one total
+// rather than fragmented across Mosel / Pfalz / Rheingau. The previous "adaptive"
+// version subdivided multi-sub-region countries but left single-appellation ones
+// (the Loire → "Loire Valley") whole, so an aggregate-heavier Germany could rank
+// BELOW the Loire — the bug this replaces.
+export function mostRepresentedRegions(
   wines: { region: string | null; quantity: number | null }[],
   topN: number,
 ): [string, number][] {
-  const base = new Map<string, { region: string | null; quantity: number | null }[]>();
-  let total = 0;
+  const counts: Record<string, number> = {};
   for (const w of wines) {
     const g = baseRegionGroup(w.region);
     if (!g) continue;
-    let arr = base.get(g);
-    if (!arr) { arr = []; base.set(g, arr); }
-    arr.push(w);
-    total += w.quantity ?? 0;
-  }
-  // A group must hold a real share of the cellar to warrant subdividing.
-  const threshold = Math.max(6, Math.ceil(total * 0.2));
-  const counts: Record<string, number> = {};
-  for (const [g, ws] of base) {
-    const gCount = ws.reduce((s, w) => s + (w.quantity ?? 0), 0);
-    const fine = new Map<string, number>();
-    for (const w of ws) {
-      const f = canonicalWineRegion(w.region) ?? g;
-      fine.set(f, (fine.get(f) ?? 0) + (w.quantity ?? 0));
-    }
-    if (gCount >= threshold && fine.size >= 2) {
-      for (const [f, c] of fine) counts[f] = (counts[f] ?? 0) + c;
-    } else {
-      counts[g] = (counts[g] ?? 0) + gCount;
-    }
+    counts[g] = (counts[g] ?? 0) + (w.quantity ?? 0);
   }
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, topN);
 }
