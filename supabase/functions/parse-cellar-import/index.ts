@@ -12,12 +12,12 @@ import Anthropic from 'npm:@anthropic-ai/sdk';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
-const SYSTEM = `You are a meticulous wine-cellar data extractor. You are given the raw rows of ONE cellar/merchant/broker list (tab-separated, one row per line, exactly as exported). Extract every real wine holding as structured JSON.
+const SYSTEM = `You are a meticulous wine-cellar data extractor. You are given ONE cellar/merchant/broker list — EITHER the raw rows of a spreadsheet export (tab-separated, one row per line) OR a storage invoice / annual reserves statement as a PDF document. Extract every real wine holding as structured JSON.
 
 The lists vary enormously — read them intelligently:
-- The header row is often NOT the first line (there may be titles, addresses, account numbers, or blank rows above it). Find the real column headings.
-- Ignore rows that are not wine holdings: titles, section labels ("Bordeaux", "Red wines"), addresses, account details, totals/subtotals, and blank rows.
-- A single value may be a description that embeds the format, e.g. "Château Providence, Pomerol, 2008, 6x75cl".
+- The header row (or invoice column layout) is often NOT at the very top (there may be titles, logos, addresses, account numbers, or blank rows above it). Find the real columns.
+- Ignore anything that isn't a wine holding: titles, section labels ("Bordeaux", "Red wines"), addresses, account details, subtotals/totals/VAT/carriage lines, page headers/footers, and blank rows.
+- On an invoice/statement each line item is usually one holding; a value may embed the format, e.g. "Château Providence, Pomerol, 2008, 6x75cl".
 
 QUANTITY — the crux. Work out how many INDIVIDUAL BOTTLES each holding is:
 - If a column gives bottles directly (e.g. "Quantity in Bottles", "Btls."), use it as bottles.
@@ -52,20 +52,29 @@ Return ONLY a JSON object: {"wines": [ ... ]}. No markdown, no commentary.`;
 
 Deno.serve(async (req) => {
   try {
-    const { text, source } = await req.json().catch(() => ({}));
-    const body = typeof text === 'string' ? text : '';
-    if (!body.trim()) return json({ wines: [] }, 200);
-    // Guard against a runaway payload — cap the characters we forward.
-    const clipped = body.length > 120000 ? body.slice(0, 120000) : body;
+    const { text, pdfBase64, source } = await req.json().catch(() => ({}));
+    const hint = typeof source === 'string' && source ? source : 'unknown';
+
+    // Two inputs: a PDF invoice/statement (sent as a document block Claude reads
+    // directly) or decoded spreadsheet rows as text.
+    let content: unknown;
+    if (typeof pdfBase64 === 'string' && pdfBase64) {
+      content = [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdfBase64 } },
+        { type: 'text', text: `Source hint: ${hint}\n\nExtract every wine holding from this document.` },
+      ];
+    } else {
+      const body = typeof text === 'string' ? text : '';
+      if (!body.trim()) return json({ wines: [] }, 200);
+      // Guard against a runaway payload — cap the characters we forward.
+      content = `Source hint: ${hint}\n\nList rows:\n${body.length > 120000 ? body.slice(0, 120000) : body}`;
+    }
 
     const resp = await client.messages.create({
       model: 'claude-sonnet-5',
       max_tokens: 16000,
       system: SYSTEM,
-      messages: [{
-        role: 'user',
-        content: `Source hint: ${typeof source === 'string' && source ? source : 'unknown'}\n\nList rows:\n${clipped}`,
-      }],
+      messages: [{ role: 'user', content: content as any }],
     });
 
     const raw = resp.content[0]?.type === 'text' ? resp.content[0].text : '';

@@ -194,6 +194,13 @@ export async function parseCellarImport(text: string, source?: string): Promise<
   return data.wines ?? [];
 }
 
+// PDF invoices / statements: the base64 PDF is read directly by Claude (as a
+// document) rather than decoded to rows on-device.
+export async function parseCellarPdf(pdfBase64: string, source?: string): Promise<CellarImportWine[]> {
+  const data = await invokeFunction('parse-cellar-import', { pdfBase64, source: source ?? '' }) as { wines?: CellarImportWine[] };
+  return data.wines ?? [];
+}
+
 // "Archive a Night" — identify each bottle in a lineup photo.
 export interface DetectedBottle {
   producer: string;
