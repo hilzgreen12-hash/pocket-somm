@@ -9,8 +9,9 @@ import { fixMojibake, parseCsv } from './vivinoCsv';
 // sees clean rows.
 
 export interface ImportSheet {
-  name: string;   // sheet name (workbook) or file name (single CSV)
-  tsv: string;    // rows joined by tabs / newlines, empty rows dropped
+  name: string;       // sheet name (workbook) or file name (single CSV)
+  rows: string[][];   // clean rows (empty rows dropped) for deterministic profiles
+  tsv: string;        // same rows as tab/newline text for the Claude fallback
   rowCount: number;
 }
 
@@ -78,7 +79,7 @@ export function fileToSheets(bytes: Uint8Array, fileName: string): ImportSheet[]
         if (!sheet) return null;
         const raw = XLSX.utils.sheet_to_json<unknown[]>(sheet, { header: 1, raw: false, defval: '', blankrows: false });
         const rows = nonEmpty(raw.map((r) => (Array.isArray(r) ? r.map((c) => (c == null ? '' : String(c))) : [])));
-        return rows.length ? { name: sn, tsv: toTsv(rows), rowCount: rows.length } : null;
+        return rows.length ? { name: sn, rows, tsv: toTsv(rows), rowCount: rows.length } : null;
       })
       .filter((s): s is ImportSheet => s !== null);
   }
@@ -86,5 +87,5 @@ export function fileToSheets(bytes: Uint8Array, fileName: string): ImportSheet[]
   // CSV / TSV / plain text — decode by encoding, parse with the shared
   // delimiter-sniffing reader, then re-serialize to clean TSV.
   const rows = nonEmpty(parseCsv(decodeText(bytes)));
-  return rows.length ? [{ name: fileName || 'File', tsv: toTsv(rows), rowCount: rows.length }] : [];
+  return rows.length ? [{ name: fileName || 'File', rows, tsv: toTsv(rows), rowCount: rows.length }] : [];
 }
