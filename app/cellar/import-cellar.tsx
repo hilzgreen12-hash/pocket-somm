@@ -7,8 +7,9 @@ import { File } from 'expo-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { importCellarDocument, prepareImageBase64, type ImportedCellarWine } from '../../src/api/label';
-import { parseCellarCsv, parseCellarSpreadsheet } from '../../src/utils/vivinoCsv';
+import { importCellarDocument, prepareImageBase64, parseCellarImport, type ImportedCellarWine, type CellarImportWine } from '../../src/api/label';
+import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
+import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
 import type { CellarWine } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -16,7 +17,27 @@ import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-type Stage = 'capture' | 'analyzing' | 'review' | 'adding' | 'done';
+type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'adding' | 'done';
+
+// Map the intelligent parser's rich wine onto the existing bottle-based review
+// row. Names: a wine with a separate cuvée keeps producer + cuvée; one with a
+// single description string goes wholly into wine_name so it isn't doubled up.
+// (Case structure is carried for the materialization step; the counts are
+// already the total individual bottles.)
+function toImported(w: CellarImportWine): ImportedCellarWine {
+  const name = (w.wineName || w.producer || '').trim();
+  const producer = w.wineName ? (w.producer || '').trim() : '';
+  return {
+    wine_name: name,
+    producer,
+    region: w.region || '',
+    vintage: w.vintage,
+    quantity: Number.isFinite(w.totalBottles) && w.totalBottles > 0 ? w.totalBottles : 1,
+    bottle_size_ml: w.bottleSizeMl,
+    purchase_price: w.purchasePricePerBottle,
+    currency: w.currency,
+  };
+}
 
 // Why a row is pre-unticked: it already exists in the cellar, or it repeats an
 // earlier row in this same import. null = a fresh wine, ticked by default.
@@ -98,6 +119,10 @@ export default function ImportCellarScreen() {
   // merged into its existing row (bottle count += imported qty) rather than
   // spawning a parallel cellar line.
   const existingByKey = useRef<Map<string, CellarWine>>(new Map());
+  // Multi-sheet workbooks (e.g. a portfolio spanning several accounts) let the
+  // user choose which lists to import before parsing.
+  const [sheets, setSheets] = useState<ImportSheet[]>([]);
+  const [sheetKeep, setSheetKeep] = useState<boolean[]>([]);
 
   // Auto-open the right picker so the chooser → this screen → picker feels like
   // one action. Vivino stays on the instructions screen (the user needs to have
@@ -206,40 +231,51 @@ export default function ImportCellarScreen() {
       if (res.canceled || !res.assets?.[0]) return;
       setStage('analyzing');
       const asset = res.assets[0];
-      const file = new File(asset.uri);
-      // Excel / OpenDocument files are binary, so they can't be read as text like
-      // a CSV. Route them to the spreadsheet parser (SheetJS) via base64; read
-      // everything else as text. Detect by extension/mime, with a byte-sniff
-      // fallback so a mislabelled file (e.g. an .xlsx with no extension) still
-      // parses: ZIP (PK, xlsx/ods) or CFB (xls) magic bytes → spreadsheet.
-      const name = (asset.name ?? '').toLowerCase();
-      const mime = asset.mimeType ?? '';
-      const looksSpreadsheet =
-        /\.(xlsx|xls|ods)$/.test(name) || /spreadsheet|officedocument|ms-excel/.test(mime);
-      let parsed = looksSpreadsheet
-        ? parseCellarSpreadsheet(await file.base64())
-        : parseCellarCsv(await file.text());
-      if (parsed.wines.length === 0 && !looksSpreadsheet) {
-        // Text parse found nothing — the file may be a binary spreadsheet with a
-        // text-ish (or missing) extension. Sniff the magic bytes and retry.
-        try {
-          const b64 = await file.base64();
-          if (/^UEsD|^0M8R/.test(b64)) parsed = parseCellarSpreadsheet(b64); // PK.. / CFB
-        } catch { /* keep the empty result */ }
-      }
-      if (parsed.wines.length === 0) {
+      // Decode the file (Excel / CSV, any encoding) into clean per-sheet rows.
+      const bytes = await new File(asset.uri).bytes();
+      const parsedSheets = fileToSheets(bytes, asset.name ?? 'file');
+      if (parsedSheets.length === 0) {
         showAlert({
           title: "Couldn't read that file",
-          body: csv?.name === 'File'
-            ? "We couldn't find any wines in that file. Make sure it's an Excel or CSV spreadsheet with a header row naming the columns (producer, wine, vintage, quantity…) and try again."
-            : `That doesn't look like a ${csv?.name ?? ''} cellar export. Make sure you exported your cellar as a CSV and try again.`,
+          body: "We couldn't find any rows in that file. Make sure it's an Excel or CSV spreadsheet with a header row naming the columns, and try again.",
         });
         setStage('capture');
         return;
       }
-      await presentWines(parsed.wines);
+      // One sheet → parse it now; several → let the user choose which lists.
+      if (parsedSheets.length === 1) { await processSheets([parsedSheets[0]]); return; }
+      setSheets(parsedSheets);
+      setSheetKeep(parsedSheets.map(() => true));
+      setStage('sheets');
     } catch (err) {
       showAlert({ title: 'Could not read the file', body: err instanceof Error ? err.message : 'Please try again.' });
+      setStage('capture');
+    }
+  }
+
+  // Parse the chosen sheets: a recognised merchant export maps exactly in code;
+  // anything else goes to the intelligent (Claude) parser. Both return the same
+  // wine shape, which we fold into the shared review list.
+  async function processSheets(selected: ImportSheet[]) {
+    setStage('analyzing');
+    try {
+      const all: CellarImportWine[] = [];
+      for (const sheet of selected) {
+        const known = parseKnownSource(sheet.rows);
+        const wines = known ? known.wines : await parseCellarImport(sheet.tsv, sheet.name);
+        all.push(...wines);
+      }
+      if (all.length === 0) {
+        showAlert({
+          title: "Couldn't read that list",
+          body: "We couldn't find any wines. Make sure the sheet has a header row naming the columns (producer, wine, vintage, quantity…) and try again.",
+        });
+        setStage('capture');
+        return;
+      }
+      await presentWines(all.map(toImported));
+    } catch (err) {
+      showAlert({ title: 'Could not read the list', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
     }
   }
@@ -379,6 +415,38 @@ export default function ImportCellarScreen() {
             </TouchableOpacity>
           </ScrollView>
         )
+      ) : stage === 'sheets' ? (
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.sectionLabel}>This file has {sheets.length} lists — choose which to import</Text>
+          <Text style={styles.dedupNote}>Workbooks can hold several lists (and sometimes other people's). Tick the ones that are yours.</Text>
+          {sheets.map((s, i) => (
+            <TouchableOpacity
+              key={i}
+              style={[styles.row, !sheetKeep[i] && styles.rowOff]}
+              onPress={() => setSheetKeep((prev) => prev.map((v, j) => (j === i ? !v : v)))}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.checkbox, sheetKeep[i] && styles.checkboxOn]}>{sheetKeep[i] ? '☑' : '☐'}</Text>
+              <View style={styles.rowText}>
+                <Text style={styles.rowName} numberOfLines={1}>{s.name || `List ${i + 1}`}</Text>
+                <Text style={styles.rowMeta}>{s.rowCount} row{s.rowCount === 1 ? '' : 's'}</Text>
+              </View>
+            </TouchableOpacity>
+          ))}
+          <TouchableOpacity
+            style={[styles.primaryBtn, !sheetKeep.some(Boolean) && styles.primaryBtnDisabled]}
+            disabled={!sheetKeep.some(Boolean)}
+            onPress={() => processSheets(sheets.filter((_, i) => sheetKeep[i]))}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.primaryBtnText}>
+              {sheetKeep.some(Boolean) ? `Import ${sheetKeep.filter(Boolean).length} list${sheetKeep.filter(Boolean).length === 1 ? '' : 's'}` : 'Nothing selected'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.secondaryBtn} onPress={() => setStage('capture')} activeOpacity={0.85}>
+            <Text style={styles.secondaryBtnText}>Choose another file</Text>
+          </TouchableOpacity>
+        </ScrollView>
       ) : stage === 'analyzing' ? (
         <View style={styles.centerBlock}>
           <ActivityIndicator color={colors.gold} />
