@@ -115,6 +115,54 @@ function findCol(header: string[], synonyms: readonly string[], exclude?: RegExp
   return -1;
 }
 
+// A Vivino "full wine list" review: a wine the user rated / reviewed / noted.
+// Score is normalised to Vinster's 0–100 scale (Vivino stars × 20).
+export interface VivinoReview {
+  producer: string;
+  wineName: string;
+  vintage: string | null;
+  score: number | null;
+  reviewNote: string | null;   // "Your review" — the shareable tasting note
+  personalNote: string | null; // "Personal Note" — private
+  location: string | null;
+  date: string | null;         // yyyy-mm-dd (from the scan/review date)
+}
+
+// Parse the Vivino "full_wine_list" export for the rows the user actually
+// engaged with (a rating, a review, or a personal note). Only those become
+// reviews — a scanned-but-unrated wine is skipped.
+export function parseVivinoReviews(rows: string[][]): VivinoReview[] {
+  if (rows.length < 2) return [];
+  const header = rows[0].map((h) => (h ?? '').trim().toLowerCase());
+  const idx = (name: string) => header.indexOf(name);
+  const cWinery = idx('winery'), cWine = idx('wine name'), cVint = idx('vintage');
+  const cRating = idx('your rating'), cReview = idx('your review'), cNote = idx('personal note');
+  const cDate = idx('scan date'), cLoc = idx('scan/review location');
+  if (cWine < 0 && cWinery < 0) return [];
+  const cell = (r: string[], i: number) => (i >= 0 && i < r.length ? (r[i] ?? '').trim() : '');
+  const out: VivinoReview[] = [];
+  for (let ri = 1; ri < rows.length; ri++) {
+    const r = rows[ri];
+    const rating = cell(r, cRating), review = cell(r, cReview), note = cell(r, cNote);
+    if (!rating && !review && !note) continue;
+    const stars = rating ? parseFloat(rating.replace(/[^0-9.]/g, '')) : NaN;
+    const score = Number.isFinite(stars) ? Math.round(Math.max(0, Math.min(5, stars)) * 20) : null;
+    const vintageRaw = cell(r, cVint);
+    const date = (cell(r, cDate).match(/\d{4}-\d{2}-\d{2}/) ?? [])[0] ?? null;
+    out.push({
+      producer: cell(r, cWinery),
+      wineName: cell(r, cWine),
+      vintage: vintageRaw ? (vintageRaw.replace(/[^0-9A-Za-z]/g, '') || null) : null,
+      score,
+      reviewNote: review || null,
+      personalNote: note || null,
+      location: cell(r, cLoc) || null,
+      date,
+    });
+  }
+  return out;
+}
+
 export interface VivinoReviewRow {
   producer: string;
   wineName: string;
