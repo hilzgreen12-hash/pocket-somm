@@ -193,11 +193,78 @@ function parseCorneyBarrow(rows: string[][]): CellarImportWine[] | null {
   return out.length ? out : null;
 }
 
+// Cru World Wine — one row per storage item (one case). Case Size is
+// bottles-per-case, so each row is a single OWC case of that many bottles. The
+// pack is also echoed in the Product Name ("Muga Aro 2019 (3x75cl)").
+function parseCru(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['cru id', 'product name', 'case size']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    name: ci(cols, 'product name'), vint: ci(cols, 'vintage'), caseSize: ci(cols, 'case size'), size: ci(cols, 'bottle size'),
+    country: ci(cols, 'country'), region: ci(cols, 'region'), cost: ci(cols, 'cost (gbp)', 'cost (real)'), cur: ci(cols, 'currency'), dw: ci(cols, 'drinking window'),
+  };
+  const out: CellarImportWine[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i];
+    let name = get(r, c.name); if (!name) continue;
+    // Drop a trailing pack suffix "(3x75cl)" and a trailing year (both are in
+    // their own columns) so the name isn't doubled up.
+    name = name.replace(/\s*\(\s*\d+\s*[x×][\d.]+\s*[a-z]+\s*\)\s*$/i, '').replace(/\s+(?:19|20)\d{2}\s*$/, '').trim();
+    if (!name) continue;
+    const per = intOf(get(r, c.caseSize)) ?? 1;
+    const cased = per > 1;
+    const dw = get(r, c.dw);
+    const cost = numOf(get(r, c.cost));
+    const cur = get(r, c.cur);
+    out.push(mkWine({
+      producer: name, vintage: yr(get(r, c.vint)), region: get(r, c.region) || null, country: get(r, c.country) || null,
+      bottleSizeMl: volToMl(get(r, c.size)), totalBottles: per,
+      packaging: cased ? 'owc' : 'loose', bottlesPerCase: cased ? per : null, cases: cased ? 1 : null, looseBottles: cased ? null : per,
+      drinkingWindowFrom: yr(dw), drinkingWindowTo: yrTo(dw),
+      purchasePricePerBottle: cost && per ? +(cost / per).toFixed(2) : null,
+      currency: /^[a-z]{3}$/i.test(cur) ? cur.toUpperCase() : 'GBP',
+    }));
+  }
+  return out.length ? out : null;
+}
+
+// Goedhuis (Private Reserves) — Cs (full cases) + Bt (loose bottles) + Size
+// pack ("6x75cl"), with Ready/Drink By window and £ per case. Header sits below
+// account title rows.
+function parseGoedhuis(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['cs', 'bt', 'wine', 'drink by']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    cs: ci(cols, 'cs'), bt: ci(cols, 'bt'), vint: ci(cols, 'vintage'), wine: ci(cols, 'wine'),
+    size: ci(cols, 'size'), price: ci(cols, '£ per cs'), ready: ci(cols, 'ready'), drink: ci(cols, 'drink by'),
+  };
+  const out: CellarImportWine[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i]; const wine = get(r, c.wine); if (!wine) continue;
+    const pack = parsePack(get(r, c.size));
+    const cs = intOf(get(r, c.cs)) ?? 0; const bt = intOf(get(r, c.bt)) ?? 0;
+    const total = cs * pack.bottlesPerCase + bt;
+    if (total < 1) continue;
+    const perCase = numOf(get(r, c.price));
+    out.push(mkWine({
+      producer: wine, vintage: yr(get(r, c.vint)), bottleSizeMl: pack.bottleSizeMl, totalBottles: total,
+      packaging: cs > 0 ? 'owc' : 'loose', bottlesPerCase: cs > 0 ? pack.bottlesPerCase : null, cases: cs > 0 ? cs : null, looseBottles: bt || null,
+      drinkingWindowFrom: yr(get(r, c.ready)), drinkingWindowTo: yr(get(r, c.drink)),
+      purchasePricePerBottle: perCase && pack.bottlesPerCase ? +(perCase / pack.bottlesPerCase).toFixed(2) : null,
+    }));
+  }
+  return out.length ? out : null;
+}
+
 const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[] | null }[] = [
   { source: 'Justerini & Brooks', parse: parseJB },
   { source: 'Berry Bros & Rudd', parse: parseBerryBros },
   { source: 'Lay & Wheeler', parse: parseLayWheeler },
   { source: 'Corney & Barrow', parse: parseCorneyBarrow },
+  { source: 'Cru World Wine', parse: parseCru },
+  { source: 'Goedhuis (Private Reserves)', parse: parseGoedhuis },
 ];
 
 // Try every known-merchant profile against a sheet. Returns the matched source
