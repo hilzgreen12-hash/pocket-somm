@@ -162,10 +162,42 @@ function parseLayWheeler(rows: string[][]): CellarImportWine[] | null {
   return out.length ? out : null;
 }
 
+// Corney & Barrow — "No bottles" is total bottles, "Pack size" is
+// bottles-per-case; full multiples become OWC cases, a remainder is loose.
+function parseCorneyBarrow(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['no bottles', 'pack size', 'account code']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    name: ci(cols, 'wine name'), vint: ci(cols, 'vintage display', 'vintage'), type: ci(cols, 'type'), size: ci(cols, 'bottle size'),
+    bottles: ci(cols, 'no bottles'), pack: ci(cols, 'pack size'), country: ci(cols, 'country'), region: ci(cols, 'region'), sub: ci(cols, 'sub region'),
+    price: ci(cols, 'purchase cost per case'), dwf: ci(cols, 'drink from'), dwt: ci(cols, 'drink to'), note: ci(cols, 'tasting note'),
+  };
+  const out: CellarImportWine[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i]; const name = get(r, c.name); const total = intOf(get(r, c.bottles));
+    if (!name || !total) continue;
+    const pk = intOf(get(r, c.pack)) ?? 1;
+    const cases = pk > 1 ? Math.floor(total / pk) : 0;
+    const loose = pk > 1 ? total % pk : total;
+    const region = [get(r, c.sub), get(r, c.region)].filter(Boolean).join(', ');
+    const perCase = numOf(get(r, c.price));
+    out.push(mkWine({
+      producer: name, vintage: yr(get(r, c.vint)), region: region || null, country: get(r, c.country) || null,
+      colour: colourOf(get(r, c.type)), bottleSizeMl: volToMl(get(r, c.size)), totalBottles: total,
+      packaging: cases > 0 ? 'owc' : 'loose', bottlesPerCase: cases > 0 ? pk : null, cases: cases > 0 ? cases : null, looseBottles: loose || null,
+      drinkingWindowFrom: yr(get(r, c.dwf)), drinkingWindowTo: yr(get(r, c.dwt)),
+      purchasePricePerBottle: perCase && pk ? +(perCase / pk).toFixed(2) : null, notes: get(r, c.note) || null,
+    }));
+  }
+  return out.length ? out : null;
+}
+
 const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[] | null }[] = [
   { source: 'Justerini & Brooks', parse: parseJB },
   { source: 'Berry Bros & Rudd', parse: parseBerryBros },
   { source: 'Lay & Wheeler', parse: parseLayWheeler },
+  { source: 'Corney & Barrow', parse: parseCorneyBarrow },
 ];
 
 // Try every known-merchant profile against a sheet. Returns the matched source
