@@ -7,7 +7,7 @@ import { File } from 'expo-file-system';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { importCellarDocument, prepareImageBase64, parseCellarImport, type ImportedCellarWine, type CellarImportWine } from '../../src/api/label';
+import { importCellarDocument, prepareImageBase64, parseCellarImport, parseCellarPdf, type ImportedCellarWine, type CellarImportWine } from '../../src/api/label';
 import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
@@ -97,8 +97,8 @@ const CSV_SOURCES: Record<CsvSource, {
   },
   file: {
     name: 'File',
-    lead: 'Upload a cellar spreadsheet.',
-    hint: 'Choose an Excel spreadsheet (.xlsx, .xls), a CSV, or a tab-delimited file (.tsv). Exported from Numbers or Google Sheets? Save it as Excel or CSV first. Vinster reads the columns wherever they are, as long as the top row names them.',
+    lead: 'Upload a cellar spreadsheet or statement.',
+    hint: 'Choose an Excel spreadsheet (.xlsx, .xls), a CSV, or a storage invoice / reserves statement (PDF). Exported from Numbers or Google Sheets? Save it as Excel or CSV first. Vinster reads the columns wherever they are, as long as the top row names them.',
     steps: null,
     hasLabelImages: false,
   },
@@ -247,6 +247,7 @@ export default function ImportCellarScreen() {
           'application/vnd.ms-excel', // .xls (and, on Windows, some .csv)
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
           'application/vnd.oasis.opendocument.spreadsheet', // .ods
+          'application/pdf', // storage invoices / reserves statements
           '*/*',
         ],
         copyToCacheDirectory: true,
@@ -255,8 +256,22 @@ export default function ImportCellarScreen() {
       if (res.canceled || !res.assets?.[0]) return;
       setStage('analyzing');
       const asset = res.assets[0];
-      // Decode the file (Excel / CSV, any encoding) into clean per-sheet rows.
+      const name = (asset.name ?? '').toLowerCase();
       const bytes = await new File(asset.uri).bytes();
+      // A PDF (storage invoice / reserves statement) is read directly by Claude
+      // rather than decoded — no rows to split, so no sheet picker.
+      const isPdf = /\.pdf$/.test(name) || (bytes[0] === 0x25 && bytes[1] === 0x50 && bytes[2] === 0x44 && bytes[3] === 0x46); // %PDF
+      if (isPdf) {
+        const wines = await parseCellarPdf(await new File(asset.uri).base64(), asset.name ?? 'PDF');
+        if (wines.length === 0) {
+          showAlert({ title: "Couldn't read that PDF", body: "Vinster couldn't find any wine holdings in that document. If it's a scanned image, try a clearer copy or a spreadsheet export instead." });
+          setStage('capture');
+          return;
+        }
+        await presentWines(wines);
+        return;
+      }
+      // Decode the spreadsheet (Excel / CSV, any encoding) into clean per-sheet rows.
       const parsedSheets = fileToSheets(bytes, asset.name ?? 'file');
       if (parsedSheets.length === 0) {
         showAlert({
