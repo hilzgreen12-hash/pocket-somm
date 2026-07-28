@@ -167,6 +167,33 @@ export async function importCellarDocument(base64Image: string): Promise<{ wines
   return invokeFunction('import-cellar', { base64Image }) as Promise<{ wines: ImportedCellarWine[] }>;
 }
 
+// Intelligent spreadsheet import: one already-decoded list (clean TSV) → real
+// wines with the case structure preserved. See parse-cellar-import edge fn.
+export interface CellarImportWine {
+  producer: string | null;
+  wineName: string | null;
+  vintage: string | null;
+  region: string | null;
+  country: string | null;
+  colour: string | null;
+  bottleSizeMl: number;
+  totalBottles: number;
+  packaging: 'owc' | 'non_owc' | 'mixed' | 'loose';
+  bottlesPerCase: number | null;
+  cases: number | null;
+  looseBottles: number | null;
+  drinkingWindowFrom: string | null;
+  drinkingWindowTo: string | null;
+  purchasePricePerBottle: number | null;
+  currency: string | null;
+  notes: string | null;
+}
+
+export async function parseCellarImport(text: string, source?: string): Promise<CellarImportWine[]> {
+  const data = await invokeFunction('parse-cellar-import', { text, source: source ?? '' }) as { wines?: CellarImportWine[] };
+  return data.wines ?? [];
+}
+
 // "Archive a Night" — identify each bottle in a lineup photo.
 export interface DetectedBottle {
   producer: string;

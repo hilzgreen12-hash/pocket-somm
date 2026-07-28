@@ -15,7 +15,7 @@ import type { ImportedCellarWine } from '../api/label';
 // continuation byte, 0x80–0xBF) and re-decode those bytes as UTF-8 — correctly
 // decoded text never matches the signature, so this is a safe no-op there.
 const MOJIBAKE_SIGNATURE = /[\xC2-\xF4][\x80-\xBF]/;
-function fixMojibake(s: string): string {
+export function fixMojibake(s: string): string {
   if (!s || !MOJIBAKE_SIGNATURE.test(s)) return s;
   let out = '';
   let i = 0;
@@ -57,7 +57,7 @@ function detectDelimiter(text: string): string {
 
 // RFC-4180-ish CSV: quoted fields, doubled quotes ("" → "), CRLF or LF breaks.
 // Delimiter is auto-detected (comma / tab / semicolon).
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const delim = detectDelimiter(text);
   const rows: string[][] = [];
   let row: string[] = [];
