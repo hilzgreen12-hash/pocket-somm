@@ -318,6 +318,70 @@ function parseFRW(rows: string[][]): CellarImportWine[] | null {
   return out.length ? out : null;
 }
 
+// Nexus — very rich. Total Bottles is given directly, plus Full Cases / Loose
+// Bottles / Case Pack Size and separate Producer + Wine Name.
+function parseNexus(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['wine producer', 'total bottles', 'case pack size']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    producer: ci(cols, 'wine producer'), name: ci(cols, 'wine name'), type: ci(cols, 'wine type'), vint: ci(cols, 'product vintage'),
+    pack: ci(cols, 'case pack size'), size: ci(cols, 'bottle size (cl)'), fullCases: ci(cols, 'full cases'), loose: ci(cols, 'loose bottles'), total: ci(cols, 'total bottles'),
+    country: ci(cols, 'wine country'), region: ci(cols, 'wine region'), sub: ci(cols, 'wine sub region'), price: ci(cols, 'case price gbp'), ds: ci(cols, 'drink start'), de: ci(cols, 'drink end'),
+  };
+  const out: CellarImportWine[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i]; const producer = get(r, c.producer); const name = get(r, c.name);
+    if (!producer && !name) continue;
+    const total = intOf(get(r, c.total)); if (!total) continue;
+    const pack = intOf(get(r, c.pack)) ?? 1;
+    const fullCases = intOf(get(r, c.fullCases)) ?? 0;
+    const loose = intOf(get(r, c.loose)) ?? 0;
+    const cl = numOf(get(r, c.size)); const ml = cl ? Math.round(cl * 10) : 750;
+    const region = [get(r, c.sub), get(r, c.region)].filter(Boolean).join(', ');
+    const perCase = numOf(get(r, c.price));
+    const cased = fullCases > 0 && pack > 1;
+    out.push(mkWine({
+      producer: producer || null, wineName: name || null, vintage: yr(get(r, c.vint)), colour: colourOf(get(r, c.type)),
+      region: region || null, country: get(r, c.country) || null, bottleSizeMl: ml >= 50 && ml <= 30000 ? ml : 750, totalBottles: total,
+      packaging: cased ? 'owc' : 'loose', bottlesPerCase: cased ? pack : null, cases: cased ? fullCases : null, looseBottles: loose || null,
+      drinkingWindowFrom: yr(get(r, c.ds)), drinkingWindowTo: yr(get(r, c.de)), purchasePricePerBottle: perCase && pack ? +(perCase / pack).toFixed(2) : null,
+    }));
+  }
+  return out.length ? out : null;
+}
+
+// Wine Bourse — Number of Cases + Number of Singles + Case Size; bottle size in
+// ml (or cl if small). Description is the full name.
+function parseWineBourse(rows: string[][]): CellarImportWine[] | null {
+  const h = headerMatch(rows, ['wine description', 'case size', 'number of cases', 'number of singles']);
+  if (!h) return null;
+  const { idx, cols } = h;
+  const c = {
+    desc: ci(cols, 'wine description'), vint: ci(cols, 'vintage'), colour: ci(cols, 'colour'), size: ci(cols, 'bottle size'),
+    caseSize: ci(cols, 'case size'), cases: ci(cols, 'number of cases'), singles: ci(cols, 'number of singles'), price: ci(cols, 'price per case'), region: ci(cols, 'region'),
+  };
+  const out: CellarImportWine[] = [];
+  for (let i = idx + 1; i < rows.length; i++) {
+    const r = rows[i]; const desc = get(r, c.desc); if (!desc) continue;
+    const caseSize = intOf(get(r, c.caseSize)) ?? 1;
+    const nCases = intOf(get(r, c.cases)) ?? 0;
+    const singles = intOf(get(r, c.singles)) ?? 0;
+    const total = nCases * caseSize + singles;
+    if (total < 1) continue;
+    const bs = numOf(get(r, c.size)); const ml = bs ? (bs < 100 ? Math.round(bs * 10) : Math.round(bs)) : 750;
+    const cased = nCases > 0 && caseSize > 1;
+    const perCase = numOf(get(r, c.price));
+    out.push(mkWine({
+      producer: desc, vintage: yr(get(r, c.vint)), colour: colourOf(get(r, c.colour)), region: get(r, c.region) || null,
+      bottleSizeMl: ml >= 50 && ml <= 30000 ? ml : 750, totalBottles: total,
+      packaging: cased ? 'owc' : 'loose', bottlesPerCase: cased ? caseSize : null, cases: cased ? nCases : null, looseBottles: singles || null,
+      purchasePricePerBottle: perCase && caseSize ? +(perCase / caseSize).toFixed(2) : null,
+    }));
+  }
+  return out.length ? out : null;
+}
+
 const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[] | null }[] = [
   { source: 'Justerini & Brooks', parse: parseJB },
   { source: 'Berry Bros & Rudd', parse: parseBerryBros },
@@ -327,6 +391,8 @@ const PROFILES: { source: string; parse: (rows: string[][]) => CellarImportWine[
   { source: 'Goedhuis (Private Reserves)', parse: parseGoedhuis },
   { source: 'London City Bond', parse: parseLCB },
   { source: 'Fine & Rare Wines', parse: parseFRW },
+  { source: 'Nexus', parse: parseNexus },
+  { source: 'Wine Bourse', parse: parseWineBourse },
 ];
 
 // Try every known-merchant profile against a sheet. Returns the matched source
