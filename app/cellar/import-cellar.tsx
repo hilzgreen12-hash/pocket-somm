@@ -11,6 +11,8 @@ import { importCellarDocument, prepareImageBase64, parseCellarImport, parseCella
 import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
+import { saveManualChosenWine } from '../../src/api/chosenWines';
+import { parseVivinoReviews, type VivinoReview } from '../../src/utils/vivinoCsv';
 import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -18,7 +20,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done';
+type Stage = 'capture' | 'sheets' | 'analyzing' | 'review' | 'location' | 'adding' | 'done' | 'reviews-done';
 
 // The review + save now work on the rich CellarImportWine (carrying the case
 // structure). The photo/screenshot path returns the simpler bottle shape, so
@@ -147,6 +149,9 @@ export default function ImportCellarScreen() {
   const [locations, setLocations] = useState<StorageLocation[]>([]);
   const [newLocationName, setNewLocationName] = useState('');
   const [savingLocation, setSavingLocation] = useState(false);
+  // Vivino reviews import summary (matched onto cellar wines vs added as
+  // standalone "other" reviews vs skipped because already reviewed).
+  const [reviewSummary, setReviewSummary] = useState<{ matched: number; added: number; skipped: number } | null>(null);
 
   // Auto-open the right picker so the chooser → this screen → picker feels like
   // one action. Vivino stays on the instructions screen (the user needs to have
@@ -288,6 +293,87 @@ export default function ImportCellarScreen() {
       setStage('sheets');
     } catch (err) {
       showAlert({ title: 'Could not read the file', body: err instanceof Error ? err.message : 'Please try again.' });
+      setStage('capture');
+    }
+  }
+
+  // Import Vivino RATINGS + TASTING NOTES (not stock). Pick the full wine list,
+  // extract every rated/reviewed wine, and either write the review onto the
+  // matching cellar wine or keep it as a standalone "other" review so nothing's
+  // lost. Never clobbers a review already written in Vinster.
+  async function pickReviewsFile() {
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: ['text/csv', 'text/comma-separated-values', 'text/tab-separated-values', 'text/plain', '*/*'],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      setStage('analyzing');
+      const asset = res.assets[0];
+      const bytes = await new File(asset.uri).bytes();
+      const parsedSheets = fileToSheets(bytes, asset.name ?? 'file');
+      const reviews = parseVivinoReviews(parsedSheets[0]?.rows ?? []);
+      if (reviews.length === 0) {
+        showAlert({ title: 'No reviews found', body: 'This file has no wines with a rating, review or note. Make sure you exported your full Vivino wine list (not just the cellar).' });
+        setStage('capture');
+        return;
+      }
+      await importReviews(reviews);
+    } catch (err) {
+      showAlert({ title: 'Could not read the file', body: err instanceof Error ? err.message : 'Please try again.' });
+      setStage('capture');
+    }
+  }
+
+  async function importReviews(reviews: VivinoReview[]) {
+    const userId = session?.user.id;
+    if (!userId) return;
+    setStage('adding');
+    try {
+      const cellar = await getCellarWines(userId);
+      const byKey = new Map<string, CellarWine>();
+      for (const w of cellar) { const k = wineKey(w); if (!byKey.has(k)) byKey.set(k, w); }
+      let matched = 0, added = 0, skipped = 0;
+      for (const rv of reviews) {
+        const existing = byKey.get(wineKey({ producer: rv.producer, wineName: rv.wineName, vintage: rv.vintage }));
+        if (existing) {
+          // Don't overwrite a review the user has already written in Vinster.
+          if (existing.review_score != null || (existing.review_note && existing.review_note.trim())) { skipped++; continue; }
+          await updateCellarWine(existing.id, {
+            review_score: rv.score,
+            review_note: rv.reviewNote,
+            user_notes: rv.personalNote,
+            review_location: rv.location,
+            review_date: rv.date,
+          });
+          matched++;
+        } else {
+          await saveManualChosenWine(userId, {
+            wineName: rv.wineName || rv.producer,
+            producer: rv.producer,
+            region: '',
+            vintage: rv.vintage ? (parseInt(rv.vintage, 10) || null) : null,
+            restaurantName: '',
+            city: rv.location ?? '',
+            listPrice: null,
+            currency: defaultCurrency,
+            tastingNote: rv.reviewNote ?? '',
+            otherObservations: rv.personalNote ?? '',
+            userScore: rv.score,
+            isFavourite: false,
+            source: 'other',
+            reviewDate: rv.date,
+          });
+          added++;
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+      setReviewSummary({ matched, added, skipped });
+      setStage('reviews-done');
+    } catch (err) {
+      showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
     }
   }
@@ -487,7 +573,14 @@ export default function ImportCellarScreen() {
             <TouchableOpacity style={styles.primaryBtn} onPress={pickCsvFile} activeOpacity={0.85}>
               <Text style={styles.primaryBtnText}>{csv.name === 'File' ? 'Choose a file' : `Choose ${csv.name} export file`}</Text>
             </TouchableOpacity>
-            <Text style={styles.footnote}>Your ratings and tasting notes come across in the file too — importing those into your reviews is coming soon.</Text>
+            {source === 'vivino' ? (
+              <>
+                <TouchableOpacity style={styles.secondaryBtn} onPress={pickReviewsFile} activeOpacity={0.85}>
+                  <Text style={styles.secondaryBtnText}>Import my ratings & reviews</Text>
+                </TouchableOpacity>
+                <Text style={styles.footnote}>Your Vivino ratings and tasting notes come across too — use "Import my ratings & reviews" and choose your full wine list. Reviews are matched to your cellar wines; the rest are kept as Other reviews.</Text>
+              </>
+            ) : null}
             {!csv.hasLabelImages ? (
               <Text style={styles.footnote}>As {csv.name === 'File' ? 'spreadsheets do' : `${csv.name} does`} not save label images you will have to update your labels in Vinster later.</Text>
             ) : null}
@@ -594,6 +687,21 @@ export default function ImportCellarScreen() {
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>View Cellar List</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/cellar')} activeOpacity={0.85}>
+            <Text style={styles.doneBtnText}>Done</Text>
+          </TouchableOpacity>
+        </View>
+      ) : stage === 'reviews-done' ? (
+        <View style={styles.centerBlock}>
+          <Text style={styles.doneTitle}>Reviews imported</Text>
+          <Text style={styles.hint}>
+            {reviewSummary
+              ? `${reviewSummary.matched} review${reviewSummary.matched === 1 ? '' : 's'} added to wines in your cellar${reviewSummary.added > 0 ? `, ${reviewSummary.added} kept as Other reviews` : ''}${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} were skipped (already reviewed in Vinster)` : ''}. Find them on each wine card and in Dine · Wine Reviews.`
+              : 'Your reviews have been imported.'}
+          </Text>
+          <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>
+            <Text style={styles.doneBtnText}>View Wine Reviews</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/cellar')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>Done</Text>
