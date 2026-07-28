@@ -21,7 +21,31 @@ function decodeText(bytes: Uint8Array): string {
   if (bytes.length >= 2 && bytes[0] === 0xff && bytes[1] === 0xfe) return utf16(bytes, 2, true);
   if (bytes.length >= 2 && bytes[0] === 0xfe && bytes[1] === 0xff) return utf16(bytes, 2, false);
   const start = bytes.length >= 3 && bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0;
-  return utf8(bytes, start);
+  // No BOM: distinguish UTF-8 from Latin-1/Windows-1252 (some merchant CSVs,
+  // e.g. Nexus, are Latin-1). A file that isn't valid UTF-8 is decoded as
+  // Latin-1 so accents survive rather than being mangled by the UTF-8 reader.
+  return isLikelyUtf8(bytes, start) ? utf8(bytes, start) : latin1(bytes, start);
+}
+
+// Validate that the bytes form well-formed UTF-8 (every lead byte followed by
+// the right number of 0x80–0xBF continuation bytes).
+function isLikelyUtf8(b: Uint8Array, offset: number): boolean {
+  let i = offset;
+  while (i < b.length) {
+    const c = b[i];
+    if (c < 0x80) { i += 1; continue; }
+    const n = c >= 0xf0 ? 3 : c >= 0xe0 ? 2 : c >= 0xc2 ? 1 : -1;
+    if (n < 0) return false;
+    for (let k = 1; k <= n; k++) { if (i + k >= b.length || (b[i + k] & 0xc0) !== 0x80) return false; }
+    i += n + 1;
+  }
+  return true;
+}
+
+function latin1(b: Uint8Array, offset: number): string {
+  let out = '';
+  for (let i = offset; i < b.length; i++) out += String.fromCharCode(b[i]);
+  return out;
 }
 
 function utf16(b: Uint8Array, offset: number, littleEndian: boolean): string {
