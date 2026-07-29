@@ -74,6 +74,12 @@ export default function CommunityTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
+        {/* The Journal is live now — Vinster's own blog, readable by everyone.
+            Reading is public, so it navigates directly (no sign-in gate). */}
+        <TouchableOpacity style={styles.journalButton} onPress={() => router.push('/community/blog')}>
+          <Text style={styles.journalText}>The Journal</Text>
+          <Text style={styles.journalSub}>Wine notes, stories &amp; finds from Vinster</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.button} onPress={() => gated('/community/profile')}>
           <Text style={styles.buttonText}>Your Community Profile</Text>
         </TouchableOpacity>
@@ -118,4 +124,9 @@ const styles = StyleSheet.create({
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  // The Journal — a live feature, so it's gold-accented to stand apart from
+  // the coming-soon buttons above.
+  journalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)', gap: 2, marginBottom: spacing.xs },
+  journalText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 18, textAlign: 'center', letterSpacing: 0.5 },
+  journalSub: { color: 'rgba(255,255,255,0.7)', fontFamily: fonts.bodyRegular, fontSize: 13, textAlign: 'center' },
 });
