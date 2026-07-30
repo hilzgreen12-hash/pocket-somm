@@ -21,4 +21,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return context.resolveRequest(context, moduleName, platform);
 };
 
+// The web Journal (web/journal) is a standalone Astro project. If it's ever
+// `npm install`ed locally, keep Metro from crawling its node_modules — that
+// would cause Haste "duplicate module" collisions against the app's own deps.
+const journalBlock = /web[\\/]journal[\\/].*/;
+config.resolver.blockList = config.resolver.blockList
+  ? (Array.isArray(config.resolver.blockList)
+      ? [...config.resolver.blockList, journalBlock]
+      : [config.resolver.blockList, journalBlock])
+  : journalBlock;
+
 module.exports = config;

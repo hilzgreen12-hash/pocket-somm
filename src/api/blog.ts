@@ -17,10 +17,24 @@ export interface BlogPost {
   body: string;
   cover_image_url: string | null;
   tags: string[];
+  slug: string | null;
   is_published: boolean;
   published_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+// URL-safe slug from a title, for the public web Journal
+// (journal.vinsterapp.com/<slug>). Hermes lacks full ICU, so .normalize() is
+// guarded; the web build's slugify (web/journal/src/lib/posts.ts) mirrors this.
+export function slugify(input: string): string {
+  let s = (input || '').toLowerCase();
+  try {
+    s = s.normalize('NFKD').replace(/[̀-ͯ]/g, '');
+  } catch {
+    /* no ICU on this engine — non-ascii falls through to a separator below */
+  }
+  return s.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'post';
 }
 
 export interface BlogPostInput {
@@ -56,6 +70,9 @@ export async function createBlogPost(userId: string, input: BlogPostInput): Prom
     .insert({
       user_id: userId,
       ...normalize(input),
+      // Slug is set once, at creation, so the public URL stays stable even if
+      // the title is later edited. updateBlogPost deliberately never touches it.
+      slug: slugify(input.title),
       published_at: input.is_published ? new Date().toISOString() : null,
     })
     .select('*')

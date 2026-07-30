@@ -1,0 +1,81 @@
+---
+import Base from '../layouts/Base.astro';
+import AppCta from '../components/AppCta.astro';
+import { getPublishedPosts, formatDate, type Post } from '../lib/posts';
+import { renderMarkdown } from '../lib/markdown';
+import { SITE } from '../lib/site';
+
+export async function getStaticPaths() {
+  const posts = await getPublishedPosts();
+  return posts.map((post) => ({ params: { slug: post.slug }, props: { post } }));
+}
+
+const { post } = Astro.props as { post: Post };
+const bodyHtml = renderMarkdown(post.body);
+const url = `${SITE.url}/${post.slug}`;
+const description = post.excerpt || post.title;
+const dateIso = post.published_at ?? post.created_at;
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Article',
+  headline: post.title,
+  description,
+  image: post.cover_image_url ? [post.cover_image_url] : undefined,
+  datePublished: dateIso,
+  dateModified: dateIso,
+  keywords: post.tags.join(', ') || undefined,
+  author: { '@type': 'Organization', name: SITE.appName },
+  publisher: { '@type': 'Organization', name: SITE.appName },
+  mainEntityOfPage: url,
+};
+---
+
+<Base
+  title={`${post.title} — ${SITE.shortName}`}
+  description={description}
+  url={url}
+  image={post.cover_image_url}
+  type="article"
+  publishedTime={dateIso}
+  tags={post.tags}
+  jsonLd={jsonLd}
+>
+  <article>
+    {post.cover_image_url && (
+      <div class="hero-cover">
+        <img src={post.cover_image_url} alt="" width="1200" height="675" />
+      </div>
+    )}
+    <div class="wrap">
+      <p class="crumb"><a href="/">← The Journal</a></p>
+      <h1 class="post-title">{post.title}</h1>
+      <p class="post-meta">
+        {formatDate(dateIso)}
+        {post.tags.length > 0 && <span> · {post.tags.join(' · ')}</span>}
+      </p>
+      {post.excerpt && <p class="post-excerpt">{post.excerpt}</p>}
+      <hr class="rule" />
+      <div class="prose" set:html={bodyHtml} />
+    </div>
+  </article>
+
+  <AppCta heading="Track this bottle in your cellar with Vinster" />
+</Base>
+
+<style>
+  .hero-cover { width: 100%; max-height: 60vh; overflow: hidden; }
+  .hero-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .crumb { margin: 2rem 0 1.5rem; }
+  .crumb a { color: var(--gold); text-decoration: none; font-family: var(--display); font-weight: 600; }
+  .post-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.2rem, 6vw, 3.2rem);
+    line-height: 1.08;
+    margin: 0;
+  }
+  .post-meta { color: var(--gold); font-size: 0.95rem; margin: 1rem 0 0; letter-spacing: 0.02em; }
+  .post-excerpt { font-family: var(--display); font-style: italic; font-size: 1.35rem; color: var(--muted); margin: 1.25rem 0 0; line-height: 1.4; }
+  .rule { border: none; border-top: 1px solid var(--border); margin: 1.75rem 0; }
+</style>

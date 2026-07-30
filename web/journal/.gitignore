@@ -1,0 +1,5 @@
+# Astro build artefacts + local secrets (root .gitignore also covers node_modules/ and dist/)
+node_modules/
+dist/
+.astro/
+.env
