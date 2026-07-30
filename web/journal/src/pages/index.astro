@@ -1,0 +1,87 @@
+---
+import Base from '../layouts/Base.astro';
+import AppCta from '../components/AppCta.astro';
+import { getPublishedPosts, formatDate } from '../lib/posts';
+import { SITE } from '../lib/site';
+
+const posts = await getPublishedPosts();
+
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'Blog',
+  name: SITE.name,
+  description: SITE.tagline,
+  url: SITE.url,
+};
+---
+
+<Base title={SITE.name} description={SITE.tagline} url={SITE.url} type="website" jsonLd={jsonLd}>
+  <section class="hero wrap">
+    <h1>The Vinster Journal</h1>
+    <p class="lede">{SITE.tagline}</p>
+  </section>
+
+  {posts.length === 0 ? (
+    <section class="wrap empty">
+      <p>The first pieces are on their way — wine notes, buying guides and stories from the Vinster cellar.</p>
+    </section>
+  ) : (
+    <section class="feed wrap">
+      {posts.map((p) => (
+        <a class="card" href={`/${p.slug}`}>
+          {p.cover_image_url && (
+            <div class="card-cover">
+              <img src={p.cover_image_url} alt="" loading="lazy" width="800" height="450" />
+            </div>
+          )}
+          <div class="card-body">
+            <h2 class="card-title">{p.title}</h2>
+            <p class="card-meta">
+              {formatDate(p.published_at ?? p.created_at)}
+              {p.tags.length > 0 && <span> · {p.tags.join(' · ')}</span>}
+            </p>
+            {p.excerpt && <p class="card-excerpt">{p.excerpt}</p>}
+            <span class="card-more">Read →</span>
+          </div>
+        </a>
+      ))}
+    </section>
+  )}
+
+  <AppCta />
+</Base>
+
+<style>
+  .hero { padding-top: 3.5rem; padding-bottom: 0.5rem; text-align: center; }
+  .hero h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(2.6rem, 8vw, 4rem);
+    line-height: 1.02;
+    margin: 0;
+    letter-spacing: 0.01em;
+  }
+  .lede { font-family: var(--display); font-style: italic; font-size: 1.35rem; color: var(--gold); margin: 0.75rem 0 0; }
+
+  .empty { padding: 3rem 0; text-align: center; color: var(--muted); font-size: 1.15rem; }
+
+  .feed { padding-top: 3rem; display: grid; gap: 2.5rem; }
+  .card {
+    text-decoration: none;
+    color: inherit;
+    display: block;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    overflow: hidden;
+    background: var(--surface);
+    transition: border-color 0.15s ease, transform 0.15s ease;
+  }
+  .card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+  .card-cover { aspect-ratio: 16 / 9; overflow: hidden; }
+  .card-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .card-body { padding: 1.5rem clamp(1.25rem, 4vw, 2rem) 1.75rem; }
+  .card-title { font-family: var(--display); font-weight: 700; font-size: 1.8rem; line-height: 1.15; margin: 0; }
+  .card-meta { font-size: 0.9rem; color: var(--gold); margin: 0.5rem 0 0; letter-spacing: 0.02em; }
+  .card-excerpt { color: var(--muted); margin: 0.75rem 0 0; }
+  .card-more { display: inline-block; margin-top: 1rem; color: var(--gold); font-family: var(--display); font-weight: 600; }
+</style>

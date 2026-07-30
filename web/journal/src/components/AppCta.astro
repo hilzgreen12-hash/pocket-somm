@@ -1,0 +1,62 @@
+---
+import { SITE } from '../lib/site';
+
+interface Props {
+  heading?: string;
+}
+const { heading } = Astro.props;
+---
+
+<aside class="cta">
+  <p class="cta-kicker">Your AI sommelier</p>
+  <h3 class="cta-title">{heading ?? 'Track every bottle with Vinster'}</h3>
+  <p class="cta-sub">
+    Scan a label for instant critic scores and estimated values, get food and
+    restaurant pairings, and organise your whole cellar — free on iOS and Android.
+  </p>
+  <div class="cta-buttons">
+    <a class="store-btn" href={SITE.appStoreUrl}>Download on the App Store</a>
+    <a class="store-btn" href={SITE.playStoreUrl}>Get it on Google Play</a>
+  </div>
+</aside>
+
+<style>
+  .cta {
+    max-width: 44rem;
+    margin: 3.5rem auto 0;
+    padding: 2rem clamp(1.5rem, 5vw, 2.5rem);
+    border: 1px solid var(--gold);
+    border-radius: 18px;
+    background: rgba(224, 184, 74, 0.09);
+    text-align: center;
+  }
+  .cta-kicker {
+    font-family: var(--body);
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    font-size: 0.78rem;
+    color: var(--gold);
+    margin: 0 0 0.4rem;
+  }
+  .cta-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.7rem;
+    line-height: 1.15;
+    margin: 0 0 0.6rem;
+  }
+  .cta-sub { color: var(--muted); margin: 0 auto 1.4rem; max-width: 34rem; font-size: 1.02rem; }
+  .cta-buttons { display: flex; gap: 0.75rem; justify-content: center; flex-wrap: wrap; }
+  .store-btn {
+    text-decoration: none;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1rem;
+    color: #3a1f1c;
+    background: var(--gold);
+    border-radius: 999px;
+    padding: 0.65rem 1.4rem;
+    transition: transform 0.12s ease, filter 0.12s ease;
+  }
+  .store-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+</style>

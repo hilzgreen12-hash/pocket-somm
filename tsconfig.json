@@ -10,6 +10,9 @@
     // config can resolve. Including them produced ~84 phantom errors that
     // drowned out real ones in the app code. Typecheck them with
     // `deno check supabase/functions/**/*.ts` instead.
-    "supabase/functions"
+    "supabase/functions",
+    // Standalone Astro project (the public web Journal) with its own tsconfig,
+    // toolchain and import.meta.env — not part of the React Native app.
+    "web"
   ]
 }
