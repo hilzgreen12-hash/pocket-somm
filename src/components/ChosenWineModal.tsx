@@ -11,8 +11,7 @@ import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
-import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
-import { isoToYmd } from '../utils/reviewDate';
+import { findExistingReview, missingReviewFields } from '../utils/reviewDedup';
 import { normaliseCity } from '../utils/city';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -122,8 +121,31 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     // Save sometimes only dismisses the numeric keypad (from the score
     // input) and the user has to tap a second time to actually save.
     Keyboard.dismiss();
-    // If this wine is already in Your Wine Reviews, let the user choose
-    // rather than silently adding a duplicate row.
+    // Pre-save nudge: list anything empty except the optional Personal Notes.
+    const missing = missingReviewFields([
+      { label: 'Your Review', filled: !!tastingNote.trim() },
+      { label: 'Your Score', filled: userScore != null },
+      { label: 'List Price', filled: !!listPrice.trim() },
+      { label: 'a Location', filled: !!(restaurant.trim() || city.trim()) },
+    ]);
+    if (missing.length) {
+      showAlert({
+        title: 'Ready to Save?',
+        body: `You're missing ${missing.join(', ')}.`,
+        buttons: [
+          { text: 'Yes, Save', onPress: () => { void proceedSave(); } },
+          { text: 'Return to Review', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await proceedSave();
+  }
+
+  async function proceedSave() {
+    if (!wine || !session) return;
+    // If this wine is already in Your Wine Reviews, offer to add a NEW dated
+    // entry to that review or start a separate one — never to edit/replace it.
     const existing = findExistingReview(chosenWines, {
       producer: wine.producer,
       wineName: wine.name,
@@ -131,9 +153,8 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     });
     if (existing) {
       // A bottle pick added from the list starts as an empty row (no note,
-      // score or observations). Reviewing it right after adding should just
-      // fill that row in — not prompt "you've reviewed this before" (the loop
-      // the user hit). Only prompt when there's a real prior review.
+      // score or observations). Reviewing it right after adding just fills that
+      // row in — it's the FIRST review, not an edit of a prior one.
       const hasContent = !!(
         (existing.tasting_note ?? '').trim() ||
         existing.user_score != null ||
@@ -143,34 +164,16 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         await doSave('update', existing);
         return;
       }
-      // Compare LOCAL calendar days (not UTC) so the same-day vs earlier-date
-      // prompt is right for non-UTC users near midnight. isoToYmd + todayIso
-      // are both local.
-      const existingDay = isoToYmd(existing.chosen_at);
-      const todayDay = todayIso();
-      if (existingDay === todayDay) {
-        showAlert({
-          title: 'Already in Your Reviews today',
-          body: `You already have this wine in Your Reviews on this date. Keep both, replace the existing one, or discard this?`,
-          buttons: [
-            { text: 'Keep both', onPress: () => { void doSave('create', null); } },
-            { text: 'Replace existing', onPress: () => { void doSave('update', existing); } },
-            { text: 'Discard', style: 'cancel' },
-          ],
-        });
-      } else {
-        const dateLabel = existing.chosen_at ? new Date(existing.chosen_at).toLocaleDateString('en-GB') : 'a previous date';
-        showAlert({
-          title: "You've reviewed this wine before",
-          body: `You reviewed this wine on ${dateLabel}. Would you like to add to that review, update that review, or create a new review card?`,
-          buttons: [
-            { text: 'Add to that review', onPress: () => { void doSave('append', existing); } },
-            { text: 'Update that review', onPress: () => { void doSave('update', existing); } },
-            { text: 'Create a new review card', onPress: () => { void doSave('create', null); } },
-            { text: 'Cancel', style: 'cancel' },
-          ],
-        });
-      }
+      const dateLabel = existing.chosen_at ? new Date(existing.chosen_at).toLocaleDateString('en-GB') : 'a previous date';
+      showAlert({
+        title: "You've reviewed this wine before",
+        body: `You reviewed this wine on ${dateLabel}. Add this as a new dated entry on that review, or start a separate new review?`,
+        buttons: [
+          { text: 'Add to that review', onPress: () => { void doSave('append', existing); } },
+          { text: 'Create a new review', onPress: () => { void doSave('create', null); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
       return;
     }
     await doSave('create', null);
@@ -181,50 +184,35 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     const trimmedPrice = listPrice.trim();
     const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
     const price = Number.isFinite(parsedPrice) ? parsedPrice : null;
-    // Normalise on save so anything the user typed by hand ("Greater
-    // London") gets canonicalised before it hits the DB. Display-side
-    // normalisation also runs (see wines/chosen.tsx) but doing it here
-    // keeps the stored row clean for sort + dedup downstream.
+    // Normalise on save so anything the user typed by hand ("Greater London")
+    // gets canonicalised before it hits the DB.
     const cityClean = normaliseCity(city);
     try {
-      if (mode === 'create' || !existing) {
+      if (mode === 'append' && existing) {
+        // "Add to this review" = a NEW dated entry joining the existing review's
+        // card (same review_group_id), leaving the earlier entry untouched.
         await save.mutateAsync({
-          wine,
-          scanSessionId: scanSessionId ?? null,
-          restaurantName: restaurant,
-          city: cityClean,
-          tastingNote,
-          otherObservations,
-          userScore,
-          listPrice: price,
-          isFavourite,
+          wine, scanSessionId: scanSessionId ?? null,
+          restaurantName: restaurant, city: cityClean,
+          tastingNote, otherObservations, userScore, listPrice: price, isFavourite,
           reviewDate,
+          reviewGroupId: existing.review_group_id ?? existing.id,
+        });
+      } else if (mode === 'update' && existing) {
+        // Only reached for a bare, unreviewed bottle pick — fill its first
+        // review in place (this stamps reviewed_at and starts its 24h window).
+        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
+        await update.mutateAsync({
+          id: existing.id,
+          input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
         });
       } else {
-        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
-        if (mode === 'update') {
-          await update.mutateAsync({
-            id: existing.id,
-            input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
-          });
-        } else {
-          // Append a dated tasting onto the existing review, leaving its
-          // original where/when/price intact.
-          const label = todayLabel();
-          await update.mutateAsync({
-            id: existing.id,
-            input: {
-              restaurantName: existing.restaurant_name ?? '',
-              city: normaliseCity(existing.city ?? ''),
-              tastingNote: appendDatedEntry(existing.tasting_note, tastingNote, label),
-              otherObservations: appendDatedEntry(existing.other_observations, otherObservations, label),
-              userScore: userScore != null ? userScore : existing.user_score,
-              listPrice: existing.menu_price,
-              isFavourite: existing.is_favourite || isFavourite,
-              ...identity,
-            },
-          });
-        }
+        await save.mutateAsync({
+          wine, scanSessionId: scanSessionId ?? null,
+          restaurantName: restaurant, city: cityClean,
+          tastingNote, otherObservations, userScore, listPrice: price, isFavourite,
+          reviewDate,
+        });
       }
       setSaved(true);
       onSaved();
@@ -394,11 +382,13 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             />
 
             {saved ? (
-              <View style={styles.savedRow}>
-                <Text style={styles.savedText}>Saved — </Text>
-                <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
-                  <Text style={styles.savedLink}>View in Your Profile</Text>
-                </TouchableOpacity>
+              <View style={styles.savedBlock}>
+                <Text style={styles.savedNote}>Review Saved — you can edit this review for 24 hours.</Text>
+                <View style={styles.savedRow}>
+                  <TouchableOpacity onPress={() => { onClose(); router.push('/wines/chosen'); }}>
+                    <Text style={styles.savedLink}>View in Your Profile</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             ) : (
               <>
@@ -575,12 +565,12 @@ const styles = StyleSheet.create({
   },
   // cancelLink / cancelLinkText removed — exit is now via the top-
   // left Back link (see backBtn / backBtnText).
+  savedBlock: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.sm, gap: 6 },
+  savedNote: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.md, lineHeight: 20 },
   savedRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: spacing.md,
-    marginBottom: spacing.sm,
   },
   savedText: {
     // "Saved —" label paired with the View link — Cormorant to match the link

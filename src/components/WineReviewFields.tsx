@@ -249,23 +249,9 @@ export function WineReviewFields({
       </TouchableOpacity>
 
       {/* Share now lives in the modal's top-right corner (like the rest of the
-          app), not here — see each review modal's header. */}
-
-      {/* Add to Cellar · Wish List (gold; omitted on cellar reviews). */}
-      {(onWishlist || onAddToCellar) ? (
-        <View style={styles.actionPairRow}>
-          {onAddToCellar ? (
-            <TouchableOpacity style={[styles.pairBtn, styles.goldBtn]} onPress={onAddToCellar} activeOpacity={0.8}>
-              <Text style={styles.goldBtnText}>Add to Cellar</Text>
-            </TouchableOpacity>
-          ) : null}
-          {onWishlist ? (
-            <TouchableOpacity style={[styles.pairBtn, styles.goldBtn]} onPress={onWishlist} activeOpacity={0.8}>
-              <Text style={styles.goldBtnText}>{wishlistActive ? 'In Your Wish List — Remove' : 'Add to Wish List'}</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-      ) : null}
+          app), not here — see each review modal's header. Add to Cellar / Wish
+          List were removed from the input — those commands live on the wine
+          reviews page, not the review form. */}
 
       {onDelete ? (
         <TouchableOpacity style={styles.deleteButton} onPress={onDelete}>

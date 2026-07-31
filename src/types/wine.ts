@@ -42,11 +42,13 @@ export interface WineRecommendation {
   rarityAssessment: RarityAssessment;
   outsidePreferences?: string | null; // set when wine breaks a stated preference, explains why it's still worth it
   topPickReasons?: string[] | null;  // legacy — superseded by the labelled notes below; kept for fallback on older saved sessions
-  // Four labelled parameter notes shown (in this order) on the results
-  // card: Critic Score, Value, Vintage/Drinkability, Producer. The recommend
-  // edge function generates criticScoreNote + valueNote; vintage/producer
-  // reuse vintageAssessment.notes + rarityAssessment.notes. Optional so
-  // sessions saved before the prompt upgrade still parse.
+  // Labelled parameter notes shown on the results card: Critic Score, Value,
+  // Vintage/Drinkability, Producer. The recommend edge function generates
+  // criticScoreNote; vintage/producer reuse vintageAssessment.notes +
+  // rarityAssessment.notes. Value prefers real Wine-Searcher market data on the
+  // results screen and uses valueNote (an estimate the edge function generates)
+  // only as a fallback when Wine-Searcher has no match. Optional so sessions
+  // saved before the prompt upgrade still parse.
   criticScoreNote?: string | null;
   valueNote?: string | null;
   // Top pick (#1) only — one brief synthesis sentence on why it leads.
@@ -243,6 +245,10 @@ export interface CellarWine {
   // The user's own drinking-window opinion (migration 048) — free text,
   // distinct from the Vinster drinking_window_* estimate above.
   user_drinking_window: string | null;
+  // Append-only review history (migration 080). The bottle's reviews as dated
+  // entries, newest last; the flat review_* fields above mirror the LATEST entry
+  // for back-compat. Each entry locks 24h after its savedAt. [] when unreviewed.
+  review_entries: ReviewEntry[];
   is_favourite: boolean;
   // Favourite LABEL flag (migration 049) — Label Library only, distinct
   // from is_favourite (favourite wine).
@@ -252,6 +258,20 @@ export interface CellarWine {
   bottle_size_ml: number;
   created_at: string;
   updated_at: string;
+}
+
+// One dated entry in a cellar bottle's append-only review history (migration
+// 080). `savedAt` (ISO) is the immutable per-entry 24-hour edit clock; `date` is
+// the user's drinking date (yyyy-mm-dd).
+export interface ReviewEntry {
+  id: string;
+  savedAt: string;
+  date: string | null;
+  location: string | null;
+  score: number | null;
+  note: string | null;
+  personalNotes: string | null;
+  drinkingWindow: string | null;
 }
 
 // Home storage location (migration 064) — a non-grid space the user photographs
@@ -407,6 +427,11 @@ export interface ChosenWine {
   reviewed_at: string | null;
   // The user's own drinking-window opinion (migration 048) — free text.
   user_drinking_window: string | null;
+  // Groups the entries of one append-only review (migration 079). Rows sharing
+  // a review_group_id are the original review + its later "Add to this review"
+  // entries, shown together as one card. NULL = a standalone single-entry
+  // review. Each row's own reviewed_at is its 24h edit clock.
+  review_group_id: string | null;
   // Label photo for the review (migration 067). Stored in the wine-labels
   // bucket (<user>/<chosenId>.jpg) and displayed via LabelThumb, exactly
   // like cellar_wines.label_image_path. Captured when a review is created

@@ -15,6 +15,10 @@ export interface SaveChosenWineInput {
   // now() so the review carries the actual drinking date the user
   // selected on the review modal. Omit / pass null to fall back to now.
   reviewDate?: string | null;
+  // Set ONLY for an "Add to this review" entry — the existing review's
+  // review_group_id, so this entry joins that review's card. Omit for a new
+  // review; the DB defaults a fresh group id.
+  reviewGroupId?: string | null;
 }
 
 // Manual entry path — used by the +Add flow on Your Wine Reviews, where
@@ -44,6 +48,8 @@ export interface ManualSaveChosenWineInput {
   reviewDate?: string | null;
   // The user's own free-text drinking window opinion.
   userDrinkingWindow?: string | null;
+  // Set ONLY for an "Add to this review" entry — see SaveChosenWineInput.
+  reviewGroupId?: string | null;
 }
 
 export async function saveManualChosenWine(userId: string, input: ManualSaveChosenWineInput): Promise<ChosenWine> {
@@ -75,6 +81,7 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
     // every existing call site that hasn't been updated.
     ...(input.source ? { source: input.source } : {}),
     ...(input.reviewDate ? { chosen_at: input.reviewDate } : {}),
+    ...(input.reviewGroupId ? { review_group_id: input.reviewGroupId } : {}),
   }).select().single();
   if (error) throw new Error(error.message);
   return data as ChosenWine;
@@ -143,6 +150,9 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
   // Only set chosen_at when the user picked a specific date — letting the
   // DB default to now() otherwise. Treat as a date-only value (no time).
   if (reviewDate) row.chosen_at = reviewDate;
+  // Set the group only for an "Add to this review" entry; a new review lets the
+  // DB default a fresh group id.
+  if (input.reviewGroupId) row.review_group_id = input.reviewGroupId;
   const { data, error } = await supabase.from('chosen_wines').insert(row).select().single();
   if (error) throw new Error(error.message);
   return data as ChosenWine;

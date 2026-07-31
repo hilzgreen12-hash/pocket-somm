@@ -154,9 +154,8 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Wine List → restaurant-list recommendations. Tap to scan; press-and-
-          hold to revisit your last result (account-gated). The old "View Last
-          Result" link was removed to reclaim vertical space. */}
+      {/* Wine List → restaurant-list recommendations. Tap to scan; the "View Last
+          Result" link (or press-and-hold) revisits your last result (account-gated). */}
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
@@ -164,6 +163,9 @@ export default function ScanTab() {
           onLongPress={() => requireAccount(handleViewLastListResult)}
         >
           <Text style={styles.buttonText}>Wine List</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
+          <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
       </View>
 

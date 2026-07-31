@@ -132,7 +132,7 @@ export default function ChefTab() {
           <Text style={styles.buttonText}>Your Restaurants</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/wines/chosen')}>
-          <Text style={styles.buttonText}>Wine Reviews</Text>
+          <Text style={styles.buttonText}>Your Wine Reviews</Text>
         </TouchableOpacity>
       </View>
 
