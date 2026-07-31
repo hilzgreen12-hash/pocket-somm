@@ -6,7 +6,9 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings, searchLabelImages, fetchWineCandidates, type WineCandidate } from '../../src/api/label';
+import { generatePairings, searchLabelImages, fetchWineCandidates, prepareImageBase64, scanLabel, type WineCandidate } from '../../src/api/label';
+import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { File, Paths } from 'expo-file-system';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -69,7 +71,7 @@ export default function LabelConfirmScreen() {
   // Reached from Scan a Lineup — Back returns to the lineup list to continue
   // onboarding the remaining bottles.
   const isLineup = context === 'lineup';
-  const { wineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
+  const { wineDetails, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setPairings, setError } = useLabelStore();
   const { preferences } = usePreferences();
   // Rack-placement context: when the user reached here by tapping an empty rack
   // slot, we skip Wine Intel and drop the bottle straight into the slot.
@@ -88,6 +90,7 @@ export default function LabelConfirmScreen() {
   const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
   const [style, setStyle] = useState(wineDetails?.style ?? '');
   const [loading, setLoading] = useState(false);
+  const [scanning, setScanning] = useState(false);
   // Rack/fridge slot placement (context=place). The ONLY extra input is the
   // bottle format, collected inline on this Confirm screen — no popup, no
   // "how many bottles", no fill direction. A short tap drops ONE bottle in the
@@ -443,8 +446,39 @@ export default function LabelConfirmScreen() {
     }
   }
 
+  // "Upload Again" — reopen the photo library, rescan a new label, and refresh
+  // the fields in place. Mirrors the upload-label flow on the Scan hub.
+  async function handleUploadAgain() {
+    if (scanning) return;
+    if (!(await ensureMediaPermission('library'))) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    setScanning(true);
+    try {
+      const base64 = await prepareImageBase64(uri);
+      setImage(uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+      setProducer(details.producer ?? '');
+      setRegion(details.region ?? '');
+      setWineName(details.wineName ?? '');
+      setVintage(details.vintage ?? '');
+      setStyle(details.style ?? '');
+    } catch (err) {
+      showAlert({ title: 'Scan failed', body: err instanceof Error ? err.message : 'Could not read that label. Please try another photo.' });
+    } finally {
+      setScanning(false);
+    }
+  }
+
   return (
     <>
+    {isUpload ? (
+      <TouchableOpacity style={styles.topBack} onPress={() => router.replace('/(tabs)/scan')} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+        <Text style={styles.topBackText}>← Back</Text>
+      </TouchableOpacity>
+    ) : null}
     <KeyboardAwareScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -572,7 +606,11 @@ export default function LabelConfirmScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => router.replace('/cellar/scan-lineup')}>
           <Text style={styles.backText}>Back to Lineup</Text>
         </TouchableOpacity>
-      ) : isManual || isUpload ? (
+      ) : isUpload ? (
+        <TouchableOpacity style={styles.uploadAgainButton} onPress={handleUploadAgain} disabled={scanning}>
+          <Text style={styles.uploadAgainText}>{scanning ? 'Reading…' : 'Upload Again'}</Text>
+        </TouchableOpacity>
+      ) : isManual ? (
         <TouchableOpacity style={styles.backButton} onPress={() => (router.canGoBack() ? router.back() : router.replace((backTo as string) || '/(tabs)/scan'))}>
           <Text style={styles.backText}>Cancel</Text>
         </TouchableOpacity>
@@ -613,6 +651,16 @@ export default function LabelConfirmScreen() {
         </View>
       </Modal>
     </KeyboardAwareScrollView>
+
+    {/* Full-screen overlay while a re-uploaded label is being read. */}
+    <Modal visible={scanning} transparent animationType="fade">
+      <View style={styles.scanOverlay}>
+        <View style={styles.scanSheet}>
+          <ActivityIndicator color={colors.gold} size="large" />
+          <Text style={styles.scanText}>Reading the label…</Text>
+        </View>
+      </View>
+    </Modal>
     </>
   );
 }
@@ -620,6 +668,16 @@ export default function LabelConfirmScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: 130, paddingBottom: 60 },
+  // Top-left Back link (upload flow) — returns to the Scan tab.
+  topBack: { position: 'absolute', top: 56, left: spacing.xl, zIndex: 20, paddingVertical: 4, paddingRight: 12 },
+  topBackText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
+  // "Upload Again" secondary button (upload flow) — gold outline to sit apart
+  // from the white Confirm button above it.
+  uploadAgainButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 8, padding: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  uploadAgainText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  scanOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center' },
+  scanSheet: { backgroundColor: colors.surface, borderRadius: 16, padding: spacing.xl, alignItems: 'center', gap: spacing.md, borderWidth: 1, borderColor: colors.gold },
+  scanText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
   heading: {
     fontSize: 26,
     fontFamily: fonts.headingBold,

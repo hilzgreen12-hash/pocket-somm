@@ -25,35 +25,19 @@ function PairingCard({
   saveState,
   onSave,
   isFromHistory,
-  onShare,
-  sharing,
   onViewFull,
 }: {
   pairing: Pairing;
   saveState: 'idle' | 'saving' | 'saved';
   onSave: () => void;
   isFromHistory: boolean;
-  onShare: () => void;
-  sharing: boolean;
   onViewFull: () => void;
 }) {
   return (
     <View style={styles.card}>
-      <View style={styles.cardHeaderRow}>
-        <Text style={[styles.dishName, { flex: 1 }]}>{pairing.dishName}</Text>
-        {/* "+ SHARE" shares the FULL recipe (the off-screen RecipeShareCard),
-            not the thumbnail. */}
-        <TouchableOpacity
-          onPress={onShare}
-          disabled={sharing}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          style={styles.cardShareLink}
-          accessibilityRole="button"
-          accessibilityLabel="Share this recipe"
-        >
-          <Text style={styles.cardShareLinkText}>{sharing ? '…' : '+ SHARE'}</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Sharing lives only on the full-screen recipe card (via View Full
+          Recipe), not on the results thumbnail. */}
+      <Text style={styles.dishName}>{pairing.dishName}</Text>
       <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
       <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
       <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
@@ -529,8 +513,6 @@ export default function ChefResultsScreen() {
               saveState={getSaveState(i)}
               onSave={() => handleSavePairing(i)}
               isFromHistory={isFromHistory}
-              onShare={() => handleSharePairing(i)}
-              sharing={sharingIndex === i}
               onViewFull={() => {
                 // Fresh result → load by index into labelStore.pairings.
                 router.push(`/chef/recipe-full?index=${i}` as any);
@@ -690,7 +672,7 @@ const styles = StyleSheet.create({
   chefInspiration: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2 },
   recipeMetaInline: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 4, letterSpacing: 0.3 },
   pairingNotes: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
-  toggle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
+  toggle: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   cardSaveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   cardSaveButtonDisabled: { opacity: 0.6 },

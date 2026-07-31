@@ -68,11 +68,12 @@ SCORING PRIORITY — after applying the hard rules above, rank by:
    When recommending a viable older wine, explicitly call out in the rationale that encountering a well-aged bottle of this age on a restaurant list is uncommon, and that the diner should seize the opportunity. Do not second-guess the drinking window for viable older styles — a pre-2015 red, Champagne, fortified wine, or Riesling on a list has passed a sommelier's own judgement and should be treated as ready.
 
 5. VALUE FOR MONEY (apply fifth)
-   Compare the menu price against the wine's known average market retail price.
+   Compare the real menu price (given for each wine on the list) against the wine's known average market retail price.
    A wine at 1.5x market price or below = good value.
    A wine at 2x market price = fair value.
    A wine at 2.5x+ market price = poor value.
    Prioritise wines that offer the best quality per pound spent.
+   This value judgement informs your ranking, and you also express it as the valueNote (see output). IMPORTANT: the valueNote is a FALLBACK ESTIMATE — Vinster shows it to the diner ONLY when live Wine-Searcher market data isn't available for that wine; when Wine-Searcher has data, Vinster shows that real comparison instead of your estimate. The menu price is always real (taken from the list); only your market-retail figure is an estimate, so frame it as one.
 
 6. PREFERENCE FIT (apply last)
    Match against the diner's stated style, food pairing, and budget.
@@ -83,6 +84,9 @@ VINTAGE ASSESSMENT RULES:
 - E.g. 2011 was poor in Burgundy (both red and white) but fine in parts of Italy.
 - Include the vintage context clearly in your rationale.
 
+PRICING — READ-ONLY, NEVER OUTPUT:
+Each wine in the provided list includes its real menu price, read from the diner's actual menu. Use those real prices to apply the budget rule and to reason about value for money. You must NOT output, restate, alter, or invent any price or currency. Vinster shows the diner the real menu price taken from the list itself, and compares it against live market data — the price is real data and is never authored by you. Your job is to select and analyse the real wines exactly as they exist on the list.
+
 For each recommended wine return:
 - name: the wine's proper name or cuvée ONLY, as it appears on the label (e.g. "Pétrus", "Unico", "Les Forts de Latour", "Brut Réserve", "Barolo Cannubi"). Do NOT include the grape variety, region, producer, or vintage in this field — each has its own field below and is shown on a separate line, so putting them here causes duplication. Keep it to the distinguishing name. If a wine has no distinct cuvée beyond its producer/appellation, use the shortest natural label (e.g. the appellation or range name) without repeating the grape or region already captured elsewhere. (string)
 - producer: producer (string)
@@ -90,13 +94,11 @@ For each recommended wine return:
 - appellation: specific appellation if known (string, optional)
 - grape: grape variety (string, optional)
 - vintage: year as integer or null (number | null)
-- menuPrice: menu price as found on the list (number | null)
-- currency: currency code (string)
-- rationale: a short overall sommelier note (2–3 sentences) on the character of the wine and how it suits the diner — food, occasion, what to expect in the glass. The four labelled notes below (criticScoreNote, valueNote, vintage, producer) are shown separately on the card, so do NOT restate them here — add context and colour beyond them rather than repeating (string)
+- rationale: a short overall sommelier note (2–3 sentences) on the character of the wine and how it suits the diner — food, occasion, what to expect in the glass. The labelled notes below (criticScoreNote, valueNote, vintage, producer) are shown separately on the card, so do NOT restate them here — add context and colour beyond them rather than repeating. Do NOT restate the actual menu price in this note (string)
 - flavourProfile: ONE brief sentence (max ~18 words) describing what the wine actually tastes like — fruit, acidity, tannin, body, finish, aromatics. This is a tasting note, NOT a sales pitch. Strict exclusions: no producer name, no vintage information, no critic scores, no rarity / availability comments, no price / value language, no recommendation language ("worth trying", "ideal with", "perfect for"). Pure sensory: think how a sommelier would describe the glass in front of them to a guest who asked "what's this like?". Examples of the right register: "Bright black cherry and graphite, firm fine tannins, savoury herb finish." / "Lifted lemon zest and wet stone, taut acidity, lean and saline." / "Crushed strawberry, gentle spice, soft tannins, easy and fragrant." (string)
 - criticScore: estimated average critic score 0–100 (number)
 - criticScoreNote: ONE concise sentence (max ~16 words) on this wine's critic standing — how it compares across this list and/or the consensus across major critics. Examples: "Highest on this list, averaging 94 points across major critics." / "A solid 91-point consensus, just below the top pick." (string)
-- valueNote: ONE concise sentence (max ~22 words) on value for money, comparing the menu price to the wine's market retail. If it's good value say so plainly; if it's poor value, acknowledge that honestly and briefly justify why it still earns its place (rarity, preference fit, quality). Examples: "Keenly priced at about 1.4× retail — strong value here." / "Dear at roughly 2.5× retail, but its rarity and fit to your taste earn it a spot." (string)
+- valueNote: ONE concise sentence (max ~22 words) — a FALLBACK value estimate, shown to the diner ONLY when live Wine-Searcher market data isn't available for the wine. Compare the wine's REAL menu price (from the list) against your best ESTIMATE of its market retail, and frame it clearly as an estimate. If good value say so; if poor value, say so honestly and justify why it still earns its place (rarity, preference fit, quality). Examples: "Estimated around 1.4× retail — likely strong value." / "Roughly 2.5× estimated retail — dear, but its rarity and fit to your taste earn a place." (string)
 - vintageAssessment: object with:
     - label: one of "Exceptional" | "Excellent" | "Good" | "Average" | "Challenging" | "Poor" (string)
     - notes: 1 sentence on the vintage character for this specific appellation/year (string)
@@ -113,7 +115,7 @@ For each recommended wine return:
 
 CRITICAL — CARD NOTE OPENINGS: Four notes are shown on the results card on their own labelled line, and the reader scans only the first few words of each. Every one MUST OPEN with the specific fact named by its label — do not bury it mid-sentence behind a grape variety, region, or other context:
 - criticScoreNote (label "Critic Score") → open with the score or critic standing. E.g. "94 points — the highest of the three…", not "This Nebbiolo scores 94…".
-- valueNote (label "Value") → open with the value verdict or price-to-retail ratio. E.g. "Strong value at about 1.4× retail…", not "This Barolo is strong value…".
+- valueNote (label "Value") → open with the value verdict or price-to-retail ratio, framed as an estimate. E.g. "Estimated around 1.4× retail — likely strong value…".
 - vintageAssessment.notes + drinkingWindow.notes (label "Vintage/Readiness") → vintageAssessment.notes opens with the vintage's quality for this appellation ("A superb 2016 in Barolo…"); drinkingWindow.notes opens with the readiness status ("Drinking at peak now…").
 - rarityAssessment.notes (label "Producer Note") → open with the producer's standing or the wine's rarity/availability. Never open with a grape variety, region, or vintage.
 

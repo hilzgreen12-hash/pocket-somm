@@ -21,6 +21,8 @@ import { captureCity } from '../utils/captureCity';
 import { normaliseCity } from '../utils/city';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { showAlert } from './AppAlert';
+import { buildEntry, entriesOf, latestEntry, flatMirror } from '../utils/cellarReview';
+import { missingReviewFields } from '../utils/reviewDedup';
 import { MicButton } from './MicButton';
 import { WineReviewFields } from './WineReviewFields';
 import { colors, spacing } from '../constants/theme';
@@ -141,19 +143,17 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   // Re-seed the form whenever a new wine is opened.
   useEffect(() => {
     if (!wine) return;
-    setReviewNote(wine.review_note ?? '');
-    setPersonalNotes(wine.user_notes ?? '');
-    setScore(wine.review_score != null ? String(wine.review_score) : '');
-    setReviewDate(wine.review_date ?? todayISO());
-    {
-      // review_location is one free-text field; split it into place + city.
-      const { restaurantName: seedName, city: seedCity } = splitLocationString(wine.review_location);
-      if (seedCity) { setLocName(seedName); setLocCity(seedCity); }
-      else { setLocName(''); setLocCity(seedName); }
-      if (!wine.review_location) captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
-    }
+    // This modal now writes a NEW review entry each time (append-only), so the
+    // review fields open blank; price stays (it's a bottle-level field).
+    setReviewNote('');
+    setPersonalNotes('');
+    setScore('');
+    setReviewDate(todayISO());
+    setLocName('');
+    setLocCity('');
+    captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
     setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
-    setDrinkingWindow(wine.user_drinking_window ?? '');
+    setDrinkingWindow('');
     setSaved(false);
   }, [wine?.id, visible]);
 
@@ -174,17 +174,21 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     const parsedPrice = pricePaid.trim() ? parseFloat(pricePaid.trim()) : NaN;
     const priceValue = Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
     const currency = (wine.purchase_price_currency ?? 'GBP').toUpperCase();
+    // Append a new dated entry to the bottle's review history; mirror the latest
+    // entry onto the flat review_* fields so existing surfaces keep reading it.
+    const entry = buildEntry({
+      note: reviewNote, personalNotes, score: parsedScore,
+      location: locationTrim, date: dateTrim || null, drinkingWindow,
+    });
+    const nextEntries = [...entriesOf(wine), entry];
+    const latest = latestEntry(nextEntries);
     await updateWine.mutateAsync({
       id: wine.id,
       updates: {
-        review_score: parsedScore,
-        review_location: locationTrim || null,
-        review_date: dateTrim || null,
-        review_note: reviewNote.trim() || null,
-        user_notes: personalNotes.trim() || null,
+        review_entries: nextEntries,
+        ...flatMirror(latest),
         purchase_price: priceValue,
         purchase_price_currency: priceValue != null ? currency : null,
-        user_drinking_window: drinkingWindow.trim() || null,
       },
     });
     // Keep any duplicate rows (other cellar bottles / chosen reviews of the
@@ -210,6 +214,28 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   }
 
   async function handleSave() {
+    if (!wine) return;
+    // Pre-save nudge: list anything empty except the optional Personal Notes.
+    const missing = missingReviewFields([
+      { label: 'Your Score', filled: !!score.trim() },
+      { label: 'a Location', filled: !!(locName.trim() || locCity.trim()) },
+      { label: 'Your Review', filled: !!reviewNote.trim() },
+    ]);
+    if (missing.length) {
+      showAlert({
+        title: 'Ready to Save?',
+        body: `You're missing ${missing.join(', ')}.`,
+        buttons: [
+          { text: 'Yes, Save', onPress: () => { void doSaveNow(); } },
+          { text: 'Return to Review', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await doSaveNow();
+  }
+
+  async function doSaveNow() {
     if (!wine) return;
     Keyboard.dismiss();
     setSaving(true);

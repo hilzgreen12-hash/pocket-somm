@@ -12,6 +12,8 @@ import { clearChosenReview } from '../../src/api/chosenWines';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
+import { ReviewDetailModal } from '../../src/components/ReviewDetailModal';
+import { fromChosenGroup, fromCellar } from '../../src/utils/reviewModel';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
@@ -139,8 +141,10 @@ function wineIdentityKey(
 // `source` column (migration 042); 'cellar' is derived from any
 // cellar_wines row with user review content.
 type ReviewItem =
-  | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine }
-  | { source: 'other';      date: string; score: number | null; wine: ChosenWine }
+  // `entries` holds the review's dated entries (the original plus any "Add to
+  // this review" entries), newest first; `wine` is the newest (representative).
+  | { source: 'restaurant'; date: string; score: number | null; wine: ChosenWine; entries: ChosenWine[] }
+  | { source: 'other';      date: string; score: number | null; wine: ChosenWine; entries: ChosenWine[] }
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
@@ -149,6 +153,8 @@ export default function ChosenWinesScreen() {
   const qc = useQueryClient();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
+  // Every review (restaurant / cellar / other) opens the same unified detail view.
+  const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
@@ -218,16 +224,33 @@ export default function ChosenWinesScreen() {
     !!w.review_date
   );
 
+  // Group chosen reviews that share a review_group_id (an original review plus
+  // its later "Add to this review" entries) into ONE review card. Entries are
+  // ordered newest-first; the newest is the representative shown on the card.
+  const chosenGroupsMap = new Map<string, ChosenWine[]>();
+  for (const w of chosenWines) {
+    const k = w.review_group_id ?? w.id;
+    const arr = chosenGroupsMap.get(k);
+    if (arr) arr.push(w); else chosenGroupsMap.set(k, [w]);
+  }
+  const chosenGroups = [...chosenGroupsMap.values()].map((entries) =>
+    [...entries].sort((a, b) => new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime()),
+  );
+
   const items: ReviewItem[] = [
     // The `source` column on chosen_wines (migration 042) drives the
     // restaurant-vs-other split here. Legacy rows default to
     // 'restaurant'; the "Review without adding" path tags 'other'.
-    ...chosenWines.map((w): ReviewItem => ({
-      source: w.source === 'other' ? 'other' : 'restaurant',
-      date: w.chosen_at,
-      score: w.user_score,
-      wine: w,
-    })),
+    ...chosenGroups.map((entries): ReviewItem => {
+      const rep = entries[0];
+      return {
+        source: rep.source === 'other' ? 'other' : 'restaurant',
+        date: rep.chosen_at,
+        score: rep.user_score,
+        wine: rep,
+        entries,
+      };
+    }),
     // Cellar wine reviews are shown here too, selectable via the collection
     // header (All / Restaurant / Cellar / Other). Each is derived from a
     // cellar_wines row carrying user review content; the review date drives
@@ -790,6 +813,42 @@ export default function ChosenWinesScreen() {
         onSaved={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
       />
 
+      <ReviewDetailModal
+        review={detailItem
+          ? (detailItem.source === 'cellar'
+              ? fromCellar(detailItem.wine as CellarWine)
+              : fromChosenGroup((detailItem as Extract<ReviewItem, { source: 'restaurant' }>).entries))
+          : null}
+        visible={!!detailItem}
+        onClose={() => setDetailItem(null)}
+        onAddReview={() => {
+          const it = detailItem; if (!it) return;
+          setDetailItem(null);
+          if (it.source === 'cellar') { setEditingCellarWine(it.wine as CellarWine); return; }
+          // Occasion add-to: open the review input pre-filled with this wine;
+          // its dedup then offers "Add to that review / Create a new review".
+          const w = it.wine as ChosenWine;
+          setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region });
+          setAddSource(it.source === 'other' ? 'other' : 'restaurant');
+          setAddOpen(true);
+        }}
+        onEditLatest={() => {
+          const it = detailItem; if (!it) return;
+          setDetailItem(null);
+          if (it.source === 'cellar') setEditingCellarWine(it.wine as CellarWine);
+          else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
+        }}
+        onDelete={async () => {
+          const it = detailItem; if (!it) return;
+          if (it.source === 'cellar') {
+            const w = it.wine as CellarWine;
+            await updateWine.mutateAsync({ id: w.id, updates: { review_entries: [], review_note: null, user_notes: null, review_score: null, review_location: null, review_date: null, user_drinking_window: null } });
+          } else {
+            for (const e of (it as Extract<ReviewItem, { source: 'restaurant' }>).entries) await remove.mutateAsync(e.id);
+          }
+        }}
+      />
+
       <EditCellarReviewModal
         wine={editingCellarWine}
         visible={!!editingCellarWine}
@@ -1196,9 +1255,10 @@ export default function ChosenWinesScreen() {
               // EditChosenWineModal; cellar reviews open the sibling
               // EditCellarReviewModal (which saves to cellar_wines).
               const isChosen = item.source !== 'cellar';
-              const onPress = isChosen
-                ? () => setEditingWine(item.wine as ChosenWine)
-                : () => setEditingCellarWine(item.wine as CellarWine);
+              // All reviews open the same unified detail view.
+              const entries = isChosen ? (item as Extract<ReviewItem, { source: 'restaurant' }>).entries : [];
+              const uni = isChosen ? fromChosenGroup(entries) : fromCellar(item.wine as CellarWine);
+              const onPress = () => setDetailItem(item);
               const locText = isChosen
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
@@ -1247,6 +1307,11 @@ export default function ChosenWinesScreen() {
                             and the long-press delete prompt, so this
                             cosmetic removal doesn't disturb behaviour. */}
                       </View>
+                      {/* Yellow stats line — number of entries + Vinster's
+                          average score across them. */}
+                      <Text style={styles.reviewStatsLine}>
+                        {uni.count} {uni.count === 1 ? 'Review' : 'Reviews'}{uni.averageScore != null ? ` · ${uni.averageScore} Average Score` : ''}
+                      </Text>
                       {note ? (
                         <Text style={styles.addedNote}>
                           You added this to your {note.kind} on {formatDate(note.date)}
@@ -1410,6 +1475,7 @@ const styles = StyleSheet.create({
   reviewThumb: { width: 46, height: 60 },
   cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
+  reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
   wineNameCompact: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 2 },
   // The user's own review score — white, matching the wine cards (critic scores

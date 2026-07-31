@@ -50,3 +50,40 @@ export function appendDatedEntry(
 export function todayLabel(): string {
   return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
 }
+
+// ---- Append-only, 24-hour-locked reviews (migration 079) ----
+
+// A saved review is editable for 24 hours, then locks as a read-only reflection.
+export const REVIEW_EDIT_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+// Whether a review entry is still within its editable window. reviewed_at is
+// server-stamped when review content first appears and never changes; a null
+// means the entry has no review yet (a bare pick), which stays editable so the
+// first review can be written.
+export function isReviewEditable(reviewedAt: string | null | undefined): boolean {
+  if (!reviewedAt) return true;
+  const t = new Date(reviewedAt).getTime();
+  if (!Number.isFinite(t)) return true;
+  return Date.now() - t < REVIEW_EDIT_WINDOW_MS;
+}
+
+// Whole-number hours left in the edit window (0 once locked) — for copy like
+// "you can edit this for N more hours".
+export function editHoursRemaining(reviewedAt: string | null | undefined): number {
+  if (!reviewedAt) return 24;
+  const left = REVIEW_EDIT_WINDOW_MS - (Date.now() - new Date(reviewedAt).getTime());
+  return Math.max(0, Math.ceil(left / (60 * 60 * 1000)));
+}
+
+// Grouping key for a review entry: its review_group_id, or its own id for
+// legacy/ungrouped rows. Entries sharing a key are one review card.
+export function reviewGroupKey(r: ChosenWine): string {
+  return r.review_group_id ?? r.id;
+}
+
+// Pure "what's empty" check for the pre-save prompt. Pass the review's fields
+// (the caller omits the optional personal note); returns the labels of the
+// empty ones, [] when nothing is missing.
+export function missingReviewFields(fields: { label: string; filled: boolean }[]): string[] {
+  return fields.filter((f) => !f.filled).map((f) => f.label);
+}

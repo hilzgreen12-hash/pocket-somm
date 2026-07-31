@@ -8,6 +8,7 @@ import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import * as Sharing from 'expo-sharing';
+import * as Haptics from 'expo-haptics';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -92,6 +93,15 @@ export default function ResultsScreen() {
   // could route to Your Restaurants before the scan_sessions row
   // landed, leaving the user staring at an empty list.
   const inFlightSaveRef = useRef<Promise<string | null> | null>(null);
+  // The scan_sessions id created THIS session, captured synchronously the moment
+  // autoSave resolves — so a follow-up tap reuses it instead of inserting a
+  // second/third restaurant (autoSave.data lags a render behind). Fixes the
+  // "same restaurant appears multiple times in Your Restaurants" bug.
+  const savedSessionIdRef = useRef<string | null>(null);
+  // Wines whose select/unselect is currently in flight — a per-index guard so a
+  // rapid second tap on the same wine can't fire a duplicate insert before the
+  // first save lands. Fixes the "one wine appears N times" bug.
+  const pendingIdxRef = useRef<Set<number>>(new Set());
   const [chosenModalWine, setChosenModalWine] = useState<WineRecommendation | null>(null);
   const [chosenIndexes, setChosenIndexes] = useState<Set<number>>(new Set());
   // index → real Wine-Searcher data for that pick (populated a beat after the
@@ -145,7 +155,7 @@ export default function ResultsScreen() {
   // this screen. Prefers the URL sessionId (set when the user came in
   // via View Last Result or the archive), falling back to whatever
   // autoSave landed in this session.
-  const effectiveSessionId = sessionId ?? autoSave.data?.[0]?.sessionId ?? null;
+  const effectiveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
   const [restaurantReviewOpen, setRestaurantReviewOpen] = useState(false);
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
 
@@ -240,7 +250,10 @@ export default function ResultsScreen() {
   async function handleSaveRestaurant(nameOverride?: string): Promise<string | null> {
     setEditingRestaurant(false);
     const trimmed = (nameOverride ?? restaurantName).trim();
-    if (effectiveSessionId) {
+    // Read the id live (not the render-time effectiveSessionId, which lags a tick
+    // behind savedSessionIdRef within a rapid burst of taps).
+    const liveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+    if (liveSessionId) {
       // Row already in scan_sessions — just update the restaurant name.
       // Covers both the in-session autoSave path and View Last Result
       // re-opens where the sessionId came in via URL params.
@@ -248,13 +261,13 @@ export default function ResultsScreen() {
         const { error } = await supabase
           .from('scan_sessions')
           .update({ restaurant_name: trimmed || null })
-          .eq('id', effectiveSessionId);
+          .eq('id', liveSessionId);
         if (error) throw error;
         qc.invalidateQueries({ queryKey: ['scan-archive'] });
       } catch (err) {
         showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
       }
-      return effectiveSessionId;
+      return liveSessionId;
     }
     // No row yet — promote this scan to scan_sessions so the entry
     // lands in Your Restaurants. Skip if there's no name to save and no
@@ -268,7 +281,13 @@ export default function ResultsScreen() {
     }
     const promise = autoSave
       .mutateAsync({ extractedWines, recommendation, restaurantNameOverride: trimmed })
-      .then((result: any) => (result?.[0]?.sessionId ?? null) as string | null);
+      .then((result: any) => {
+        const id = (result?.[0]?.sessionId ?? null) as string | null;
+        // Capture synchronously so the very next tap reuses this session instead
+        // of inserting another restaurant row.
+        if (id) savedSessionIdRef.current = id;
+        return id;
+      });
     inFlightSaveRef.current = promise;
     try {
       return await promise;
@@ -326,7 +345,12 @@ export default function ResultsScreen() {
   // fragment it. Same-scan-session re-taps are a silent no-op (the chip
   // just flips to Chosen).
   async function handleQuickSelect(wine: WineRecommendation, i: number, overrides?: { restaurant?: string; city?: string }) {
-    if (!session || chosenIndexes.has(i)) return;
+    if (!session || chosenIndexes.has(i) || pendingIdxRef.current.has(i)) return;
+    pendingIdxRef.current.add(i);
+    // Optimistic: flip the chip to "Added" instantly so the tap has immediate
+    // feedback and doesn't wait on the save round-trip — this is what removes the
+    // reason to tap repeatedly (which is what created the duplicates).
+    setChosenIndexes((prev) => new Set([...prev, i]));
     try {
       const cityValue = overrides?.city
         ?? cityOverride
@@ -409,7 +433,11 @@ export default function ResultsScreen() {
         ],
       });
     } catch (err) {
+      // Roll back the optimistic selection so the chip reflects reality.
+      setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      pendingIdxRef.current.delete(i);
     }
   }
 
@@ -417,15 +445,31 @@ export default function ResultsScreen() {
   // for this session (never a pre-existing review from another visit) and clears
   // the chip so the button flips back to "Add …".
   async function unselectBottle(wine: WineRecommendation, i: number) {
-    const sid = isFromHistory ? (sessionId ?? null) : (autoSave.data?.[0]?.sessionId ?? null);
+    if (pendingIdxRef.current.has(i)) return;
+    pendingIdxRef.current.add(i);
+    // Optimistic: clear the chip immediately so the revert reads instantly.
+    setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
+    const sid = isFromHistory ? (sessionId ?? null) : (savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null);
+    const identity = { producer: wine.producer, wineName: wine.name, vintage: wine.vintage };
     try {
-      const existing = findExistingReview(chosenWines, { producer: wine.producer, wineName: wine.name, vintage: wine.vintage });
+      let existing = findExistingReview(chosenWines, identity);
+      // The pick may have been saved a moment ago and not yet be in the cached
+      // list — pull a fresh copy and retry so the removal is reliable.
+      if (!existing) {
+        await qc.refetchQueries({ queryKey: ['chosen-wines', session?.user.id] });
+        const fresh = (qc.getQueryData(['chosen-wines', session?.user.id]) as typeof chosenWines) ?? [];
+        existing = findExistingReview(fresh, identity);
+      }
+      // Only remove a pick made on THIS visit — never a prior review from another
+      // occasion, which stays in the user's records intact.
       if (existing && sid && existing.scan_session_id === sid) {
         await removeChosen.mutateAsync(existing.id);
       }
-      setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
     } catch (err) {
+      setChosenIndexes((prev) => new Set([...prev, i])); // rollback
       showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      pendingIdxRef.current.delete(i);
     }
   }
 
@@ -678,11 +722,12 @@ export default function ResultsScreen() {
       <View style={styles.list}>
         {recommendation.wines.map((wine, i) => {
           const sommOpen = openIndex === i;
-          // The four labelled parameter notes, always in the same order.
-          // Critic Score / Value come from the AI once the recommend
-          // function is redeployed; until then Critic Score falls back to a
-          // computed line and Value stays hidden. Vintage + Producer reuse
-          // the existing assessment notes.
+          // The labelled parameter notes, always in the same order.
+          // Value prefers REAL market data — the live Wine-Searcher average vs the
+          // menu price — and falls back to a Vinster market estimate only when
+          // Wine-Searcher has no match. Critic Score prefers Wine-Searcher's
+          // aggregated score, falling back to a computed line. Vintage + Producer
+          // reuse the assessment notes.
           // Real Wine-Searcher data for this pick, once it has loaded in.
           const wsE = wsByIndex[i];
           const effCritic = wsE && wsE.criticScore != null ? wsE.criticScore : wine.criticScore;
@@ -696,6 +741,10 @@ export default function ResultsScreen() {
                     ? `Highest of the picks at ${wine.criticScore} points`
                     : `${wine.criticScore} points`)
                 : null));
+          // Value verdict: prefer REAL live Wine-Searcher market data (average vs
+          // the menu price). Only when Wine-Searcher has no match for this wine
+          // do we fall back to Vinster's own market estimate (framed as an
+          // estimate in the copy), so an obscure bottle still gets a verdict.
           const valueText = wsE && wsE.avgPrice != null
             ? wsValueLine(wine.menuPrice, wsE.avgPrice, currencySymbol(wsE.currency))
             : (wine.valueNote ?? null);
@@ -736,7 +785,7 @@ export default function ResultsScreen() {
                 {(wine.menuPrice != null || effCritic > 0) && (
                   <View style={styles.priceScoreRow}>
                     {wine.menuPrice != null && (
-                      <Text style={styles.priceScoreText}>{currencySymbol(userPrefs?.defaultCurrency)}{wine.menuPrice}</Text>
+                      <Text style={styles.priceScoreText}>{currencySymbol(wine.currency || userPrefs?.defaultCurrency)}{wine.menuPrice}</Text>
                     )}
                     {wine.menuPrice != null && effCritic > 0 && (
                       <Text style={styles.priceScoreDot}> · </Text>
@@ -801,6 +850,10 @@ export default function ResultsScreen() {
                   <TouchableOpacity
                     style={[styles.bottlePicksButton, chosenIndexes.has(i) && styles.bottlePicksButtonDone]}
                     onPress={() => {
+                      // Ignore taps while this wine's select/unselect is still
+                      // saving — stops rapid taps from stacking duplicate rows.
+                      if (pendingIdxRef.current.has(i)) return;
+                      void Haptics.selectionAsync().catch(() => {});
                       if (chosenIndexes.has(i)) { unselectBottle(wine, i); return; }
                       // Can't save a bottle to Your Restaurants without a
                       // restaurant name — collect it (and location) first.
@@ -817,7 +870,7 @@ export default function ResultsScreen() {
                     activeOpacity={0.85}
                   >
                     <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? `Added to ${restaurantName.trim() || 'Your Restaurants'} – List Pick` : 'Add to Your Restaurants – List Pick'}
+                      {chosenIndexes.has(i) ? `Added to ${restaurantName.trim() || 'Your Restaurants'} – List Pick · Tap to remove` : 'Add to Your Restaurants – List Pick'}
                     </Text>
                   </TouchableOpacity>
                 )}

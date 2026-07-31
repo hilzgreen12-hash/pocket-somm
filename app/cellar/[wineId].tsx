@@ -17,6 +17,8 @@ import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { COMMUNITY_ENABLED } from '../../src/constants/features';
 import { useAuth } from '../../src/hooks/useAuth';
+import { buildEntry, entriesOf, latestEntry, byRecency, flatMirror } from '../../src/utils/cellarReview';
+import { findMatchingChosenWine } from '../../src/api/chosenWines';
 import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -252,6 +254,42 @@ export default function CellarWineDetail() {
   // The review is now edited only through the canonical EditCellarReviewModal,
   // never inline on the card. This opens it.
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
+
+  // +Add Review: offer a brand-new review or importing one already written in
+  // Your Wine Reviews (an identity-matched chosen review) onto this bottle.
+  function openAddReview() {
+    showAlert({
+      title: 'Add a review',
+      body: 'Create a new review, or import one you already wrote in Your Wine Reviews?',
+      buttons: [
+        { text: 'Create New Review', onPress: () => setReviewModalOpen(true) },
+        { text: 'Import from Your Wine Reviews', onPress: () => { void importFromWineReviews(); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  async function importFromWineReviews() {
+    if (!session?.user.id || !wine) return;
+    try {
+      const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage });
+      if (!match) { showAlert({ title: 'No matching review', body: "You don't have a review of this wine in Your Wine Reviews to import." }); return; }
+      const entry = buildEntry({
+        note: match.tasting_note ?? '',
+        personalNotes: match.other_observations ?? '',
+        score: match.user_score,
+        location: [match.restaurant_name, match.city].map((s) => (s ?? '').trim()).filter(Boolean).join(', '),
+        date: match.chosen_at ? match.chosen_at.split('T')[0] : null,
+        drinkingWindow: match.user_drinking_window ?? '',
+      });
+      const next = [...entriesOf(wine), entry];
+      await updateWine.mutateAsync({ id: wine.id, updates: { review_entries: next, ...flatMirror(latestEntry(next)) } });
+      setReviewExpanded(true);
+      showAlert({ title: 'Review imported', body: 'It now shows on this bottle.' });
+    } catch (err) {
+      showAlert({ title: 'Could not import', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
   const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
   const [reviewLocationDraft, setReviewLocationDraft] = useState(wine?.review_location ?? '');
   // "When did you drink it?" defaults to today if the wine hasn't been
@@ -1544,13 +1582,33 @@ export default function CellarWineDetail() {
         {/* Your Review — the chevron drills through to the full review page.
             Score + Drinking Window stay on the card below. */}
         <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+          <TouchableOpacity onPress={() => setReviewExpanded((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
             <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-            <Ionicons name="chevron-down-outline" size={16} color={colors.gold} />
+            <Ionicons name={reviewExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
           </TouchableOpacity>
         </View>
 
-        {(wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
+        {reviewExpanded ? (
+          <View>
+            {entriesOf(wine).length === 0 ? (
+              <Text style={styles.reviewEmptyText}>No reviews yet.</Text>
+            ) : byRecency(entriesOf(wine)).map((e) => (
+              <View key={e.id} style={styles.reviewEntryBlock}>
+                <Text style={styles.reviewEntryMeta}>
+                  {e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                  {e.location ? ` · ${e.location}` : ''}
+                  {e.score != null ? ` · ${e.score}/100` : ''}
+                </Text>
+                {e.note ? <Text style={styles.reviewEntryBody}>{e.note}</Text> : null}
+                {e.personalNotes ? <Text style={styles.reviewEntryBodyMuted}>{e.personalNotes}</Text> : null}
+                {e.drinkingWindow ? <Text style={styles.reviewEntryBodyMuted}>Drinking window: {e.drinkingWindow}</Text> : null}
+              </View>
+            ))}
+            <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
+              <Text style={styles.addReviewLink}>+ Add Review</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
           <View style={styles.reviewQuickStats}>
             <View style={styles.reviewQuickCell}>
               <Text style={styles.reviewQuickLabel}>Score</Text>
@@ -1566,7 +1624,7 @@ export default function CellarWineDetail() {
             </View>
           </View>
         ) : (
-          <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+          <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
             <Text style={styles.addReviewLink}>+ Add Review</Text>
           </TouchableOpacity>
         )}
@@ -2237,6 +2295,11 @@ const styles = StyleSheet.create({
   },
   // Gold "+ Add Review" link (no review yet) + "Edit Review" link (review exists).
   addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
+  reviewEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
+  reviewEntryBlock: { marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
+  reviewEntryMeta: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginBottom: 4 },
+  reviewEntryBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22, marginTop: 2 },
+  reviewEntryBodyMuted: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, lineHeight: 20, marginTop: 2 },
   editReviewLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm, textAlign: 'center' },
   // Inter — user written review body
   reviewNoteBody: {

@@ -160,14 +160,18 @@ export default function WineListScreen() {
     setSignInPromptVisible(false);
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
-    action?.();
+    // Defer until the sign-in modal has finished fading out. Launching the image
+    // picker while a modal is still dismissing silently fails to present on iOS —
+    // this was the guest "Upload Wine List" bug. (Same 350ms defer the label
+    // upload uses in app/(tabs)/scan.tsx.)
+    if (action) setTimeout(action, 350);
   }
 
   function continueWithoutAccount() {
     setSignInPromptVisible(false);
     const action = pendingActionRef.current;
     pendingActionRef.current = null;
-    action?.();
+    if (action) setTimeout(action, 350);
   }
 
   function handleScan() {

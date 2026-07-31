@@ -247,6 +247,22 @@ export default function CellarStatsScreen() {
     }
   }
 
+  // "Update all" on the missing CURRENT-value line — current values are
+  // Vinster-generated (unlike purchase values, which are user-entered), so the
+  // right action is to re-run the valuation on every wine still missing one,
+  // not to send the user into each wine.
+  async function handleUpdateMissingValues() {
+    if (winesUnvaluable.length === 0) return;
+    setCalculating(true);
+    try {
+      await processBatch(winesUnvaluable);
+    } catch {
+      showAlert({ title: 'Could not finish', body: 'Some wines could not be valued. Please try again.' });
+    } finally {
+      setCalculating(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -354,9 +370,9 @@ export default function CellarStatsScreen() {
                 {/* Wines Vinster couldn't value — left-indented directly under
                     Total Estimated Current Value. */}
                 {winesUnvaluable.length > 0 ? (
-                  <TouchableOpacity style={styles.missingValueRow} onPress={() => setValueEditor('estimate')} activeOpacity={0.7}>
+                  <TouchableOpacity style={styles.missingValueRow} onPress={handleUpdateMissingValues} activeOpacity={0.7}>
                     <Text style={styles.missingValueText}>
-                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>View Wines to Update</Text>
+                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>Update All</Text>
                     </Text>
                   </TouchableOpacity>
                 ) : null}

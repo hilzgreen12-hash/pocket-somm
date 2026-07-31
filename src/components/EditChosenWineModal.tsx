@@ -23,6 +23,7 @@ import { generateWineIntel } from '../services/pricing';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { formatCurrency } from '../constants/currency';
 import { showAlert } from './AppAlert';
+import { isReviewEditable } from '../utils/reviewDedup';
 import { useLabelStore } from '../stores/labelStore';
 import { WineReviewFields } from './WineReviewFields';
 import { splitLocationString, clearReviewOnCellar } from '../services/reviewSync';
@@ -170,6 +171,12 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
 
   async function handleSave() {
     if (!wine) return;
+    // Reviews lock 24h after they're saved. Belt-and-braces: even if this editor
+    // was reached via a deep link, refuse to write edits to a locked review.
+    if (!isReviewEditable(wine.reviewed_at)) {
+      showAlert({ title: 'This review is locked', body: 'Reviews can be edited for 24 hours after saving. This one is now a permanent reflection — you can still delete it.' });
+      return;
+    }
     Keyboard.dismiss();
     setSaving(true);
     try {

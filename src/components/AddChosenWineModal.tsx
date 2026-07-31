@@ -15,8 +15,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
-import { findExistingReview, appendDatedEntry, todayLabel } from '../utils/reviewDedup';
-import { isoToYmd } from '../utils/reviewDate';
+import { findExistingReview, missingReviewFields } from '../utils/reviewDedup';
 import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
@@ -113,11 +112,33 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     if (!session) { showAlert({ title: 'Sign in required', body: 'Sign in to save a review.' }); return; }
     if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name before saving.' }); return; }
     Keyboard.dismiss();
+    // Pre-save nudge: list anything empty except the optional Personal Notes.
+    const missing = missingReviewFields([
+      { label: 'Your Review', filled: !!tastingNote.trim() },
+      { label: 'Your Score', filled: userScore != null },
+      { label: 'List Price', filled: !!listPrice.trim() },
+      { label: 'a Location', filled: !!(locName.trim() || locCity.trim()) },
+    ]);
+    if (missing.length) {
+      showAlert({
+        title: 'Ready to Save?',
+        body: `You're missing ${missing.join(', ')}.`,
+        buttons: [
+          { text: 'Yes, Save', onPress: () => { void proceedSave(); } },
+          { text: 'Return to Review', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    await proceedSave();
+  }
+
+  async function proceedSave() {
     const existing = findExistingReview(chosenWines, { producer, wineName, vintage });
     if (existing) {
       // A bottle pick added from the list starts as an empty row (no note,
-      // score or observations). Reviewing it should just fill that row in —
-      // not prompt "you've reviewed this before". Mirrors ChosenWineModal.
+      // score or observations). Reviewing it just fills that row in — the FIRST
+      // review, not an edit of a prior one. Mirrors ChosenWineModal.
       const hasContent = !!(
         (existing.tasting_note ?? '').trim() ||
         existing.user_score != null ||
@@ -127,34 +148,16 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
         await doSave('update', existing);
         return;
       }
-      // Compare LOCAL calendar days (not UTC) so the same-day vs earlier-date
-      // prompt is right for non-UTC users near midnight.
-      const existingDay = isoToYmd(existing.chosen_at);
-      const todayDay = isoToYmd(new Date().toISOString());
-      if (existingDay === todayDay) {
-        // Same-day duplicate — keep both is allowed (e.g. two bottles that day).
-        showAlert({
-          title: 'Already in Your Reviews today',
-          body: `You already have this wine in Your Reviews on this date. Keep both, replace the existing one, or discard this?`,
-          buttons: [
-            { text: 'Keep both', onPress: () => { void doSave('create', null); } },
-            { text: 'Replace existing', onPress: () => { void doSave('update', existing); } },
-            { text: 'Discard', style: 'cancel' },
-          ],
-        });
-      } else {
-        const dateLabel = existing.chosen_at ? new Date(existing.chosen_at).toLocaleDateString('en-GB') : 'a previous date';
-        showAlert({
-          title: "You've reviewed this wine before",
-          body: `You reviewed this wine on ${dateLabel}. Would you like to add to that review, update that review, or create a new review card?`,
-          buttons: [
-            { text: 'Add to that review', onPress: () => { void doSave('append', existing); } },
-            { text: 'Update that review', onPress: () => { void doSave('update', existing); } },
-            { text: 'Create a new review card', onPress: () => { void doSave('create', null); } },
-            { text: 'Cancel', style: 'cancel' },
-          ],
-        });
-      }
+      const dateLabel = existing.chosen_at ? new Date(existing.chosen_at).toLocaleDateString('en-GB') : 'a previous date';
+      showAlert({
+        title: "You've reviewed this wine before",
+        body: `You reviewed this wine on ${dateLabel}. Add this as a new dated entry on that review, or start a separate new review?`,
+        buttons: [
+          { text: 'Add to that review', onPress: () => { void doSave('append', existing); } },
+          { text: 'Create a new review', onPress: () => { void doSave('create', null); } },
+          { text: 'Cancel', style: 'cancel' },
+        ],
+      });
       return;
     }
     await doSave('create', null);
@@ -172,7 +175,21 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     const restaurantName = locName.trim();
     const city = locCity.trim();
     try {
-      if (mode === 'create' || !existing) {
+      if (mode === 'update' && existing) {
+        // Bare, unreviewed bottle pick — fill its first review in place (this
+        // stamps reviewed_at and starts the 24h window).
+        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
+        await update.mutateAsync({
+          id: existing.id,
+          input: { restaurantName, city, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
+        });
+        if (dw !== null) {
+          await patchChosenWine(existing.id, { user_drinking_window: dw });
+          qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+        }
+      } else {
+        // create OR append. "Add to this review" (append) = a NEW dated entry
+        // that joins the existing review's card via its review_group_id.
         const row = await saveManual.mutateAsync({
           wineName, producer, region, vintage: vintageNum,
           restaurantName, city, listPrice: price, currency,
@@ -181,17 +198,15 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           userDrinkingWindow: dw,
           // Collection tag from the "Add a Wine Review" chooser: 'restaurant'
           // (drunk at a restaurant) or 'other' (a tasting, event, or at home).
-          // Both stay in Your Wine Reviews, out of You · Your Restaurants ·
-          // Bottle Picks (which are scan-session-linked, not hand entered).
           source,
+          ...(mode === 'append' && existing ? { reviewGroupId: existing.review_group_id ?? existing.id } : {}),
         });
         // Persist any style the user set via the identity sheet.
         if (style.trim() && row?.id) {
           try { await patchChosenWine(row.id, { style: style.trim() }); } catch { /* non-fatal */ }
         }
         // Attach the label photo — a photo picked in the identity sheet wins,
-        // else the scanned one, so the review card shows the label like a cellar
-        // wine. Best-effort: a failed upload never blocks the save.
+        // else the scanned one. Best-effort: a failed upload never blocks save.
         const photoUri = editImageUri ?? labelImageUri;
         if (photoUri && row?.id) {
           try {
@@ -200,42 +215,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
             qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
           } catch { /* non-fatal — review saved without a photo */ }
         } else if (labelImagePath && row?.id) {
-          // From Your Label Library — the photo already lives in storage, so
-          // reuse its path rather than re-uploading, so the review card shows
-          // the same thumbnail.
           try {
             await patchChosenWine(row.id, { label_image_path: labelImagePath });
             qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
           } catch { /* non-fatal — review saved without a photo */ }
-        }
-      } else {
-        const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
-        if (mode === 'update') {
-          await update.mutateAsync({
-            id: existing.id,
-            input: { restaurantName, city, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
-          });
-        } else {
-          const label = todayLabel();
-          await update.mutateAsync({
-            id: existing.id,
-            input: {
-              restaurantName: existing.restaurant_name ?? '',
-              city: existing.city ?? '',
-              tastingNote: appendDatedEntry(existing.tasting_note, tastingNote, label),
-              otherObservations: appendDatedEntry(existing.other_observations, otherObservations, label),
-              userScore: userScore != null ? userScore : existing.user_score,
-              listPrice: existing.menu_price,
-              isFavourite: existing.is_favourite || isFavourite,
-              ...identity,
-            },
-          });
-        }
-        // The structured update input doesn't carry the drinking window — patch
-        // it onto the existing row, then refresh.
-        if (dw !== null) {
-          await patchChosenWine(existing.id, { user_drinking_window: dw });
-          qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
         }
       }
       onSaved();
