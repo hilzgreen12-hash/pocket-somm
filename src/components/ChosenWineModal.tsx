@@ -253,7 +253,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
             activeOpacity={0.7}
           >
-            <Text style={styles.backBtnText}>Back</Text>
+            <Text accessibilityLabel="Back" style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -440,10 +440,10 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   backBtnText: {
-    // Back/nav link — Inter
+    // Back/nav arrow — gold, matching the rest of the app
     fontFamily: fonts.bodyRegular,
-    fontSize: 16,
-    color: colors.textMuted,
+    fontSize: 22,
+    color: colors.gold,
   },
   favouriteStar: {
     fontSize: 30,

@@ -10,8 +10,12 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
+import { generateWineIntel } from '../../src/services/pricing';
+import { useLastIntelStore } from '../../src/stores/lastIntelStore';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import type { WineDetailsComplete } from '../../src/types/wine';
 
 export default function LabelCameraScreen() {
   const { context, backTo } = useLocalSearchParams<{ context?: string; backTo?: string }>();
@@ -23,7 +27,11 @@ export default function LabelCameraScreen() {
   const cameraRef = useRef<CameraView>(null);
   const [frameRect, setFrameRect] = useState<FrameRect | null>(null);
   const [previewUri, setPreviewUri] = useState<string | null>(null);
-  const { setImage, setWineDetails, setError } = useLabelStore();
+  // Overlay caption while the still is on screen: OCR first, then (intel flow)
+  // the wine-intel lookup, so the user sees why the wait continues.
+  const [status, setStatus] = useState('Reading the label…');
+  const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError } = useLabelStore();
+  const { preferences } = usePreferences();
 
   // Drop the still-photo preview when the screen regains focus (e.g. user
   // navigated back from /label/confirm) so the live camera comes back.
@@ -88,7 +96,14 @@ export default function LabelCameraScreen() {
       setImage(uri, base64);
       const details = await scanLabel(base64);
       setWineDetails(details);
-      router.replace(`/label/confirm${contextQuery}`);
+      // Scan Wine Label (intel) skips the confirm-details step entirely: go
+      // straight from the read to the Wine Intel card. The user corrects a
+      // misread with "Scan Again" (top-right on the intel screen) instead.
+      if (context === 'intel') {
+        await runIntel(details);
+      } else {
+        router.replace(`/label/confirm${contextQuery}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
       router.replace(`/label/confirm${contextQuery}`);
@@ -100,13 +115,39 @@ export default function LabelCameraScreen() {
     }
   }
 
+  // Intel flow only: generate the Wine Intel here (no confirm page) and land on
+  // the results card. The captured photo is already the label thumbnail, so no
+  // auto-label fetch is needed. On any failure, fall back to the confirm screen
+  // so a bad read isn't a dead-end.
+  async function runIntel(details: Awaited<ReturnType<typeof scanLabel>>) {
+    const confirmed: WineDetailsComplete = {
+      producer: (details.producer ?? '').trim(),
+      region: (details.region ?? '').trim(),
+      wineName: (details.wineName ?? '').trim() || null,
+      vintage: (details.vintage ?? '').trim(),
+      style: (details.style ?? '').trim() || null,
+      bottleSizeMl: details.bottleSizeMl ?? null,
+      quantity: details.quantity ?? 1,
+    };
+    setWineDetailsConfirmed(confirmed);
+    setStatus('Finding this wine…');
+    try {
+      const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
+      setIntelligence(intel);
+      useLastIntelStore.getState().setLast(confirmed, intel);
+      router.replace(`/label/results${contextQuery}&fresh=1`);
+    } catch {
+      router.replace(`/label/confirm${contextQuery}`);
+    }
+  }
+
   if (previewUri) {
     return (
       <View style={styles.container}>
         <Image source={{ uri: previewUri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
         <View style={styles.processingOverlay}>
           <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.processingText}>Reading the label…</Text>
+          <Text style={styles.processingText}>{status}</Text>
         </View>
       </View>
     );

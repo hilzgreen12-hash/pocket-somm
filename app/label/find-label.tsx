@@ -8,6 +8,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { searchLabelImages, type LabelImageCandidate } from '../../src/api/label';
 import { uploadLabelImageFromUrl } from '../../src/api/labelPhotos';
 import { updateCellarWine } from '../../src/api/cellar';
+import { patchChosenWine } from '../../src/api/chosenWines';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -18,7 +19,9 @@ import { fonts } from '../../src/constants/fonts';
 type Stage = 'searching' | 'choosing' | 'saving' | 'empty' | 'error';
 
 export default function FindLabelScreen() {
-  const { wineId, producer, wineName } = useLocalSearchParams<{ wineId?: string; producer?: string; wineName?: string }>();
+  // `kind` decides which table the chosen image is saved to: cellar wines live
+  // in cellar_wines (the default), restaurant/other reviews in chosen_wines.
+  const { wineId, producer, wineName, kind } = useLocalSearchParams<{ wineId?: string; producer?: string; wineName?: string; kind?: string }>();
   const { session } = useAuth();
   const qc = useQueryClient();
   const [stage, setStage] = useState<Stage>('searching');
@@ -46,8 +49,13 @@ export default function FindLabelScreen() {
     setStage('saving');
     try {
       const path = await uploadLabelImageFromUrl(session.user.id, c.url, wineId);
-      await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: true } as any);
-      qc.invalidateQueries({ queryKey: ['cellar'] });
+      if (kind === 'chosen') {
+        await patchChosenWine(wineId, { label_image_path: path });
+        qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      } else {
+        await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: true } as any);
+        qc.invalidateQueries({ queryKey: ['cellar'] });
+      }
       qc.invalidateQueries({ queryKey: ['label-url', path] });
       router.back();
     } catch (err) {

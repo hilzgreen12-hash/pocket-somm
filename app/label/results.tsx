@@ -24,7 +24,11 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
-import { getWineIntelligence, fetchWineCandidates, type WineCandidate } from '../../src/api/label';
+import { getWineIntelligence, fetchWineCandidates, prepareImageBase64, scanLabel, type WineCandidate } from '../../src/api/label';
+import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
+import { useLastIntelStore } from '../../src/stores/lastIntelStore';
+import type { WineDetailsComplete } from '../../src/types/wine';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
@@ -78,7 +82,8 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh, backTo } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string }>();
+  const { context, fresh, backTo, via } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string }>();
+  const isUploadFlow = via === 'upload';
   const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
   // a review, so the action area collapses to a single "Review this Wine"
@@ -99,7 +104,7 @@ export default function LabelResultsScreen() {
   // no-intel adds — 'add-location' must be included or the guard below dead-ends
   // on "No results available" and the wine never saves (regression from 7e9deec).
   const isAddFlow = context === 'add' || context === 'add-location';
-  const { wineDetailsConfirmed, intelligence, imageUri, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
+  const { wineDetailsConfirmed, intelligence, imageUri, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
@@ -119,7 +124,47 @@ export default function LabelResultsScreen() {
   const [candidates, setCandidates] = useState<WineCandidate[]>([]);
   const [candidatesOpen, setCandidatesOpen] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  const [reReading, setReReading] = useState(false);
   const candidatesTriedRef = useRef(false);
+
+  // "Upload Again" — re-pick a label and regenerate intel in place (the upload
+  // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
+  // store update re-renders the card with the new wine.
+  async function handleUploadAgain() {
+    if (reReading) return;
+    if (!(await ensureMediaPermission('library'))) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    setReReading(true);
+    try {
+      const base64 = await prepareImageBase64(result.assets[0].uri);
+      setImage(result.assets[0].uri, base64);
+      const details = await scanLabel(base64);
+      setWineDetails(details);
+      const confirmed: WineDetailsComplete = {
+        producer: (details.producer ?? '').trim(),
+        region: (details.region ?? '').trim(),
+        wineName: (details.wineName ?? '').trim() || null,
+        vintage: (details.vintage ?? '').trim(),
+        style: (details.style ?? '').trim() || null,
+        bottleSizeMl: details.bottleSizeMl ?? null,
+        quantity: details.quantity ?? 1,
+      };
+      setWineDetailsConfirmed(confirmed);
+      const intel = await generateWineIntel(confirmed, userCurrency);
+      setIntelligence(intel);
+      useLastIntelStore.getState().setLast(confirmed, intel);
+      // Let the disambiguation check run again for the new wine.
+      candidatesTriedRef.current = false;
+      setCandidates([]);
+      setCandidatesOpen(false);
+      setNoIntelDismissed(false);
+    } catch {
+      showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
+    } finally {
+      setReReading(false);
+    }
+  }
 
   useEffect(() => {
     if (candidatesTriedRef.current) return;
@@ -1125,6 +1170,21 @@ export default function LabelResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
+      {/* Scan Again — the intel flow now skips the confirm-details step, so this
+          is how the user re-reads a bottle when the label was misread. */}
+      {isIntelOnlyFlow ? (
+        <TouchableOpacity
+          style={styles.scanAgainBtn}
+          onPress={isUploadFlow
+            ? handleUploadAgain
+            : () => router.replace(`/label/camera?context=intel${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` as any)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.scanAgainText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
+        </TouchableOpacity>
+      ) : null}
+
       <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
       <View style={styles.header}>
@@ -1146,6 +1206,14 @@ export default function LabelResultsScreen() {
         onEdit={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
         editLabel="Check details"
       />
+
+      {/* Upload Again — re-reading the new photo + regenerating intel. */}
+      <Modal visible={reReading} transparent animationType="fade">
+        <View style={styles.reReadOverlay}>
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.reReadText}>Finding this wine…</Text>
+        </View>
+      </Modal>
 
       {/* "Which wine is this?" — Claude's list of this producer's plausible
           bottlings, shown when intel came back weak. Picking one regenerates
@@ -1717,6 +1785,10 @@ const styles = StyleSheet.create({
   linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm, alignSelf: 'flex-start' },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  scanAgainBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, paddingVertical: spacing.xs },
+  scanAgainText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  reReadOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  reReadText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF' },
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   heroImage: { alignSelf: 'center', width: 130, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginBottom: spacing.md },
