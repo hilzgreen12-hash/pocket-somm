@@ -356,7 +356,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
             {/* Top row: back (left) · Share · Edit (right). */}
             <View style={styles.topRow}>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={styles.backText}>← Back</Text>
+                <Text accessibilityLabel="Back" style={styles.backText}>←</Text>
               </TouchableOpacity>
               <View style={styles.topRight}>
                 <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
@@ -513,7 +513,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
   content: { padding: spacing.xl, paddingTop: 56, paddingBottom: 60 },
-  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  backText: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   topRight: { alignItems: 'flex-end', gap: 2 },
   topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },

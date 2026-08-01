@@ -14,6 +14,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { ReviewDetailModal } from '../../src/components/ReviewDetailModal';
 import { fromChosenGroup, fromCellar } from '../../src/utils/reviewModel';
+import { byRecency, entriesOf, flatMirror } from '../../src/utils/cellarReview';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { showAlert } from '../../src/components/AppAlert';
@@ -23,6 +24,8 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { LabelThumb } from '../../src/components/LabelThumb';
+import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
+import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity } from '../../src/utils/city';
@@ -152,6 +155,7 @@ export default function ChosenWinesScreen() {
   const { wines: cellarWines, updateWine } = useCellar();
   const qc = useQueryClient();
   const { setImage, setWineDetails, setError } = useLabelStore();
+  const attachPhoto = useAttachLabelPhoto();
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   // Every review (restaurant / cellar / other) opens the same unified detail view.
   const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
@@ -159,7 +163,7 @@ export default function ChosenWinesScreen() {
   const [addOpen, setAddOpen] = useState(false);
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
   // (null for Manual Input). Keeps all three on the same review input screen.
-  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null>(null);
+  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null } | null>(null);
   // Local uri of a scanned/uploaded label, retained through the Add-a-Review
   // modal so the new review can carry its label photo (Part 3). Null for Manual.
   const [pendingReviewLabelUri, setPendingReviewLabelUri] = useState<string | null>(null);
@@ -828,7 +832,9 @@ export default function ChosenWinesScreen() {
           // Occasion add-to: open the review input pre-filled with this wine;
           // its dedup then offers "Add to that review / Create a new review".
           const w = it.wine as ChosenWine;
-          setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region });
+          // Carry the stored menu price so the new entry keeps the restaurant
+          // list price even though the user no longer has the menu.
+          setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region, listPrice: w.menu_price });
           setAddSource(it.source === 'other' ? 'other' : 'restaurant');
           setAddOpen(true);
         }}
@@ -838,13 +844,27 @@ export default function ChosenWinesScreen() {
           if (it.source === 'cellar') setEditingCellarWine(it.wine as CellarWine);
           else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
         }}
-        onDelete={async () => {
+        thumbPath={detailItem ? labelPathFor(detailItem) : null}
+        onAddPhoto={() => {
+          const it = detailItem; if (!it) return;
+          attachPhoto.present({
+            kind: it.source === 'cellar' ? 'cellar' : 'chosen',
+            wineId: it.wine.id,
+            producer: it.wine.producer,
+            wineName: it.wine.wine_name,
+          });
+        }}
+        onDeleteEntry={async (entryId) => {
           const it = detailItem; if (!it) return;
           if (it.source === 'cellar') {
+            // Drop just this entry from the bottle's review_entries and re-mirror
+            // the flat review_* fields onto whatever entry is now the latest.
             const w = it.wine as CellarWine;
-            await updateWine.mutateAsync({ id: w.id, updates: { review_entries: [], review_note: null, user_notes: null, review_score: null, review_location: null, review_date: null, user_drinking_window: null } });
+            const remaining = byRecency(entriesOf(w)).filter((e) => e.id !== entryId);
+            await updateWine.mutateAsync({ id: w.id, updates: { review_entries: remaining, ...flatMirror(remaining[0] ?? null) } });
           } else {
-            for (const e of (it as Extract<ReviewItem, { source: 'restaurant' }>).entries) await remove.mutateAsync(e.id);
+            // Occasion entries are individual chosen_wines rows.
+            await remove.mutateAsync(entryId);
           }
         }}
       />
@@ -1128,7 +1148,8 @@ export default function ChosenWinesScreen() {
                   <>
                     {`${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`}
                     {a > 0 ? (
-                      <Text> · <Text style={styles.summaryLink} onPress={() => listScrollRef.current?.scrollTo({ y: Math.max(0, awaitingY - 12), animated: true })}>{`${a} ${a === 1 ? 'Wine' : 'Wines'} awaiting your review`}</Text></Text>
+                      // Awaiting count drops to its own line beneath "Reviews · Wines".
+                      <Text>{'\n'}<Text style={styles.summaryLink} onPress={() => listScrollRef.current?.scrollTo({ y: Math.max(0, awaitingY - 12), animated: true })}>{`${a} ${a === 1 ? 'Wine' : 'Wines'} awaiting your review`}</Text></Text>
                     ) : null}
                   </>
                 );
@@ -1276,7 +1297,20 @@ export default function ChosenWinesScreen() {
                   <View style={styles.cardCompactOuter}>
                     {thumbPath ? (
                       <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
-                    ) : null}
+                    ) : (
+                      // No label shot (e.g. a wine picked from a scanned list) —
+                      // offer to add one right from the review card.
+                      <AddPhotoThumb
+                        style={styles.reviewThumb}
+                        radius={4}
+                        onPress={() => attachPhoto.present({
+                          kind: isChosen ? 'chosen' : 'cellar',
+                          wineId: w.id,
+                          producer: w.producer,
+                          wineName: w.wine_name,
+                        })}
+                      />
+                    )}
                     <View style={styles.cardCompactBody}>
                       <View style={styles.cardCompactRow}>
                         <Text style={styles.wineNameCompact} numberOfLines={2}>
@@ -1344,7 +1378,13 @@ export default function ChosenWinesScreen() {
                     <View style={styles.cardCompactOuter}>
                       {thumbPath ? (
                         <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
-                      ) : null}
+                      ) : (
+                        <AddPhotoThumb
+                          style={styles.reviewThumb}
+                          radius={4}
+                          onPress={() => attachPhoto.present({ kind: 'chosen', wineId: w.id, producer: w.producer, wineName: w.wine_name })}
+                        />
+                      )}
                       <View style={styles.cardCompactBody}>
                         <Text style={styles.awaitingName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
                         <Text style={styles.awaitingMeta} numberOfLines={1}>
@@ -1494,7 +1534,7 @@ const styles = StyleSheet.create({
   // list itself. Sort chip is gold-bordered to mark it as the most
   // common interaction.
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
-  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Tappable variant of the awaiting-review line (no underline, per house style).
   summaryLink: { marginTop: 4 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },

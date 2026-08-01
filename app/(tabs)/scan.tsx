@@ -12,8 +12,11 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
+import { generateWineIntel } from '../../src/services/pricing';
+import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useAuth } from '../../src/hooks/useAuth';
+import type { WineDetailsComplete } from '../../src/types/wine';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -27,7 +30,8 @@ export default function ScanTab() {
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const { setExtractedWines, setRecommendation } = useScanStore();
-  const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
+  const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError, reset: resetLabelStore } = useLabelStore();
+  const { preferences } = usePreferences();
 
   const [addWineOpen, setAddWineOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
@@ -119,20 +123,37 @@ export default function ScanTab() {
     const uri = result.assets[0].uri;
     // Scanning overlay covers the ~5–15s OCR round-trip so the app doesn't
     // appear frozen between the picker dismiss and the confirm screen.
+    const backTo = encodeURIComponent('/(tabs)/scan');
     setScanningLabel(true);
     try {
       const base64 = await prepareImageBase64(uri);
       setImage(uri, base64);
       const details = await scanLabel(base64);
       setWineDetails(details);
+      // Upload a label skips the confirm-details step too: go straight to the
+      // Wine Intel card. "Upload Again" (top-right there) re-reads a misread.
+      const confirmed: WineDetailsComplete = {
+        producer: (details.producer ?? '').trim(),
+        region: (details.region ?? '').trim(),
+        wineName: (details.wineName ?? '').trim() || null,
+        vintage: (details.vintage ?? '').trim(),
+        style: (details.style ?? '').trim() || null,
+        bottleSizeMl: details.bottleSizeMl ?? null,
+        quantity: details.quantity ?? 1,
+      };
+      setWineDetailsConfirmed(confirmed);
+      const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
+      setIntelligence(intel);
+      useLastIntelStore.getState().setLast(confirmed, intel);
+      setScanningLabel(false);
+      router.push(`/label/results?context=intel&via=upload&fresh=1&backTo=${backTo}`);
+      return;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
-    } finally {
       setScanningLabel(false);
+      // Fall back to the confirm screen so a bad read isn't a dead-end.
+      router.push(`/label/confirm?context=intel&via=upload&backTo=${backTo}`);
     }
-    // via=upload → the confirm screen shows "Cancel" (back to Scan) instead of
-    // "Scan Again" (which reopens the camera — only right for the camera flow).
-    router.push(`/label/confirm?context=intel&via=upload&backTo=${encodeURIComponent('/(tabs)/scan')}`);
   }
 
   return (

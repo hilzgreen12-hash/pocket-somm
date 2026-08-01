@@ -9,6 +9,8 @@ import { router } from 'expo-router';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { LabelThumb } from './LabelThumb';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
+import { AddPhotoThumb } from './AddPhotoThumb';
+import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
@@ -49,6 +51,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const { session } = useAuth();
   const qc = useQueryClient();
   const { setWineDetails } = useLabelStore();
+  const attachPhoto = useAttachLabelPhoto();
 
   const [userScore, setUserScore] = useState<number | null>(null);
   const [tastingNote, setTastingNote] = useState('');      // Your Review
@@ -87,7 +90,14 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       setUserScore(wine.user_score ?? null);
       setTastingNote(wine.tasting_note ?? '');
       setPersonalNotes(wine.other_observations ?? '');
-      setPurchasePrice(wine.purchase_price != null ? String(wine.purchase_price) : '');
+      // Restaurant picks carry the scanned menu price. When the user reviews the
+      // bottle later (often without the menu to hand), auto-fill the price from
+      // what Vinster stored at scan time rather than leaving it blank.
+      setPurchasePrice(
+        wine.purchase_price != null
+          ? String(wine.purchase_price)
+          : wine.menu_price != null ? String(wine.menu_price) : '',
+      );
       setLocCity(wine.city ?? '');
       setLocName(wine.restaurant_name ?? '');
       // Prefill the city from GPS when the review has none yet.
@@ -460,7 +470,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
                 the app, sharing the same wine card as everywhere else. */}
             <View style={styles.topRow}>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
-                <Text style={styles.backText}>← Back</Text>
+                <Text accessibilityLabel="Back" style={styles.backText}>←</Text>
               </TouchableOpacity>
               <View style={styles.topRight}>
                 <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
@@ -475,14 +485,21 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
             {/* Header — mirrors the cellar wine card: label thumbnail on the
                 left (when the wine has a scanned/uploaded photo) with the
                 identity beside it. No favourite star. */}
-            <View style={[styles.header, wine.label_image_path ? styles.headerWithThumb : null]}>
+            <View style={[styles.header, styles.headerWithThumb]}>
               {wine.label_image_path ? (
                 <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
-              ) : null}
-              <View style={wine.label_image_path ? styles.headerTextCol : undefined}>
-                <Text style={[styles.headerLine, wine.label_image_path ? styles.headerLineLeft : null]}>{headerLine}</Text>
+              ) : (
+                // No photo (e.g. a scanned-list pick) — offer to add one.
+                <AddPhotoThumb
+                  style={styles.headerThumb}
+                  radius={5}
+                  onPress={() => attachPhoto.present({ kind: 'chosen', wineId: wine.id, producer: wine.producer, wineName: wine.wine_name })}
+                />
+              )}
+              <View style={styles.headerTextCol}>
+                <Text style={[styles.headerLine, styles.headerLineLeft]}>{headerLine}</Text>
                 {(wine.region || wine.grape) ? (
-                  <Text style={[styles.region, wine.label_image_path ? styles.regionLeft : null]}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
+                  <Text style={[styles.region, styles.regionLeft]}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
                 ) : null}
                 {/* Date · where you drank it — a clean header stamp (kept out of
                     the free-text notes below). */}
@@ -492,7 +509,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
                     ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                     : '';
                   const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                  return stamp ? <Text style={[styles.stampLine, wine.label_image_path ? styles.stampLineLeft : null]}>{stamp}</Text> : null;
+                  return stamp ? <Text style={[styles.stampLine, styles.stampLineLeft]}>{stamp}</Text> : null;
                 })()}
               </View>
             </View>
@@ -676,7 +693,7 @@ const styles = StyleSheet.create({
   // Gold text link below the buttons (Dive Deeper → Wine Knowledge).
   diveDeeperLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   diveDeeperLinkText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
-  backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  backText: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   topRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   topShareText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   header: { alignItems: 'center', marginBottom: spacing.sm },

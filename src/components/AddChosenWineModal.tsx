@@ -34,7 +34,7 @@ interface Props {
   // Optional OCR pre-fill so Scan / Upload land on this SAME screen (no wine
   // intel card) with the wine identity already filled in — the only difference
   // from Manual Input is where the details come from.
-  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null;
+  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null } | null;
   // Local image uri of the scanned/uploaded label (Scan / Upload review flow).
   // When present and the review is newly CREATED, we upload it and stamp
   // chosen_wines.label_image_path so the review card shows the label photo —
@@ -99,7 +99,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       setWineName(initial?.wineName ?? '');
       setVintage(initial?.vintage != null ? String(initial.vintage) : '');
       setRegion(initial?.region ?? '');
-      setLocCity(''); setLocName(''); setListPrice(''); setTastingNote(''); setOtherObservations('');
+      setLocCity(''); setLocName(''); setTastingNote(''); setOtherObservations('');
+      // Carry the scanned/stored menu price through so the user doesn't have to
+      // re-enter it when reviewing a restaurant wine after the fact.
+      setListPrice(initial?.listPrice != null ? String(initial.listPrice) : '');
       setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false);
       setReviewDate(new Date().toISOString().split('T')[0]);
       setStyle(''); setEditImageUri(null); setIdentityEditOpen(false);
@@ -238,7 +241,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-            <Text style={styles.backBtnText}>Back</Text>
+            <Text accessibilityLabel="Back" style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.favouriteBtn} onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
             <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
@@ -418,7 +421,7 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: colors.background },
   sheet: { flex: 1, backgroundColor: colors.background },
   backBtn: { position: 'absolute', top: 56, left: spacing.xl, zIndex: 10, padding: 4 },
-  backBtnText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.textMuted },
+  backBtnText: { fontFamily: fonts.bodyRegular, fontSize: 22, color: colors.gold },
   favouriteBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, padding: 4 },
   favouriteStar: { fontSize: 30, color: colors.textMuted },
   favouriteStarActive: { color: colors.gold },
