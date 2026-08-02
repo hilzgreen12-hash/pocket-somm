@@ -951,6 +951,8 @@ export default function CellarWineDetail() {
           // Keep the (WS-anchored) critic score fresh on refresh too.
           critic_score: v.criticScore,
           critic_score_note: v.criticScoreNote,
+          // Canonical identity anchor when Wine-Searcher matched.
+          ...(v.wsWineId ? { ws_wine_id: v.wsWineId, ws_wine_name: v.wsWineName ?? null } : {}),
           // valueWine() also returns Vinster's tasting note + drinking window
           // (+ grape). Persist them so imported/bare wines gain a Vinster's
           // Review and drinking window from the same Generate action — these

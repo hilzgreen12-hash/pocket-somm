@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal } from 'react-native';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -82,6 +82,25 @@ export default function ResultsScreen() {
   const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
+  const navigation = useNavigation();
+
+  // Single source of truth for "back": skip the transient camera/preview/
+  // extracting screens (which sit below results in the stack and error when
+  // revisited) and return to the Scan a List form.
+  const goBack = useCallback(() => {
+    if (isFromHistory) { router.back(); return; }
+    reset();
+    router.dismissTo('/scan/wine-list');
+  }, [isFromHistory, reset]);
+
+  // Route the Android hardware back through goBack, and disable the iOS swipe
+  // gesture (which would otherwise pop to the stale preview screen).
+  useFocusEffect(useCallback(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
+    return () => sub.remove();
+  }, [goBack]));
+  useEffect(() => { navigation.setOptions({ gestureEnabled: false }); }, [navigation]);
+
   const { autoSave, archive } = useScanHistory();
   const { session } = useAuth();
   const { preferences: userPrefs } = usePreferences();
@@ -424,8 +443,8 @@ export default function ResultsScreen() {
       });
       setChosenIndexes((prev) => new Set([...prev, i]));
       showAlert({
-        title: 'Added to You · Your Restaurants',
-        body: "Saved to Wines You Drank under You · Your Restaurants. Review it now while it's fresh, or later from the You tab — Vinster folds it into your vinous amour either way.",
+        title: 'Wine Selected',
+        body: `${wine.name} has been recorded in Your Restaurants – ${currentRestaurant.trim() || 'Your Restaurants'}.`,
         showCloseX: true,
         buttons: [
           { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
@@ -614,16 +633,7 @@ export default function ResultsScreen() {
       <View style={styles.header}>
         <View style={styles.topRow}>
           <TouchableOpacity
-            onPress={() => {
-              if (isFromHistory) {
-                router.back();
-              } else {
-                // Skip the camera/preview/extracting stack on the way back —
-                // return straight to the Wine List form.
-                reset();
-                router.dismissTo('/scan/wine-list');
-              }
-            }}
+            onPress={goBack}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
           >
             <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
@@ -773,6 +783,37 @@ export default function ResultsScreen() {
             <View key={wine.name + i} style={styles.card}>
               <View style={styles.cardInner}>
 
+                {/* Gold "Select This Wine" bar above the name — mirrors the
+                    cellar stats bars. Records the pick in Your Restaurants
+                    (prompting for a restaurant name first if none is set);
+                    tap again to remove. */}
+                {session && (
+                  <TouchableOpacity
+                    style={[styles.selectBar, chosenIndexes.has(i) && styles.selectBarDone]}
+                    onPress={() => {
+                      if (pendingIdxRef.current.has(i)) return;
+                      void Haptics.selectionAsync().catch(() => {});
+                      if (chosenIndexes.has(i)) { unselectBottle(wine, i); return; }
+                      // Can't record a pick in Your Restaurants without a
+                      // restaurant name — collect it (and location) first.
+                      if (!restaurantName.trim()) {
+                        setPendingWine({ wine, i });
+                        setPromptRestaurant(restaurantName);
+                        setPromptCity('');
+                        setRestaurantPromptOpen(true);
+                        return;
+                      }
+                      handleQuickSelect(wine, i);
+                    }}
+                    disabled={saveChosen.isPending && !chosenIndexes.has(i)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={[styles.selectBarText, chosenIndexes.has(i) && styles.selectBarTextDone]}>
+                      {chosenIndexes.has(i) ? 'Selected · Tap to Remove' : 'Select This Wine'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+
                 <Text style={styles.wineName}>{wineTitle}</Text>
                 {wineSubline ? (
                   <Text style={styles.wineProducer}>{wineSubline}</Text>
@@ -845,35 +886,6 @@ export default function ResultsScreen() {
                     </Text>
                   ) : null}
                 </View>
-
-                {session && (
-                  <TouchableOpacity
-                    style={[styles.bottlePicksButton, chosenIndexes.has(i) && styles.bottlePicksButtonDone]}
-                    onPress={() => {
-                      // Ignore taps while this wine's select/unselect is still
-                      // saving — stops rapid taps from stacking duplicate rows.
-                      if (pendingIdxRef.current.has(i)) return;
-                      void Haptics.selectionAsync().catch(() => {});
-                      if (chosenIndexes.has(i)) { unselectBottle(wine, i); return; }
-                      // Can't save a bottle to Your Restaurants without a
-                      // restaurant name — collect it (and location) first.
-                      if (!restaurantName.trim()) {
-                        setPendingWine({ wine, i });
-                        setPromptRestaurant(restaurantName);
-                        setPromptCity('');
-                        setRestaurantPromptOpen(true);
-                        return;
-                      }
-                      handleQuickSelect(wine, i);
-                    }}
-                    disabled={saveChosen.isPending && !chosenIndexes.has(i)}
-                    activeOpacity={0.85}
-                  >
-                    <Text style={[styles.bottlePicksButtonText, chosenIndexes.has(i) && styles.bottlePicksButtonTextDone]}>
-                      {chosenIndexes.has(i) ? `Added to ${restaurantName.trim() || 'Your Restaurants'} – List Pick · Tap to remove` : 'Add to Your Restaurants – List Pick'}
-                    </Text>
-                  </TouchableOpacity>
-                )}
 
                 {/* "Review Wine" is no longer a standalone button here — after
                     adding to Bottle Picks the success popup offers it, so a wine
@@ -1297,26 +1309,30 @@ const styles = StyleSheet.create({
   },
   // Long primary CTA — Add to Your Bottle Picks. Sits below the
   // two-button row as the headline action on each card.
-  bottlePicksButton: {
-    marginTop: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderWidth: 1.5,
-    borderColor: '#FFFFFF',
-    borderRadius: 10,
+  // "Select This Wine" bar — a gold band at the top of the card, above the
+  // name, mirroring the cellar stats bars.
+  selectBar: {
+    alignSelf: 'stretch',
     alignItems: 'center',
-    backgroundColor: 'transparent',
+    paddingVertical: spacing.sm,
+    marginTop: -2,
+    marginBottom: spacing.sm,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderLight,
+    backgroundColor: 'rgba(224,184,74,0.06)',
   },
-  bottlePicksButtonDone: {
-    borderColor: colors.gold,
-    backgroundColor: 'rgba(212,176,96,0.18)',
+  selectBarDone: {
+    backgroundColor: 'rgba(224,184,74,0.16)',
   },
-  bottlePicksButtonText: {
-    fontFamily: fonts.headingSemibold,
-    fontSize: 15,
-    color: '#FFFFFF',
-    letterSpacing: 0.4,
+  selectBarText: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 13,
+    color: colors.gold,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
   },
-  bottlePicksButtonTextDone: {
+  selectBarTextDone: {
     color: colors.gold,
   },
   // "Add a restaurant first" prompt.

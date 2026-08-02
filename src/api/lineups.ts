@@ -126,6 +126,27 @@ export async function setLineupNote(id: string, note: string | null): Promise<vo
   if (error) throw error;
 }
 
+// Persist the identified/confirmed wines on a lineup (the `wines` jsonb column,
+// migration 065). Used by the "Identify wines" flow on the lineup info screen.
+export async function setLineupWines(id: string, wines: LineupWine[]): Promise<void> {
+  const { error } = await supabase
+    .from('lineup_archives')
+    .update({ wines, bottle_count: wines.reduce((n, w) => n + (w.count ?? 1), 0) })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Edit a lineup's date + location stamp (from the lineup info screen). city is
+// trimmed; a blank clears it. archivedAt is an ISO date string.
+export async function updateLineupStamp(id: string, updates: { archivedAt?: string; city?: string | null }): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (updates.archivedAt !== undefined) patch.archived_at = updates.archivedAt;
+  if (updates.city !== undefined) patch.city = updates.city?.trim() ? updates.city.trim() : null;
+  if (Object.keys(patch).length === 0) return;
+  const { error } = await supabase.from('lineup_archives').update(patch).eq('id', id);
+  if (error) throw error;
+}
+
 // Delete a lineup from the library — removes its photo from Storage (best
 // effort) and the archive row. Verifies a row was actually removed so a stale
 // session can't read as a fake success.

@@ -311,6 +311,8 @@ export async function patchChosenWine(
     wishlist: boolean;
     user_drinking_window: string | null;
     label_image_path: string | null;
+    ws_wine_id: string | null;
+    ws_wine_name: string | null;
     critic_score: number | null;
     critic_score_note: string | null;
     wine_name: string;

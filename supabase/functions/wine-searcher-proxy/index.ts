@@ -117,6 +117,7 @@ const UNAVAILABLE = {
   region: null,
   grape: null,
   wsWineId: null,
+  wsWineName: null,
 };
 
 // Build the Wine-Searcher request URL. vintageValue === null queries across ALL
@@ -176,6 +177,10 @@ async function lookupWineSearcher(name: string, vintageValue: string | null, cur
     region: tag(xml, 'region'),
     grape: tag(xml, 'grape'),
     wsWineId: tag(xml, 'wine-name-id'),
+    // Canonical wine name — best-effort: the confirmed sample only documented
+    // <wine-name-id>, so this is null when the tag is absent. The id is the
+    // anchor; the name is only for display.
+    wineName: tag(xml, 'wine-name'),
   };
 }
 
@@ -215,6 +220,9 @@ Deno.serve(async (req) => {
             maxPrice: convert(cached.market_price_max, fxRate),
             criticScore: cached.critic_score,
             currency: cur,
+            // Carry the anchor identity through cache hits too.
+            wsWineId: cached.ws_wine_id ?? null,
+            wsWineName: cached.ws_wine_name ?? null,
             source: 'wine-searcher',
           }),
           { headers: { 'Content-Type': 'application/json' } }
@@ -256,6 +264,8 @@ Deno.serve(async (req) => {
       market_price_max: result.maxPrice,
       critic_score: result.criticScore,
       currency: result.currency,
+      ws_wine_id: result.wsWineId,
+      ws_wine_name: result.wineName,
       fetched_at: new Date().toISOString(),
     });
     if (cacheErr) {
@@ -275,6 +285,7 @@ Deno.serve(async (req) => {
       region: result.region,
       grape: result.grape,
       wsWineId: result.wsWineId,
+      wsWineName: result.wineName,
       priceScope,
     }), {
       headers: { 'Content-Type': 'application/json' },

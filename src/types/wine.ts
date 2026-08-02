@@ -141,6 +141,11 @@ export interface WineIntelligence {
   // real listing — the card labels them "Estimated by Vinster" and the weak-
   // intel disambiguation ("which wine is this?") is offered.
   verified?: boolean;
+  // Wine-Searcher's stable wine id (+ canonical name) when it matched this wine.
+  // The canonical identity anchor — persisted onto the saved record so every
+  // record of the same wine shares one real, registry-backed id.
+  wsWineId?: string | null;
+  wsWineName?: string | null;
 }
 
 export interface Recipe {
@@ -235,6 +240,9 @@ export interface CellarWine {
   // Where Estimated Value came from (migration 053): 'wine-searcher' = real
   // market data, 'vinster' = Claude estimate. Null on legacy/untouched rows.
   estimated_value_source: string | null;
+  // Wine-Searcher canonical identity anchor (migration 081), null when unverified.
+  ws_wine_id?: string | null;
+  ws_wine_name?: string | null;
   // "Dive Deeper" editorial profiles (migration 054), generated lazily and
   // cached. Shape: { producerProfile, regionProfile, vintageProfile, grapeProfile }.
   wine_knowledge: WineKnowledgeData | null;
@@ -416,6 +424,9 @@ export interface ChosenWine {
   estimated_value_currency: string | null;
   estimated_value_at: string | null;
   estimated_value_source: string | null;
+  // Wine-Searcher canonical identity anchor (migration 081), null when unverified.
+  ws_wine_id?: string | null;
+  ws_wine_name?: string | null;
   // Source discriminator (migration 042). 'restaurant' = came from a
   // List scan or manual entry on Your Wine Reviews. 'other' = reviewed
   // via the "Review without adding" path on /label/results (Cellar
@@ -454,6 +465,8 @@ export interface LibraryLabel {
   captured_city: string | null;
   captured_place: string | null;
   is_favourite: boolean;
+  ws_wine_id?: string | null;
+  ws_wine_name?: string | null;
   created_at: string;
 }
 
@@ -485,5 +498,6 @@ export interface PricingData {
   region?: string | null;
   grape?: string | null;
   wsWineId?: string | null;
+  wsWineName?: string | null;
   source: 'wine-searcher' | 'unavailable';
 }

@@ -10,10 +10,26 @@ import { entriesOf } from './cellarReview';
 // "you've had this wine" connects even across vintages; `vintageMismatch` flags
 // when a match is a different vintage than the wine in hand.
 
-const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+// Normalize for identity matching, tolerant of the formatting differences that
+// crop up between a label scan and a list scan of the SAME wine: strip
+// diacritics ("Château" == "Chateau"), drop any 4-digit vintage embedded in the
+// name (we match vintage-agnostically anyway, so "Barolo Ravera 2019" ==
+// "Barolo Ravera"), fold punctuation to spaces, collapse and trim.
+const norm = (s: string | null | undefined) => (s ?? '')
+  .normalize('NFD').replace(/[\u0300-\u036f]/g, "")
+  .toLowerCase()
+  .replace(/\b(?:19|20)\d{2}\b/g, ' ')
+  .replace(/[^a-z0-9]+/g, ' ')
+  .trim();
 
+// Order- and field-placement-independent identity key. A label scan and a list
+// scan of the same wine often split producer vs name differently (or repeat the
+// producer inside the name), so we match on the SET of significant words across
+// BOTH fields: same words in any order/placement → same wine; different words →
+// different wine (kept conservative so distinct cuvées don't merge).
 export function wineNameKey(producer: string | null | undefined, wineName: string | null | undefined): string {
-  return `${norm(producer)}|${norm(wineName)}`;
+  const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter(Boolean);
+  return Array.from(new Set(tokens)).sort().join(' ');
 }
 
 // A chosen_wines row counts as reviewed once it carries any review content
@@ -45,24 +61,32 @@ export const EMPTY_CONNECTIONS: WineConnections = {
 };
 
 export function findWineConnections(
-  identity: { producer: string | null; wineName: string | null | undefined; vintage: string | number | null },
+  identity: { producer: string | null; wineName: string | null | undefined; vintage: string | number | null; wsWineId?: string | null },
   data: { labels?: LibraryLabel[]; chosenWines?: ChosenWine[]; cellarWines?: CellarWine[] },
   opts?: { excludeChosenId?: string; excludeLabelId?: string; excludeCellarId?: string },
 ): WineConnections {
   const key = wineNameKey(identity.producer, identity.wineName);
-  // No producer AND no name → nothing meaningful to match on.
-  if (key === '|') return EMPTY_CONNECTIONS;
+  const wantId = identity.wsWineId ?? null;
+  // Nothing to match on: no producer/name AND no Wine-Searcher id.
+  if (!key && !wantId) return EMPTY_CONNECTIONS;
 
   const wantVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
 
+  // A record matches when its Wine-Searcher id matches (exact, registry-backed —
+  // the authoritative link) OR, as a fallback for unverified wines, its
+  // normalized name key matches.
+  const matches = (recId: string | null | undefined, recProducer: string | null, recName: string | null) =>
+    (wantId != null && recId != null && recId === wantId) ||
+    (!!key && wineNameKey(recProducer, recName) === key);
+
   const labels = (data.labels ?? []).filter(
-    (l) => wineNameKey(l.producer, l.wine_name) === key && l.id !== opts?.excludeLabelId,
+    (l) => matches(l.ws_wine_id, l.producer, l.wine_name) && l.id !== opts?.excludeLabelId,
   );
   const cellarWines = (data.cellarWines ?? []).filter(
-    (w) => wineNameKey(w.producer, w.wine_name) === key && w.id !== opts?.excludeCellarId,
+    (w) => matches(w.ws_wine_id, w.producer, w.wine_name) && w.id !== opts?.excludeCellarId,
   );
   const restaurantPicks = (data.chosenWines ?? []).filter(
-    (w) => wineNameKey(w.producer, w.wine_name) === key && w.id !== opts?.excludeChosenId,
+    (w) => matches(w.ws_wine_id, w.producer, w.wine_name) && w.id !== opts?.excludeChosenId,
   );
 
   const reviewedChosen = restaurantPicks.filter(chosenHasReview);
