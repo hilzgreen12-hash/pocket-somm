@@ -20,7 +20,7 @@ import { RestaurantReviewShareCard } from '../../src/components/RestaurantReview
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { normaliseCity } from '../../src/utils/city';
+import { normaliseCity, cityKey } from '../../src/utils/city';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
@@ -385,8 +385,8 @@ export default function RestaurantReviewsScreen() {
 
     const visitCity = normName(item.city);
     const sameCity = candidates.filter((c) => {
-      const cityKey = normName(c.city);
-      return !cityKey || !visitCity || cityKey === visitCity;
+      const candKey = normName(c.city);
+      return !candKey || !visitCity || candKey === visitCity;
     });
     const pool = sameCity.length > 0 ? sameCity : candidates;
     const visitTime = new Date(item.capturedAt).getTime();
@@ -437,13 +437,18 @@ export default function RestaurantReviewsScreen() {
   // Location options — every city visited, plus an "Unrecorded" bucket when
   // any visit has no city recorded.
   const availableLocations = useMemo(() => {
-    const set = new Set<string>();
+    // De-duplicate by canonical key so "Novello" and "Novello, Italy" collapse
+    // to one entry (keeping the richer label).
+    const byKey = new Map<string, string>();
     let hasUnrecorded = false;
     for (const item of reviewed) {
       const c = normaliseCity(item.city);
-      if (c) set.add(c); else hasUnrecorded = true;
+      if (!c) { hasUnrecorded = true; continue; }
+      const key = cityKey(c);
+      const prev = byKey.get(key);
+      if (!prev || c.length > prev.length) byKey.set(key, c);
     }
-    return { cities: Array.from(set).sort((a, b) => a.localeCompare(b)), hasUnrecorded };
+    return { cities: Array.from(byKey.values()).sort((a, b) => a.localeCompare(b)), hasUnrecorded };
   }, [reviewed]);
 
   // A restaurant counts as reviewed once it carries any rating or a note.
@@ -476,7 +481,7 @@ export default function RestaurantReviewsScreen() {
       if (locationFilter !== 'All') {
         const c = normaliseCity(item.city);
         if (locationFilter === 'Unrecorded') { if (c) return false; }
-        else if (c !== locationFilter) return false;
+        else if (cityKey(c) !== cityKey(locationFilter)) return false;
       }
       if (ratingFilter !== 'all') {
         const r = item.ratingOverall;

@@ -59,9 +59,11 @@ export function useAttachLabelPhoto() {
       title: 'Add a photo',
       body: 'Give this wine a label photo.',
       buttons: [
-        { text: 'Take Photo', onPress: () => pick(kind, wineId, 'camera') },
-        { text: 'Upload', onPress: () => pick(kind, wineId, 'library') },
-        { text: 'Search Online', onPress: () => searchOnline(kind, wineId, producer, wineName) },
+        // AppAlert fires onPress as it dismisses; iOS can't present the image
+        // picker (or cleanly navigate) mid-dismiss, so defer past the animation.
+        { text: 'Take Photo', onPress: () => setTimeout(() => pick(kind, wineId, 'camera'), 350) },
+        { text: 'Upload', onPress: () => setTimeout(() => pick(kind, wineId, 'library'), 350) },
+        { text: 'Search Online', onPress: () => setTimeout(() => searchOnline(kind, wineId, producer, wineName), 350) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
