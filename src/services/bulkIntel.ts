@@ -45,6 +45,8 @@ export async function updateCellarIntelBatch(
           estimated_value_source: intel.valueSource ?? 'vinster',
           critic_score: intel.criticScore,
           critic_score_note: intel.criticScoreNote ?? null,
+          // Canonical identity anchor when Wine-Searcher matched.
+          ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
         });
       } catch {
         // Skip on error — partial progress beats failing the whole batch.

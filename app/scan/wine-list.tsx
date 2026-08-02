@@ -42,7 +42,7 @@ export default function WineListScreen() {
   const isRestoring = useRef(
     !useScanStore.getState().needsReset && (
       restored.wineTypes.length > 0 || restored.styleProfiles.length > 0 ||
-      !!restored.foodPairing || restored.budget != null || restored.topScoringMode
+      !!restored.foodPairing || restored.budget != null
     )
   ).current;
 
@@ -52,7 +52,10 @@ export default function WineListScreen() {
   const [foodPairing, setFoodPairing] = useState(isRestoring ? restored.foodPairing : '');
   const [wineTypeOpen, setWineTypeOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
-  const [topScoringMode, setTopScoringMode] = useState(isRestoring ? restored.topScoringMode : false);
+  // Top-scoring is now the DEFAULT search (no manual toggle): with no preferences
+  // entered, Vinster returns the three highest quality + value wines. Entering any
+  // preference (wine type, style, food, budget) switches to tailored picks.
+  const topScoringMode = wineTypes.length === 0 && styleProfiles.length === 0 && !foodPairing.trim() && budget == null;
 
   function toggleSection(section: 'wineType' | 'style') {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -122,7 +125,6 @@ export default function WineListScreen() {
       setStyleProfiles([]);
       setBudget(savedPreferences?.defaultBudget ?? null);
       setFoodPairing('');
-      setTopScoringMode(false);
       clearNeedsReset();
     }
   }, [needsReset]);
@@ -232,7 +234,7 @@ export default function WineListScreen() {
         <View style={styles.titleRow}>
           <Text style={styles.appName}>Scan a List</Text>
         </View>
-        <Text style={styles.subtitle}>Input a wine list alongside your preferences to generate three recommendations.</Text>
+        <Text style={styles.subtitle}>Input a wine list to generate Vinster's top three picks based on overall quality and value. Input your preferences to tailor its recommendations further.</Text>
         <HelpButton label="More About Scan" title="How Scan works" body={LIST_HELP} />
       </View>
 
@@ -283,17 +285,6 @@ export default function WineListScreen() {
               : <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" />}
           </View>
         </View>
-
-        <TouchableOpacity
-          style={[styles.accordionRow, topScoringMode && styles.accordionRowActive]}
-          onPress={() => setTopScoringMode((v) => !v)}
-          activeOpacity={0.7}
-        >
-          <View style={styles.accordionLeft}>
-            <Text style={[styles.question, topScoringMode && styles.questionActive]}>Top Scoring Wines</Text>
-            <Text style={styles.selectionSummary}>Ignore all preferences — show the 3 highest-rated wines on the list</Text>
-          </View>
-        </TouchableOpacity>
 
         <View style={styles.buttonRow}>
           <TouchableOpacity style={styles.buttonHalf} onPress={handleScan}>

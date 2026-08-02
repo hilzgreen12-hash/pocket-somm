@@ -142,7 +142,7 @@ export default function MyLabelsScreen() {
     const m = new Map<string, WineConnections>();
     for (const l of labels) {
       m.set(l.id, findWineConnections(
-        { producer: l.producer, wineName: l.wine_name, vintage: l.vintage },
+        { producer: l.producer, wineName: l.wine_name, vintage: l.vintage, wsWineId: l.ws_wine_id },
         { chosenWines, cellarWines },
       ));
     }
@@ -207,6 +207,9 @@ export default function MyLabelsScreen() {
         vintage: w.vintage,
         region: w.region,
         intel: intelFromCellar(w),
+        // Carry the cellar wine's canonical anchor onto the copied label.
+        wsWineId: w.ws_wine_id ?? null,
+        wsWineName: w.ws_wine_name ?? null,
       });
     } catch (err) {
       showAlert({ title: 'Could not add label', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -260,6 +263,8 @@ export default function MyLabelsScreen() {
         grape_variety: intel?.grapeVariety ?? null,
         label_image_path: label.label_image_path,
         user_notes: null,
+        ws_wine_id: label.ws_wine_id ?? null,
+        ws_wine_name: label.ws_wine_name ?? null,
         estimated_value: intel?.estimatedValue ?? null,
         estimated_value_currency: intel?.estimatedValue != null ? currency : null,
         estimated_value_source: intel?.valueSource ?? null,

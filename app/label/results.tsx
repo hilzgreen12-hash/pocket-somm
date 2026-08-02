@@ -123,11 +123,11 @@ export default function LabelResultsScreen() {
   const connections = useMemo(
     () => (isIntelOnlyFlow && wineDetailsConfirmed
       ? findWineConnections(
-          { producer: wineDetailsConfirmed.producer, wineName: wineDetailsConfirmed.wineName, vintage: wineDetailsConfirmed.vintage },
+          { producer: wineDetailsConfirmed.producer, wineName: wineDetailsConfirmed.wineName, vintage: wineDetailsConfirmed.vintage, wsWineId: intelligence?.wsWineId },
           { labels, chosenWines, cellarWines: wines },
         )
       : EMPTY_CONNECTIONS),
-    [isIntelOnlyFlow, wineDetailsConfirmed, labels, chosenWines, wines],
+    [isIntelOnlyFlow, wineDetailsConfirmed, intelligence, labels, chosenWines, wines],
   );
 
   // When Generate Wine Intel comes back empty (no score, no value) it's almost
@@ -504,6 +504,9 @@ export default function LabelResultsScreen() {
       // Real Wine-Searcher market price vs Claude estimate — drives the card's
       // value source label.
       estimated_value_source: intel.estimatedValue != null ? (intel.valueSource ?? 'vinster') : (prefetchedValue?.source ?? null),
+      // Canonical identity anchor when Wine-Searcher matched this wine.
+      ws_wine_id: intel.wsWineId ?? null,
+      ws_wine_name: intel.wsWineName ?? null,
       purchase_price: validPrice,
       purchase_price_currency: userCurrency,
       // A price the user never touched came from the auto-estimate → flag it so

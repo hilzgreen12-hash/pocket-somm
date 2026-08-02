@@ -39,25 +39,25 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
     return () => { active = false; };
   }, [item.image_path]);
 
-  const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const stamp = [date, item.city].filter(Boolean).join(' · ');
+  const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  const wineCount = item.wines?.length ?? 0;
+  // Full-width row (thumbnail left, details right) mirroring the Label Library.
   return (
-    <TouchableOpacity style={[styles.tile, { width: size }]} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.8}>
-      <View style={[styles.tileImageWrap, { width: size, height: size * 1.1 }]}>
-        {url ? <Image source={{ uri: url }} style={{ width: size, height: size * 1.1 }} resizeMode="cover" />
+    <TouchableOpacity style={styles.row} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.7}>
+      <View style={{ width: size, height: Math.round(size * 0.78) }}>
+        {url ? <Image source={{ uri: url }} style={{ width: size, height: Math.round(size * 0.78), borderRadius: 5 }} resizeMode="cover" />
              : <ActivityIndicator color={colors.gold} />}
         <TouchableOpacity style={styles.favStar} onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={[styles.favStarText, item.is_favourite && styles.favStarActive]}>{item.is_favourite ? '★' : '☆'}</Text>
         </TouchableOpacity>
-        {item.note ? <View style={styles.noteDot} /> : null}
       </View>
-      {/* Date · city stamp. Tap the tile to open the lineup (note, share, wines). */}
-      <View style={styles.tileTopRow}>
-        <Text style={styles.tileDate} numberOfLines={1}>{item.is_favourite ? '★ ' : ''}{stamp}</Text>
+      <View style={styles.rowBody}>
+        <Text style={styles.rowStamp}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
+        {item.bottle_count ? (
+          <Text style={styles.rowCount}>{item.bottle_count} bottle{item.bottle_count === 1 ? '' : 's'}{wineCount ? ` · ${wineCount} wine${wineCount === 1 ? '' : 's'}` : ''}</Text>
+        ) : null}
+        {item.note ? <Text style={styles.rowNote} numberOfLines={2}>{item.note}</Text> : null}
       </View>
-      {item.bottle_count ? (
-        <Text style={styles.tileCount}>{item.bottle_count} bottle{item.bottle_count === 1 ? '' : 's'}</Text>
-      ) : null}
     </TouchableOpacity>
   );
 }
@@ -419,9 +419,9 @@ export default function LineupLibraryScreen() {
               <Text style={styles.emptyBody}>Try clearing the filters above.</Text>
             </View>
           ) : (
-            <ScrollView contentContainerStyle={styles.grid}>
+            <ScrollView contentContainerStyle={styles.listContent}>
               {filtered.map((item) => (
-                <LineupTile key={item.id} item={item} size={tileWidth} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onToggleFav={() => toggleFav(item)} onLongPress={() => confirmDeleteLineup(item)} />
+                <LineupTile key={item.id} item={item} size={104} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onToggleFav={() => toggleFav(item)} onLongPress={() => confirmDeleteLineup(item)} />
               ))}
             </ScrollView>
           )}
@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
-  filterChip: { width: 160, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChip: { width: 112, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   filterChipActive: { borderColor: colors.gold },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -582,6 +582,12 @@ const styles = StyleSheet.create({
   customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
   customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  rowBody: { flex: 1 },
+  rowStamp: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
+  rowCount: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
+  rowNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.xl, paddingBottom: 60 },
   tile: { alignItems: 'flex-start' },
   tileImageWrap: { borderRadius: 10, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },

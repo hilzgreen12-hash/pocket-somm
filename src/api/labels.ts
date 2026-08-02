@@ -30,6 +30,10 @@ export interface CreateLabelInput {
   intel?: WineIntelligence | null;
   city?: string | null;
   place?: string | null;
+  // Explicit canonical anchor (e.g. copying a cellar wine's identity into a
+  // label). Falls back to the intel's anchor when not given.
+  wsWineId?: string | null;
+  wsWineName?: string | null;
 }
 
 // Create a label. When imageUri is given we mint the row id up front (so the
@@ -54,6 +58,10 @@ export async function createLabel(userId: string, input: CreateLabelInput): Prom
       vintage: vintageInt,
       region: input.region?.trim() || null,
       intel: input.intel ?? null,
+      // Canonical identity anchor — explicit override, else from the intel
+      // Wine-Searcher matched.
+      ws_wine_id: input.wsWineId ?? input.intel?.wsWineId ?? null,
+      ws_wine_name: input.wsWineName ?? input.intel?.wsWineName ?? null,
       captured_city: input.city?.trim() || null,
       captured_place: input.place?.trim() || null,
     })

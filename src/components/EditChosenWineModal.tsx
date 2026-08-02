@@ -144,6 +144,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         ...(intel.criticScore != null
           ? { critic_score: intel.criticScore, critic_score_note: intel.criticScoreNote ?? null }
           : {}),
+        // Canonical identity anchor when Wine-Searcher matched.
+        ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
       });
       qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
     } catch (err) {

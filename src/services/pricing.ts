@@ -40,6 +40,9 @@ export interface WineValuation {
   drinkingWindowStatus: string;
   grapeVariety: string | null;
   tastingNotes: string | null;
+  // Canonical identity anchor when Wine-Searcher matched (null otherwise).
+  wsWineId?: string | null;
+  wsWineName?: string | null;
 }
 
 export async function valueWine(
@@ -78,6 +81,8 @@ export async function valueWine(
     drinkingWindowStatus: intel.drinkingWindowStatus ?? 'unknown',
     grapeVariety: intel.grapeVariety ?? null,
     tastingNotes: intel.tastingNotes ?? null,
+    wsWineId: wsMatched ? (pricing.wsWineId ?? null) : null,
+    wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,
   };
 }
 
@@ -121,5 +126,8 @@ export async function generateWineIntel(
     // Verified = Wine-Searcher found a real record. When false, the score/value
     // are Vinster estimates (labelled as such) and disambiguation is offered.
     verified: wsMatched,
+    // Canonical identity anchor — only when Wine-Searcher actually matched.
+    wsWineId: wsMatched ? (pricing.wsWineId ?? null) : null,
+    wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,
   };
 }
