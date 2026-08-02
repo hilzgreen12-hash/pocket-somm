@@ -13,6 +13,7 @@ import { MicButton } from '../../src/components/MicButton';
 import { LineupShareCard } from '../../src/components/LineupShareCard';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { captureCity } from '../../src/utils/captureCity';
+import { cityKey } from '../../src/utils/city';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
@@ -120,16 +121,24 @@ export default function LineupLibraryScreen() {
 
   // City options — distinct cities the lineups were captured in, alphabetical.
   const cityOptions = useMemo(() => {
-    const seen: string[] = [];
-    for (const l of lineups) { const c = (l.city ?? '').trim(); if (c && !seen.includes(c)) seen.push(c); }
-    seen.sort((a, b) => a.localeCompare(b));
+    // De-duplicate by canonical key so e.g. "Novello" and "Novello, Italy"
+    // collapse to a single entry (keeping the richer label).
+    const byKey = new Map<string, string>();
+    for (const l of lineups) {
+      const c = (l.city ?? '').trim();
+      if (!c) continue;
+      const key = cityKey(c);
+      const prev = byKey.get(key);
+      if (!prev || c.length > prev.length) byKey.set(key, c);
+    }
+    const seen = Array.from(byKey.values()).sort((a, b) => a.localeCompare(b));
     return [{ value: 'All', label: 'All cities' }, ...seen.map((c) => ({ value: c, label: c }))];
   }, [lineups]);
 
   const filtered = useMemo(() => {
     let list = lineups;
     if (favFilter === 'fav') list = list.filter((l) => l.is_favourite);
-    if (cityFilter !== 'All') list = list.filter((l) => (l.city ?? '').trim() === cityFilter);
+    if (cityFilter !== 'All') list = list.filter((l) => cityKey(l.city) === cityKey(cityFilter));
     if (monthFilter !== 'All') list = list.filter((l) => monthKey(l.archived_at) === monthFilter);
     if (activeCustomId) {
       const f = customFilters.find((cf) => cf.id === activeCustomId);

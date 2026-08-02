@@ -34,13 +34,14 @@ export interface WineConnections {
   reviewedCellar: CellarWine[];    // matching cellar bottles that carry review_entries
   averageScore: number | null;     // mean of every review score found
   reviewCount: number;             // distinct review groups + reviewed cellar bottles
+  lastReviewedIso: string | null;  // most recent review date across all sources
   vintageMismatch: boolean;        // a match exists but of a different vintage
   hasAny: boolean;                 // any connection at all
 }
 
 export const EMPTY_CONNECTIONS: WineConnections = {
   labels: [], cellarWines: [], restaurantPicks: [], reviewedChosen: [], reviewedCellar: [],
-  averageScore: null, reviewCount: 0, vintageMismatch: false, hasAny: false,
+  averageScore: null, reviewCount: 0, lastReviewedIso: null, vintageMismatch: false, hasAny: false,
 };
 
 export function findWineConnections(
@@ -77,6 +78,14 @@ export function findWineConnections(
   const groups = new Set(reviewedChosen.map((w) => w.review_group_id ?? w.id));
   const reviewCount = groups.size + reviewedCellar.length;
 
+  // Most recent review date across chosen (chosen_at) and cellar entries.
+  let lastReviewedIso: string | null = null;
+  const noteDate = (iso: string | null | undefined) => {
+    if (iso && (!lastReviewedIso || new Date(iso).getTime() > new Date(lastReviewedIso).getTime())) lastReviewedIso = iso;
+  };
+  reviewedChosen.forEach((w) => noteDate(w.chosen_at));
+  reviewedCellar.forEach((w) => entriesOf(w).forEach((e) => noteDate(e.date ?? e.savedAt)));
+
   const vintages = [
     ...labels.map((l) => l.vintage),
     ...cellarWines.map((w) => w.vintage),
@@ -88,6 +97,6 @@ export function findWineConnections(
 
   return {
     labels, cellarWines, restaurantPicks, reviewedChosen, reviewedCellar,
-    averageScore, reviewCount, vintageMismatch, hasAny,
+    averageScore, reviewCount, lastReviewedIso, vintageMismatch, hasAny,
   };
 }

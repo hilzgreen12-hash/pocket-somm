@@ -390,10 +390,11 @@ export default function MyLabelsScreen() {
     }
   }
 
-  const cols = VIEW_COLS[viewMode];
-  const gap = spacing.sm;
-  const tileWidth = (width - spacing.xl * 2 - gap * (cols - 1)) / cols;
-  const tileHeight = tileWidth * 1.3;
+  // Full-width row list: a thumbnail on the left, the wine name + dated links
+  // across the rest of the page. Kept generously sized — only narrow enough to
+  // leave room for the name to extend right. The View toggle scales it further.
+  const thumbW = viewMode === 'enlarge' ? 150 : 104;
+  const thumbH = Math.round(thumbW * 1.3);
 
   const viewLabel = VIEW_OPTIONS.find((o) => o.value === viewMode)?.label ?? 'Thumbnails';
   const dateLabel = dateSort === 'asc' ? 'Ascending' : 'Descending';
@@ -459,23 +460,22 @@ export default function MyLabelsScreen() {
             </TouchableOpacity>
           </ScrollView>
 
-          <ScrollView style={styles.listScroll} contentContainerStyle={styles.grid}>
-              {shown.map((label) => (
+          <ScrollView style={styles.listScroll} contentContainerStyle={styles.listContent}>
+              {shown.map((label) => {
+                const conn = connByLabel.get(label.id);
+                const cellar = conn && conn.cellarWines.length > 0 ? conn.cellarWines[0] : null;
+                return (
                 <TouchableOpacity
                   key={label.id}
-                  style={[styles.tile, { width: tileWidth, marginRight: gap, marginBottom: gap }]}
+                  style={styles.row}
                   onPress={() => setExpandedLabel(label)}
                   onLongPress={() => onTapLabel(label)}
                   delayLongPress={300}
                   activeOpacity={0.7}
                 >
-                  <View style={{ width: tileWidth, height: tileHeight }}>
-                    <LabelThumb
-                      path={label.label_image_path}
-                      fallbackText={label.wine_name}
-                      style={{ width: tileWidth, height: tileHeight }}
-                    />
-                    {/* Favourite star — top-right of every thumbnail. */}
+                  <View style={{ width: thumbW, height: thumbH }}>
+                    <LabelThumb path={label.label_image_path} fallbackText={label.wine_name} style={{ width: thumbW, height: thumbH }} radius={5} />
+                    {/* Favourite star — top-right of the thumbnail. */}
                     <TouchableOpacity
                       style={styles.favStar}
                       onPress={() => toggleFav(label)}
@@ -485,38 +485,27 @@ export default function MyLabelsScreen() {
                       <Text style={[styles.favStarText, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
                     </TouchableOpacity>
                   </View>
-                  <Text style={styles.caption} numberOfLines={2}>
-                    {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
-                  </Text>
-                  <Text style={styles.captionDate}>{new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
-                  {/* Connection badges — this wine also lives in reviews / cellar /
-                      restaurant records. Tapping jumps straight to it. */}
-                  {(() => {
-                    const conn = connByLabel.get(label.id);
-                    if (!conn || !conn.hasAny) return null;
-                    const hasResto = conn.restaurantPicks.some((p) => (p.restaurant_name ?? '').trim());
-                    return (
-                      <View style={styles.badgeRow}>
-                        {conn.reviewCount > 0 ? (
-                          <TouchableOpacity onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
-                            <Text style={styles.badge}>Reviewed</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {conn.cellarWines.length > 0 ? (
-                          <TouchableOpacity onPress={() => router.push(`/cellar/${conn.cellarWines[0].id}` as any)} activeOpacity={0.7}>
-                            <Text style={styles.badge}>Cellar</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                        {hasResto ? (
-                          <TouchableOpacity onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
-                            <Text style={styles.badge}>Restaurant</Text>
-                          </TouchableOpacity>
-                        ) : null}
-                      </View>
-                    );
-                  })()}
+                  <View style={styles.rowBody}>
+                    <Text style={styles.rowName} numberOfLines={3}>
+                      {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
+                    </Text>
+                    <Text style={styles.rowScanned}>Scanned: {new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
+                    {/* Dated links to where this wine also lives — most recent
+                        review date only; styled as links, not buttons. */}
+                    {conn?.lastReviewedIso ? (
+                      <TouchableOpacity onPress={() => router.push('/wines/chosen')} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                        <Text style={styles.rowLink}>Reviewed {new Date(conn.lastReviewedIso).toLocaleDateString('en-GB')}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {cellar ? (
+                      <TouchableOpacity onPress={() => router.push(`/cellar/${cellar.id}` as any)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                        <Text style={styles.rowLink}>Added to Cellar: {cellar.date_received ? new Date(cellar.date_received).toLocaleDateString('en-GB') : '—'}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 </TouchableOpacity>
-              ))}
+                );
+              })}
             </ScrollView>
         </>
       )}
@@ -665,29 +654,25 @@ const styles = StyleSheet.create({
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
-  filterChip: { width: 150, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChip: { width: 112, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
   listScroll: { flex: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
-  tile: { alignItems: 'flex-start' },
-  caption: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: spacing.xs, alignSelf: 'stretch' },
-  captionDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 1, alignSelf: 'stretch' },
-  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4, alignSelf: 'stretch' },
-  badge: {
-    fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.gold, letterSpacing: 0.3,
-    borderWidth: 1, borderColor: colors.gold, borderRadius: 4,
-    paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden',
-  },
+  listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
+  row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowBody: { flex: 1 },
+  rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 21 },
+  rowScanned: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
+  rowLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', marginTop: 4 },
   expandOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   expandImage: { width: '100%', height: '78%' },
   expandCaptionWrap: { position: 'absolute', bottom: 48, left: spacing.xl, right: spacing.xl, alignItems: 'center' },
   expandCaption: { fontSize: 17, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center' },
   expandDate: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', marginTop: 4 },
-  favStar: { position: 'absolute', top: spacing.sm, right: spacing.sm, width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  favStarText: { fontSize: 24, color: '#FFFFFF', lineHeight: 26 },
+  favStar: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
+  favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
   favStarActive: { color: colors.gold },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },

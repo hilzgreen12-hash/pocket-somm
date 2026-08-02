@@ -24,3 +24,15 @@ export function normaliseCity(input: string | null | undefined): string {
   const key = raw.toLowerCase();
   return ALIASES[key] ?? raw;
 }
+
+// Canonical matching key for a city — collapses the same place written slightly
+// differently so filters don't fragment it. Drops any trailing ", Country" /
+// ", Region" qualifier (so "Novello" and "Novello, Italy" match), lower-cases,
+// and applies the same aliases. Use this to DEDUPE / COMPARE cities; keep the
+// original (richer) string for display.
+export function cityKey(input: string | null | undefined): string {
+  const base = (input ?? '').split(',')[0].trim().toLowerCase();
+  if (!base) return '';
+  const aliased = ALIASES[base];
+  return aliased ? aliased.toLowerCase() : base;
+}

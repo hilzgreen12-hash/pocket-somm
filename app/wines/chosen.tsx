@@ -28,7 +28,7 @@ import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
-import { normaliseCity } from '../../src/utils/city';
+import { normaliseCity, cityKey } from '../../src/utils/city';
 import { splitLocationString } from '../../src/services/reviewSync';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -172,6 +172,9 @@ export default function ChosenWinesScreen() {
   // (name header + editable date + thumbnail) rather than the blank manual form.
   const [addConfirmed, setAddConfirmed] = useState(false);
   const [addLabelPath, setAddLabelPath] = useState<string | null>(null);
+  // When set, the Add-a-Review modal is in "add to THIS review" mode: it appends
+  // a dated entry to this review_group_id and skips the "reviewed before" prompt.
+  const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
   // "+ Add" opens a chooser first — Scan / Upload / Manual — then the
   // chosen path takes over (manual reuses the existing AddChosenWineModal;
   // scan + upload feed into the label flow with context=reviews).
@@ -446,13 +449,18 @@ export default function ChosenWinesScreen() {
   // review (bare, unreviewed picks live in Your Restaurants, so skip them),
   // normalised + de-duplicated.
   const availableCities = useMemo(() => {
-    const set = new Set<string>();
+    // De-duplicate by canonical key so "Novello" and "Novello, Italy" collapse
+    // to one entry; keep the richest label (usually the one with the country).
+    const byKey = new Map<string, string>();
     for (const it of items) {
       if ((it.source === 'restaurant' || it.source === 'other') && !chosenHasReview(it.wine as ChosenWine)) continue;
       const c = cityFor(it);
-      if (c) set.add(c);
+      if (!c) continue;
+      const key = cityKey(c);
+      const prev = byKey.get(key);
+      if (!prev || c.length > prev.length) byKey.set(key, c);
     }
-    return ['All', ...Array.from(set).sort((a, b) => a.localeCompare(b))];
+    return ['All', ...Array.from(byKey.values()).sort((a, b) => a.localeCompare(b))];
     // items is a derived array — listing it as a dep is fine, useMemo
     // will recompute when chosenWines / cellarReviews change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -495,7 +503,7 @@ export default function ChosenWinesScreen() {
     // Bespoke Other filter — only bites while the Other collection is active.
     if (typeFilter === 'other' && tagFilter !== 'all' && !(tagAssign[it.wine.id] ?? []).includes(tagFilter)) return false;
     if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
-    if (locationFilter !== 'All' && cityFor(it) !== locationFilter) return false;
+    if (locationFilter !== 'All' && cityKey(cityFor(it)) !== cityKey(locationFilter)) return false;
     if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
     if (q) {
       const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
@@ -836,6 +844,12 @@ export default function ChosenWinesScreen() {
           // list price even though the user no longer has the menu.
           setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region, listPrice: w.menu_price });
           setAddSource(it.source === 'other' ? 'other' : 'restaurant');
+          // Review-card add flow: the wine is known, so use the clean review-card
+          // layout (thumbnail + name, no identity fields / header), carry the
+          // photo, and append to THIS review's group with no "reviewed before" prompt.
+          setAddConfirmed(true);
+          setAddLabelPath(labelPathFor(it));
+          setAddToGroupId(w.review_group_id ?? w.id);
           setAddOpen(true);
         }}
         onEditLatest={() => {
@@ -882,9 +896,10 @@ export default function ChosenWinesScreen() {
         labelImageUri={pendingReviewLabelUri}
         confirmedIdentity={addConfirmed}
         labelImagePath={addLabelPath}
+        addToGroupId={addToGroupId}
         source={addSource}
-        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
-        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
+        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
+        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
       />
 
       {/* "+ Add" step 1 — "Add a Wine Review": pick the collection. Restaurant

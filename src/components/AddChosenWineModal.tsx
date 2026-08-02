@@ -52,9 +52,13 @@ interface Props {
   // distinguished by the `source` column; defaults to 'other' for a hand-entered
   // review that isn't tied to a restaurant visit.
   source?: 'restaurant' | 'other';
+  // Set from a review card's "+ Add Review": this is a new dated entry on an
+  // EXISTING review. We append to this review_group_id and skip the "you've
+  // reviewed this before" prompt (the user already knows — they're on its card).
+  addToGroupId?: string | null;
 }
 
-export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null, source = 'other' }: Props) {
+export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null, source = 'other', addToGroupId = null }: Props) {
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { saveManual, update, chosenWines } = useChosenWines();
@@ -137,6 +141,12 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   }
 
   async function proceedSave() {
+    // Review-card "+ Add Review": append straight onto that review's group — no
+    // dedup prompt, the user is explicitly adding to a review they can see.
+    if (addToGroupId) {
+      await doSave('append', null);
+      return;
+    }
     const existing = findExistingReview(chosenWines, { producer, wineName, vintage });
     if (existing) {
       // A bottle pick added from the list starts as an empty row (no note,
@@ -202,7 +212,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           // Collection tag from the "Add a Wine Review" chooser: 'restaurant'
           // (drunk at a restaurant) or 'other' (a tasting, event, or at home).
           source,
-          ...(mode === 'append' && existing ? { reviewGroupId: existing.review_group_id ?? existing.id } : {}),
+          ...(mode === 'append' ? { reviewGroupId: addToGroupId ?? existing?.review_group_id ?? existing?.id ?? null } : {}),
         });
         // Persist any style the user set via the identity sheet.
         if (style.trim() && row?.id) {
@@ -254,11 +264,15 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               // + date·location stamp, with a top-right "Edit" opening a full
               // identity/photo sheet. Review inputs sit below.
               <>
-                <View style={styles.cardTopRow}>
-                  <TouchableOpacity onPress={() => setIdentityEditOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
-                    <Text style={styles.topEditText}>Edit</Text>
-                  </TouchableOpacity>
-                </View>
+                {/* Adding to an existing review — the wine is fixed, so no Edit
+                    affordance (edit the wine from its card, not here). */}
+                {addToGroupId ? null : (
+                  <View style={styles.cardTopRow}>
+                    <TouchableOpacity onPress={() => setIdentityEditOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
+                      <Text style={styles.topEditText}>Edit</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
                 <View style={[styles.cardHeader, (editImageUri || labelImagePath) ? styles.cardHeaderRow : null]}>
                   {editImageUri ? (
                     <Image source={{ uri: editImageUri }} style={styles.headerThumb} resizeMode="cover" />
@@ -340,7 +354,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               onCity={edited(setLocCity)}
               locationName={locName}
               onLocationName={edited(setLocName)}
-              showLocation={false}
+              showLocation={!!addToGroupId}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}
