@@ -1,0 +1,93 @@
+import type { LibraryLabel, CellarWine, ChosenWine } from '../types/wine';
+import { entriesOf } from './cellarReview';
+
+// One wine identity ties together every place a wine shows up: its label(s) in
+// the library, cellar bottles, restaurant picks and reviews. This resolver
+// gathers those connections for a given identity so the Wine Intel screen, the
+// Label Library and the review/cellar cards can cross-link to each other.
+//
+// Matching is vintage-AGNOSTIC — keyed on normalized producer + name — so
+// "you've had this wine" connects even across vintages; `vintageMismatch` flags
+// when a match is a different vintage than the wine in hand.
+
+const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+
+export function wineNameKey(producer: string | null | undefined, wineName: string | null | undefined): string {
+  return `${norm(producer)}|${norm(wineName)}`;
+}
+
+// A chosen_wines row counts as reviewed once it carries any review content
+// (mirrors the predicate in app/wines/chosen.tsx).
+function chosenHasReview(w: ChosenWine): boolean {
+  return !!(
+    (w.tasting_note && w.tasting_note.trim()) ||
+    (w.other_observations && w.other_observations.trim()) ||
+    w.user_score != null
+  );
+}
+
+export interface WineConnections {
+  labels: LibraryLabel[];
+  cellarWines: CellarWine[];       // matching cellar bottles (owned or wishlist)
+  restaurantPicks: ChosenWine[];   // matching chosen_wines (restaurant / other), reviewed or awaiting
+  reviewedChosen: ChosenWine[];    // subset of chosen_wines that carry a review
+  reviewedCellar: CellarWine[];    // matching cellar bottles that carry review_entries
+  averageScore: number | null;     // mean of every review score found
+  reviewCount: number;             // distinct review groups + reviewed cellar bottles
+  vintageMismatch: boolean;        // a match exists but of a different vintage
+  hasAny: boolean;                 // any connection at all
+}
+
+export const EMPTY_CONNECTIONS: WineConnections = {
+  labels: [], cellarWines: [], restaurantPicks: [], reviewedChosen: [], reviewedCellar: [],
+  averageScore: null, reviewCount: 0, vintageMismatch: false, hasAny: false,
+};
+
+export function findWineConnections(
+  identity: { producer: string | null; wineName: string | null | undefined; vintage: string | number | null },
+  data: { labels?: LibraryLabel[]; chosenWines?: ChosenWine[]; cellarWines?: CellarWine[] },
+  opts?: { excludeChosenId?: string; excludeLabelId?: string; excludeCellarId?: string },
+): WineConnections {
+  const key = wineNameKey(identity.producer, identity.wineName);
+  // No producer AND no name → nothing meaningful to match on.
+  if (key === '|') return EMPTY_CONNECTIONS;
+
+  const wantVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
+
+  const labels = (data.labels ?? []).filter(
+    (l) => wineNameKey(l.producer, l.wine_name) === key && l.id !== opts?.excludeLabelId,
+  );
+  const cellarWines = (data.cellarWines ?? []).filter(
+    (w) => wineNameKey(w.producer, w.wine_name) === key && w.id !== opts?.excludeCellarId,
+  );
+  const restaurantPicks = (data.chosenWines ?? []).filter(
+    (w) => wineNameKey(w.producer, w.wine_name) === key && w.id !== opts?.excludeChosenId,
+  );
+
+  const reviewedChosen = restaurantPicks.filter(chosenHasReview);
+  const reviewedCellar = cellarWines.filter((w) => entriesOf(w).length > 0);
+
+  const scores: number[] = [];
+  reviewedChosen.forEach((w) => { if (w.user_score != null) scores.push(w.user_score); });
+  reviewedCellar.forEach((w) => entriesOf(w).forEach((e) => { if (e.score != null) scores.push(e.score); }));
+  const averageScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+
+  // Distinct reviews = grouped chosen reviews (by review_group_id) + each
+  // reviewed cellar bottle.
+  const groups = new Set(reviewedChosen.map((w) => w.review_group_id ?? w.id));
+  const reviewCount = groups.size + reviewedCellar.length;
+
+  const vintages = [
+    ...labels.map((l) => l.vintage),
+    ...cellarWines.map((w) => w.vintage),
+    ...restaurantPicks.map((w) => w.vintage),
+  ];
+  const vintageMismatch = wantVintage !== '' && vintages.some((v) => v != null && String(v).trim() !== wantVintage);
+
+  const hasAny = labels.length > 0 || cellarWines.length > 0 || restaurantPicks.length > 0;
+
+  return {
+    labels, cellarWines, restaurantPicks, reviewedChosen, reviewedCellar,
+    averageScore, reviewCount, vintageMismatch, hasAny,
+  };
+}

@@ -7,6 +7,8 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { router } from 'expo-router';
 import { useLabels } from '../../src/hooks/useLabels';
 import { useCellar } from '../../src/hooks/useCellar';
+import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { findWineConnections, type WineConnections } from '../../src/utils/wineConnections';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -101,6 +103,7 @@ export default function MyLabelsScreen() {
   const userId = session?.user.id;
   const { labels, isLoading, remove, setFavourite, create } = useLabels();
   const { wines: cellarWines, addWine } = useCellar();
+  const { chosenWines } = useChosenWines();
   const { preferences } = usePreferences();
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { width } = useWindowDimensions();
@@ -132,6 +135,19 @@ export default function MyLabelsScreen() {
       return dateSort === 'asc' ? ta - tb : tb - ta;
     });
   }, [labels, dateSort, favOnly]);
+
+  // Where each label's wine also lives — reviews / cellar / restaurant — so the
+  // tile can badge the connection and jump to it (vintage-agnostic match).
+  const connByLabel = useMemo(() => {
+    const m = new Map<string, WineConnections>();
+    for (const l of labels) {
+      m.set(l.id, findWineConnections(
+        { producer: l.producer, wineName: l.wine_name, vintage: l.vintage },
+        { chosenWines, cellarWines },
+      ));
+    }
+    return m;
+  }, [labels, chosenWines, cellarWines]);
 
   // Cellar wines that have a label photo — the pool for "Select from Cellar".
   // Web-fetched labels are excluded: they're third-party imagery kept private,
@@ -473,6 +489,32 @@ export default function MyLabelsScreen() {
                     {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                   </Text>
                   <Text style={styles.captionDate}>{new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
+                  {/* Connection badges — this wine also lives in reviews / cellar /
+                      restaurant records. Tapping jumps straight to it. */}
+                  {(() => {
+                    const conn = connByLabel.get(label.id);
+                    if (!conn || !conn.hasAny) return null;
+                    const hasResto = conn.restaurantPicks.some((p) => (p.restaurant_name ?? '').trim());
+                    return (
+                      <View style={styles.badgeRow}>
+                        {conn.reviewCount > 0 ? (
+                          <TouchableOpacity onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
+                            <Text style={styles.badge}>Reviewed</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {conn.cellarWines.length > 0 ? (
+                          <TouchableOpacity onPress={() => router.push(`/cellar/${conn.cellarWines[0].id}` as any)} activeOpacity={0.7}>
+                            <Text style={styles.badge}>Cellar</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                        {hasResto ? (
+                          <TouchableOpacity onPress={() => router.push('/wines/chosen')} activeOpacity={0.7}>
+                            <Text style={styles.badge}>Restaurant</Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+                    );
+                  })()}
                 </TouchableOpacity>
               ))}
             </ScrollView>
@@ -633,6 +675,12 @@ const styles = StyleSheet.create({
   tile: { alignItems: 'flex-start' },
   caption: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: spacing.xs, alignSelf: 'stretch' },
   captionDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 1, alignSelf: 'stretch' },
+  badgeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4, alignSelf: 'stretch' },
+  badge: {
+    fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.gold, letterSpacing: 0.3,
+    borderWidth: 1, borderColor: colors.gold, borderRadius: 4,
+    paddingHorizontal: 5, paddingVertical: 1, overflow: 'hidden',
+  },
   expandOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   expandImage: { width: '100%', height: '78%' },
   expandCaptionWrap: { position: 'absolute', bottom: 48, left: spacing.xl, right: spacing.xl, alignItems: 'center' },
