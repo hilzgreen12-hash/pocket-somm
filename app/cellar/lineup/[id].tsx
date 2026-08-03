@@ -12,7 +12,6 @@ import { detectLineup, prepareImageBase64 } from '../../../src/api/label';
 import { matchLineupToCellar } from '../../../src/services/archiveNight';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
-import { AddChosenWineModal } from '../../../src/components/AddChosenWineModal';
 import { MicButton } from '../../../src/components/MicButton';
 import { showAlert } from '../../../src/components/AppAlert';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
@@ -150,8 +149,6 @@ export default function LineupDetailScreen() {
     }
   }
 
-  // Review a wine from the lineup — opens the same Add-a-Review modal, pre-filled.
-  const [reviewWine, setReviewWine] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null } | null>(null);
 
   // Branded share (photo + date + note), mirroring Your Lineup Library.
   const [shareData, setShareData] = useState<{ url: string; date: string; note: string } | null>(null);
@@ -237,7 +234,10 @@ export default function LineupDetailScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Lineup</Text>
+        {/* Date · location as the header title (tap to edit). */}
+        <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}<Text style={styles.stampEditHint}>  ✎</Text></Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Share'}</Text>
         </TouchableOpacity>
@@ -251,10 +251,6 @@ export default function LineupDetailScreen() {
               <Text style={[styles.favStarText, fav && styles.favStarActive]}>{fav ? '★' : '☆'}</Text>
             </TouchableOpacity>
           </View>
-          {/* Tap the date · location stamp to edit it. */}
-          <TouchableOpacity onPress={openStampEdit} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.stamp}>{stamp || 'Add a date · location'}<Text style={styles.stampEditHint}>  ✎</Text></Text>
-          </TouchableOpacity>
 
           {/* Note */}
           <View style={styles.dictateRow}>
@@ -292,58 +288,53 @@ export default function LineupDetailScreen() {
             </View>
           ) : (
             <View style={styles.wineList}>
-              {wines.map((w, i) => (
+              {wines.map((w, i) => {
+                // Cellar status + quantity for this bottle (only active cellar
+                // wines carry a quantity; archived ones are flagged separately).
+                const cellarWine = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
+                const cellarQty = cellarWine?.quantity ?? null;
+                // Whether this wine has been reviewed anywhere (any vintage).
+                const conn = findWineConnections(
+                  { producer: w.producer, wineName: w.wine_name, vintage: w.vintage },
+                  { labels, chosenWines, cellarWines },
+                );
+                return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.wineName} numberOfLines={2}>
                       {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                     </Text>
                     <View style={styles.tagRow}>
+                      {/* Cellar: a link when it's in the live cellar, else a stamp. */}
                       {w.cellar_wine_id ? (
-                        <Text style={[styles.tag, styles.tagYours]}>{w.archived ? 'Yours · Archived' : 'From your cellar'}</Text>
-                      ) : (
-                        <Text style={[styles.tag, styles.tagOff]}>Off-cellar</Text>
-                      )}
-                      {w.cellar_wine_id ? (
-                        <TouchableOpacity onPress={() => router.push(`/cellar/${w.cellar_wine_id}` as any)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                          <Text style={styles.viewLink}>In cellar</Text>
-                        </TouchableOpacity>
-                      ) : null}
-                      {/* Link to existing reviews of this wine (any vintage), like
-                          the Label Library. */}
-                      {(() => {
-                        const conn = findWineConnections(
-                          { producer: w.producer, wineName: w.wine_name, vintage: w.vintage },
-                          { labels, chosenWines, cellarWines },
-                        );
-                        return conn.reviewCount > 0 ? (
-                          <TouchableOpacity onPress={() => router.push('/wines/chosen')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                            <Text style={styles.viewLink}>Reviewed</Text>
+                        w.archived ? (
+                          <Text style={styles.stampTag}>Yours · Archived</Text>
+                        ) : (
+                          <TouchableOpacity onPress={() => router.push(`/cellar/${w.cellar_wine_id}` as any)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Text style={styles.viewLink}>View In Your Cellar{cellarQty != null ? ` · ${cellarQty} bottle${cellarQty === 1 ? '' : 's'}` : ''}</Text>
                           </TouchableOpacity>
-                        ) : null;
-                      })()}
+                        )
+                      ) : (
+                        <Text style={styles.stampTag}>Off-cellar</Text>
+                      )}
+                      {/* Review: a link to the review cards when reviewed, else a
+                          stamp. Reviewing is done from Your Wine Reviews, not here. */}
+                      {conn.reviewCount > 0 ? (
+                        <TouchableOpacity onPress={() => router.push('/wines/chosen')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Text style={styles.viewLink}>View Your Review</Text>
+                        </TouchableOpacity>
+                      ) : (
+                        <Text style={styles.stampTag}>Not reviewed</Text>
+                      )}
                     </View>
                   </View>
-                  <TouchableOpacity
-                    style={styles.reviewBtn}
-                    onPress={() => setReviewWine({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage })}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.reviewBtnText}>Review</Text>
-                  </TouchableOpacity>
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
-
-      <AddChosenWineModal
-        visible={reviewWine !== null}
-        initial={reviewWine}
-        onClose={() => setReviewWine(null)}
-        onSaved={() => setReviewWine(null)}
-      />
 
       {/* Edit the date + location stamp. */}
       <Modal visible={stampOpen} transparent animationType="fade" onRequestClose={() => setStampOpen(false)}>
@@ -429,13 +420,14 @@ const styles = StyleSheet.create({
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
+  headerStampWrap: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.sm },
+  headerStamp: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
   shareText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
   photo: { width: '92%', height: 420, borderRadius: 14, backgroundColor: colors.surface },
   favStar: { position: 'absolute', top: spacing.lg, right: '8%', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
   favStarText: { fontSize: 22, color: '#FFFFFF' },
   favStarActive: { color: colors.gold },
-  stamp: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', letterSpacing: 0.3, marginTop: spacing.sm, marginBottom: spacing.md },
   stampEditHint: { fontSize: 13, color: colors.textMuted },
   stampOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   stampSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
@@ -466,12 +458,9 @@ const styles = StyleSheet.create({
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
   tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
-  tag: { fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
-  tagYours: { color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)' },
-  tagOff: { color: colors.textMuted, borderWidth: 1, borderColor: colors.border },
+  // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
+  stampTag: { fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
   viewLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
-  reviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: 6, paddingHorizontal: spacing.md },
-  reviewBtnText: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold },
   muted: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, lineHeight: 20 },
   offscreen: { position: 'absolute', left: -9999, top: -9999 },
 });
