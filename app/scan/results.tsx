@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal, BackHandler } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { router, useLocalSearchParams, useFocusEffect, useNavigation } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../../src/api/supabase';
 import { Ionicons } from '@expo/vector-icons';
@@ -82,24 +82,17 @@ export default function ResultsScreen() {
   const { fromHistory, sessionId, restaurant: historyRestaurant, city: historyCity, date: historyDate } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; restaurant?: string; city?: string; date?: string }>();
   const isFromHistory = fromHistory === 'true';
   const { recommendation, extractedWines, preferences, setRecommendation, reset } = useScanStore();
-  const navigation = useNavigation();
 
-  // Single source of truth for "back": skip the transient camera/preview/
-  // extracting screens (which sit below results in the stack and error when
-  // revisited) and return to the Scan a List form.
+  // The header "back" button. The transient camera/preview/extracting screens
+  // are dismissed at extracting→results time, so the Wine List form sits
+  // directly below results — plain back (this, plus the native system/gesture
+  // back) returns to the form. We navigate first, then clear the scan store so
+  // the next scan starts fresh (resetting first would flash the null state).
   const goBack = useCallback(() => {
     if (isFromHistory) { router.back(); return; }
-    reset();
     router.dismissTo('/scan/wine-list');
+    reset();
   }, [isFromHistory, reset]);
-
-  // Route the Android hardware back through goBack, and disable the iOS swipe
-  // gesture (which would otherwise pop to the stale preview screen).
-  useFocusEffect(useCallback(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => { goBack(); return true; });
-    return () => sub.remove();
-  }, [goBack]));
-  useEffect(() => { navigation.setOptions({ gestureEnabled: false }); }, [navigation]);
 
   const { autoSave, archive } = useScanHistory();
   const { session } = useAuth();
