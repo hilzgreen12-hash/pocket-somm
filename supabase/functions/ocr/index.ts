@@ -91,7 +91,12 @@ Deno.serve(async (req) => {
     async function attemptOCR(attempt: number): Promise<any> {
       const response = await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 8192,
+        // Headroom for the JSON output. At 8192 a normal-length list sits right
+        // on the ceiling: it truncates → invalid JSON → the retry below fires a
+        // second full call → the two together blow past the function's time
+        // limit (the "timed out at 91%" bug). 16384 clears typical lists in one
+        // attempt so the retry never triggers. Haiku 4.5 supports far more.
+        max_tokens: 16384,
         system: IMAGE_SYSTEM_PROMPT,
         messages: [
           {
@@ -108,24 +113,27 @@ Deno.serve(async (req) => {
       });
       const textBlock = response.content.find((b) => b.type === 'text');
       const text = textBlock?.type === 'text' ? textBlock.text : '';
+      // If the model hit the token ceiling the output is truncated — retrying
+      // just truncates again and burns the clock (the timeout cause). Don't.
+      const truncated = response.stop_reason === 'max_tokens';
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) {
         const snippet = text ? text.slice(0, 200) : `(no text block; content types: ${response.content.map((b) => b.type).join(', ')})`;
-        if (attempt < 2) {
+        if (attempt < 2 && !truncated) {
           console.warn(`[ocr] no JSON in Claude response (attempt ${attempt}), retrying. Snippet: ${snippet}`);
           return attemptOCR(attempt + 1);
         }
-        throw new Error(`Claude returned no JSON after ${attempt} attempts. Snippet: ${snippet}`);
+        throw new Error(`Claude returned no JSON${truncated ? ' (output truncated at max_tokens)' : ''} after ${attempt} attempt(s). Snippet: ${snippet}`);
       }
       try {
         return JSON.parse(match[0]);
       } catch (parseErr) {
-        if (attempt < 2) {
+        if (attempt < 2 && !truncated) {
           console.warn(`[ocr] JSON parse failed (attempt ${attempt}), retrying. Detail:`, parseErr);
           return attemptOCR(attempt + 1);
         }
         const detail = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        throw new Error(`Claude returned malformed JSON after ${attempt} attempts: ${detail}`);
+        throw new Error(`Claude returned malformed JSON${truncated ? ' (output truncated at max_tokens)' : ''} after ${attempt} attempt(s): ${detail}`);
       }
     }
 

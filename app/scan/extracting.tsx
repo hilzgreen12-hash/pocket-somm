@@ -200,7 +200,13 @@ export default function ExtractingScreen() {
       }
 
       setRecommendation(recommendation);
-      router.replace('/scan/results');
+      // Land results DIRECTLY on the Wine List form: dismiss the transient
+      // camera/preview/extracting screens first, then push results. Otherwise
+      // those screens sit below results in the stack and Back — including the
+      // Android system back, which the native stack handles itself and JS
+      // BackHandler can't intercept — pops to a stale/erroring transient screen.
+      router.dismissTo('/scan/wine-list');
+      router.push('/scan/results');
     } catch (err) {
       if (!token.active) return;
       const message = err instanceof Error ? err.message : String(err);
