@@ -24,7 +24,10 @@ export function useAttachLabelPhoto() {
     if (!userId) return;
     const path = await uploadLabelImage(userId, uri, wineId);
     if (kind === 'cellar') {
-      await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: true } as any);
+      // This is the user's OWN photo (camera/library), not a web-fetched label —
+      // label_image_fetched must stay false so the wine still appears in the
+      // "Select from Cellar" pool and on shareable/community cards.
+      await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: false } as any);
       qc.invalidateQueries({ queryKey: ['cellar'] });
     } else {
       await patchChosenWine(wineId, { label_image_path: path });

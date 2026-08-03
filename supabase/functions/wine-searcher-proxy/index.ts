@@ -213,7 +213,7 @@ Deno.serve(async (req) => {
       if (ageDays < CACHE_TTL_DAYS) {
         return new Response(
           JSON.stringify({
-            matched: cached.market_price_avg != null || cached.critic_score != null,
+            matched: cached.market_price_avg != null || cached.critic_score != null || cached.ws_wine_id != null,
             // Cached values are native USD — convert to the requested currency.
             averageMarketPrice: convert(cached.market_price_avg, fxRate),
             minPrice: convert(cached.market_price_min, fxRate),
@@ -264,8 +264,9 @@ Deno.serve(async (req) => {
       market_price_max: result.maxPrice,
       critic_score: result.criticScore,
       currency: result.currency,
-      ws_wine_id: result.wsWineId,
-      ws_wine_name: result.wineName,
+      // Only write the anchor when this fetch actually returned one — a matched
+      // re-fetch that omits <wine-name-id> must NOT null out a previously cached id.
+      ...(result.wsWineId ? { ws_wine_id: result.wsWineId, ws_wine_name: result.wineName } : {}),
       fetched_at: new Date().toISOString(),
     });
     if (cacheErr) {

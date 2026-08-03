@@ -42,6 +42,7 @@ export default function LabelCameraScreen() {
 
   async function handleCapture() {
     if (!cameraRef.current || previewUri) return;
+    setStatus('Reading the label…'); // reset in case the screen is reused
     try {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
