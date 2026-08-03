@@ -805,7 +805,6 @@ export default function ResultsScreen() {
                       }
                       handleQuickSelect(wine, i);
                     }}
-                    disabled={saveChosen.isPending && !chosenIndexes.has(i)}
                     activeOpacity={0.7}
                   >
                     <Text style={[styles.selectBarText, chosenIndexes.has(i) && styles.selectBarTextDone]}>

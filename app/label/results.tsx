@@ -111,7 +111,7 @@ export default function LabelResultsScreen() {
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
   const { saveManual, update: updateChosen, chosenWines } = useChosenWines();
-  const { create: createLabel, labels } = useLabels();
+  const { create: createLabel, remove: removeLabel, labels } = useLabels();
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, setPendingWineId, setPendingStorageType, pendingStorageLocationId, setPendingStorageLocationId, pendingCaseId, setPendingCaseId } = useRackStore();
   const { racks } = useRacks();
   const { preferences } = usePreferences();
@@ -149,11 +149,14 @@ export default function LabelResultsScreen() {
     if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
     setReReading(true);
     try {
-      const base64 = await prepareImageBase64(result.assets[0].uri);
-      setImage(result.assets[0].uri, base64);
+      const base64 = await prepareImageBase64(uri);
+      // Read the new label FIRST — only swap the on-screen photo once the read
+      // succeeds, so a failed re-read never leaves the new photo over the old wine.
       const details = await scanLabel(base64);
+      setImage(uri, base64);
       setWineDetails(details);
       const confirmed: WineDetailsComplete = {
         producer: (details.producer ?? '').trim(),
@@ -173,6 +176,14 @@ export default function LabelResultsScreen() {
       setCandidates([]);
       setCandidatesOpen(false);
       setNoIntelDismissed(false);
+      // Replace the auto-saved library label so it reflects the CORRECTED wine —
+      // drop the misread one, then save the new read (best-effort).
+      try {
+        if (savedLabelIdRef.current) { await removeLabel.mutateAsync(savedLabelIdRef.current); savedLabelIdRef.current = null; }
+        const city = await captureCity();
+        const created = await createLabel.mutateAsync({ imageUri: uri, producer: confirmed.producer, wineName: confirmed.wineName, vintage: confirmed.vintage, region: confirmed.region, intel, city });
+        savedLabelIdRef.current = created?.id ?? null;
+      } catch { /* best-effort — library save is not critical */ }
     } catch {
       showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
     } finally {
@@ -393,6 +404,9 @@ export default function LabelResultsScreen() {
   // there's an actual photo to save (manual-input intel has no imageUri → no
   // save; "View last result" pushes without fresh=1 → no save).
   const libraryPromptShown = useRef(false);
+  // Id of the label this scan auto-saved, so "Upload Again" can replace it with
+  // the corrected wine instead of leaving the misread one behind.
+  const savedLabelIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (libraryPromptShown.current) return;
     if (!isIntelOnlyFlow || fresh !== '1') return;
@@ -404,7 +418,7 @@ export default function LabelResultsScreen() {
     void (async () => {
       try {
         const city = await captureCity();
-        await createLabel.mutateAsync({
+        const created = await createLabel.mutateAsync({
           imageUri,
           producer: w.producer,
           wineName: w.wineName,
@@ -413,6 +427,7 @@ export default function LabelResultsScreen() {
           intel: intelSnapshot,
           city,
         });
+        savedLabelIdRef.current = created?.id ?? null;
       } catch { /* silent — saving the label to the library is best-effort */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps

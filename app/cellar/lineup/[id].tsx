@@ -57,7 +57,11 @@ export default function LineupDetailScreen() {
 
   function openStampEdit() {
     if (!lineup) return;
-    setDateDraft(new Date(lineup.archived_at).toISOString().split('T')[0]);
+    // Seed from LOCAL date parts (not UTC) so the pre-filled draft matches the
+    // displayed stamp — avoids an off-by-one for rows saved near midnight.
+    const d = new Date(lineup.archived_at);
+    const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    setDateDraft(local);
     setCityDraft(lineup.city ?? '');
     setStampOpen(true);
   }
@@ -65,6 +69,12 @@ export default function LineupDetailScreen() {
     if (!lineup || savingStamp) return;
     const ymd = dateDraft.trim();
     const valid = /^\d{4}-\d{2}-\d{2}$/.test(ymd) && !Number.isNaN(new Date(ymd).getTime());
+    // A non-empty but malformed date must not silently save nothing — tell the
+    // user rather than closing as if it worked. (Empty = leave the date as-is.)
+    if (ymd && !valid) {
+      showAlert({ title: 'Check the date', body: 'Enter the date as YYYY-MM-DD (e.g. 2026-08-02).' });
+      return;
+    }
     setSavingStamp(true);
     try {
       await updateLineupStamp(lineup.id, {
@@ -392,7 +402,7 @@ export default function LineupDetailScreen() {
                 );
               })}
             </ScrollView>
-            <TouchableOpacity style={[styles.stampSaveBtn, savingWines && { opacity: 0.5 }]} onPress={saveIdentifiedWines} disabled={savingWines} activeOpacity={0.85}>
+            <TouchableOpacity style={[styles.stampSaveBtn, (savingWines || included.size === 0) && { opacity: 0.5 }]} onPress={saveIdentifiedWines} disabled={savingWines || included.size === 0} activeOpacity={0.85}>
               <Text style={styles.stampSaveText}>{savingWines ? 'Saving…' : `Save ${included.size} wine${included.size === 1 ? '' : 's'}`}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.confirmCancel} onPress={() => setConfirmWines(null)} disabled={savingWines}>
