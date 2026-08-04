@@ -53,6 +53,21 @@ export default function CellarTab() {
     });
   }
 
+  // Top-right "+ Import" → the three import streams. "Import Cellar Document"
+  // opens its own Scan / Screenshot / File chooser (openImportChooser).
+  function openImportMenu() {
+    showAlert({
+      title: 'Import a Cellar',
+      body: 'Bring in an existing cellar from another app or a file.',
+      buttons: [
+        { text: 'Import Cellar Document', onPress: openImportChooser },
+        { text: 'Import Vivino', onPress: () => router.push('/cellar/import-cellar?source=vivino' as any) },
+        { text: 'Import CellarTracker', onPress: () => router.push('/cellar/import-cellar?source=cellartracker' as any) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   function continueWithoutAccount() {
     setSignInPromptVisible(false);
     const action = pendingActionRef.current;
@@ -67,7 +82,11 @@ export default function CellarTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
+        <View style={styles.titleSide} />
         <Text style={styles.title}>Cellar</Text>
+        <TouchableOpacity style={styles.titleSide} onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.importLink}>+ Import</Text>
+        </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
       <HelpButton label="More About Cellar" title="How Cellar works" body={CELLAR_HELP} />
@@ -116,21 +135,6 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.divider} />
-
-      {/* Import an existing cellar from another app (Vivino, CellarTracker, a
-          spreadsheet…) — by photo/screenshot OCR, or a Vivino CSV export. */}
-      <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(openImportChooser)}>
-          <Text style={styles.buttonText}>Import Cellar Document</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(() => router.push('/cellar/import-cellar?source=vivino' as any))}>
-          <Text style={styles.buttonVivinoText}>Import Vivino</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(() => router.push('/cellar/import-cellar?source=cellartracker' as any))}>
-          <Text style={styles.buttonVivinoText}>Import CellarTracker</Text>
-        </TouchableOpacity>
-      </View>
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -148,7 +152,11 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Big "Cellar" tab title.
   title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  // Side cells balance the centred title: an empty spacer on the left, the
+  // "+ Import" link on the right, both the same width so "Cellar" stays centred.
+  titleSide: { width: 72, justifyContent: 'center' },
+  importLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").
   subtitle: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, paddingHorizontal: spacing.xl, marginBottom: 0 },
