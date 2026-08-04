@@ -948,6 +948,9 @@ export default function CellarWineDetail() {
           estimated_value_currency: v.currency,
           estimated_value_at: new Date().toISOString(),
           estimated_value_source: v.valueSource,
+          // Exact-vintage vs all-vintage fallback, so the value's sub-label and
+          // the market note below stay accurate after this refetch.
+          estimated_value_scope: v.priceScope ?? null,
           // Keep the (WS-anchored) critic score fresh on refresh too.
           critic_score: v.criticScore,
           critic_score_note: v.criticScoreNote,
@@ -1501,7 +1504,9 @@ export default function CellarWineDetail() {
               </Text>
               {wine.estimated_value_at ? (
                 <Text style={styles.statSub}>
-                  {wine.estimated_value_source === 'wine-searcher' ? 'Wine-Searcher · ' : ''}
+                  {wine.estimated_value_source === 'wine-searcher'
+                    ? (wine.estimated_value_scope === 'all-vintage' ? 'WS · all vintages · ' : 'Wine-Searcher · ')
+                    : ''}
                   {new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </Text>
               ) : null}
@@ -1519,6 +1524,27 @@ export default function CellarWineDetail() {
           <Text style={styles.scoreNoteLabel}>Why no critic score?</Text>
           <Text style={styles.scoreNoteText}>{wine.critic_score_note}</Text>
         </View>
+      ) : null}
+
+      {/* Honest market-value context, mirroring the scan intel card. Only after
+          a real generate attempt (estimated_value_at set), so it never shows on
+          a bare wine before Vinster has looked. */}
+      {!isWishlist && !isArchived && !refreshingValue && wine.estimated_value_at ? (
+        wine.estimated_value_source === 'wine-searcher' && wine.estimated_value_scope === 'all-vintage' ? (
+          <View style={styles.scoreNoteBlock}>
+            <Text style={styles.scoreNoteLabel}>About this value</Text>
+            <Text style={styles.scoreNoteText}>
+              No live market price for the {wine.vintage || 'listed'} vintage on Wine-Searcher — this is its global average across all vintages of the wine, in {wine.estimated_value_currency ?? 'GBP'}.
+            </Text>
+          </View>
+        ) : wine.estimated_value == null ? (
+          <View style={styles.scoreNoteBlock}>
+            <Text style={styles.scoreNoteLabel}>No market price</Text>
+            <Text style={styles.scoreNoteText}>
+              Wine-Searcher has no live listing for this wine and vintage, and Vinster couldn't confidently estimate one. Try the closest vintage, or check the wine's global page on Wine-Searcher.
+            </Text>
+          </View>
+        ) : null
       ) : null}
 
       {/* Bottles grid moved ABOVE the chef button so the user can see

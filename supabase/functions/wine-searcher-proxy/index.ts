@@ -223,6 +223,10 @@ Deno.serve(async (req) => {
             // Carry the anchor identity through cache hits too.
             wsWineId: cached.ws_wine_id ?? null,
             wsWineName: cached.ws_wine_name ?? null,
+            // Whether the cached figure is exact-vintage or an all-vintage
+            // fallback. Legacy rows (pre-migration 082) are null → treat as
+            // 'vintage', the historic default.
+            priceScope: cached.price_scope ?? 'vintage',
             source: 'wine-searcher',
           }),
           { headers: { 'Content-Type': 'application/json' } }
@@ -264,6 +268,9 @@ Deno.serve(async (req) => {
       market_price_max: result.maxPrice,
       critic_score: result.criticScore,
       currency: result.currency,
+      // Whether this figure is exact-vintage or the all-vintage fallback, so a
+      // cache hit can label it the same way the fresh response does.
+      price_scope: priceScope,
       // Only write the anchor when this fetch actually returned one — a matched
       // re-fetch that omits <wine-name-id> must NOT null out a previously cached id.
       ...(result.wsWineId ? { ws_wine_id: result.wsWineId, ws_wine_name: result.wineName } : {}),
