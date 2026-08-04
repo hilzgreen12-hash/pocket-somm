@@ -7,9 +7,13 @@ import { fonts } from '../constants/fonts';
 // storage unit (no decimals, no locale dependency); labels use cl / L for
 // the user-facing language Vinster has settled on elsewhere.
 export const COMMON_BOTTLE_SIZES: { ml: number; label: string }[] = [
-  { ml: 375,  label: '37.5cl' },
-  { ml: 750,  label: '75cl' },
-  { ml: 1500, label: '150cl' },
+  { ml: 375,   label: '37.5cl' },
+  { ml: 750,   label: '75cl' },
+  { ml: 1500,  label: '150cl' },
+  { ml: 3000,  label: '300cl' },
+  { ml: 6000,  label: '600cl' },
+  { ml: 9000,  label: '900cl' },
+  { ml: 12000, label: '1200cl' },
 ];
 
 // User-facing label for any ml value — used on the cellar list etc. so

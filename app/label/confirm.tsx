@@ -114,6 +114,8 @@ export default function LabelConfirmScreen() {
   // offered on label-derived flows (manual entry has its own predictive search).
   const [candidates, setCandidates] = useState<WineCandidate[]>([]);
   const [candidatesOpen, setCandidatesOpen] = useState(false);
+  // Single-select tick in the "Which wine is this?" list (lineup-style rows).
+  const [selectedCand, setSelectedCand] = useState<number | null>(null);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   // Auto-open once when the scan came back low-confidence (undefined confidence
   // — older scan-label responses / non-scan flows — never auto-opens).
@@ -126,6 +128,7 @@ export default function LabelConfirmScreen() {
       return;
     }
     setLoadingCandidates(true);
+    setSelectedCand(null);
     if (!auto) setCandidatesOpen(true);
     try {
       const list = await fetchWineCandidates({ producer, region, wineName, vintage });
@@ -635,14 +638,30 @@ export default function LabelConfirmScreen() {
             {loadingCandidates ? (
               <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Finding bottlings…</Text></View>
             ) : (
-              <ScrollView style={{ maxHeight: 320 }}>
-                {candidates.map((c, i) => (
-                  <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candItem} onPress={() => pickCandidate(c)} activeOpacity={0.75}>
-                    <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
-                    {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <>
+                <ScrollView style={{ maxHeight: 320 }}>
+                  {candidates.map((c, i) => {
+                    const on = selectedCand === i;
+                    return (
+                      <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candRow} onPress={() => setSelectedCand(on ? null : i)} activeOpacity={0.7}>
+                        <Text style={[styles.candCheck, on && styles.candCheckOn]}>{on ? '☑' : '☐'}</Text>
+                        <View style={styles.candRowText}>
+                          <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
+                          {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.candConfirmBtn, selectedCand == null && styles.candConfirmBtnDisabled]}
+                  onPress={() => { if (selectedCand != null) pickCandidate(candidates[selectedCand]); }}
+                  disabled={selectedCand == null}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.candConfirmText}>Select This Wine</Text>
+                </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity style={styles.candCancel} onPress={() => setCandidatesOpen(false)} disabled={loadingCandidates}>
               <Text style={styles.candCancelText}>None of these — keep as is</Text>
@@ -750,9 +769,17 @@ const styles = StyleSheet.create({
   candBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   candLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   candLoadingText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  candItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.surface },
+  // Tickable list rows (lineup-detection style) — replaces the old bordered
+  // "bubbles". Single-select: tapping a row ticks it; "Select This Wine" confirms.
+  candRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  candCheck: { fontSize: 24, color: colors.textMuted, width: 28, textAlign: 'center' },
+  candCheckOn: { color: colors.gold },
+  candRowText: { flex: 1 },
   candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  candConfirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
+  candConfirmBtnDisabled: { opacity: 0.4 },
+  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },
