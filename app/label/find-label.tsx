@@ -56,7 +56,7 @@ export default function FindLabelScreen() {
         await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: true } as any);
         qc.invalidateQueries({ queryKey: ['cellar'] });
       }
-      qc.invalidateQueries({ queryKey: ['label-url', path] });
+      qc.invalidateQueries({ queryKey: ['label-image', path] });
       router.back();
     } catch (err) {
       showAlert({ title: 'Could not save that image', body: err instanceof Error ? err.message : 'Pick another, or try again.' });

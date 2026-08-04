@@ -337,7 +337,7 @@ export default function CellarWineDetail() {
         // Bust the cached signed URL for this path so a replaced photo shows
         // immediately rather than the previous image (the path is reused per
         // wine id, so without this the cached URL/bitmap would persist).
-        qc.invalidateQueries({ queryKey: ['label-url', path] });
+        qc.invalidateQueries({ queryKey: ['label-image', path] });
       } catch (err) {
         showAlert({ title: 'Could not save photo', body: err instanceof Error ? err.message : 'Please try again.' });
       } finally {
