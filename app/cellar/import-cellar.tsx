@@ -276,8 +276,11 @@ export default function ImportCellarScreen() {
         await presentWines(wines);
         return;
       }
-      // Decode the spreadsheet (Excel / CSV, any encoding) into clean per-sheet rows.
-      const parsedSheets = fileToSheets(bytes, asset.name ?? 'file');
+      // Decode the spreadsheet (Excel / CSV, any encoding) into clean per-sheet
+      // rows. Excel (.xlsx/.xls/.ods) is read from base64 — SheetJS's array path
+      // hits the bundler's empty stream/fs stubs and throws (see fileToSheets).
+      const base64 = await new File(asset.uri).base64();
+      const parsedSheets = fileToSheets(bytes, asset.name ?? 'file', base64);
       if (parsedSheets.length === 0) {
         showAlert({
           title: "Couldn't read that file",
@@ -312,7 +315,8 @@ export default function ImportCellarScreen() {
       setStage('analyzing');
       const asset = res.assets[0];
       const bytes = await new File(asset.uri).bytes();
-      const parsedSheets = fileToSheets(bytes, asset.name ?? 'file');
+      const base64 = await new File(asset.uri).base64();
+      const parsedSheets = fileToSheets(bytes, asset.name ?? 'file', base64);
       const reviews = parseVivinoReviews(parsedSheets[0]?.rows ?? []);
       if (reviews.length === 0) {
         showAlert({ title: 'No reviews found', body: 'This file has no wines with a rating, review or note. Make sure you exported your full Vivino wine list (not just the cellar).' });

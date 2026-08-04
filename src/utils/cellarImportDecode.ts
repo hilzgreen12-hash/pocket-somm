@@ -89,14 +89,22 @@ function nonEmpty(rows: string[][]): string[][] {
   return rows.map((r) => (Array.isArray(r) ? r.map(fixMojibake) : [])).filter((r) => r.some((c) => c.trim() !== ''));
 }
 
-export function fileToSheets(bytes: Uint8Array, fileName: string): ImportSheet[] {
+export function fileToSheets(bytes: Uint8Array, fileName: string, base64?: string): ImportSheet[] {
   const name = (fileName || '').toLowerCase();
   const isZip = bytes[0] === 0x50 && bytes[1] === 0x4b; // PK — xlsx/ods
   const isCfb = bytes[0] === 0xd0 && bytes[1] === 0xcf; // xls
   const looksSpreadsheet = /\.(xlsx|xls|ods)$/.test(name) || isZip || isCfb;
 
   if (looksSpreadsheet) {
-    const wb = XLSX.read(bytes, { type: 'array' });
+    // SheetJS MUST be fed base64 here. metro.config.js maps xlsx's Node
+    // `stream`/`fs` requires to empty modules on the strength of "we only ever
+    // hand XLSX base64" — the `type: 'array'` read path reaches into those now-
+    // empty stubs and throws at runtime (Excel imports silently failing while
+    // CSVs worked). base64 comes from the Expo File API at the call site; the
+    // array fall-back only covers a legacy caller that didn't pass it.
+    const wb = base64 != null
+      ? XLSX.read(base64, { type: 'base64' })
+      : XLSX.read(bytes, { type: 'array' });
     return wb.SheetNames
       .map((sn) => {
         const sheet = wb.Sheets[sn];
