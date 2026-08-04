@@ -491,8 +491,19 @@ export default function LabelConfirmScreen() {
       <Text style={styles.subheading}>
         {isManual
           ? 'Search for your wine, or enter the details below.'
-          : 'Check the details we extracted and correct anything that looks wrong.'}
+          : 'Correct anything that looks wrong.'}
       </Text>
+
+      {/* Bottling picker — sits directly under the blurb so a misread cuvée can
+          be fixed before touching the fields. Label-derived flows only (manual
+          entry has the predictive search below instead). */}
+      {!isManual ? (
+        <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
+          <Text style={styles.candLinkText}>
+            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Vinster detects similar bottlings — select the correct one by tapping this link.'}
+          </Text>
+        </TouchableOpacity>
+      ) : null}
 
       {/* Manual entry: predictive search fills producer/name/region/style from a
           real wine — the fields below stay editable. */}
@@ -552,17 +563,6 @@ export default function LabelConfirmScreen() {
         placeholderTextColor={colors.textMuted}
         autoCapitalize="words"
       />
-
-      {/* Bottling picker affordance — for label-derived flows, let the user
-          correct a misread cuvée by choosing from this producer's real wines
-          (manual entry already has predictive search). */}
-      {!isManual ? (
-        <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
-          <Text style={styles.candLinkText}>
-            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Vinster detects similar bottlings, select the correct one from our list'}
-          </Text>
-        </TouchableOpacity>
-      ) : null}
 
       {/* Bin diamond add: quantity + bottle format inline (one-step), so the
           diamond add mirrors the rack Confirm screen plus these two fields. */}
@@ -689,27 +689,28 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.headingRegular,
     color: colors.textMuted,
-    marginBottom: spacing.xl,
+    marginBottom: spacing.sm,
     lineHeight: 20,
     textAlign: 'center',
   },
-  // Form field label — body.
+  // Form field label — body. Compact so five fields don't fill the screen.
   label: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
-    marginBottom: spacing.xs,
+    marginBottom: 2,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
-  // Form input — body.
+  // Form input — body. Reduced height/gap so all five fields fit comfortably.
   input: {
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 8,
-    padding: spacing.md,
-    marginBottom: spacing.md,
-    fontSize: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+    fontSize: 15,
     fontFamily: fonts.bodyRegular,
     color: colors.text,
     backgroundColor: colors.surface,

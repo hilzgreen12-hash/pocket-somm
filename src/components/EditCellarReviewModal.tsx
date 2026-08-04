@@ -359,11 +359,11 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
                 <Text accessibilityLabel="Back" style={styles.backText}>←</Text>
               </TouchableOpacity>
               <View style={styles.topRight}>
+                {/* No "Edit" here — a cellar wine's identity is already confirmed
+                    (edit it from the wine card). Date + location are editable
+                    inline in the stamp below. */}
                 <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
                   <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={openIdentityEdit} hitSlop={{ top: 6, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
-                  <Text style={styles.topEditText}>Edit</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -379,15 +379,29 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
                 {(wine.region || wine.grape_variety) ? (
                   <Text style={[styles.region, wine.label_image_path ? styles.regionLeft : null]}>{[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}</Text>
                 ) : null}
-                {(() => {
-                  const { restaurantName, city } = splitLocationString(wine.review_location);
-                  const loc = [restaurantName, normaliseCity(city)].filter(Boolean).join(', ');
-                  const dateStr = wine.review_date
-                    ? new Date(wine.review_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                    : '';
-                  const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                  return stamp ? <Text style={[styles.stampLine, wine.label_image_path ? styles.stampLineLeft : null]}>{stamp}</Text> : null;
-                })()}
+                {/* Editable date · location stamp, in gold. Both are always
+                    editable here (no "Edit" step) — a cellar wine is already
+                    confirmed, so the only things to capture on a review are when
+                    and where you drank it. */}
+                <View style={[styles.stampEdit, wine.label_image_path ? null : styles.stampEditCenter]}>
+                  <TextInput
+                    style={styles.stampDateInput}
+                    value={reviewDate}
+                    onChangeText={(t) => { setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)); setSaved(false); }}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor={colors.textSubtle}
+                    keyboardType="numbers-and-punctuation"
+                    maxLength={10}
+                  />
+                  <Text style={styles.stampSep}>·</Text>
+                  <TextInput
+                    style={styles.stampLocInput}
+                    value={locName}
+                    onChangeText={(v) => { setLocName(v); setSaved(false); }}
+                    placeholder="Where you drank it"
+                    placeholderTextColor={colors.textSubtle}
+                  />
+                </View>
               </View>
             </View>
 
@@ -526,6 +540,12 @@ const styles = StyleSheet.create({
   regionLeft: { textAlign: 'left' },
   stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
   stampLineLeft: { textAlign: 'left' },
+  // Editable date · location stamp (gold), replacing the old read-only line.
+  stampEdit: { flexDirection: 'row', alignItems: 'center', marginTop: 5, gap: 6 },
+  stampEditCenter: { justifyContent: 'center' },
+  stampDateInput: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, minWidth: 96 },
+  stampSep: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
+  stampLocInput: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, flexShrink: 1, flexGrow: 1, minWidth: 120 },
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm, marginTop: spacing.sm },

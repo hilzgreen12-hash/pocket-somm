@@ -35,11 +35,16 @@ export default function PersonalityScreen() {
   const cat: Category = category === 'recipe' ? 'recipe' : 'wine';
   const { session } = useAuth();
   const { preferences } = usePreferences();
-  const { wines } = useCellar();
-  const { chosenWines } = useChosenWines();
-  const { archive } = useScanHistory();
-  const { sessions: chefLabelSessions } = useChefLabelHistory();
-  const { sessions: chefPairingSessions } = useChefPairingHistory();
+  const { wines, isLoading: cellarLoading } = useCellar();
+  const { chosenWines, isLoading: chosenLoading } = useChosenWines();
+  const { archive, archiveLoading } = useScanHistory();
+  const { sessions: chefLabelSessions, isLoading: labelLoading } = useChefLabelHistory();
+  const { sessions: chefPairingSessions, isLoading: pairingLoading } = useChefPairingHistory();
+  // Whether the activity that feeds the readiness gate is still loading. Until
+  // it settles the counts read as zero, so hasEnoughData is transiently false —
+  // gating the "not enough data" message on this stops the screen from telling
+  // a ready user we don't have enough (the "offered then denied" bug).
+  const activityLoading = cellarLoading || chosenLoading || archiveLoading || labelLoading || pairingLoading;
 
   // Gate the auto-generate behind the SHARED readiness bar (personalityReadiness)
   // so first-time users don't get a sketch invented from a first-session burst.
@@ -275,10 +280,12 @@ export default function PersonalityScreen() {
           <Text style={styles.subheading}>{personalityBlurb(cat)}</Text>
         </View>
 
-        {loading ? (
+        {loading || (!text && !error && !notReady && (!hydrated || activityLoading)) ? (
           <View style={styles.center}>
             <ActivityIndicator color={colors.gold} />
-            <Text style={styles.loadingText}>Vinster is sketching your personality…</Text>
+            <Text style={styles.loadingText}>
+              {loading ? 'Vinster is sketching your personality…' : 'Gathering your activity…'}
+            </Text>
           </View>
         ) : error ? (
           <View style={styles.center}>
