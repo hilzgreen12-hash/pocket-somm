@@ -87,7 +87,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Tell Vinster what you're cooking and it'll offer you a wine. What you're drinking and it'll generate original, chef-inspired recipes tailored to your tastes. Keep, organise, and share your recipes in Your Cookbook.
+          This is your food and wine experience hub. Generate pairings & store the recipes, keep track of where you dined, what you drank, and record your thoughts along the way.
         </Text>
         <Text style={styles.prefsBlurb}>
           Vinster will use your preferences in{' '}
@@ -99,9 +99,9 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Wine → Recipe. Tap to start; press-and-hold to revisit your last
-          result. The standalone "View last result" link was removed to reclaim
-          space. */}
+      {/* Pairing generators — Wine → Recipe and Recipe → Wine. Both in one
+          section so they sit with the same gap as the buttons below. Tap to
+          start; press-and-hold to revisit your last result. */}
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
@@ -110,16 +110,21 @@ export default function ChefTab() {
         >
           <Text style={styles.buttonText}>I've got a wine, find me a recipe</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Recipe → Wine. Tap to start; press-and-hold to revisit your last result. */}
-      <View style={[styles.section, { marginTop: spacing.lg }]}>
         <TouchableOpacity
           style={styles.buttonFull}
           onPress={() => router.push('/chef/find-pairing')}
           onLongPress={handleViewLastPairing}
         >
           <Text style={styles.buttonText}>I know what I'm cooking, find me a wine</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Your Cookbook — its own separated section. */}
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
+          <Text style={styles.buttonText}>Your Cookbook</Text>
         </TouchableOpacity>
       </View>
 
@@ -133,12 +138,6 @@ export default function ChefTab() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/wines/chosen')}>
           <Text style={styles.buttonText}>Your Wine Reviews</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={[styles.section, { marginTop: spacing.sm }]}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
-          <Text style={styles.buttonText}>Your Cookbook</Text>
         </TouchableOpacity>
       </View>
 
