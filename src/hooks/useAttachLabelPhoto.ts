@@ -33,7 +33,7 @@ export function useAttachLabelPhoto() {
       await patchChosenWine(wineId, { label_image_path: path });
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
     }
-    qc.invalidateQueries({ queryKey: ['label-url', path] });
+    qc.invalidateQueries({ queryKey: ['label-image', path] });
   }
 
   async function pick(kind: AttachKind, wineId: string, source: 'camera' | 'library') {
