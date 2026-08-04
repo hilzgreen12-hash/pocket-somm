@@ -869,7 +869,16 @@ export default function StorageLocationScreen() {
 
         {listView === 'bottles' ? (
           filtered.length === 0 ? (
-            <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet, +Add to start cellaring' : 'No wines match your filters.'}</Text>
+            wines.length === 0 ? (
+              <View style={styles.emptyWinesBlock}>
+                <Text style={styles.emptyWinesTitle}>No Wines Here Yet</Text>
+                <TouchableOpacity onPress={openAddWine} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}>
+                  <Text style={styles.emptyWinesAdd}>+ Add Wine</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <Text style={styles.emptyList}>No wines match your filters.</Text>
+            )
           ) : (
             <View style={styles.listSection}>{filtered.map(renderWine)}</View>
           )
@@ -893,7 +902,16 @@ export default function StorageLocationScreen() {
             </View>
           )
         ) : filtered.length === 0 && caseGroups.length === 0 ? (
-          <Text style={styles.emptyList}>{wines.length === 0 ? 'No wines here yet, +Add to start cellaring' : 'No wines match your search.'}</Text>
+          wines.length === 0 ? (
+            <View style={styles.emptyWinesBlock}>
+              <Text style={styles.emptyWinesTitle}>No Wines Here Yet</Text>
+              <TouchableOpacity onPress={openAddWine} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }}>
+                <Text style={styles.emptyWinesAdd}>+ Add Wine</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <Text style={styles.emptyList}>No wines match your search.</Text>
+          )
         ) : (
           <View style={styles.listSection}>
             {caseGroups.map((g) => (
@@ -1134,6 +1152,10 @@ const styles = StyleSheet.create({
   maturityOptionTextActive: { color: colors.gold, fontFamily: fonts.bodySemibold },
   listSection: { paddingHorizontal: spacing.xl },
   emptyList: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.xl, lineHeight: 20 },
+  // Empty location (no wines yet) — a title with a gold "+ Add Wine" beneath.
+  emptyWinesBlock: { alignItems: 'center', paddingVertical: spacing.xl, gap: spacing.sm },
+  emptyWinesTitle: { fontSize: 16, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
+  emptyWinesAdd: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineRowSelected: { backgroundColor: 'rgba(224,184,74,0.16)' },
