@@ -268,10 +268,42 @@ export default function CellarWineDetail() {
     });
   }
 
+  // Auto-link an existing review: if this cellar wine carries no review yet but
+  // the user already reviewed it in Your Wine Reviews, pull that review onto the
+  // bottle so its Your Review shows straight away. Silent + once per wine; the
+  // manual "Import from Your Wine Reviews" remains for anything this misses.
+  const autoLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wine || isWishlist || isArchived) return;
+    if (autoLinkRef.current === wine.id) return;
+    if (entriesOf(wine).length > 0) return; // already has its own review
+    autoLinkRef.current = wine.id;
+    void (async () => {
+      if (!session?.user.id) return;
+      try {
+        const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, wsWineId: wine.ws_wine_id });
+        if (!match) return;
+        const hasContent = !!((match.tasting_note && match.tasting_note.trim()) || (match.other_observations && match.other_observations.trim()) || match.user_score != null);
+        if (!hasContent) return;
+        const entry = buildEntry({
+          note: match.tasting_note ?? '',
+          personalNotes: match.other_observations ?? '',
+          score: match.user_score,
+          location: [match.restaurant_name, match.city].map((s) => (s ?? '').trim()).filter(Boolean).join(', '),
+          date: match.chosen_at ? match.chosen_at.split('T')[0] : null,
+          drinkingWindow: match.user_drinking_window ?? '',
+        });
+        const next = [...entriesOf(wine), entry];
+        await updateWine.mutateAsync({ id: wine.id, updates: { review_entries: next, ...flatMirror(latestEntry(next)) } });
+      } catch { /* best-effort — the manual import stays available */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wine?.id, isWishlist, isArchived]);
+
   async function importFromWineReviews() {
     if (!session?.user.id || !wine) return;
     try {
-      const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage });
+      const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, wsWineId: wine.ws_wine_id });
       if (!match) { showAlert({ title: 'No matching review', body: "You don't have a review of this wine in Your Wine Reviews to import." }); return; }
       const entry = buildEntry({
         note: match.tasting_note ?? '',

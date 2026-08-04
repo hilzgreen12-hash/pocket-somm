@@ -29,6 +29,7 @@ import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity, cityKey } from '../../src/utils/city';
+import { wineNameKey } from '../../src/utils/wineConnections';
 import { splitLocationString } from '../../src/services/reviewSync';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -231,6 +232,20 @@ export default function ChosenWinesScreen() {
     !!w.review_date
   );
 
+  // A cellar review that's really the SAME wine as an existing reviewed chosen
+  // review — auto-linked / imported onto a cellar bottle — must not list twice.
+  // Drop the cellar copy from this list (the chosen review represents it here;
+  // the wine card still shows it via its own review_entries). Match by
+  // Wine-Searcher id, else order-independent name tokens + vintage.
+  const reviewedChosen = chosenWines.filter(chosenHasReview);
+  const reviewedWsIds = new Set(reviewedChosen.map((w) => w.ws_wine_id).filter((v): v is string => !!v));
+  const reviewKey = (w: { producer?: string | null; wine_name?: string | null; vintage?: string | number | null }) =>
+    `${wineNameKey(w.producer, w.wine_name)}|${String(w.vintage ?? '').trim()}`;
+  const reviewedChosenKeys = new Set(reviewedChosen.map(reviewKey));
+  const dedupedCellarReviews = cellarReviews.filter((w) =>
+    !(w.ws_wine_id && reviewedWsIds.has(w.ws_wine_id)) && !reviewedChosenKeys.has(reviewKey(w)),
+  );
+
   // Group chosen reviews that share a review_group_id (an original review plus
   // its later "Add to this review" entries) into ONE review card. Entries are
   // ordered newest-first; the newest is the representative shown on the card.
@@ -262,7 +277,7 @@ export default function ChosenWinesScreen() {
     // header (All / Restaurant / Cellar / Other). Each is derived from a
     // cellar_wines row carrying user review content; the review date drives
     // recency + the Month filter, the review score drives sort.
-    ...cellarReviews.map((w): ReviewItem => ({
+    ...dedupedCellarReviews.map((w): ReviewItem => ({
       source: 'cellar',
       date: w.review_date ?? w.updated_at ?? w.created_at,
       score: w.review_score ?? null,
