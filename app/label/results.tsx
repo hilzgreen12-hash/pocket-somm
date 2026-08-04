@@ -137,6 +137,8 @@ export default function LabelResultsScreen() {
   // producer's plausible bottlings so the user can confirm the exact wine.
   const [candidates, setCandidates] = useState<WineCandidate[]>([]);
   const [candidatesOpen, setCandidatesOpen] = useState(false);
+  // Single-select tick in the "Which wine is this?" list (lineup-style rows).
+  const [selectedCand, setSelectedCand] = useState<number | null>(null);
   const [regenerating, setRegenerating] = useState(false);
   const [reReading, setReReading] = useState(false);
   const candidatesTriedRef = useRef(false);
@@ -207,7 +209,7 @@ export default function LabelResultsScreen() {
           wineName: wineDetailsConfirmed.wineName,
           vintage: wineDetailsConfirmed.vintage,
         });
-        if (list.length > 0) { setCandidates(list); setCandidatesOpen(true); }
+        if (list.length > 0) { setCandidates(list); setSelectedCand(null); setCandidatesOpen(true); }
       } catch { /* silent — NoIntelPrompt stays as the fallback */ }
     })();
   }, [intelligence, isIntelOnlyFlow, wineDetailsConfirmed]);
@@ -1261,14 +1263,30 @@ export default function LabelResultsScreen() {
             {regenerating ? (
               <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Getting intel…</Text></View>
             ) : (
-              <ScrollView style={{ maxHeight: 320 }}>
-                {candidates.map((c, i) => (
-                  <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candItem} onPress={() => pickCandidate(c)} activeOpacity={0.75}>
-                    <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
-                    {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              <>
+                <ScrollView style={{ maxHeight: 320 }}>
+                  {candidates.map((c, i) => {
+                    const on = selectedCand === i;
+                    return (
+                      <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candRow} onPress={() => setSelectedCand(on ? null : i)} activeOpacity={0.7}>
+                        <Text style={[styles.candCheck, on && styles.candCheckOn]}>{on ? '☑' : '☐'}</Text>
+                        <View style={styles.candRowText}>
+                          <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
+                          {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.candConfirmBtn, selectedCand == null && styles.candConfirmBtnDisabled]}
+                  onPress={() => { if (selectedCand != null) pickCandidate(candidates[selectedCand]); }}
+                  disabled={selectedCand == null}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.candConfirmText}>Select This Wine</Text>
+                </TouchableOpacity>
+              </>
             )}
             <TouchableOpacity style={styles.candCancel} onPress={() => { setCandidatesOpen(false); }} disabled={regenerating}>
               <Text style={styles.candCancelText}>None of these — keep as is</Text>
@@ -1709,6 +1727,32 @@ export default function LabelResultsScreen() {
                 bottle count still matters — e.g. photographing a whole case. */}
             {context === 'add-location' && (
               <>
+                <Text style={styles.modalLabel}>Bottle size</Text>
+                <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('bottle')} activeOpacity={0.7}>
+                  <Text style={styles.fieldSelectValue} numberOfLines={1}>{customSizeMode ? (customSizeCl ? `${customSizeCl}cl` : 'Other') : bottleSizeLabel(bottleSizeMl)}</Text>
+                  <Text style={styles.fieldSelectArrow}>▾</Text>
+                </TouchableOpacity>
+
+                {customSizeMode && (
+                  <View style={styles.customSizeRow}>
+                    <TextInput
+                      style={styles.customSizeInput}
+                      value={customSizeCl}
+                      onChangeText={(t) => {
+                        const cleaned = t.replace(/[^0-9]/g, '').slice(0, 4);
+                        setCustomSizeCl(cleaned);
+                        const cl = parseInt(cleaned, 10);
+                        if (!Number.isNaN(cl) && cl > 0) setBottleSizeMl(cl * 10);
+                      }}
+                      placeholder="e.g. 62"
+                      placeholderTextColor={colors.textMuted}
+                      keyboardType="number-pad"
+                      maxLength={4}
+                    />
+                    <Text style={styles.customSizeSuffix}>cl</Text>
+                  </View>
+                )}
+
                 <Text style={styles.modalLabel}>Number of bottles</Text>
                 <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('count')} activeOpacity={0.7}>
                   <Text style={styles.fieldSelectValue}>{bottleCount}</Text>
@@ -1859,9 +1903,17 @@ const styles = StyleSheet.create({
   candBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
   candLoading: { alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xl },
   candLoadingText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  candItem: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: spacing.md, marginBottom: spacing.sm, backgroundColor: colors.surface },
+  // Tickable list rows (lineup-detection style) — replaces the old bordered
+  // "bubbles". Single-select: tapping a row ticks it; "Select This Wine" confirms.
+  candRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  candCheck: { fontSize: 24, color: colors.textMuted, width: 28, textAlign: 'center' },
+  candCheckOn: { color: colors.gold },
+  candRowText: { flex: 1 },
   candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  candConfirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
+  candConfirmBtnDisabled: { opacity: 0.4 },
+  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   producer: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text },
