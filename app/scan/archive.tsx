@@ -23,25 +23,24 @@ import { LabelShareCard } from '../../src/components/LabelShareCard';
 import { labelSignedUrl } from '../../src/api/labelPhotos';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
+import type { LibraryFilter } from '../../src/api/libraryFilters';
+import { cityKey } from '../../src/utils/city';
 import type { CellarWine, LibraryLabel, WineDetailsComplete, WineIntelligence } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-// How many label tiles per row. "single" = one large label per row.
-type ViewMode = 'thumbnails' | 'enlarge';
-const VIEW_OPTIONS: { value: ViewMode; label: string }[] = [
-  { value: 'thumbnails', label: 'Thumbnails' },
-  { value: 'enlarge', label: 'Enlarge' },
+// Filter chips mirror the Lineup Library exactly: Date · City · Favourites · +Add.
+const FAV_OPTIONS = [
+  { value: 'all', label: 'All labels' },
+  { value: 'fav', label: 'Favourites only' },
 ];
-const VIEW_COLS: Record<ViewMode, number> = { thumbnails: 2, enlarge: 1 };
+function monthKey(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+}
 
-type DateSort = 'desc' | 'asc';
-const DATE_OPTIONS: { value: DateSort; label: string }[] = [
-  { value: 'desc', label: 'Descending (newest first)' },
-  { value: 'asc', label: 'Ascending (oldest first)' },
-];
-
-type FilterField = 'view' | 'date' | null;
+type FilterField = 'date' | 'city' | 'fav' | null;
 
 function formatStamp(label: LibraryLabel): string {
   const date = new Date(label.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -108,12 +107,20 @@ export default function MyLabelsScreen() {
   const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   const { width } = useWindowDimensions();
 
-  const [viewMode, setViewMode] = useState<ViewMode>('thumbnails');
-  const [dateSort, setDateSort] = useState<DateSort>('desc');
-  const [favOnly, setFavOnly] = useState(false);
+  const [favFilter, setFavFilter] = useState<'all' | 'fav'>('all');
+  const [cityFilter, setCityFilter] = useState<string>('All');
+  const [dateFilter, setDateFilter] = useState<string>('All');
   const [expandedLabel, setExpandedLabel] = useState<LibraryLabel | null>(null);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [addOpen, setAddOpen] = useState(false);
+
+  // Bespoke user-created filters (the "+ Add" chip) — same system the Lineup
+  // Library uses, scoped to labels.
+  const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('label');
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
   const [selectCellarOpen, setSelectCellarOpen] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const [generatingIntel, setGeneratingIntel] = useState(false);
@@ -127,14 +134,84 @@ export default function MyLabelsScreen() {
 
   const { setImage, setWineDetails, setError } = useLabelStore();
 
+  // Date (month) options — distinct months labels were scanned, newest first.
+  const monthOptions = useMemo(() => {
+    const seen: string[] = [];
+    for (const l of labels) { const k = monthKey(l.created_at); if (!seen.includes(k)) seen.push(k); }
+    return [{ value: 'All', label: 'All dates' }, ...seen.map((m) => ({ value: m, label: m }))];
+  }, [labels]);
+
+  // City options — distinct places labels were captured, de-duplicated by
+  // canonical key so "Novello" and "Novello, Italy" collapse to one entry.
+  const cityOptions = useMemo(() => {
+    const byKey = new Map<string, string>();
+    for (const l of labels) {
+      const c = (l.captured_city ?? '').trim();
+      if (!c) continue;
+      const key = cityKey(c);
+      const prev = byKey.get(key);
+      if (!prev || c.length > prev.length) byKey.set(key, c);
+    }
+    const seen = Array.from(byKey.values()).sort((a, b) => a.localeCompare(b));
+    return [{ value: 'All', label: 'All cities' }, ...seen.map((c) => ({ value: c, label: c }))];
+  }, [labels]);
+
+  // Always listed by recency; the chips filter within that order.
   const shown = useMemo(() => {
-    const base = favOnly ? labels.filter((l) => l.is_favourite) : labels;
-    return [...base].sort((a, b) => {
-      const ta = new Date(a.created_at).getTime();
-      const tb = new Date(b.created_at).getTime();
-      return dateSort === 'asc' ? ta - tb : tb - ta;
+    let base = labels;
+    if (favFilter === 'fav') base = base.filter((l) => l.is_favourite);
+    if (cityFilter !== 'All') base = base.filter((l) => cityKey(l.captured_city) === cityKey(cityFilter));
+    if (dateFilter !== 'All') base = base.filter((l) => monthKey(l.created_at) === dateFilter);
+    if (activeCustomId) {
+      const f = customFilters.find((cf) => cf.id === activeCustomId);
+      const ids = new Set(f?.itemIds ?? []);
+      base = base.filter((l) => ids.has(l.id));
+    }
+    return [...base].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }, [labels, favFilter, cityFilter, dateFilter, activeCustomId, customFilters]);
+
+  // Bespoke-filter management — mirrors the Lineup Library.
+  function applyCustom(id: string) {
+    setActiveCustomId((prev) => (prev === id ? null : id));
+  }
+  function openCreateFilter() {
+    setEditingFilter(null);
+    setFilterModalOpen(true);
+  }
+  function openFilterOptions(f: LibraryFilter) {
+    showAlert({
+      title: f.name,
+      body: 'Edit this filter’s name and labels, or delete it. Your labels stay in the library either way.',
+      buttons: [
+        { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
+        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); removeFilter.mutate(f.id); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
     });
-  }, [labels, dateSort, favOnly]);
+  }
+  async function saveFilter(name: string, ids: string[]) {
+    setSavingFilter(true);
+    try {
+      if (editingFilter) {
+        await renameFilter.mutateAsync({ filterId: editingFilter.id, name });
+        await setFilterItems.mutateAsync({ filterId: editingFilter.id, itemIds: ids });
+      } else {
+        await createFilter.mutateAsync({ name, itemIds: ids });
+      }
+      setFilterModalOpen(false);
+      setEditingFilter(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
+    }
+  }
+  // Items offered in the create/edit sheet — every label, by wine name + date.
+  const filterItems = useMemo(() => labels.map((l) => ({
+    id: l.id,
+    label: wineHeaderLine(l.producer, l.wine_name, l.vintage) || l.wine_name || l.producer || 'Wine label',
+    sublabel: new Date(l.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
+  })), [labels]);
 
   // Where each label's wine also lives — reviews / cellar / restaurant — so the
   // tile can badge the connection and jump to it (vintage-agnostic match).
@@ -281,6 +358,19 @@ export default function MyLabelsScreen() {
     }
   }
 
+  // "Reviewed …" tag → open the actual review, not the landing page. Prefer the
+  // most-recent Your-Wine-Reviews entry (openReview matches a chosen_wines id);
+  // fall back to a reviewed cellar bottle's card when the review lives there.
+  function openReviewedLink(conn: WineConnections) {
+    const chosen = [...conn.reviewedChosen].sort(
+      (a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime(),
+    )[0];
+    if (chosen) { router.push(`/wines/chosen?openReview=${chosen.id}`); return; }
+    const cellar = conn.reviewedCellar[0];
+    if (cellar) { router.push(`/cellar/${cellar.id}` as any); return; }
+    router.push('/wines/chosen');
+  }
+
   function goToReview(existingId: string | null, label: LibraryLabel) {
     if (existingId) { router.push(`/wines/chosen?openReview=${existingId}`); return; }
     const q = [
@@ -396,20 +486,22 @@ export default function MyLabelsScreen() {
   }
 
   // Full-width row list: a thumbnail on the left, the wine name + dated links
-  // across the rest of the page. Kept generously sized — only narrow enough to
-  // leave room for the name to extend right. The View toggle scales it further.
-  const thumbW = viewMode === 'enlarge' ? 150 : 104;
+  // across the rest of the page.
+  const thumbW = 104;
   const thumbH = Math.round(thumbW * 1.3);
 
-  const viewLabel = VIEW_OPTIONS.find((o) => o.value === viewMode)?.label ?? 'Thumbnails';
-  const dateLabel = dateSort === 'asc' ? 'Ascending' : 'Descending';
+  const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All labels';
+  const cityLabel = cityFilter === 'All' ? 'All cities' : cityFilter;
+  const dateLabel = dateFilter === 'All' ? 'All dates' : dateFilter;
 
-  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
-    if (field === 'view') return { title: 'View', options: VIEW_OPTIONS, selected: viewMode, onSelect: (v) => setViewMode(v as ViewMode) };
-    if (field === 'date') return { title: 'Date', options: DATE_OPTIONS, selected: dateSort, onSelect: (v) => setDateSort(v as DateSort) };
-    return null;
-  }
-  const activeDropdown = dropdownConfig(openDropdown);
+  const activeDropdown: { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null =
+    openDropdown === 'date'
+      ? { title: 'Date', options: monthOptions, selected: dateFilter, onSelect: (v) => setDateFilter(v) }
+      : openDropdown === 'city'
+      ? { title: 'City', options: cityOptions, selected: cityFilter, onSelect: (v) => setCityFilter(v) }
+      : openDropdown === 'fav'
+      ? { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v) => setFavFilter(v as 'all' | 'fav') }
+      : null;
 
   if (isLoading) {
     return (
@@ -443,28 +535,50 @@ export default function MyLabelsScreen() {
             style={styles.filterScroll}
             contentContainerStyle={styles.filterRow}
           >
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('view')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>View</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'view' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{viewLabel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
+            <TouchableOpacity style={[styles.filterChip, dateFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('date')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Date</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'date' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, dateSort === 'asc' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateLabel}</Text>
+              <Text style={[styles.filterChipValue, dateFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setFavOnly((v) => !v)}>
+            <TouchableOpacity style={[styles.filterChip, cityFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('city')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>City</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'city' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, cityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{cityLabel}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.filterChip, favFilter !== 'all' && styles.filterChipActive]} onPress={() => setOpenDropdown('fav')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Favourites</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, favOnly && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favOnly ? '★ Only' : 'All'}</Text>
+              <Text style={[styles.filterChipValue, favFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favLabel}</Text>
+            </TouchableOpacity>
+            {customFilters.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
+                onPress={() => applyCustom(f.id)}
+                onLongPress={() => openFilterOptions(f)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+              <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
           </ScrollView>
 
+          {shown.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No labels match</Text>
+              <Text style={styles.emptyBody}>Try clearing the filters above.</Text>
+            </View>
+          ) : (
           <ScrollView style={styles.listScroll} contentContainerStyle={styles.listContent}>
               {shown.map((label) => {
                 const conn = connByLabel.get(label.id);
@@ -498,7 +612,7 @@ export default function MyLabelsScreen() {
                     {/* Dated links to where this wine also lives — most recent
                         review date only; styled as links, not buttons. */}
                     {conn?.lastReviewedIso ? (
-                      <TouchableOpacity onPress={() => router.push('/wines/chosen')} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                      <TouchableOpacity onPress={() => openReviewedLink(conn)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                         <Text style={styles.rowLink}>Reviewed {new Date(conn.lastReviewedIso).toLocaleDateString('en-GB')}</Text>
                       </TouchableOpacity>
                     ) : null}
@@ -512,10 +626,11 @@ export default function MyLabelsScreen() {
                 );
               })}
             </ScrollView>
+          )}
         </>
       )}
 
-      {/* View / Favourites dropdown */}
+      {/* Date / City / Favourites dropdown */}
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
@@ -544,6 +659,19 @@ export default function MyLabelsScreen() {
           </TouchableOpacity>
         </TouchableOpacity>
       </Modal>
+
+      {/* Bespoke "+ Add" filter — create / edit a named filter over labels. */}
+      <LibraryFilterModal
+        visible={filterModalOpen}
+        title={editingFilter ? 'Edit filter' : 'New filter'}
+        itemNoun="labels"
+        items={filterItems}
+        initialName={editingFilter?.name}
+        initialSelected={editingFilter?.itemIds}
+        saving={savingFilter}
+        onSave={saveFilter}
+        onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
+      />
 
       {/* +Add chooser — Scan / Upload / Select from Cellar */}
       <Modal visible={addOpen} transparent animationType="fade" onRequestClose={() => setAddOpen(false)}>
@@ -660,6 +788,12 @@ const styles = StyleSheet.create({
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 112, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  filterChipActive: { borderColor: colors.gold },
+  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, maxWidth: 160 },
+  customChipActive: { borderColor: colors.gold },
+  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md },
+  customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },

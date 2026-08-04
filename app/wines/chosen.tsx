@@ -400,7 +400,18 @@ export default function ChosenWinesScreen() {
       const key = `open:${params.openReview}`;
       if (handledParamRef.current === key) return;
       const match = chosenWines.find((w) => w.id === params.openReview);
-      if (match) { handledParamRef.current = key; setEditingWine(match); }
+      if (match) {
+        handledParamRef.current = key;
+        // Open the unified READ-ONLY detail view (not the editable input card).
+        // Gather this review's dated entries — every row sharing its
+        // review_group_id — newest first, exactly as the list does.
+        const gid = match.review_group_id ?? match.id;
+        const entries = chosenWines
+          .filter((w) => (w.review_group_id ?? w.id) === gid)
+          .sort((a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime());
+        const source: 'restaurant' | 'other' = match.source === 'other' ? 'other' : 'restaurant';
+        setDetailItem({ source, date: entries[0]?.chosen_at ?? '', score: entries[0]?.user_score ?? null, wine: entries[0] ?? match, entries: entries.length ? entries : [match] });
+      }
       return;
     }
     if (params.seedAdd === '1') {
@@ -1121,7 +1132,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Wine Reviews</Text>
+        <Text style={styles.title}>Your Wine Reviews</Text>
         <TouchableOpacity
           onPress={() => setCollectionChooserOpen(true)}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}

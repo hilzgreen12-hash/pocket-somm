@@ -3,7 +3,8 @@ import { View, Text, ScrollView, Pressable, TouchableOpacity, TextInput, StyleSh
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { getBins, getBinCells, deleteBin, emptyBinCell, removeWineFromCell, binCellLabels, binDiamondCount } from '../../../src/api/bins';
+import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, removeWineFromCell, binCellLabels, binDiamondCount } from '../../../src/api/bins';
+import { RenameModal } from '../../../src/components/RenameModal';
 import { updateCellarWine, archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -231,8 +232,8 @@ export default function BinDetailScreen() {
           text: 'Delete Wine (Permanent)',
           style: 'destructive',
           onPress: () => showAlert({
-            title: 'Delete wine?',
-            body: "Permanently remove it from your records. This can't be undone.",
+            title: 'Delete this wine?',
+            body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
             buttons: [
               { text: 'Cancel', style: 'cancel' },
               { text: 'Delete', style: 'destructive', onPress: async () => { try { await deleteCellarWine(w.id); invalidate(); } catch (err) { showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
@@ -310,6 +311,51 @@ export default function BinDetailScreen() {
     });
   }
 
+  // Top-right "Edit" — bin management, mirroring the rack/fridge Edit modal's
+  // contents. Resize is omitted: a bin's diamond geometry is fixed at creation
+  // (there's no in-place resize like a rack grid).
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [savingRename, setSavingRename] = useState(false);
+
+  function openBinEdit() {
+    showAlert({
+      title: bin?.name ?? 'Bin',
+      body: 'Manage this bin.',
+      buttons: [
+        { text: 'Rename Bin', onPress: () => setRenameOpen(true) },
+        { text: 'Empty Bin Contents', style: 'destructive', onPress: confirmEmptyBin },
+        { text: 'Delete Bin', style: 'destructive', onPress: handleDelete },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  function confirmEmptyBin() {
+    showAlert({
+      title: 'Empty this bin?',
+      body: "This empties every cell in this bin. The wines stay in your cellar — they're just unassigned from this bin.",
+      buttons: [
+        { text: 'Empty bin', style: 'destructive', onPress: async () => { try { await emptyBin(binId); invalidate(); } catch (err) { showAlert({ title: 'Could not empty', body: err instanceof Error ? err.message : 'Please try again.' }); } } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  async function handleRename(name: string) {
+    const n = name.trim();
+    if (!n) return;
+    setSavingRename(true);
+    try {
+      await renameBin(binId, n);
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      setRenameOpen(false);
+    } catch (err) {
+      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingRename(false);
+    }
+  }
+
   const showList = listOpen || q.length > 0;
 
   return (
@@ -318,10 +364,12 @@ export default function BinDetailScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <TouchableOpacity onLongPress={handleDelete} delayLongPress={400} activeOpacity={1} style={styles.titleWrap}>
+        <View style={styles.titleWrap}>
           <Text style={styles.title} numberOfLines={1}>{bin?.name ?? 'Bin'}</Text>
+        </View>
+        <TouchableOpacity onPress={openBinEdit} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
+          <Text style={styles.headerEdit}>Edit</Text>
         </TouchableOpacity>
-        <View style={{ width: 40 }} />
       </View>
 
       {isLoading || !bin ? (
@@ -501,6 +549,15 @@ export default function BinDetailScreen() {
           </View>
         </View>
       </Modal>
+
+      <RenameModal
+        visible={renameOpen}
+        initialName={bin?.name ?? ''}
+        title="Rename bin"
+        saving={savingRename}
+        onSave={handleRename}
+        onClose={() => setRenameOpen(false)}
+      />
     </View>
   );
 }
@@ -510,6 +567,7 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
+  headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', minWidth: 40 },
   titleWrap: { flex: 1 },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   statsLine1: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: spacing.lg },

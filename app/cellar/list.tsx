@@ -270,7 +270,7 @@ export default function FullCellarListScreen() {
   function confirmDeleteOne(w: CellarWine) {
     showAlert({
       title: 'Delete this wine?',
-      body: "Permanently remove it from your records. This can't be undone.",
+      body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete (permanent)', style: 'destructive', onPress: async () => {

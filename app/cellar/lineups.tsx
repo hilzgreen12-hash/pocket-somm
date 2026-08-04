@@ -116,7 +116,7 @@ export default function LineupLibraryScreen() {
   const monthOptions = useMemo(() => {
     const seen: string[] = [];
     for (const l of lineups) { const k = monthKey(l.archived_at); if (!seen.includes(k)) seen.push(k); }
-    return [{ value: 'All', label: 'All months' }, ...seen.map((m) => ({ value: m, label: m }))];
+    return [{ value: 'All', label: 'All dates' }, ...seen.map((m) => ({ value: m, label: m }))];
   }, [lineups]);
 
   // City options — distinct cities the lineups were captured in, alphabetical.
@@ -304,14 +304,14 @@ export default function LineupLibraryScreen() {
 
   const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All lineups';
   const cityLabel = cityFilter === 'All' ? 'All cities' : cityFilter;
-  const monthLabel = monthFilter === 'All' ? 'All months' : monthFilter;
+  const monthLabel = monthFilter === 'All' ? 'All dates' : monthFilter;
 
   const dropdown = openDropdown === 'fav'
     ? { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v: string) => setFavFilter(v as 'all' | 'fav') }
     : openDropdown === 'city'
     ? { title: 'City', options: cityOptions, selected: cityFilter, onSelect: (v: string) => setCityFilter(v) }
     : openDropdown === 'month'
-    ? { title: 'Month enjoyed', options: monthOptions, selected: monthFilter, onSelect: (v: string) => setMonthFilter(v) }
+    ? { title: 'Date', options: monthOptions, selected: monthFilter, onSelect: (v: string) => setMonthFilter(v) }
     : null;
 
   // Whole-library tally shown in gold under the header, mirroring the Full
@@ -375,12 +375,12 @@ export default function LineupLibraryScreen() {
           <View style={styles.summaryDivider} />
           <Text style={styles.filterHint}>Listed by Recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterRow}>
-            <TouchableOpacity style={[styles.filterChip, favFilter !== 'all' && styles.filterChipActive]} onPress={() => setOpenDropdown('fav')}>
+            <TouchableOpacity style={[styles.filterChip, monthFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Favourites</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Date</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'month' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, favFilter !== 'all' && { color: colors.gold }]} numberOfLines={1}>{favLabel}</Text>
+              <Text style={[styles.filterChipValue, monthFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{monthLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.filterChip, cityFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('city')}>
               <View style={styles.filterChipHeadingRow}>
@@ -389,12 +389,12 @@ export default function LineupLibraryScreen() {
               </View>
               <Text style={[styles.filterChipValue, cityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{cityLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.filterChip, monthFilter !== 'All' && styles.filterChipActive]} onPress={() => setOpenDropdown('month')}>
+            <TouchableOpacity style={[styles.filterChip, favFilter !== 'all' && styles.filterChipActive]} onPress={() => setOpenDropdown('fav')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Month enjoyed</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'month' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Favourites</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, monthFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{monthLabel}</Text>
+              <Text style={[styles.filterChipValue, favFilter !== 'all' && { color: colors.gold }]} numberOfLines={1}>{favLabel}</Text>
             </TouchableOpacity>
             {customFilters.map((f) => (
               <TouchableOpacity
