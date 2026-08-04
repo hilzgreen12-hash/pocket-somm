@@ -1,10 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Share, Image,
+  StyleSheet, Keyboard, Share,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import * as ImagePicker from 'expo-image-picker';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
@@ -12,8 +11,6 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { LabelThumb } from './LabelThumb';
-import { uploadLabelImage } from '../api/labelPhotos';
-import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
@@ -64,81 +61,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
 
-  // Edit-identity sheet (name / vintage / region / style + location + date +
-  // label photo) — the same affordance the restaurant review editor has.
-  const [identityEditOpen, setIdentityEditOpen] = useState(false);
-  const [editProducer, setEditProducer] = useState('');
-  const [editName, setEditName] = useState('');
-  const [editVintage, setEditVintage] = useState('');
-  const [editRegion, setEditRegion] = useState('');
-  const [editStyle, setEditStyle] = useState('');
-  const [editRestaurant, setEditRestaurant] = useState('');
-  const [editCity, setEditCity] = useState('');
-  const [editDate, setEditDate] = useState('');
-  const [editImageUri, setEditImageUri] = useState<string | null>(null);
-  const [savingIdentity, setSavingIdentity] = useState(false);
-
   const shareCardRef = useRef<View>(null);
-
-  function openIdentityEdit() {
-    if (!wine) return;
-    setEditProducer(wine.producer ?? '');
-    setEditName(wine.wine_name ?? '');
-    setEditVintage(wine.vintage ?? '');
-    setEditRegion(wine.region ?? '');
-    setEditStyle(wine.style ?? '');
-    const { restaurantName, city } = splitLocationString(wine.review_location);
-    if (city) { setEditRestaurant(restaurantName); setEditCity(city); }
-    else { setEditRestaurant(''); setEditCity(restaurantName); }
-    setEditDate(wine.review_date ?? todayISO());
-    setEditImageUri(null);
-    setIdentityEditOpen(true);
-  }
-
-  async function pickIdentityPhoto(source: 'camera' | 'library') {
-    if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
-    const res = source === 'camera'
-      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
-      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-    if (res.canceled || !res.assets[0]) return;
-    setEditImageUri(res.assets[0].uri);
-  }
-
-  async function saveIdentity() {
-    if (!wine || !session?.user.id) return;
-    if (!editName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name.' }); return; }
-    setSavingIdentity(true);
-    try {
-      const location = [editRestaurant.trim(), editCity.trim()].filter(Boolean).join(', ') || null;
-      let labelPath: string | undefined;
-      if (editImageUri) labelPath = await uploadLabelImage(session.user.id, editImageUri, wine.id);
-      await updateWine.mutateAsync({
-        id: wine.id,
-        updates: {
-          producer: editProducer.trim() || null,
-          wine_name: editName.trim(),
-          region: editRegion.trim() || null,
-          style: editStyle.trim() || null,
-          vintage: editVintage.trim() || null,
-          review_location: location,
-          review_date: editDate.trim() || null,
-          ...(labelPath ? { label_image_path: labelPath } : {}),
-        },
-      });
-      // Keep the review form's own location/date state in step.
-      setLocName(editRestaurant.trim());
-      setLocCity(editCity.trim());
-      setReviewDate(editDate.trim());
-      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-      setIdentityEditOpen(false);
-      onSaved();
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingIdentity(false);
-    }
-  }
 
   // Re-seed the form whenever a new wine is opened.
   useEffect(() => {
@@ -439,67 +362,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
           </KeyboardAwareScrollView>
         </View>
       </View>
-
-      {/* Edit the wine's identity (name / vintage / region / style), the review
-          location + date, and the label photo — the same sheet as the restaurant
-          review editor, saving to the cellar wine. */}
-      <Modal visible={identityEditOpen} transparent animationType="fade" onRequestClose={() => setIdentityEditOpen(false)}>
-        <View style={styles.confirmOverlay}>
-          <KeyboardAwareScrollView contentContainerStyle={styles.editScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-            <View style={styles.editSheet}>
-              <Text style={styles.confirmTitle}>Edit wine</Text>
-
-              <Text style={styles.editLabel}>Producer</Text>
-              <TextInput style={styles.editInput} value={editProducer} onChangeText={setEditProducer} placeholder="Producer" placeholderTextColor={colors.textSubtle} />
-
-              <Text style={styles.editLabel}>Wine name</Text>
-              <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="Wine name" placeholderTextColor={colors.textSubtle} />
-
-              <Text style={styles.editLabel}>Vintage</Text>
-              <TextInput style={styles.editInput} value={editVintage} onChangeText={(t) => setEditVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textSubtle} autoCapitalize="characters" maxLength={7} />
-
-              <Text style={styles.editLabel}>Region</Text>
-              <TextInput style={styles.editInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textSubtle} />
-
-              <Text style={styles.editLabel}>Style</Text>
-              <TextInput style={styles.editInput} value={editStyle} onChangeText={setEditStyle} placeholder="e.g. Red, White, Rosé, Sparkling" placeholderTextColor={colors.textSubtle} />
-
-              <Text style={styles.editLabel}>Location</Text>
-              <TextInput style={styles.editInput} value={editRestaurant} onChangeText={setEditRestaurant} placeholder="Where you drank it" placeholderTextColor={colors.textSubtle} />
-
-              <Text style={styles.editLabel}>City</Text>
-              <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} placeholder="City" placeholderTextColor={colors.textSubtle} />
-
-              <Text style={styles.editLabel}>Date</Text>
-              <TextInput style={styles.editInput} value={editDate} onChangeText={(t) => setEditDate(t.replace(/[^0-9-]/g, '').slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" maxLength={10} />
-
-              <Text style={styles.editLabel}>Photo</Text>
-              <View style={styles.editThumbRow}>
-                {editImageUri ? (
-                  <Image source={{ uri: editImageUri }} style={styles.editThumb} />
-                ) : (
-                  <LabelThumb path={wine.label_image_path ?? null} fallbackText={wine.wine_name} style={styles.editThumb} radius={6} frame={0} />
-                )}
-                <View style={styles.editPhotoBtns}>
-                  <TouchableOpacity style={styles.editPhotoBtn} onPress={() => pickIdentityPhoto('camera')}>
-                    <Text style={styles.editPhotoBtnText}>Take Photo</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.editPhotoBtn} onPress={() => pickIdentityPhoto('library')}>
-                    <Text style={styles.editPhotoBtnText}>Upload</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              <TouchableOpacity style={[styles.confirmButton, savingIdentity && styles.btnDisabled]} onPress={saveIdentity} disabled={savingIdentity}>
-                <Text style={styles.confirmButtonText}>{savingIdentity ? 'Saving…' : 'Save'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.confirmCancel} onPress={() => setIdentityEditOpen(false)} disabled={savingIdentity}>
-                <Text style={styles.confirmCancelText}>Cancel</Text>
-              </TouchableOpacity>
-            </View>
-          </KeyboardAwareScrollView>
-        </View>
-      </Modal>
 
       {sharing && (
         <View style={styles.shareCardWrap} pointerEvents="none">
