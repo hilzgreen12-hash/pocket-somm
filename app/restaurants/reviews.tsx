@@ -773,11 +773,29 @@ export default function RestaurantReviewsScreen() {
               // deleting it. The modal's silent autosave persists the
               // restaurant note/ratings as it unmounts.
               manualSavedRef.current = true;
-              // pop=false: keep this screen instance mounted so the editingWine
-              // modal we open next actually renders here (see closeRestaurantReview).
-              closeRestaurantReview(false);
-              setEditWineIdentity(false);
-              setEditingWine(cw);
+              const isReviewed = !!(
+                (cw.tasting_note && cw.tasting_note.trim()) ||
+                (cw.other_observations && cw.other_observations.trim()) ||
+                cw.user_score != null
+              );
+              if (isReviewed) {
+                // Already reviewed → open the unified READ-ONLY review view in
+                // Your Wine Reviews (the canonical host with the append/edit/
+                // delete flow), not the editable input card. Close the restaurant
+                // modal first, then navigate on the next tick (a push while it's
+                // still dismissing gets swallowed — same reason as onViewIntel).
+                const id = cw.id;
+                setEditing(null);
+                setEditingFromLink(false);
+                setTimeout(() => router.push(`/wines/chosen?openReview=${id}`), 320);
+              } else {
+                // Not yet reviewed → open the input card in place to CREATE the
+                // review. pop=false keeps this screen instance mounted so the
+                // editingWine modal renders here (see closeRestaurantReview).
+                closeRestaurantReview(false);
+                setEditWineIdentity(false);
+                setEditingWine(cw);
+              }
             }
           }}
           onEditWine={(i) => {

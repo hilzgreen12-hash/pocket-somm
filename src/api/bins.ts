@@ -171,6 +171,26 @@ export async function deleteBin(binId: string): Promise<void> {
   if (error) throw error;
 }
 
+// Rename a bin (bins are wine_racks rows, same as racks/fridges).
+export async function renameBin(binId: string, name: string): Promise<void> {
+  const { error } = await supabase.from('wine_racks').update({ name }).eq('id', binId);
+  if (error) throw error;
+}
+
+// Empty every cell in a bin at once — the wines stay in the cellar (loose),
+// they just lose their cell pointer. Mirrors the rack "Wipe contents" action.
+export async function emptyBin(binId: string): Promise<void> {
+  const { data: cells, error: cellsErr } = await supabase.from('bin_cells').select('id').eq('bin_id', binId);
+  if (cellsErr) throw cellsErr;
+  const cellIds = (cells ?? []).map((c) => c.id);
+  if (cellIds.length === 0) return;
+  const { error } = await supabase
+    .from('cellar_wines')
+    .update({ bin_cell_id: null, updated_at: new Date().toISOString() })
+    .in('bin_cell_id', cellIds);
+  if (error) throw error;
+}
+
 // A bin's cells with the (live) wines filed into each, plus a summed bottle
 // count per cell for the fill meter. Wishlist/archived wines are excluded, as
 // on the rack path.

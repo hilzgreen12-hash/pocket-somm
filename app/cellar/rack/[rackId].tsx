@@ -1032,10 +1032,10 @@ export default function RackGridScreen() {
 
   function confirmDeleteWine(wineId: string, wineName: string, qty: number) {
     showAlert({
-      title: qty > 1 ? `Delete all ${qty} bottles?` : 'Delete wine?',
+      title: qty > 1 ? `Delete all ${qty} bottles?` : 'Delete this wine?',
       body: qty > 1
-        ? `Permanently remove all ${qty} bottles of ${wineName} from your records. This can't be undone.`
-        : `Permanently remove ${wineName} from your records. This can't be undone.`,
+        ? `Permanently remove all ${qty} bottles of ${wineName} from your cellar, but keep your reviews. This can't be undone.`
+        : "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
       buttons: [
         {
           text: 'Delete permanently',
@@ -1411,7 +1411,12 @@ export default function RackGridScreen() {
             <Text style={[styles.navArrow, !nextRack && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
         </View>
-        <View style={{ width: 40 }} />
+        <TouchableOpacity
+          onPress={() => { setRenameDraft(rack.name); setEditOpen(true); }}
+          hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}
+        >
+          <Text style={styles.headerEdit}>Edit</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Gold tally — distinct wines, total bottles, and total slot capacity. */}
@@ -1627,16 +1632,6 @@ export default function RackGridScreen() {
         </View>
 
 
-        {/* Edit bubble — opens the rack-management modal (wipe / rename /
-            delete). Sits at the bottom of the page so destructive actions
-            stay out of the user's primary path. */}
-        <TouchableOpacity
-          style={styles.editRackBtn}
-          onPress={() => { setRenameDraft(rack.name); setEditOpen(true); }}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.editRackBtnText}>{rack.storage_type === 'fridge' ? 'Edit Wine Fridge' : 'Edit Wine Rack'}</Text>
-        </TouchableOpacity>
       </KeyboardAwareScrollView>
 
 
@@ -2240,10 +2235,9 @@ const styles = StyleSheet.create({
   placeCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   // Inter — cancel link (not a button)
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  // Add-a-lineup CTA — gold to read as a primary action, above the Edit pill.
-  editRackBtn: { alignSelf: 'center', marginTop: spacing.md, marginBottom: spacing.lg, borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 20, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  // Cormorant — button text
-  editRackBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', letterSpacing: 1, textTransform: 'uppercase' },
+  // Top-right header "Edit" link — opens the rack-management modal, consistent
+  // with the +Add / Edit affordances elsewhere. minWidth balances the back arrow.
+  headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', minWidth: 40 },
   editActionBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
   // Cormorant — button text
   editActionBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },

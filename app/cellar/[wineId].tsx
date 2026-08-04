@@ -1957,7 +1957,7 @@ export default function CellarWineDetail() {
           <View style={styles.removeModalSheet}>
             {removeStep === 'confirm' ? (
               <>
-                <Text style={styles.removeModalTitle}>Remove this wine?</Text>
+                <Text style={styles.removeModalTitle}>Delete this wine?</Text>
                 <Text style={styles.removeModalBody}>
                   {(() => {
                     const c = Math.max(1, Math.min(parseInt(removeCount) || wine.quantity, wine.quantity));
@@ -1965,7 +1965,7 @@ export default function CellarWineDetail() {
                     const label = `${wine.wine_name}${wine.vintage ? ` ${wine.vintage}` : ''}`;
                     return partial
                       ? `This will permanently delete ${c} of your ${wine.quantity} bottles of ${label}. This can't be undone.`
-                      : `This will permanently delete ${label} from your record. This can't be undone.`;
+                      : "Permanently remove it from your cellar, but keep your reviews. This can't be undone.";
                   })()}
                 </Text>
                 <TouchableOpacity
