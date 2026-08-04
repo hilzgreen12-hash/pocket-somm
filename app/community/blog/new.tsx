@@ -2,8 +2,11 @@ import { useEffect, useState } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Switch, ActivityIndicator, Image } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { createBlogPost, updateBlogPost, fetchBlogPost, isVinsterOwner, type BlogPostInput } from '../../../src/api/blog';
+import { extractDocumentText } from '../../../src/api/documents';
 import { showAlert } from '../../../src/components/AppAlert';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../../src/constants/fonts';
@@ -23,6 +26,52 @@ export default function BlogComposeScreen() {
   const [wasPublished, setWasPublished] = useState(false);
   const [loading, setLoading] = useState(!!id);
   const [saving, setSaving] = useState(false);
+  const [importing, setImporting] = useState(false);
+
+  // Import the body from a document — a phone keyboard is no place for a long
+  // journal entry. .txt is read on-device; PDF and Word (.docx) go through the
+  // extract-document-text edge function. Imported text is appended to whatever's
+  // already in the body so it stays editable.
+  async function handleImportDocument() {
+    if (importing) return;
+    try {
+      const res = await DocumentPicker.getDocumentAsync({
+        type: [
+          'text/plain',
+          'application/pdf',
+          'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+          '*/*',
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+      if (res.canceled || !res.assets?.[0]) return;
+      const asset = res.assets[0];
+      const name = (asset.name ?? '').toLowerCase();
+      const mime = asset.mimeType ?? '';
+      setImporting(true);
+      let text = '';
+      if (name.endsWith('.txt') || mime === 'text/plain') {
+        text = await new File(asset.uri).text();
+      } else if (name.endsWith('.pdf') || mime === 'application/pdf') {
+        text = await extractDocumentText(await new File(asset.uri).base64(), 'pdf');
+      } else if (name.endsWith('.docx') || mime.includes('wordprocessingml')) {
+        text = await extractDocumentText(await new File(asset.uri).base64(), 'docx');
+      } else {
+        showAlert({ title: 'Unsupported file', body: 'Import a plain-text (.txt), PDF, or Word (.docx) file. Old .doc files aren’t supported — re-save as .docx or PDF.' });
+        return;
+      }
+      if (!text.trim()) {
+        showAlert({ title: 'Nothing to import', body: "Vinster couldn't read any text from that file. If it's a scanned image, try a clearer PDF." });
+        return;
+      }
+      setBody((prev) => (prev.trim() ? `${prev.trim()}\n\n${text.trim()}` : text.trim()));
+    } catch (err) {
+      showAlert({ title: 'Could not import', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setImporting(false);
+    }
+  }
 
   // Only the owner may compose — bounce anyone else out.
   useEffect(() => {
@@ -94,8 +143,12 @@ export default function BlogComposeScreen() {
           <TextInput style={styles.input} value={tags} onChangeText={setTags} placeholder="Burgundy, Tasting, Travel" placeholderTextColor={colors.textSubtle} />
 
           <Text style={styles.label}>Body</Text>
-          <Text style={styles.hint}>Supports ## headings, **bold**, *italic*, &gt; quotes and - lists. Leave a blank line between paragraphs.</Text>
-          <TextInput style={[styles.input, styles.bodyInput]} value={body} onChangeText={setBody} placeholder="Write your piece…" placeholderTextColor={colors.textSubtle} multiline textAlignVertical="top" />
+          <Text style={styles.hint}>Writing a long piece on a phone isn't much fun — import it from a document instead, then tweak. Supports ## headings, **bold**, *italic*, &gt; quotes and - lists.</Text>
+          <TouchableOpacity onPress={handleImportDocument} disabled={importing} activeOpacity={0.7} style={styles.importRow} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            {importing ? <ActivityIndicator color={colors.gold} size="small" /> : null}
+            <Text style={styles.importLink}>{importing ? 'Reading your document…' : '⭳  Import from a document (txt · Word · PDF)'}</Text>
+          </TouchableOpacity>
+          <TextInput style={[styles.input, styles.bodyInput]} value={body} onChangeText={setBody} placeholder="Write your piece, or import it above…" placeholderTextColor={colors.textSubtle} multiline textAlignVertical="top" />
 
           <View style={styles.publishRow}>
             <View style={{ flex: 1 }}>
@@ -122,6 +175,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   label: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: 6 },
   hint: { fontSize: 12.5, fontFamily: fonts.bodyItalic, color: 'rgba(255,255,255,0.55)', marginBottom: 8, lineHeight: 18 },
+  importRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: 10 },
+  importLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   input: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 16, fontFamily: fonts.bodyRegular, color: '#FFFFFF', backgroundColor: 'rgba(255,255,255,0.04)' },
   titleInput: { fontSize: 20, fontFamily: fonts.headingSemibold, minHeight: 52 },
   bodyInput: { minHeight: 260, lineHeight: 24 },
