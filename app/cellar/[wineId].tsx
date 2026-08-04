@@ -27,7 +27,6 @@ import { generatePairings } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
-import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../../src/services/reviewSync';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -290,17 +289,6 @@ export default function CellarWineDetail() {
       showAlert({ title: 'Could not import', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
-  const [reviewScoreDraft, setReviewScoreDraft] = useState(wine?.review_score != null ? String(wine.review_score) : '');
-  const [reviewLocationDraft, setReviewLocationDraft] = useState(wine?.review_location ?? '');
-  // "When did you drink it?" defaults to today if the wine hasn't been
-  // reviewed yet — users adding a review immediately after drinking would
-  // otherwise have to type the date out every time.
-  const [reviewDateDraft, setReviewDateDraft] = useState(wine?.review_date ?? todayISO());
-  // The user's WRITTEN review text — sharable to community + outside
-  // the app. Distinct from Personal Notes (user_notes), which stays
-  // private. Backed by the new review_note column (migration 043).
-  const [reviewNoteDraft, setReviewNoteDraft] = useState(wine?.review_note ?? '');
-  const [savingReview, setSavingReview] = useState(false);
 
   // Vinster's Note — collapsed by default now (was always visible).
   // The "(what's this)" link surfaces a short explanation modal so a
@@ -777,69 +765,6 @@ export default function CellarWineDetail() {
       showAlert({ title: 'Error', body: 'Could not save purchase price.' });
     } finally {
       setSavingPrice(false);
-    }
-  }
-
-  async function handleSaveReview() {
-    Keyboard.dismiss();
-    const scoreTrim = reviewScoreDraft.trim();
-    const locationTrim = reviewLocationDraft.trim();
-    const dateTrim = reviewDateDraft.trim();
-    const priceTrim = purchasePriceDraft.trim();
-    const parsedPrice = priceTrim ? parseFloat(priceTrim) : NaN;
-    const priceValue = Number.isFinite(parsedPrice) && parsedPrice >= 0 ? parsedPrice : null;
-    const priceCurrency = wine!.purchase_price_currency ?? preferences?.defaultCurrency ?? 'GBP';
-    let parsedScore: number | null = null;
-    if (scoreTrim) {
-      const n = Number(scoreTrim);
-      if (!Number.isFinite(n) || n < 0 || n > 100) {
-        showAlert({ title: 'Invalid score', body: 'Enter a score between 0 and 100.' });
-        return;
-      }
-      parsedScore = Math.round(n);
-    }
-    setSavingReview(true);
-    try {
-      await updateWine.mutateAsync({
-        id: wine!.id,
-        updates: {
-          review_score: parsedScore,
-          review_location: locationTrim || null,
-          review_date: dateTrim || null,
-          // Review prose lives in review_note (migration 043) so it
-          // can be split cleanly from Personal Notes (user_notes).
-          review_note: reviewNoteDraft.trim() || null,
-          purchase_price: priceValue,
-          purchase_price_currency: priceValue != null ? priceCurrency : null,
-        },
-      });
-      // Mirror the review edit onto every matching record so reviews,
-      // wishlist entries and any other cellar rows for the same wine
-      // stay in lock-step. Best-effort — sync failures don't undo the
-      // primary cellar update.
-      if (session?.user.id && wine) {
-        const { restaurantName, city } = splitLocationString(locationTrim);
-        const identity = { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage };
-        const fields = { userScore: parsedScore, restaurantName, city, reviewDate: dateTrim || undefined };
-        try {
-          // Update a matching chosen_wines review if one exists, but DON'T
-          // create one: a cellar wine's review already surfaces in Your Wine
-          // Reviews as a 'cellar' item, so spawning a chosen_wines row here
-          // produced a duplicate (a score-only twin of the real review).
-          await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: false, region: wine.region });
-          await syncReviewToCellar(session.user.id, identity, fields, { excludeCellarWineId: wine.id });
-          qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
-          qc.invalidateQueries({ queryKey: ['wishlist', session.user.id] });
-          qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-        } catch (err) {
-          console.warn('[wine-detail review sync] failed:', err);
-        }
-      }
-      setReviewExpanded(false);
-    } catch {
-      showAlert({ title: 'Could not save review', body: 'Please try again.' });
-    } finally {
-      setSavingReview(false);
     }
   }
 
