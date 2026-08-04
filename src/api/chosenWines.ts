@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { wineNameKey } from '../utils/wineIdentity';
 import type { ChosenWine, WineRecommendation } from '../types/wine';
 
 export interface SaveChosenWineInput {
@@ -239,7 +240,7 @@ export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
 // the matching review.
 export async function findMatchingChosenWine(
   userId: string,
-  identity: { producer: string | null; wineName: string; vintage: string | number | null }
+  identity: { producer: string | null; wineName: string; vintage: string | number | null; wsWineId?: string | null }
 ): Promise<ChosenWine | null> {
   const { data, error } = await supabase
     .from('chosen_wines')
@@ -248,15 +249,30 @@ export async function findMatchingChosenWine(
     .order('chosen_at', { ascending: false });
   if (error) throw error;
   const list = (data ?? []) as ChosenWine[];
-  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-  const wantedProducer = norm(identity.producer);
-  const wantedName = norm(identity.wineName);
-  const wantedVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
-  return list.find((w) =>
-    norm(w.producer) === wantedProducer &&
-    norm(w.wine_name) === wantedName &&
-    (w.vintage != null ? String(w.vintage).trim() : '') === wantedVintage
-  ) ?? null;
+
+  const wantId = identity.wsWineId ?? null;
+  const wantKey = wineNameKey(identity.producer, identity.wineName);
+  const wantVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
+  const sameVintage = (w: ChosenWine) => (w.vintage != null ? String(w.vintage).trim() : '') === wantVintage;
+  const hasReview = (w: ChosenWine) =>
+    !!((w.tasting_note && w.tasting_note.trim()) || (w.other_observations && w.other_observations.trim()) || w.user_score != null);
+
+  // Same wine, same vintage — by Wine-Searcher id (authoritative) when both
+  // carry one, else an order-/placement-independent name-token match. This is
+  // broader than the old exact producer==name==vintage equality, which missed
+  // reviews whose producer / name were split differently from the cellar wine
+  // (the "import review didn't link" bug).
+  const isMatch = (w: ChosenWine) =>
+    sameVintage(w) && (
+      (wantId != null && w.ws_wine_id != null && w.ws_wine_id === wantId) ||
+      (!!wantKey && wineNameKey(w.producer, w.wine_name) === wantKey)
+    );
+
+  const matches = list.filter(isMatch);
+  if (matches.length === 0) return null;
+  // Prefer a match that actually carries a review, so an import/link lands on
+  // the real review rather than a bare bottle-pick of the same wine.
+  return matches.find(hasReview) ?? matches[0];
 }
 
 // Create a chosen_wines row from a review made directly on a cellar

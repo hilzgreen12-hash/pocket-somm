@@ -1,4 +1,5 @@
 import type { ChosenWine } from '../types/wine';
+import { wineNameKey } from './wineIdentity';
 
 // Shared helpers for the duplicate-review flow. When a user reviews a
 // wine they've already reviewed (matched by identity), the review modals
@@ -12,19 +13,25 @@ export interface WineIdentity {
   producer: string | null | undefined;
   wineName: string | null | undefined;
   vintage: string | number | null | undefined;
+  // Wine-Searcher id, when known — the authoritative match anchor.
+  wsWineId?: string | null;
 }
 
 // Find an existing review for the same wine identity (producer + name +
 // vintage, normalised — same criterion as reviewSync). Returns the most
 // recent match, or null.
 export function findExistingReview(reviews: ChosenWine[], identity: WineIdentity): ChosenWine | null {
-  const p = norm(identity.producer);
-  const n = norm(identity.wineName);
+  const wantId = identity.wsWineId ?? null;
+  const wantKey = wineNameKey(identity.producer, identity.wineName);
   const v = norm(identity.vintage != null ? String(identity.vintage) : '');
+  // Same wine, same vintage — by Wine-Searcher id when both carry one, else an
+  // order-/placement-independent name-token match. Broader than the old exact
+  // producer==name==vintage equality, which missed a prior review whose name was
+  // split differently (and so spawned a duplicate).
   const matches = reviews.filter((r) =>
-    norm(r.producer) === p &&
-    norm(r.wine_name) === n &&
-    norm(r.vintage != null ? String(r.vintage) : '') === v,
+    norm(r.vintage != null ? String(r.vintage) : '') === v &&
+    ((wantId != null && r.ws_wine_id != null && r.ws_wine_id === wantId) ||
+      (!!wantKey && wineNameKey(r.producer, r.wine_name) === wantKey)),
   );
   if (matches.length === 0) return null;
   return matches.reduce((a, b) =>

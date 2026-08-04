@@ -299,7 +299,7 @@ export default function MyLabelsScreen() {
     let existingId: string | null = null;
     try {
       if (userId) {
-        const match = await findMatchingChosenWine(userId, { producer: label.producer, wineName: label.wine_name ?? '', vintage: label.vintage });
+        const match = await findMatchingChosenWine(userId, { producer: label.producer, wineName: label.wine_name ?? '', vintage: label.vintage, wsWineId: label.ws_wine_id });
         existingId = match?.id ?? null;
       }
     } catch { /* fall back to Create a Review */ }

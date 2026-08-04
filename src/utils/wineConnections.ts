@@ -10,27 +10,10 @@ import { entriesOf } from './cellarReview';
 // "you've had this wine" connects even across vintages; `vintageMismatch` flags
 // when a match is a different vintage than the wine in hand.
 
-// Normalize for identity matching, tolerant of the formatting differences that
-// crop up between a label scan and a list scan of the SAME wine: strip
-// diacritics ("Château" == "Chateau"), drop any 4-digit vintage embedded in the
-// name (we match vintage-agnostically anyway, so "Barolo Ravera 2019" ==
-// "Barolo Ravera"), fold punctuation to spaces, collapse and trim.
-const norm = (s: string | null | undefined) => (s ?? '')
-  .normalize('NFD').replace(/[\u0300-\u036f]/g, "")
-  .toLowerCase()
-  .replace(/\b(?:19|20)\d{2}\b/g, ' ')
-  .replace(/[^a-z0-9]+/g, ' ')
-  .trim();
-
-// Order- and field-placement-independent identity key. A label scan and a list
-// scan of the same wine often split producer vs name differently (or repeat the
-// producer inside the name), so we match on the SET of significant words across
-// BOTH fields: same words in any order/placement → same wine; different words →
-// different wine (kept conservative so distinct cuvées don't merge).
-export function wineNameKey(producer: string | null | undefined, wineName: string | null | undefined): string {
-  const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter(Boolean);
-  return Array.from(new Set(tokens)).sort().join(' ');
-}
+// The identity-matching key lives in a dependency-free module (wineIdentity)
+// so reviewDedup and the chosen-wines API can share it without an import
+// cycle. Re-exported so existing importers of wineNameKey here keep working.
+export { wineNameKey } from './wineIdentity';
 
 // A chosen_wines row counts as reviewed once it carries any review content
 // (mirrors the predicate in app/wines/chosen.tsx).
