@@ -519,6 +519,9 @@ export default function LabelResultsScreen() {
       // Real Wine-Searcher market price vs Claude estimate — drives the card's
       // value source label.
       estimated_value_source: intel.estimatedValue != null ? (intel.valueSource ?? 'vinster') : (prefetchedValue?.source ?? null),
+      // Exact-vintage vs all-vintage fallback, so the cellar card can label a
+      // stored WS value the same way the scan card does (null = treated as exact).
+      estimated_value_scope: intel.estimatedValue != null ? (intel.priceScope ?? null) : null,
       // Canonical identity anchor when Wine-Searcher matched this wine.
       ws_wine_id: intel.wsWineId ?? null,
       ws_wine_name: intel.wsWineName ?? null,
@@ -1300,14 +1303,16 @@ export default function LabelResultsScreen() {
               ) : null}
             </View>
             <View style={styles.statCell}>
-              <Text style={styles.statLabel}>Estimated Value</Text>
+              <Text style={styles.statLabel}>Market Value</Text>
               {intel.estimatedValue != null ? (
                 <>
                   <Text style={[styles.statValue, styles.estimatedValueGold]}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
-                  {intel.valueSource === 'wine-searcher' ? <Text style={styles.statSub}>Wine-Searcher</Text> : null}
+                  {intel.valueSource === 'wine-searcher' ? (
+                    <Text style={styles.statSub}>{intel.priceScope === 'all-vintage' ? 'All vintages' : 'Wine-Searcher'}</Text>
+                  ) : null}
                 </>
               ) : (
-                <Text style={[styles.statValue, styles.statValueMuted]}>No market data</Text>
+                <Text style={[styles.statValue, styles.statValueMuted]}>None listed</Text>
               )}
             </View>
             <View style={styles.statCell}>
@@ -1318,6 +1323,21 @@ export default function LabelResultsScreen() {
               ) : null}
             </View>
           </View>
+
+          {/* Honest market-value context. Wine-Searcher gives one global average
+              (converted to the user's currency); when it has no listing for the
+              exact vintage the proxy already falls back to the all-vintage
+              average — say so rather than passing it off as the exact vintage.
+              When there's no live price at all, state it plainly. */}
+          {intel.valueSource === 'wine-searcher' && intel.priceScope === 'all-vintage' ? (
+            <Text style={styles.marketNote}>
+              No live market price for the {wine.vintage || 'listed'} vintage on Wine-Searcher — showing its global average across all vintages of this wine, in {userCurrency}.
+            </Text>
+          ) : intel.estimatedValue == null ? (
+            <Text style={styles.marketNote}>
+              No live market price on Wine-Searcher for this wine and vintage. Try checking the closest vintage, or the wine's global page on Wine-Searcher.
+            </Text>
+          ) : null}
 
           <View style={styles.section}>
             <VinstersNoteHeading />
@@ -1870,6 +1890,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
   statSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  marketNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, marginTop: spacing.sm, marginBottom: spacing.xs },
   estimatedByLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: 3 },
   estimatedValueGold: { color: colors.gold },
   // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.

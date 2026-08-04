@@ -146,6 +146,11 @@ export interface WineIntelligence {
   // record of the same wine shares one real, registry-backed id.
   wsWineId?: string | null;
   wsWineName?: string | null;
+  // When the headline value is a real Wine-Searcher price: 'vintage' if it's the
+  // exact vintage, 'all-vintage' if the exact vintage had no listing and this is
+  // WS's average across all vintages. Null when the value is a Vinster estimate
+  // or absent. Drives the "no {vintage}-specific price" label on the intel card.
+  priceScope?: 'vintage' | 'all-vintage' | null;
 }
 
 export interface Recipe {
@@ -240,6 +245,10 @@ export interface CellarWine {
   // Where Estimated Value came from (migration 053): 'wine-searcher' = real
   // market data, 'vinster' = Claude estimate. Null on legacy/untouched rows.
   estimated_value_source: string | null;
+  // Whether a Wine-Searcher value is exact-vintage or an all-vintage fallback
+  // (migration 082): 'vintage' | 'all-vintage'. Null on legacy/untouched rows;
+  // the card treats null as 'vintage'.
+  estimated_value_scope?: string | null;
   // Wine-Searcher canonical identity anchor (migration 081), null when unverified.
   ws_wine_id?: string | null;
   ws_wine_name?: string | null;
@@ -499,5 +508,9 @@ export interface PricingData {
   grape?: string | null;
   wsWineId?: string | null;
   wsWineName?: string | null;
+  // 'vintage' = price is for the exact vintage queried; 'all-vintage' = the
+  // exact vintage had no listing so this is Wine-Searcher's average across all
+  // vintages of the wine (the fallback the proxy retries). Absent on a miss.
+  priceScope?: 'vintage' | 'all-vintage' | null;
   source: 'wine-searcher' | 'unavailable';
 }

@@ -43,6 +43,8 @@ export interface WineValuation {
   // Canonical identity anchor when Wine-Searcher matched (null otherwise).
   wsWineId?: string | null;
   wsWineName?: string | null;
+  // 'vintage' | 'all-vintage' when the value is a real WS price; null otherwise.
+  priceScope?: 'vintage' | 'all-vintage' | null;
 }
 
 export async function valueWine(
@@ -83,6 +85,8 @@ export async function valueWine(
     tastingNotes: intel.tastingNotes ?? null,
     wsWineId: wsMatched ? (pricing.wsWineId ?? null) : null,
     wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,
+    // Only meaningful when the headline value is the real WS price.
+    priceScope: useWs ? (pricing.priceScope ?? 'vintage') : null,
   };
 }
 
@@ -129,5 +133,9 @@ export async function generateWineIntel(
     // Canonical identity anchor — only when Wine-Searcher actually matched.
     wsWineId: wsMatched ? (pricing.wsWineId ?? null) : null,
     wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,
+    // 'all-vintage' when the shown price is the fallback across all vintages
+    // (exact vintage had no WS listing); 'vintage' for an exact match; null
+    // when the value is a Vinster estimate. Labels the intel card honestly.
+    priceScope: useWs ? (pricing.priceScope ?? 'vintage') : null,
   };
 }
