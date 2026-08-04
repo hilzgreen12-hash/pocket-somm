@@ -9,6 +9,7 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
+import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { updateCellarIntelBatch, isMissingIntel } from '../../src/services/bulkIntel';
@@ -98,6 +99,7 @@ export default function FullCellarListScreen() {
   const { wines, isLoading, isError } = useCellar();
   const { wines: archivedWines } = useArchive();
   const { racks } = useRacks();
+  const attachPhoto = useAttachLabelPhoto();
   const qc = useQueryClient();
 
   const userId = session?.user.id;
@@ -245,9 +247,12 @@ export default function FullCellarListScreen() {
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
       buttons: [
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
+        // Update the label photo via the shared Take Photo / Upload / Search
+        // Online sheet. (Viewing intel is the short-press action, so it's not
+        // repeated here.)
+        { text: 'Update Label Photo', onPress: () => attachPhoto.present({ kind: 'cellar', wineId: w.id, producer: w.producer, wineName: w.wine_name }) },
         { text: 'Archive Wine', onPress: () => confirmArchiveOne(w) },
         { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
-        { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${w.id}` as any) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
