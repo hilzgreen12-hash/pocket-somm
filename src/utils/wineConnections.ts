@@ -65,28 +65,28 @@ export function findWineConnections(
   data: { labels?: LibraryLabel[]; chosenWines?: ChosenWine[]; cellarWines?: CellarWine[] },
   opts?: { excludeChosenId?: string; excludeLabelId?: string; excludeCellarId?: string },
 ): WineConnections {
-  const key = wineNameKey(identity.producer, identity.wineName);
   const wantId = identity.wsWineId ?? null;
-  // Nothing to match on: no producer/name AND no Wine-Searcher id.
-  if (!key && !wantId) return EMPTY_CONNECTIONS;
+  // Cross-linking is anchored SOLELY to the Wine-Searcher id — the registry-
+  // backed, authoritative identity. The old normalized-name fallback is gone: it
+  // linked (and mis-linked) on shared words and never linked reliably. A wine
+  // with no id (Wine-Searcher can't identify it) intentionally shows no
+  // connections rather than risk a wrong one. Older rows are stamped with their
+  // id by the one-off backfill (services/backfillWsIds.ts); every new scan
+  // captures it at input.
+  if (!wantId) return EMPTY_CONNECTIONS;
 
   const wantVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
 
-  // A record matches when its Wine-Searcher id matches (exact, registry-backed —
-  // the authoritative link) OR, as a fallback for unverified wines, its
-  // normalized name key matches.
-  const matches = (recId: string | null | undefined, recProducer: string | null, recName: string | null) =>
-    (wantId != null && recId != null && recId === wantId) ||
-    (!!key && wineNameKey(recProducer, recName) === key);
+  const matches = (recId: string | null | undefined) => recId != null && recId === wantId;
 
   const labels = (data.labels ?? []).filter(
-    (l) => matches(l.ws_wine_id, l.producer, l.wine_name) && l.id !== opts?.excludeLabelId,
+    (l) => matches(l.ws_wine_id) && l.id !== opts?.excludeLabelId,
   );
   const cellarWines = (data.cellarWines ?? []).filter(
-    (w) => matches(w.ws_wine_id, w.producer, w.wine_name) && w.id !== opts?.excludeCellarId,
+    (w) => matches(w.ws_wine_id) && w.id !== opts?.excludeCellarId,
   );
   const restaurantPicks = (data.chosenWines ?? []).filter(
-    (w) => matches(w.ws_wine_id, w.producer, w.wine_name) && w.id !== opts?.excludeChosenId,
+    (w) => matches(w.ws_wine_id) && w.id !== opts?.excludeChosenId,
   );
 
   const reviewedChosen = restaurantPicks.filter(chosenHasReview);
