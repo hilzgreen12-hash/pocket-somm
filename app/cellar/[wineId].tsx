@@ -1261,7 +1261,13 @@ export default function CellarWineDetail() {
           >
             <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.detailThumb} />
           </TouchableOpacity>
-          <View style={styles.headerTextCol}>
+          {/* Tap the identity (name · region · vintage / grape) to edit the wine
+              — the standalone "Edit" link was removed in favour of this. */}
+          <TouchableOpacity
+            style={styles.headerTextCol}
+            onPress={() => router.push(`/cellar/edit-wine/${wine.id}` as any)}
+            activeOpacity={0.7}
+          >
             <Text style={styles.headerLine}>
               {(() => {
                 const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
@@ -1278,12 +1284,7 @@ export default function CellarWineDetail() {
             {wine.bottle_size_ml && wine.bottle_size_ml !== 750 ? (
               <Text style={styles.bottleFormat}>{bottleSizeLabel(wine.bottle_size_ml)} bottle</Text>
             ) : null}
-            <View style={styles.editRow}>
-              <TouchableOpacity onPress={openTitleEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                <Text style={styles.editTitleLink}>Edit</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          </TouchableOpacity>
         </View>
         {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
       </View>
@@ -1531,84 +1532,88 @@ export default function CellarWineDetail() {
       <View style={styles.cardDivider} />
       <Text style={styles.reviewsHeader}>Reviews</Text>
 
-      <View style={styles.reviewSubsection}>
-        {/* Your Review — the chevron drills through to the full review page.
-            Score + Drinking Window stay on the card below. */}
-        <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={() => setReviewExpanded((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-            <Text style={styles.vinsterReviewTitle}>Your Review</Text>
-            <Ionicons name={reviewExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-          </TouchableOpacity>
+      {/* Personal Notes (left) beside Your Review (right); Vinster's Review
+          sits full-width beneath. Fills the blank space the stacked layout left.
+          Wishlist wines have no Personal Notes, so Your Review takes the row. */}
+      <View style={styles.reviewRow}>
+        {!isWishlist && (
+        <View style={styles.reviewCol}>
+          {/* Personal Notes — same chevron + auto-save-on-collapse pattern. */}
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={toggleNote} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Personal Notes</Text>
+              <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+          {wine.user_notes ? (
+            editingNote ? (
+              <>
+                <Text style={styles.noteText}>{wine.user_notes}</Text>
+                <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+                  <Text style={styles.editReviewLink}>Edit Personal Note</Text>
+                </TouchableOpacity>
+              </>
+            ) : null
+          ) : (
+            <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.addReviewLink}>+ Add Personal Note</Text>
+            </TouchableOpacity>
+          )}
         </View>
+        )}
 
-        {reviewExpanded ? (
-          <View>
-            {entriesOf(wine).length === 0 ? (
-              <Text style={styles.reviewEmptyText}>No reviews yet.</Text>
-            ) : byRecency(entriesOf(wine)).map((e) => (
-              <View key={e.id} style={styles.reviewEntryBlock}>
-                <Text style={styles.reviewEntryMeta}>
-                  {e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                  {e.location ? ` · ${e.location}` : ''}
-                  {e.score != null ? ` · ${e.score}/100` : ''}
+        <View style={styles.reviewCol}>
+          {/* Your Review — the chevron drills through to the full review page.
+              Score + Drinking Window stay on the card below. */}
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={() => setReviewExpanded((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Your Review</Text>
+              <Ionicons name={reviewExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+
+          {reviewExpanded ? (
+            <View>
+              {entriesOf(wine).length === 0 ? (
+                <Text style={styles.reviewEmptyText}>No reviews yet.</Text>
+              ) : byRecency(entriesOf(wine)).map((e) => (
+                <View key={e.id} style={styles.reviewEntryBlock}>
+                  <Text style={styles.reviewEntryMeta}>
+                    {e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
+                    {e.location ? ` · ${e.location}` : ''}
+                    {e.score != null ? ` · ${e.score}/100` : ''}
+                  </Text>
+                  {e.note ? <Text style={styles.reviewEntryBody}>{e.note}</Text> : null}
+                  {e.personalNotes ? <Text style={styles.reviewEntryBodyMuted}>{e.personalNotes}</Text> : null}
+                  {e.drinkingWindow ? <Text style={styles.reviewEntryBodyMuted}>Drinking window: {e.drinkingWindow}</Text> : null}
+                </View>
+              ))}
+              <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
+                <Text style={styles.addReviewLink}>+ Add Review</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
+            <View style={styles.reviewQuickStatsCol}>
+              <View style={styles.reviewQuickCell}>
+                <Text style={styles.reviewQuickLabel}>Score</Text>
+                <Text style={[styles.reviewQuickValue, wine.review_score == null && styles.reviewQuickValueMuted]}>
+                  {wine.review_score != null ? `${wine.review_score}/100` : '—'}
                 </Text>
-                {e.note ? <Text style={styles.reviewEntryBody}>{e.note}</Text> : null}
-                {e.personalNotes ? <Text style={styles.reviewEntryBodyMuted}>{e.personalNotes}</Text> : null}
-                {e.drinkingWindow ? <Text style={styles.reviewEntryBodyMuted}>Drinking window: {e.drinkingWindow}</Text> : null}
               </View>
-            ))}
+              <View style={styles.reviewQuickCell}>
+                <Text style={styles.reviewQuickLabel}>Drinking Window</Text>
+                <Text style={[styles.reviewQuickValue, !wine.user_drinking_window && styles.reviewQuickValueMuted]} numberOfLines={1}>
+                  {wine.user_drinking_window || '—'}
+                </Text>
+              </View>
+            </View>
+          ) : (
             <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
               <Text style={styles.addReviewLink}>+ Add Review</Text>
             </TouchableOpacity>
-          </View>
-        ) : (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
-          <View style={styles.reviewQuickStats}>
-            <View style={styles.reviewQuickCell}>
-              <Text style={styles.reviewQuickLabel}>Score</Text>
-              <Text style={[styles.reviewQuickValue, wine.review_score == null && styles.reviewQuickValueMuted]}>
-                {wine.review_score != null ? `${wine.review_score}/100` : '—'}
-              </Text>
-            </View>
-            <View style={styles.reviewQuickCell}>
-              <Text style={styles.reviewQuickLabel}>Drinking Window</Text>
-              <Text style={[styles.reviewQuickValue, !wine.user_drinking_window && styles.reviewQuickValueMuted]} numberOfLines={1}>
-                {wine.user_drinking_window || '—'}
-              </Text>
-            </View>
-          </View>
-        ) : (
-          <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
-            <Text style={styles.addReviewLink}>+ Add Review</Text>
-          </TouchableOpacity>
-        )}
-
-      </View>
-
-      {!isWishlist && (
-      <View style={styles.reviewSubsection}>
-        {/* Personal Notes — same chevron + auto-save-on-collapse pattern. */}
-        <View style={styles.vinsterHeaderRow}>
-          <TouchableOpacity onPress={toggleNote} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-            <Text style={styles.vinsterReviewTitle}>Personal Notes</Text>
-            <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-          </TouchableOpacity>
+          )}
         </View>
-        {wine.user_notes ? (
-          editingNote ? (
-            <>
-              <Text style={styles.noteText}>{wine.user_notes}</Text>
-              <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-                <Text style={styles.editReviewLink}>Edit Personal Note</Text>
-              </TouchableOpacity>
-            </>
-          ) : null
-        ) : (
-          <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.addReviewLink}>+ Add Personal Note</Text>
-          </TouchableOpacity>
-        )}
       </View>
-      )}
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
           chevron toggle. Sits last of the three review blocks (after Your
@@ -1995,6 +2000,13 @@ const styles = StyleSheet.create({
   reviewPriceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
   autoSaveHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  // Two-column review row: Personal Notes (left) beside Your Review (right).
+  // The row carries the horizontal padding; each column just flexes.
+  reviewRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.lg, alignItems: 'flex-start' },
+  reviewCol: { flex: 1, paddingTop: spacing.sm },
+  // Quick stats stacked (Score above Drinking Window) — the narrow column can't
+  // fit them side by side cleanly.
+  reviewQuickStatsCol: { gap: spacing.sm, marginBottom: spacing.md },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
   vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
