@@ -382,7 +382,9 @@ export default function ArchiveNightScreen() {
         )
       ) : stage === 'preview' ? (
         <View style={styles.cameraWrap}>
-          {imageUri ? <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+          {/* 'contain' so a landscape lineup shows in full on the portrait
+              confirm screen — 'cover' cropped most of the bottles out. */}
+          {imageUri ? <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="contain" /> : null}
           <View style={styles.previewActions}>
             <TouchableOpacity style={styles.previewNeutral} onPress={() => { if (imageUri) void analyze(imageUri); }} activeOpacity={0.85}>
               <Text style={styles.previewNeutralText}>Review Now & Save</Text>
@@ -460,7 +462,6 @@ export default function ArchiveNightScreen() {
                   <Text style={styles.matchLink}>This is in my cellar — find it</Text>
                 </TouchableOpacity>
               ))}
-              <Text style={styles.hintSmall}>Tap a bottle that's actually yours to match it. The rest won't be archived.</Text>
             </>
           )}
 
@@ -490,7 +491,7 @@ export default function ArchiveNightScreen() {
               <Text style={styles.overlayTitle}>{archivedCount > 0 ? 'Night Archived' : 'Lineup Saved'}</Text>
 
               {imageUri ? (
-                <Image source={{ uri: imageUri }} style={[styles.overlayPhoto, { height: Math.round(Dimensions.get('window').height / 3) }]} resizeMode="cover" />
+                <Image source={{ uri: imageUri }} style={[styles.overlayPhoto, { height: Math.round(Dimensions.get('window').height / 3) }]} resizeMode="contain" />
               ) : null}
 
               {/* Editable date · location — gold editable TEXT, not boxed inputs. */}
