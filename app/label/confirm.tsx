@@ -9,6 +9,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { generatePairings, searchLabelImages, fetchWineCandidates, prepareImageBase64, scanLabel, type WineCandidate } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
+import { wineNameKey } from '../../src/utils/wineIdentity';
 import { File, Paths } from 'expo-file-system';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -80,7 +81,7 @@ export default function LabelConfirmScreen() {
   // Bin-diamond placement (context=place-bin): quantity + bottle format are
   // collected inline on this screen so the whole add is one step.
   const isPlaceBin = context === 'place-bin' && !!pendingBinCell;
-  const { addWine, updateWine } = useCellar();
+  const { wines: cellarWines, addWine, updateWine } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
 
@@ -322,44 +323,84 @@ export default function LabelConfirmScreen() {
         setPlacing(false);
         return;
       }
-      const saved = await addWine.mutateAsync({
-        user_id: userId,
-        wine_name: wineName.trim() || producer.trim(),
-        producer: producer.trim(),
-        region: region.trim(),
-        vintage: vintage.trim(),
-        quantity: free.length,
-        storage_location: null,
-        date_received: new Date().toISOString().split('T')[0],
-        critic_score: null,
-        critic_score_note: null,
-        drinking_window_from: null,
-        drinking_window_to: null,
-        drinking_window_status: 'unknown',
-        tasting_notes: null,
-        grape_variety: null,
-        label_image_path: null,
-        user_notes: null,
-        is_wishlist: false,
-        estimated_value: null,
-        estimated_value_currency: null,
-        estimated_value_at: null,
-        estimated_value_source: null,
-        purchase_price: null,
-        purchase_price_currency: null,
-        bottle_size_ml: placeFormat,
-      } as any);
-      // Upload the scanned label photo so the slot shows the bottle thumbnail
-      // (matches the normal add flow). Manual entries have no image, and a
-      // failed upload is non-fatal — the wine is still placed.
-      const labelUri = useLabelStore.getState().imageUri;
-      if (labelUri) {
-        try {
-          const path = await uploadLabelImage(userId, labelUri, saved.id);
-          await updateWine.mutateAsync({ id: saved.id, updates: { label_image_path: path } });
-        } catch { /* non-fatal — placed without a thumbnail */ }
+      // Duplicate check across the WHOLE cellar (any rack / fridge / location) —
+      // same wine + vintage. If the user already owns it, offer to add these
+      // bottles to that entry so the total stays correct, instead of spawning a
+      // second listing (the "split across two locations" bug).
+      const key = wineNameKey(producer, wineName.trim() || producer.trim());
+      const wantVintage = vintage.trim();
+      const dupe = key
+        ? cellarWines.find((w) =>
+            !w.is_wishlist && !w.archived_at &&
+            wineNameKey(w.producer, w.wine_name) === key &&
+            (w.vintage ?? '').trim() === wantVintage)
+        : undefined;
+
+      let merge = false;
+      if (dupe) {
+        merge = await new Promise<boolean>((resolve) => {
+          showAlert({
+            title: 'You already have this wine',
+            body: `You already have ${dupe.quantity} bottle${dupe.quantity === 1 ? '' : 's'} of this wine in your cellar. Add these ${free.length} to that entry so your total stays correct, or keep this as a separate listing?`,
+            dismissable: false,
+            buttons: [
+              { text: 'Add to existing', onPress: () => resolve(true) },
+              { text: 'Keep separate', style: 'cancel', onPress: () => resolve(false) },
+            ],
+          });
+        });
       }
-      await assignSlots(pendingSlot.rackId, free, saved.id);
+
+      const labelUri = useLabelStore.getState().imageUri;
+      if (merge && dupe) {
+        // Merge: the new slots point at the EXISTING wine and its quantity grows
+        // by what we placed — so the wine now spans both locations, one total.
+        if (labelUri && !dupe.label_image_path) {
+          try {
+            const path = await uploadLabelImage(userId, labelUri, dupe.id);
+            await updateWine.mutateAsync({ id: dupe.id, updates: { label_image_path: path } });
+          } catch { /* non-fatal */ }
+        }
+        await assignSlots(pendingSlot.rackId, free, dupe.id);
+        await updateWine.mutateAsync({ id: dupe.id, updates: { quantity: (dupe.quantity ?? 0) + free.length } });
+      } else {
+        const saved = await addWine.mutateAsync({
+          user_id: userId,
+          wine_name: wineName.trim() || producer.trim(),
+          producer: producer.trim(),
+          region: region.trim(),
+          vintage: vintage.trim(),
+          quantity: free.length,
+          storage_location: null,
+          date_received: new Date().toISOString().split('T')[0],
+          critic_score: null,
+          critic_score_note: null,
+          drinking_window_from: null,
+          drinking_window_to: null,
+          drinking_window_status: 'unknown',
+          tasting_notes: null,
+          grape_variety: null,
+          label_image_path: null,
+          user_notes: null,
+          is_wishlist: false,
+          estimated_value: null,
+          estimated_value_currency: null,
+          estimated_value_at: null,
+          estimated_value_source: null,
+          purchase_price: null,
+          purchase_price_currency: null,
+          bottle_size_ml: placeFormat,
+        } as any);
+        // Upload the scanned label photo so the slot shows the bottle thumbnail.
+        // Manual entries have no image; a failed upload is non-fatal.
+        if (labelUri) {
+          try {
+            const path = await uploadLabelImage(userId, labelUri, saved.id);
+            await updateWine.mutateAsync({ id: saved.id, updates: { label_image_path: path } });
+          } catch { /* non-fatal — placed without a thumbnail */ }
+        }
+        await assignSlots(pendingSlot.rackId, free, saved.id);
+      }
       const rackId = pendingSlot.rackId;
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
