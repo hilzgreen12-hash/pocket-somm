@@ -163,6 +163,9 @@ export default function ChosenWinesScreen() {
   // Every review (restaurant / cellar / other) opens the same unified detail view.
   const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
+  // True when the cellar review modal was opened to EDIT the latest entry (from
+  // the review card's Edit) rather than to add a fresh one.
+  const [editingCellarLatest, setEditingCellarLatest] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
   // (null for Manual Input). Keeps all three on the same review input screen.
@@ -389,7 +392,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
@@ -435,6 +438,19 @@ export default function ChosenWinesScreen() {
       }
       return;
     }
+    if (params.openCellarReview) {
+      // From a cellar wine card's "View Full Review(s)" link — open that
+      // bottle's unified review card (read-only), matching by cellar_wines id.
+      const key = `openCellar:${params.openCellarReview}`;
+      if (handledParamRef.current === key) return;
+      const w = cellarWines.find((x) => x.id === params.openCellarReview)
+        ?? archivedWines.find((x) => x.id === params.openCellarReview);
+      if (w) {
+        handledParamRef.current = key;
+        setDetailItem({ source: 'cellar', date: w.review_date ?? '', score: w.review_score ?? null, wine: w });
+      }
+      return;
+    }
     if (params.seedAdd === '1') {
       const key = `add:${params.sp}|${params.sw}|${params.sv}`;
       if (handledParamRef.current === key) return;
@@ -448,7 +464,7 @@ export default function ChosenWinesScreen() {
       setAddOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openReview, params.seedAdd, params.sp, params.sw, params.sv, params.sr, chosenWines]);
+  }, [params.openReview, params.openCellarReview, params.seedAdd, params.sp, params.sw, params.sv, params.sr, chosenWines, cellarWines, archivedWines]);
 
   // "Don't show me this again" — a direct action (no tick box): opt out
   // permanently and dismiss.
@@ -881,7 +897,7 @@ export default function ChosenWinesScreen() {
         onAddReview={() => {
           const it = detailItem; if (!it) return;
           setDetailItem(null);
-          if (it.source === 'cellar') { setEditingCellarWine(it.wine as CellarWine); return; }
+          if (it.source === 'cellar') { setEditingCellarLatest(false); setEditingCellarWine(it.wine as CellarWine); return; }
           // Occasion add-to: open the review input pre-filled with this wine;
           // its dedup then offers "Add to that review / Create a new review".
           const w = it.wine as ChosenWine;
@@ -900,7 +916,7 @@ export default function ChosenWinesScreen() {
         onEditLatest={() => {
           const it = detailItem; if (!it) return;
           setDetailItem(null);
-          if (it.source === 'cellar') setEditingCellarWine(it.wine as CellarWine);
+          if (it.source === 'cellar') { setEditingCellarLatest(true); setEditingCellarWine(it.wine as CellarWine); }
           else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
         }}
         thumbPath={detailItem ? labelPathFor(detailItem) : null}
@@ -931,6 +947,7 @@ export default function ChosenWinesScreen() {
       <EditCellarReviewModal
         wine={editingCellarWine}
         visible={!!editingCellarWine}
+        editLatest={editingCellarLatest}
         onClose={() => setEditingCellarWine(null)}
         onSaved={() => setEditingCellarWine(null)}
       />

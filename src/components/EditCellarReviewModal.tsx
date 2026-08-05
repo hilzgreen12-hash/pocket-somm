@@ -31,6 +31,9 @@ interface Props {
   visible: boolean;
   onClose: () => void;
   onSaved: () => void;
+  // When true, edit the latest entry in place (pre-filled) instead of appending
+  // a fresh blank review. Used by the review card's "Edit" action.
+  editLatest?: boolean;
 }
 
 function todayISO() {
@@ -43,7 +46,7 @@ function todayISO() {
 // review_date) rather than chosen_wines, so this modal reads and saves
 // there. It lets Your Wine Reviews open every review the same way — a
 // review form, never the full wine card.
-export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props) {
+export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLatest = false }: Props) {
   const { updateWine } = useCellar();
   const { session } = useAuth();
   const qc = useQueryClient();
@@ -58,6 +61,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  // In edit mode, the id of the entry being edited in place (else null = append).
+  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -66,8 +71,24 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
   // Re-seed the form whenever a new wine is opened.
   useEffect(() => {
     if (!wine) return;
-    // This modal now writes a NEW review entry each time (append-only), so the
+    // Edit mode: pre-fill from the latest entry and edit it in place. Otherwise
+    // this modal writes a NEW review entry each time (append-only), so the
     // review fields open blank; price stays (it's a bottle-level field).
+    const latest = editLatest ? latestEntry(entriesOf(wine)) : null;
+    setEditingEntryId(latest?.id ?? null);
+    if (latest) {
+      setReviewNote(latest.note ?? '');
+      setPersonalNotes(latest.personalNotes ?? '');
+      setScore(latest.score != null ? String(latest.score) : '');
+      setReviewDate(latest.date ?? todayISO());
+      const { restaurantName, city } = splitLocationString(latest.location ?? '');
+      setLocName(restaurantName ?? '');
+      setLocCity(city ?? '');
+      setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
+      setDrinkingWindow(latest.drinkingWindow ?? '');
+      setSaved(false);
+      return;
+    }
     setReviewNote('');
     setPersonalNotes('');
     setScore('');
@@ -78,7 +99,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
     setPricePaid(wine.purchase_price != null ? String(wine.purchase_price) : '');
     setDrinkingWindow('');
     setSaved(false);
-  }, [wine?.id, visible]);
+  }, [wine?.id, visible, editLatest]);
 
   async function persist() {
     if (!wine) return;
@@ -103,7 +124,11 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
       note: reviewNote, personalNotes, score: parsedScore,
       location: locationTrim, date: dateTrim || null, drinkingWindow,
     });
-    const nextEntries = [...entriesOf(wine), entry];
+    // Edit mode replaces the entry in place (keeping its id + savedAt so the 24h
+    // edit clock isn't reset); otherwise append a fresh dated entry.
+    const nextEntries = editLatest && editingEntryId
+      ? entriesOf(wine).map((e) => (e.id === editingEntryId ? { ...entry, id: e.id, savedAt: e.savedAt } : e))
+      : [...entriesOf(wine), entry];
     const latest = latestEntry(nextEntries);
     await updateWine.mutateAsync({
       id: wine.id,
@@ -342,6 +367,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved }: Props
               onReview={(v) => { setReviewNote(v); setSaved(false); }}
               personalNotes={personalNotes}
               onPersonalNotes={(v) => { setPersonalNotes(v); setSaved(false); }}
+              showPersonalNotes={false}
               city={locCity}
               onCity={(v) => { setLocCity(v); setSaved(false); }}
               locationName={locName}

@@ -226,6 +226,10 @@ export interface CellarWine {
   // Optional/nullable — non-bin wines have none.
   bin_cell_id?: string | null;
   user_notes: string | null;
+  // Migration 084. The Cellar Note — a short (≤50 char) private note shown ONLY
+  // on the wine card, never in Your Wine Reviews or the review card. Distinct
+  // from a review; edited via a small dictate/type popup on the card.
+  cellar_note?: string | null;
   // Migration 043. The user's WRITTEN REVIEW — sharable to community
   // and outside the app. Distinct from user_notes (Personal Notes,
   // private). Null on legacy rows; the wine card prefers review_note

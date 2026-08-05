@@ -178,8 +178,10 @@ export default function CellarWineDetail() {
   const [pendingLocationId, setPendingLocationId] = useState<string | null>(null);
   const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
 
-  const [editingNote, setEditingNote] = useState(false);
-  const [noteText, setNoteText] = useState(wine?.user_notes ?? '');
+  // Cellar Note — a short private note shown ONLY on the wine card (never in a
+  // review). Edited through a small dictate/type popup, capped at 50 chars.
+  const [cellarNoteOpen, setCellarNoteOpen] = useState(false);
+  const [noteText, setNoteText] = useState(wine?.cellar_note ?? '');
   const [savingNote, setSavingNote] = useState(false);
 
   const [removeCount, setRemoveCount] = useState('1');
@@ -597,16 +599,21 @@ export default function CellarWineDetail() {
     }
   }
 
-  async function handleSaveNote() {
+  function openCellarNote() {
+    setNoteText(wine?.cellar_note ?? '');
+    setCellarNoteOpen(true);
+  }
+
+  async function handleSaveCellarNote() {
     Keyboard.dismiss();
     setSavingNote(true);
     try {
       await updateWine.mutateAsync({
         id: wine!.id,
-        updates: { user_notes: noteText.trim() || null },
+        updates: { cellar_note: noteText.trim().slice(0, 50) || null },
       });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      setEditingNote(false);
+      setCellarNoteOpen(false);
     } catch {
       showAlert({ title: 'Error', body: 'Could not save note.' });
     } finally {
@@ -788,11 +795,6 @@ export default function CellarWineDetail() {
   // uses the inline auto-save pattern below.
   function toggleReview() {
     setReviewExpanded((v) => !v);
-  }
-  // Personal Notes is display-only on the card now — the chevron just
-  // expands/collapses. Editing happens in the canonical review form.
-  function toggleNote() {
-    setEditingNote((v) => !v);
   }
 
   async function handleRemoveWine() {
@@ -1573,23 +1575,26 @@ export default function CellarWineDetail() {
 
           {reviewExpanded ? (
             <View>
+              {/* Expanded list: every review's score and the date it was entered,
+                  both in gold as DD/MM/YYYY. No location, no note body (the full
+                  text lives on the review card, reached via "View Full Review"). */}
               {entriesOf(wine).length === 0 ? (
                 <Text style={styles.reviewEmptyText}>No reviews yet.</Text>
               ) : byRecency(entriesOf(wine)).map((e) => (
-                <View key={e.id} style={styles.reviewEntryBlock}>
-                  <Text style={styles.reviewEntryMeta}>
-                    {e.date ? new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : ''}
-                    {e.location ? ` · ${e.location}` : ''}
-                    {e.score != null ? ` · ${e.score}/100` : ''}
-                  </Text>
-                  {e.note ? <Text style={styles.reviewEntryBody}>{e.note}</Text> : null}
-                  {e.personalNotes ? <Text style={styles.reviewEntryBodyMuted}>{e.personalNotes}</Text> : null}
-                  {e.drinkingWindow ? <Text style={styles.reviewEntryBodyMuted}>Drinking window: {e.drinkingWindow}</Text> : null}
-                </View>
+                <Text key={e.id} style={styles.reviewScoreLine} numberOfLines={1}>
+                  {e.score != null ? <Text style={styles.reviewScoreValue}>{e.score}/100</Text> : null}
+                  {e.score != null && e.date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+                  {e.date ? <Text style={styles.reviewScoreValue}>{new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB')}</Text> : null}
+                </Text>
               ))}
               <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
                 <Text style={styles.addReviewLink}>+ Add Review</Text>
               </TouchableOpacity>
+              {entriesOf(wine).length > 0 ? (
+                <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}` as any)} activeOpacity={0.7}>
+                  <Text style={styles.viewFullReviewLink}>View Full Review{entriesOf(wine).length === 1 ? '' : 's'}</Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
           ) : (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
             // Collapsed summary: just the score (gold) and the review date,
@@ -1612,25 +1617,19 @@ export default function CellarWineDetail() {
 
         {!isWishlist && (
         <View style={styles.reviewCol}>
-          {/* Personal Notes — same chevron + auto-save-on-collapse pattern. */}
+          {/* Cellar Note — a short private note, card-only. Opens a small
+              dictate/type popup; never links to the review card. */}
           <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={toggleNote} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-              <Text style={styles.vinsterReviewTitle}>Personal Notes</Text>
-              <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-            </TouchableOpacity>
+            <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
           </View>
-          {wine.user_notes ? (
-            editingNote ? (
-              <>
-                <Text style={styles.noteText}>{wine.user_notes}</Text>
-                <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-                  <Text style={styles.editReviewLink}>Edit Personal Note</Text>
-                </TouchableOpacity>
-              </>
-            ) : null
+          {wine.cellar_note ? (
+            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+              <Text style={styles.noteText}>{wine.cellar_note}</Text>
+              <Text style={styles.editReviewLink}>Edit Cellar Note</Text>
+            </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.addReviewLink}>+ Add Personal Note</Text>
+            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+              <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -1956,6 +1955,37 @@ export default function CellarWineDetail() {
         onClose={() => setReviewModalOpen(false)}
         onSaved={() => qc.invalidateQueries({ queryKey: ['cellar'] })}
       />
+
+      {/* Cellar Note popup — dictate or type a short private note (<=50 chars).
+          Card-only; never touches the review. */}
+      <Modal visible={cellarNoteOpen} transparent animationType="fade" onRequestClose={() => setCellarNoteOpen(false)}>
+        <View style={styles.cnOverlay}>
+          <View style={styles.cnSheet}>
+            <View style={styles.cnHeaderRow}>
+              <Text style={styles.cnTitle}>Cellar Note</Text>
+              <MicButton value={noteText} onChangeText={(t) => setNoteText(t.slice(0, 50))} onClear={() => setNoteText('')} />
+            </View>
+            <Text style={styles.cnBody}>A short private note, shown only here on the wine card — 50 characters or less.</Text>
+            <TextInput
+              style={styles.cnInput}
+              value={noteText}
+              onChangeText={(t) => setNoteText(t.slice(0, 50))}
+              placeholder="e.g. Gift from Dad — lay down till 2030"
+              placeholderTextColor={colors.textMuted}
+              maxLength={50}
+              multiline
+              autoFocus
+            />
+            <Text style={styles.cnCount}>{noteText.length}/50</Text>
+            <TouchableOpacity style={styles.cnSaveBtn} onPress={handleSaveCellarNote} disabled={savingNote} activeOpacity={0.85}>
+              <Text style={styles.cnSaveText}>{savingNote ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.cnCancel} onPress={() => setCellarNoteOpen(false)}>
+              <Text style={styles.cnCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAwareScrollView>
   );
 }
@@ -2274,6 +2304,20 @@ const styles = StyleSheet.create({
   reviewScoreDate: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
   // Gold "+ Add Review" link (no review yet) + "Edit Review" link (review exists).
   addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: 0 },
+  // "View Full Review(s)" link — drills to the wine's review card.
+  viewFullReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: spacing.xs, textDecorationLine: 'underline' },
+  // Cellar Note popup.
+  cnOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  cnSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
+  cnHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cnTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text },
+  cnBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
+  cnInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface, minHeight: 52, textAlignVertical: 'top' },
+  cnCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, textAlign: 'right', marginTop: 4 },
+  cnSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
+  cnSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  cnCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
+  cnCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   reviewEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
   reviewEntryBlock: { marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
   reviewEntryMeta: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginBottom: 4 },
