@@ -22,6 +22,9 @@ interface Props {
   field: 'estimated_value' | 'purchase_price';
   wines: CellarWine[];
   currency: string;
+  // Optional gold prompt below the blurb to switch to entering the OTHER value
+  // (e.g. "Input Current Values" from the purchase-price editor).
+  altAction?: { label: string; onPress: () => void };
   onClose: () => void;
   onSaved: () => void;
 }
@@ -29,7 +32,7 @@ interface Props {
 // A list of wines (lineup-input style rows) each with a per-bottle value input,
 // so the user can fill in the values Vinster couldn't find — estimated current
 // value, or purchase price. Only rows with a positive number are written.
-export function WineValueEditorModal({ visible, title, subtitle, field, wines, currency, onClose, onSaved }: Props) {
+export function WineValueEditorModal({ visible, title, subtitle, field, wines, currency, altAction, onClose, onSaved }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const sym = symbolFor(currency);
@@ -47,7 +50,9 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
       if (cur != null) init[w.id] = String(cur);
     }
     setValues(init);
-  }, [visible]);
+    // Re-seed when the value type switches (e.g. "Input Current Values" from the
+    // purchase editor) so the inputs reflect the new field, not the old entries.
+  }, [visible, field]);
 
   function setVal(id: string, text: string) {
     // Keep digits + a single decimal point.
@@ -109,6 +114,11 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
         <View style={styles.sheet}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.subtitle}>{subtitle}</Text>
+          {altAction ? (
+            <TouchableOpacity onPress={altAction.onPress} activeOpacity={0.7} style={styles.altLinkWrap}>
+              <Text style={styles.altLink}>{altAction.label}</Text>
+            </TouchableOpacity>
+          ) : null}
           <ScrollView style={styles.list} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: spacing.md }}>
             {wines.map((w) => (
               <View key={w.id} style={styles.row}>
@@ -146,7 +156,9 @@ const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   sheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, borderTopWidth: 1, borderColor: colors.border, paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.lg, maxHeight: '86%' },
   title: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
-  subtitle: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: spacing.md, lineHeight: 20 },
+  subtitle: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', marginTop: 4, marginBottom: spacing.sm, lineHeight: 20 },
+  altLinkWrap: { alignItems: 'center', marginBottom: spacing.md },
+  altLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   list: { flexGrow: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMain: { flex: 1 },
