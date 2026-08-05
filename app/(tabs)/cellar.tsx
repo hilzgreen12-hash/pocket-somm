@@ -95,7 +95,7 @@ export default function CellarTab() {
 
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
-          <Text style={styles.buttonText}>Quick Cellar Stats</Text>
+          <Text style={styles.buttonText}>Cellar Statistics</Text>
         </TouchableOpacity>
       </View>
 

@@ -304,16 +304,20 @@ export default function CellarStatsScreen() {
             </View>
           )}
 
-          {/* Top quick numbers */}
-          <View style={styles.statsRow}>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{totalWines}</Text>
-              <Text style={styles.statLabel}>Wines</Text>
-            </View>
-            <View style={styles.stat}>
-              <Text style={styles.statValue}>{totalBottles}</Text>
-              <Text style={styles.statLabel}>Bottles</Text>
-            </View>
+          {/* Top summary — the app's consistent gold stat bar: wines · bottles,
+              then the top three regions by share, then a link into the map. */}
+          <View style={styles.summaryBar}>
+            <Text style={styles.summaryLine}>
+              {totalWines} {totalWines === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'}
+            </Text>
+            {topRegions.length > 0 ? (
+              <Text style={styles.summarySub}>
+                {topRegions.map(([region, count]) => `${pct(count, totalBottles)} ${region}`).join('  ·  ')}
+              </Text>
+            ) : null}
+            <TouchableOpacity onPress={() => router.push('/cellar/regions-map')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+              <Text style={styles.viewMapsLink}>View In Maps</Text>
+            </TouchableOpacity>
           </View>
 
           {/* "Wines missing intel" lives on the Full Cellar List only — not here. */}
@@ -433,22 +437,6 @@ export default function CellarStatsScreen() {
             })}
           </View>
 
-          {/* Most Represented Regions */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Most Represented Regions</Text>
-            {topRegions.length === 0 ? (
-              <Text style={styles.muted}>No region data yet.</Text>
-            ) : (
-              topRegions.map(([region, count], i) => (
-                <View key={region} style={styles.breakdownRow}>
-                  <Text style={styles.breakdownRank}>{i + 1}.</Text>
-                  <Text style={styles.breakdownLabel}>{region}</Text>
-                  <Text style={styles.breakdownPct}>{pct(count, totalBottles)}</Text>
-                </View>
-              ))
-            )}
-          </View>
-
           {/* Style Breakdown */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Style</Text>
@@ -506,12 +494,11 @@ const styles = StyleSheet.create({
   missingValueRow: { paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
   missingValueText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted },
   missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
-  statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
-  stat: { flex: 1, alignItems: 'center', paddingVertical: spacing.lg },
-  // Inter — stat value read-out
-  statValue: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, marginBottom: 2 },
-  // Inter — stat label
-  statLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
+  // Consistent gold stat bar (matches the app's other summary bars).
+  summaryBar: { alignItems: 'center', paddingVertical: spacing.lg, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryLine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
+  summarySub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
+  viewMapsLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: 2 },
   section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Cormorant — section header
   sectionTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
