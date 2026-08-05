@@ -49,8 +49,6 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
   }, [item.image_path]);
 
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  const wineCount = item.wines?.length ?? 0;
-  const bottleTotal = lineupBottleTotal(item);
   // Full-width row (thumbnail left, details right) mirroring the Label Library.
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.7}>
@@ -63,9 +61,7 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
       </View>
       <View style={styles.rowBody}>
         <Text style={styles.rowStamp}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
-        {bottleTotal ? (
-          <Text style={styles.rowCount}>{bottleTotal} bottle{bottleTotal === 1 ? '' : 's'}{wineCount ? ` · ${wineCount} wine${wineCount === 1 ? '' : 's'}` : ''}</Text>
-        ) : null}
+        {item.venue ? <Text style={styles.rowVenue} numberOfLines={1}>{item.venue}</Text> : null}
         {item.note ? <Text style={styles.rowNote} numberOfLines={2}>{item.note}</Text> : null}
       </View>
     </TouchableOpacity>
@@ -594,6 +590,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowBody: { flex: 1 },
   rowStamp: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
+  rowVenue: { fontSize: 13.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
   rowCount: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
   rowNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, padding: spacing.xl, paddingBottom: 60 },

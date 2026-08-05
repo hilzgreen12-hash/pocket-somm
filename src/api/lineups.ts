@@ -32,6 +32,8 @@ export interface LineupArchive {
   city: string | null;
   // Migration 085 — a matched restaurant review (scan_sessions id), if any.
   restaurant_session_id: string | null;
+  // Migration 086 — free-text venue / place name (distinct from city).
+  venue: string | null;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -148,12 +150,13 @@ export async function setLineupWines(id: string, wines: LineupWine[]): Promise<v
   if (error) throw error;
 }
 
-// Edit a lineup's date + location stamp (from the lineup info screen). city is
-// trimmed; a blank clears it. archivedAt is an ISO date string.
-export async function updateLineupStamp(id: string, updates: { archivedAt?: string; city?: string | null }): Promise<void> {
+// Edit a lineup's date · city · venue stamp (from the lineup info screen). city
+// and venue are trimmed; a blank clears them. archivedAt is an ISO date string.
+export async function updateLineupStamp(id: string, updates: { archivedAt?: string; city?: string | null; venue?: string | null }): Promise<void> {
   const patch: Record<string, unknown> = {};
   if (updates.archivedAt !== undefined) patch.archived_at = updates.archivedAt;
   if (updates.city !== undefined) patch.city = updates.city?.trim() ? updates.city.trim() : null;
+  if (updates.venue !== undefined) patch.venue = updates.venue?.trim() ? updates.venue.trim() : null;
   if (Object.keys(patch).length === 0) return;
   const { error } = await supabase.from('lineup_archives').update(patch).eq('id', id);
   if (error) throw error;
