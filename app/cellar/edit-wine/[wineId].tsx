@@ -80,6 +80,8 @@ export default function EditWineScreen() {
             estimated_value_currency: v.currency,
             estimated_value_at: v.estimatedValue != null ? new Date().toISOString() : null,
             estimated_value_source: v.estimatedValue != null ? v.valueSource : null,
+            estimated_value_low: v.estimatedValueLow ?? null,
+            estimated_value_high: v.estimatedValueHigh ?? null,
             estimated_value_scope: v.priceScope ?? null,
             critic_score: v.criticScore,
             critic_score_note: v.criticScoreNote,
