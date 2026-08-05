@@ -2,6 +2,7 @@ import type { CellarWine } from '../types/wine';
 import type { DetectedBottle } from '../api/label';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
 import { clearWineFromRacks, removeSlotsForWine } from '../api/racks';
+import { wineNameKey } from '../utils/wineIdentity';
 
 export interface NightMatch {
   wine: CellarWine;
@@ -15,28 +16,37 @@ export interface NightMatchResult {
   unmatched: DetectedBottle[];
 }
 
-const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-
 // Match each detected bottle to a live cellar wine by producer + name (+ vintage
 // when both have one), then aggregate duplicates into per-wine counts. Bottles
 // with no cellar match are returned separately so the UI can say "not in your
 // cellar" rather than inventing a removal.
+//
+// Matching uses the shared `wineNameKey` identity so it's tolerant of the
+// formatting differences a lineup read introduces — accents ("Château" ==
+// "Chateau"), apostrophes/punctuation, definite articles ("Il Marroneto" ==
+// "Marroneto"), word order, and embedded vintages — the same logic the app's
+// search boxes and connection matching use. It stays conservative: distinct
+// cuvées with different significant words don't merge.
 export function matchLineupToCellar(detected: DetectedBottle[], cellar: CellarWine[]): NightMatchResult {
   const byWineId = new Map<string, NightMatch>();
   const unmatched: DetectedBottle[] = [];
 
   for (const b of detected) {
-    const dProducer = norm(b.producer);
-    const dName = norm(b.wineName);
+    const dKey = wineNameKey(b.producer, b.wineName);       // full identity
+    const dProducerKey = wineNameKey(b.producer, null);     // producer field alone
+    const dNameKey = wineNameKey(null, b.wineName);         // name field alone
     const dVintage = (b.vintage ?? '').trim();
 
-    // Candidate cellar wines whose producer or name lines up. Producer match is
-    // the anchor; the name must also match unless the producer IS the name.
+    // Candidate cellar wines whose identity lines up. A full token-set match is
+    // the strongest signal; otherwise fall back to the producer or name lining
+    // up on its own (mirrors the original looser rule, now accent/punctuation/
+    // article/order tolerant).
     const candidates = cellar.filter((w) => {
-      const wProducer = norm(w.producer);
-      const wName = norm(w.wine_name);
-      const producerHit = !!dProducer && (wProducer === dProducer || wName === dProducer);
-      const nameHit = !!dName && (wName === dName || wProducer === dName);
+      if (dKey && dKey === wineNameKey(w.producer, w.wine_name)) return true;
+      const wProducerKey = wineNameKey(w.producer, null);
+      const wNameKey = wineNameKey(null, w.wine_name);
+      const producerHit = !!dProducerKey && (wProducerKey === dProducerKey || wNameKey === dProducerKey);
+      const nameHit = !!dNameKey && (wNameKey === dNameKey || wProducerKey === dNameKey);
       return producerHit || nameHit;
     });
 
