@@ -4,6 +4,9 @@ export interface ExtractedWine {
   region: string;
   appellation?: string;
   grape?: string;
+  // Colour/type classified at OCR time (red/white/rose/sparkling/orange/
+  // fortified), so colour filters have real data to work on. Null when unknown.
+  colour?: string | null;
   vintage: number | null;
   menuPrice: number | null;
   currency: string;

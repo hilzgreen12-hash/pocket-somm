@@ -16,6 +16,13 @@ const WINE_FIELDS = `For each wine return a JSON object with these fields:
 - region: broad region e.g. "Burgundy", "Bordeaux", "Napa Valley" (string)
 - appellation: specific appellation e.g. "Puligny-Montrachet", "Pauillac" (string, optional)
 - grape: grape variety or blend e.g. "Chardonnay", "Cabernet Sauvignon/Merlot" (string, optional)
+- colour: the wine's colour/type — one of "red", "white", "rose", "sparkling",
+  "orange", "fortified". Infer it from the wine list's SECTION HEADINGS (e.g. a
+  "Rosé" / "Rosés" section, a "Sparkling" / "Champagne" section, "By the Glass"
+  sub-headed by colour), then from the grape variety, then the wine name/style.
+  Use "rose" (no accent) for rosé/pink wines and "sparkling" for Champagne,
+  Crémant, Cava, Prosecco, and other sparkling wines. Only use null when the
+  colour is genuinely impossible to determine. (string | null)
 - vintage: 4-digit year as integer, or null if non-vintage (number | null)
 - menuPrice: numeric price as listed on the menu, null if not shown (number | null).
   IMPORTANT: many wine lists show two or more prices for the same wine —

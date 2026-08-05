@@ -5,7 +5,7 @@ import * as Location from 'expo-location';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
-import { useScanStore } from '../../src/stores/scanStore';
+import { useScanStore, type ScanPreferences } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { extractWineList } from '../../src/services/ocr';
 import { recommendWines } from '../../src/services/recommender';
@@ -15,6 +15,7 @@ import { fonts } from '../../src/constants/fonts';
 import { COUNTRY_TO_CURRENCY } from '../../src/constants/currency';
 import type { ExtractedWine } from '../../src/types/wine';
 import type { UserPreferences } from '../../src/types/preferences';
+import { foldAccents } from '../../src/utils/wineIdentity';
 
 async function detectLocalCurrency(): Promise<{ currency: string; country: string | null } | null> {
   try {
@@ -89,6 +90,38 @@ function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | 
   const others = filtered.filter((w) => !isFavourite(w));
 
   return [...favourited, ...others].slice(0, 80);
+}
+
+// Does a wine's OCR-classified colour match one of the selected colour filters?
+// wineTypes ids are 'red' | 'white' | 'rose' | 'sparkling'; the OCR colour is a
+// free string like 'red'/'white'/'rosé'/'sparkling' (accent-folded to compare).
+function colourMatches(colour: string | null | undefined, wineTypes: string[]): boolean {
+  if (!colour) return false;
+  const c = foldAccents(colour);
+  return wineTypes.some((t) => c.includes(t.toLowerCase()));
+}
+
+// Enforce the SCAN's own colour + budget deterministically before recommending,
+// so a colour/budget filter no longer depends on Claude inferring colour from a
+// colourless list (which returned an empty set → "please try again"). Colour
+// filtering keeps clear matches AND wines whose colour is unknown, so an
+// occasional OCR miss isn't silently dropped; if that still leaves nothing
+// (e.g. no colour data at all), it falls back to no colour filter so Claude can
+// decide rather than us shipping an empty list.
+function applyScanFilters(wines: ExtractedWine[], preferences: ScanPreferences | null | undefined): ExtractedWine[] {
+  if (!preferences) return wines;
+  let out = wines;
+
+  const budget = preferences.budget;
+  if (budget) out = out.filter((w) => w.menuPrice == null || w.menuPrice <= budget);
+
+  const types = preferences.wineTypes ?? [];
+  if (types.length) {
+    const byColour = out.filter((w) => !w.colour || colourMatches(w.colour, types));
+    if (byColour.length) out = byColour;
+  }
+
+  return out;
 }
 
 type Stage = 'reading' | 'recommending' | 'error';
@@ -169,7 +202,7 @@ export default function ExtractingScreen() {
 
       // Step 3: Pre-filter by user profile then recommend
       setStage('recommending');
-      const winesForRecommend = preFilterWines(wines, userProfile);
+      const winesForRecommend = applyScanFilters(preFilterWines(wines, userProfile), preferences);
       const recommendation = await recommendWines({
         wines: winesForRecommend,
         wineTypes: preferences.wineTypes,
