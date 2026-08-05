@@ -593,9 +593,9 @@ export default function ArchiveNightScreen() {
         </ScrollView>
       )}
 
-      {/* Night Archived — a bottom-rising overlay: photo, editable date · location
-          stamp (gold editable text), a note with mic + trash, then Save /
-          View Lineup Library / Cancel. */}
+      {/* Night Archived — a bottom-rising overlay: photo, editable Date · City ·
+          Venue stamp (all required), a note with mic + trash, then Save / Cancel.
+          Save lands on Your Lineup Library. */}
       <Modal visible={stage === 'done'} transparent animationType="slide" onRequestClose={() => router.back()}>
         <View style={styles.overlayRoot}>
           <View style={styles.overlaySheet}>
