@@ -265,11 +265,11 @@ export default function FullCellarListScreen() {
   function confirmArchiveOne(w: CellarWine) {
     setArchiveWine(w);
   }
-  async function handleArchiveConfirm(count: number, note: string) {
+  async function handleArchiveConfirm(count: number, note: string, date: string) {
     const w = archiveWine;
     if (!w) return;
     const total = w.quantity ?? 1;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = date;
     setBusy(true);
     try {
       await addCellarWineRemoval({ cellarWineId: w.id, removedAt: today, count, note: note || null });

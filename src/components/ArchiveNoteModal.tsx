@@ -13,8 +13,12 @@ interface Props {
   // the modal asks how many to archive via a manual number field — no option
   // buttons. Omit / 1 → archives the single bottle.
   maxCount?: number;
-  onConfirm: (count: number, note: string) => void;
+  onConfirm: (count: number, note: string, date: string) => void;
   onClose: () => void;
+}
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 // Shared archive confirmation — consistent across every archive flow (wine card,
@@ -25,11 +29,12 @@ export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'S
   const asksCount = maxCount > 1;
   const [count, setCount] = useState('1');
   const [note, setNote] = useState('');
-  useEffect(() => { if (visible) { setCount('1'); setNote(''); } }, [visible]);
+  const [date, setDate] = useState(todayISO);
+  useEffect(() => { if (visible) { setCount('1'); setNote(''); setDate(todayISO()); } }, [visible]);
 
   function confirm() {
     const n = asksCount ? Math.max(1, Math.min(parseInt(count, 10) || 1, maxCount)) : 1;
-    onConfirm(n, note.trim());
+    onConfirm(n, note.trim(), date.trim() || todayISO());
   }
 
   return (
@@ -53,6 +58,17 @@ export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'S
               />
             </>
           ) : null}
+
+          <Text style={styles.label}>Date removed</Text>
+          <TextInput
+            style={styles.input}
+            value={date}
+            onChangeText={(t) => setDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="numbers-and-punctuation"
+            maxLength={10}
+          />
 
           <Text style={styles.label}>Note (optional)</Text>
           <TextInput
