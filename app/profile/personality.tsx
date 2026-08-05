@@ -264,11 +264,11 @@ export default function PersonalityScreen() {
               <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
                 <Text style={styles.shareText}>+ SHARE</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={handleUploadToCommunity} disabled={publishState !== 'idle'} style={styles.postLinkBtn} activeOpacity={0.7}>
-                <Text style={styles.postLinkText}>
-                  {publishState === 'saved' ? 'posted ✓' : publishState === 'saving' ? 'posting…' : 'post to community'}
-                </Text>
-              </TouchableOpacity>
+              {/* Community isn't live yet — the "post to community" link is
+                  faded out and non-interactive until there's a feed to post to. */}
+              <View style={[styles.postLinkBtn, styles.postLinkDisabled]} pointerEvents="none">
+                <Text style={styles.postLinkText}>post to community</Text>
+              </View>
             </View>
           ) : null}
         </View>
@@ -357,6 +357,8 @@ const styles = StyleSheet.create({
   topRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   topRightStack: { alignItems: 'flex-end', gap: 4 },
   postLinkBtn: { paddingVertical: 2, paddingHorizontal: 8 },
+  // Faded/disabled until the community feed is live.
+  postLinkDisabled: { opacity: 0.35 },
   postLinkText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   backRow: {},
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
