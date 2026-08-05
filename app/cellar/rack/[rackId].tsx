@@ -113,12 +113,8 @@ export default function RackGridScreen() {
   // survives navigating to another rack — pick up on rack A, drop on rack B.
   const moving = pendingMove;
   const [savedMsg, setSavedMsg] = useState<string | null>(null);
-  // "Archive Wine" on a multi-bottle wine → ask how many (or Archive All).
-  const [archiveModal, setArchiveModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
-  const [archiveCount, setArchiveCount] = useState('1');
-  // Optional removal note captured in both archive paths.
-  const [archiveNote, setArchiveNote] = useState('');
-  // Single-bottle archive → the shared note modal (mirrors the wine card).
+  // "Archive Wine" → the shared ArchiveNoteModal: how many (if the user owns
+  // more than one, across the whole cellar) + an optional note. qty is the total.
   const [singleArchive, setSingleArchive] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
   const [archiving, setArchiving] = useState(false);
   // Moving an already-placed wine INTO this rack via "Select from Cellar List".
@@ -917,12 +913,7 @@ export default function RackGridScreen() {
         // Archive keeps the wine in the user's records (Cellar Archive) but
         // takes it out of the live Cellar List and this rack.
         text: 'Archive Wine',
-        onPress: () => {
-          // Multiple bottles → ask how many (with an Archive All option).
-          // Single bottle → the simple confirm is enough.
-          if (qty > 1) { setArchiveCount('1'); setArchiveNote(''); setArchiveModal({ wineId, wineName: wine.wine_name, qty }); }
-          else confirmArchiveWine(wineId, wine.wine_name, qty);
-        },
+        onPress: () => setSingleArchive({ wineId, wineName: wine.wine_name, qty: wine.quantity ?? 1 }),
       },
     ];
     // Delete — same shape as Archive: ask how many to permanently remove when
@@ -944,63 +935,22 @@ export default function RackGridScreen() {
     });
   }
 
-  // Archive the whole listing from the rack long-press: log the removal, mark
-  // the row archived, and pull it out of the live cellar + every rack slot. The
-  // wine stays in the Cellar Archive (and Removal History). Mirrors the wine
-  // card's full-archive branch, scoped to the entire quantity.
-  function confirmArchiveWine(wineId: string, wineName: string, qty: number) {
-    setSingleArchive({ wineId, wineName, qty });
-  }
-  async function handleSingleArchive(note: string) {
+  // Archive `count` bottles of a wine from the rack. Full (count === total) marks
+  // the row archived and clears its slots; partial decrements the live row, clones
+  // an archive row for the removed bottles, and frees that many slots — so the
+  // "Bottles in My Archive" stat stays correct. Note is logged on the removal.
+  async function handleSingleArchive(count: number, note: string) {
     const target = singleArchive;
     if (!target || archiving) return;
     const { wineId, qty } = target;
     const today = new Date().toISOString().slice(0, 10);
-    setArchiving(true);
-    try {
-      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count: qty, note: note || null });
-      await updateWine.mutateAsync({
-        id: wineId,
-        updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` },
-      });
-      await clearWineFromRacks(wineId);
-      if (session?.user.id) {
-        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
-          (old ?? []).filter((w) => w.id !== wineId));
-        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-        qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-      }
-      qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      setSingleArchive(null);
-    } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setArchiving(false);
-    }
-  }
-
-  // Archive from the multi-bottle modal. `archiveAll` archives the whole
-  // listing; otherwise it archives the entered count, decrementing the live
-  // row and cloning an archive row for the removed bottles (mirrors the wine
-  // card's partial-archive so the "Bottles in My Archive" stat stays correct).
-  async function handleRackArchive(archiveAll: boolean) {
-    if (!archiveModal || archiving) return;
-    const { wineId, qty } = archiveModal;
-    const count = archiveAll ? qty : (parseInt(archiveCount, 10) || 0);
-    if (count < 1 || count > qty) {
-      showAlert({ title: 'Invalid', body: `Enter between 1 and ${qty} bottles.` });
-      return;
-    }
-    const today = new Date().toISOString().slice(0, 10);
     const wine = wines.find((w) => w.id === wineId);
     setArchiving(true);
     try {
-      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count, note: archiveNote.trim() || null });
+      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count, note: note || null });
       qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
 
-      if (count === qty) {
+      if (count >= qty) {
         // Full archive — mark the row archived and clear all its slots.
         await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` } });
         await clearWineFromRacks(wineId);
@@ -1010,8 +960,8 @@ export default function RackGridScreen() {
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
         }
       } else {
-        // Partial — decrement the live row, clone an archive row for the
-        // removed bottles, and free exactly `count` of its slots.
+        // Partial — decrement the live row, clone an archive row for the removed
+        // bottles, and free that many of its slots.
         await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty - count } });
         if (wine) {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
@@ -1022,8 +972,8 @@ export default function RackGridScreen() {
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      setArchiveModal(null);
-      setSavedMsg(count === qty ? 'Wine archived' : `${count} bottle${count === 1 ? '' : 's'} archived`);
+      setSingleArchive(null);
+      setSavedMsg(count >= qty ? 'Wine archived' : `${count} bottle${count === 1 ? '' : 's'} archived`);
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -1080,10 +1030,7 @@ export default function RackGridScreen() {
         { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${wine.id}` as any) },
         {
           text: 'Archive Wine',
-          onPress: () => {
-            if (qty > 1) { setArchiveCount('1'); setArchiveNote(''); setArchiveModal({ wineId: wine.id, wineName: wine.wine_name, qty }); }
-            else confirmArchiveWine(wine.id, wine.wine_name, qty);
-          },
+          onPress: () => setSingleArchive({ wineId: wine.id, wineName: wine.wine_name, qty: wine.quantity ?? 1 }),
         },
         {
           text: 'Delete Wine (Permanent)',
@@ -1862,62 +1809,13 @@ export default function RackGridScreen() {
         onClose={() => setRenameFilterTarget(null)}
       />
 
-      {/* Archive-a-multi-bottle-wine modal — how many, or Archive All. */}
-      <Modal visible={!!archiveModal} transparent animationType="fade" onRequestClose={() => !archiving && setArchiveModal(null)}>
-        <KeyboardAvoidingView behavior="padding" style={styles.placeOverlay}>
-          <View style={styles.placeSheet}>
-            <Text style={styles.placeTitle}>Archive bottles</Text>
-            <Text style={styles.placeBody}>
-              How many of your {archiveModal?.qty} bottles of {archiveModal?.wineName} to move to your Cellar Archive? They leave the Cellar List and this rack but stay in your records.
-            </Text>
-
-            <TextInput
-              style={styles.placeInput}
-              value={archiveCount}
-              onChangeText={setArchiveCount}
-              keyboardType="number-pad"
-              placeholder="1"
-              placeholderTextColor={colors.textMuted}
-              maxLength={3}
-              selectTextOnFocus
-            />
-
-            <TextInput
-              style={[styles.placeInput, { marginTop: spacing.sm }]}
-              value={archiveNote}
-              onChangeText={(t) => setArchiveNote(t.slice(0, 50))}
-              placeholder="Note (optional) — where or with whom"
-              placeholderTextColor={colors.textMuted}
-              maxLength={50}
-            />
-
-            <TouchableOpacity
-              style={[styles.placeConfirmBtn, archiving && { opacity: 0.6 }]}
-              onPress={() => handleRackArchive(false)}
-              disabled={archiving}
-            >
-              <Text style={styles.placeConfirmText}>{archiving ? 'Archiving…' : `Archive ${parseInt(archiveCount, 10) || 1}`}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.archiveAllBtn, archiving && { opacity: 0.6 }]}
-              onPress={() => handleRackArchive(true)}
-              disabled={archiving}
-            >
-              <Text style={styles.archiveAllText}>Archive all {archiveModal?.qty}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => setArchiveModal(null)} disabled={archiving} style={styles.placeCancel}>
-              <Text style={styles.placeCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      {/* Single-bottle archive — the shared note modal. */}
+      {/* Archive — the shared modal: how many (if you own more than one) + note. */}
       <ArchiveNoteModal
         visible={!!singleArchive}
         title="Archive wine?"
         body={singleArchive ? `Move ${singleArchive.wineName} to your Cellar Archive. It'll leave the Cellar List and this rack but stay in your records.` : ''}
         busy={archiving}
+        maxCount={singleArchive?.qty ?? 1}
         onConfirm={handleSingleArchive}
         onClose={() => setSingleArchive(null)}
       />

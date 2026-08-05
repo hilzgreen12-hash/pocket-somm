@@ -17,8 +17,8 @@ import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval } from '../../src/api/cellar';
+import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
+import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWine } from '../../src/api/cellar';
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
@@ -97,7 +97,7 @@ type ArchivedFilter = 'hide' | 'include' | 'only';
 
 export default function FullCellarListScreen() {
   const { session } = useAuth();
-  const { wines, isLoading, isError } = useCellar();
+  const { wines, isLoading, isError, addWine, updateWine } = useCellar();
   const { wines: archivedWines } = useArchive();
   const { racks } = useRacks();
   const attachPhoto = useAttachLabelPhoto();
@@ -265,14 +265,26 @@ export default function FullCellarListScreen() {
   function confirmArchiveOne(w: CellarWine) {
     setArchiveWine(w);
   }
-  async function handleArchiveConfirm(note: string) {
+  async function handleArchiveConfirm(count: number, note: string) {
     const w = archiveWine;
     if (!w) return;
+    const total = w.quantity ?? 1;
+    const today = new Date().toISOString().slice(0, 10);
     setBusy(true);
     try {
-      await addCellarWineRemoval({ cellarWineId: w.id, removedAt: new Date().toISOString().slice(0, 10), count: w.quantity ?? 1, note: note || null });
-      await clearWineFromRacks(w.id);
-      await archiveCellarWine(w.id);
+      await addCellarWineRemoval({ cellarWineId: w.id, removedAt: today, count, note: note || null });
+      if (count >= total) {
+        // Full archive.
+        await clearWineFromRacks(w.id);
+        await archiveCellarWine(w.id);
+      } else {
+        // Partial — decrement the live row, clone an archive row for the removed
+        // bottles, and free that many slots (mirrors the rack / wine-card logic).
+        await updateWine.mutateAsync({ id: w.id, updates: { quantity: total - count } });
+        const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = w;
+        await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false } as any);
+        await removeSlotsForWine(w.id, count);
+      }
       qc.invalidateQueries({ queryKey: ['cellar-removals', w.id] });
       invalidateCellar();
       setArchiveWine(null);
@@ -1241,6 +1253,7 @@ export default function FullCellarListScreen() {
         title="Archive this wine?"
         body="It moves to Your Archive and leaves any rack or location it was placed in. Your reviews and history stay."
         busy={busy}
+        maxCount={archiveWine?.quantity ?? 1}
         onConfirm={handleArchiveConfirm}
         onClose={() => setArchiveWine(null)}
       />
