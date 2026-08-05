@@ -75,9 +75,19 @@ function RemovalRow({ removal }: { removal: { id: string; removed_at: string; co
     <View style={styles.removalRow}>
       <View style={styles.removalHeader}>
         <Text style={styles.removalCount}>{removal.count} {removal.count === 1 ? 'bottle' : 'bottles'}</Text>
-        <Text style={styles.removalDate}>{dateLabel}</Text>
+        <View style={styles.removalDateWrap}>
+          <Text style={styles.removalDate}>{dateLabel}</Text>
+          {removal.note && removal.note.trim() ? (
+            <TouchableOpacity
+              onPress={() => showAlert({ title: dateLabel, body: removal.note!.trim() })}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.removalNoteLink}>Note</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       </View>
-      {removal.note ? <Text style={styles.removalNoteText}>{removal.note}</Text> : null}
     </View>
   );
 }
@@ -180,6 +190,9 @@ export default function CellarWineDetail() {
 
   const [removeCount, setRemoveCount] = useState('1');
   const [removeDate, setRemoveDate] = useState(todayISO());
+  // Brief, optional note on the removal — where/with whom it was drunk. Capped
+  // at 50 chars; shown per-removal in the Bottles in my Archive list.
+  const [removeNote, setRemoveNote] = useState('');
   const [removing, setRemoving] = useState(false);
   const [rackRemovalMsg, setRackRemovalMsg] = useState<string | null>(null);
   const [removeStep, setRemoveStep] = useState<'idle' | 'confirm' | 'success'>('idle');
@@ -656,6 +669,7 @@ export default function CellarWineDetail() {
         cellarWineId: wine!.id,
         removedAt: removeDate,
         count,
+        note: removeNote.trim() || null,
       });
       qc.invalidateQueries({ queryKey: ['cellar-removals', wine!.id] });
 
@@ -695,7 +709,7 @@ export default function CellarWineDetail() {
         }
         showAlert({
           title: 'Wine Archived',
-          body: 'Removed from Cellar List and racks.',
+          body: 'Removed from Cellar List and racks.\n\nYour record of this wine is in Full Cellar List → Archive filter.',
           buttons: [{ text: 'OK', onPress: () => router.back() }],
         });
       } else {
@@ -728,6 +742,7 @@ export default function CellarWineDetail() {
           setRackRemovalMsg(null);
         }
         setRemoveCount('1');
+        setRemoveNote('');
       }
       // Removal was scoped to a location → untag the wine from it. Single-row
       // delete (not a full set-replace), so other members are never touched.
@@ -835,6 +850,7 @@ export default function CellarWineDetail() {
         if (delLocId) qc.invalidateQueries({ queryKey: ['storage-location-wines', delLocId] });
         setRemoveStep('idle');
         setRemoveCount('1');
+        setRemoveNote('');
         setRemoving(false);
         return;
       }
@@ -1859,6 +1875,17 @@ export default function CellarWineDetail() {
               placeholderTextColor={colors.textMuted}
             />
 
+            <Text style={styles.fieldLabel}>Note (optional)</Text>
+            <TextInput
+              style={styles.input}
+              value={removeNote}
+              onChangeText={(t) => setRemoveNote(t.slice(0, 50))}
+              placeholder="e.g. dinner with the Smiths"
+              placeholderTextColor={colors.textMuted}
+              maxLength={50}
+            />
+            <Text style={styles.removeNoteHint}>{removeNote.length}/50 — where or with whom you drank it.</Text>
+
             <TouchableOpacity
               style={[styles.removeBtn, removing && styles.buttonDisabled]}
               onPress={async () => {
@@ -2102,13 +2129,15 @@ const styles = StyleSheet.create({
   // Inter — subtle small info (archived date)
   archivedAt: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.5 },
   removalRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  removalHeader: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: 4 },
-  // Inter — subtle removal count read-out
-  removalCount: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
-  // Inter — removal date caption
-  removalDate: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
-  // Inter — removal note body
-  removalNoteText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.text, lineHeight: 20, marginBottom: 4 },
+  removalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  removalDateWrap: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // Count + date match the drinking-window read-out (statValue) size/font.
+  removalCount: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
+  removalDate: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
+  // Gold "Note" link beside the date, shown when the removal carries a note.
+  removalNoteLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
+  // Char-count hint under the removal note field in the archive modal.
+  removeNoteHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: -2, marginBottom: spacing.sm },
   // Inter — subtle hint
   removalArchiveHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   removeModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
