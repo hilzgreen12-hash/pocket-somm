@@ -29,6 +29,7 @@ import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import { CellarListShareCard } from '../../src/components/CellarListShareCard';
 import { buildCellarListHtml } from '../../src/utils/cellarListHtml';
+import { foldAccents } from '../../src/utils/wineIdentity';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
@@ -536,7 +537,7 @@ export default function FullCellarListScreen() {
 
   // Apply filters. The search query is applied last so the chips still
   // own their truth — typing a query just narrows whatever filters are on.
-  const q = search.trim().toLowerCase();
+  const q = foldAccents(search.trim());
   // Archived view swaps the source list; the other filters still apply.
   const baseWines = archivedFilter === 'only'
     ? archivedWines
@@ -561,10 +562,9 @@ export default function FullCellarListScreen() {
     if (maturityFilter !== 'All' && effectiveMaturity(w) !== maturityFilter) return false;
     if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
     if (q) {
-      const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
+      const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
         .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
+        .join(' '));
       if (!hay.includes(q)) return false;
     }
     return true;

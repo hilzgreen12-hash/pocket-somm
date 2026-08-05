@@ -5,6 +5,7 @@ import { useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { showAlert } from '../../src/components/AppAlert';
+import { foldAccents } from '../../src/utils/wineIdentity';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
@@ -37,13 +38,12 @@ export default function CellarArchiveScreen() {
   const { wines, isLoading, deleteWine } = useArchive();
   const [search, setSearch] = useState('');
 
-  const q = search.trim().toLowerCase();
+  const q = foldAccents(search.trim());
   const filtered = q
     ? wines.filter((w) => {
-        const hay = [w.producer, w.wine_name, w.region, w.vintage]
+        const hay = foldAccents([w.producer, w.wine_name, w.region, w.vintage]
           .filter(Boolean)
-          .join(' ')
-          .toLowerCase();
+          .join(' '));
         return hay.includes(q);
       })
     : wines;

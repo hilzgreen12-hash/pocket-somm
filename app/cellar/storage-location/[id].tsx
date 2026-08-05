@@ -6,6 +6,7 @@ import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
+import { foldAccents } from '../../../src/utils/wineIdentity';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
 import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../src/api/racks';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
@@ -225,7 +226,7 @@ export default function StorageLocationScreen() {
   }, [activeCustomFilterId, customFilters]);
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = foldAccents(search.trim());
     return wines.filter((w) => {
       if (maturity && effectiveMaturity(w) !== maturity) return false;
       // Packaging filter: "loose" keeps only un-cased bottles; a case kind keeps
@@ -235,7 +236,7 @@ export default function StorageLocationScreen() {
       if (activeFilterWineIds && !activeFilterWineIds.has(w.id)) return false;
       if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
-        const hay = [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase();
+        const hay = foldAccents([w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' '));
         const statusTerms = STATUS_SEARCH.find((s) => s.status === effectiveMaturity(w))?.terms ?? [];
         if (!hay.includes(q) && !statusTerms.some((t) => t.includes(q))) return false;
       }
