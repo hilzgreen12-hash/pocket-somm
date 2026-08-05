@@ -20,6 +20,7 @@ function fmtDate(iso: string | null): string {
 
 export function ReviewDetailModal({
   review, visible, onClose, onAddReview, onEditLatest, onDeleteEntry, thumbPath, onAddPhoto,
+  cellarBottles = 0, archiveBottles = 0,
 }: {
   review: UnifiedReview | null;
   visible: boolean;
@@ -29,6 +30,8 @@ export function ReviewDetailModal({
   onDeleteEntry: (entryId: string) => Promise<void> | void;
   thumbPath?: string | null;
   onAddPhoto?: () => void;
+  cellarBottles?: number;
+  archiveBottles?: number;
 }) {
   if (!review) return null;
   const { entries } = review; // newest first
@@ -73,12 +76,20 @@ export function ReviewDetailModal({
             <Text style={styles.wineName} numberOfLines={3}>{review.title}</Text>
           </View>
 
-          {/* Yellow stats band, framed by separator rules. */}
+          {/* Yellow stats band, framed by separator rules. First line: review
+              tally + average. Second line: live bottle holdings for this wine. */}
           <View style={styles.rule} />
-          <Text style={styles.stats}>
-            {review.count} {review.count === 1 ? 'Review' : 'Reviews'}
-            {review.averageScore != null ? ` · ${review.averageScore} Average Score` : ''}
-          </Text>
+          <View style={styles.statsBand}>
+            <Text style={styles.stats}>
+              {review.count} {review.count === 1 ? 'Review' : 'Reviews'}
+              {review.averageScore != null ? ` · ${review.averageScore} Average Score` : ''}
+            </Text>
+            <Text style={styles.statsSub}>
+              {cellarBottles} {cellarBottles === 1 ? 'Bottle' : 'Bottles'} in Your Cellar
+              {' · '}
+              {archiveBottles} {archiveBottles === 1 ? 'Bottle' : 'Bottles'} in Your Archive
+            </Text>
+          </View>
           <View style={styles.rule} />
 
           {entries.map((e, i) => {
@@ -163,7 +174,9 @@ const styles = StyleSheet.create({
   wineName: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 19, color: colors.text, lineHeight: 25 },
 
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.borderLight },
-  stats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, paddingVertical: spacing.sm },
+  statsBand: { paddingVertical: spacing.sm, gap: 3 },
+  stats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
+  statsSub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
 
   entry: { paddingTop: spacing.md },
   metaRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
