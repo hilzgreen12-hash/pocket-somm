@@ -113,7 +113,7 @@ export default function CellarStatsScreen() {
     });
 
   // Which value-editor sheet is open (user fills in what Vinster couldn't find).
-  const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | null>(null);
+  const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | 'purchase-current' | 'estimate-purchase' | null>(null);
   // Which Condition bucket is expanded to show its wines.
   const [expandedCondition, setExpandedCondition] = useState<string | null>(null);
   const editorCurrency = preferences?.defaultCurrency ?? 'GBP';
@@ -452,20 +452,55 @@ export default function CellarStatsScreen() {
         </ScrollView>
       )}
 
-      <WineValueEditorModal
-        visible={valueEditor !== null}
-        field={valueEditor === 'purchase' || valueEditor === 'purchase-estimated' ? 'purchase_price' : 'estimated_value'}
-        title={valueEditor === 'purchase' ? 'Add Purchase Prices' : valueEditor === 'purchase-estimated' ? 'Review Estimated Prices' : 'Update Estimated Values'}
-        subtitle={valueEditor === 'purchase'
-          ? 'Enter what you paid per bottle — this adds to your Total Purchase Value.'
-          : valueEditor === 'purchase-estimated'
-            ? 'These purchase prices are Vinster estimates. Check them and enter what you actually paid per bottle where you know it.'
-            : "Enter your own estimated value per bottle for the wines Vinster couldn't price."}
-        wines={valueEditor === 'purchase' ? winesNoPurchase : valueEditor === 'purchase-estimated' ? winesEstimatedPurchase : winesUnvaluable}
-        currency={editorCurrency}
-        onClose={() => setValueEditor(null)}
-        onSaved={onEditorSaved}
-      />
+      {(() => {
+        // Each editor can offer a gold prompt to switch to entering the OTHER
+        // value for the SAME wines: from a missing-purchase list you can instead
+        // input current values (so they count towards Total Current Value), and
+        // from a missing-current list you can instead input purchase values.
+        const cfg = (() => {
+          switch (valueEditor) {
+            case 'purchase':
+              return { field: 'purchase_price' as const, title: 'Add Purchase Prices',
+                subtitle: 'Enter what you paid per bottle — this adds to your Total Purchase Value.',
+                wines: winesNoPurchase,
+                altAction: { label: 'Input Current Values', onPress: () => setValueEditor('purchase-current') } };
+            case 'purchase-current':
+              return { field: 'estimated_value' as const, title: 'Input Current Values',
+                subtitle: "Enter a current value per bottle for these wines — they'll count towards your Total Current Value (Estimated Values).",
+                wines: winesNoPurchase,
+                altAction: { label: 'Input Purchase Prices', onPress: () => setValueEditor('purchase') } };
+            case 'purchase-estimated':
+              return { field: 'purchase_price' as const, title: 'Review Estimated Prices',
+                subtitle: 'These purchase prices are Vinster estimates. Check them and enter what you actually paid per bottle where you know it.',
+                wines: winesEstimatedPurchase, altAction: undefined };
+            case 'estimate':
+              return { field: 'estimated_value' as const, title: 'Update Estimated Values',
+                subtitle: "Enter your own estimated value per bottle for the wines Vinster couldn't price.",
+                wines: winesUnvaluable,
+                altAction: { label: 'Input Purchase Values', onPress: () => setValueEditor('estimate-purchase') } };
+            case 'estimate-purchase':
+              return { field: 'purchase_price' as const, title: 'Input Purchase Values',
+                subtitle: 'Enter what you paid per bottle for these wines — this adds to your Total Purchase Value.',
+                wines: winesUnvaluable,
+                altAction: { label: 'Input Current Values', onPress: () => setValueEditor('estimate') } };
+            default:
+              return { field: 'purchase_price' as const, title: '', subtitle: '', wines: [], altAction: undefined };
+          }
+        })();
+        return (
+          <WineValueEditorModal
+            visible={valueEditor !== null}
+            field={cfg.field}
+            title={cfg.title}
+            subtitle={cfg.subtitle}
+            wines={cfg.wines}
+            altAction={cfg.altAction}
+            currency={editorCurrency}
+            onClose={() => setValueEditor(null)}
+            onSaved={onEditorSaved}
+          />
+        );
+      })()}
     </View>
   );
 }
