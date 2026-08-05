@@ -31,6 +31,15 @@ function monthKey(iso: string): string {
 }
 
 // A single lineup tile — resolves a fresh signed URL for its photo on mount.
+// Total bottles in a lineup — ALL of them (matched cellar bottles + off-cellar
+// ones), summed from the confirmed wines. The stored bottle_count reflects only
+// the bottles archived to the cellar, so it undercounts; fall back to it only
+// when the lineup has no confirmed wines yet.
+function lineupBottleTotal(l: LineupArchive): number {
+  if (l.wines && l.wines.length) return l.wines.reduce((s, w) => s + (w.count ?? 1), 0);
+  return l.bottle_count ?? 0;
+}
+
 function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void; onLongPress: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
@@ -41,6 +50,7 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
 
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
   const wineCount = item.wines?.length ?? 0;
+  const bottleTotal = lineupBottleTotal(item);
   // Full-width row (thumbnail left, details right) mirroring the Label Library.
   return (
     <TouchableOpacity style={styles.row} onPress={onPress} onLongPress={onLongPress} delayLongPress={400} activeOpacity={0.7}>
@@ -53,8 +63,8 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
       </View>
       <View style={styles.rowBody}>
         <Text style={styles.rowStamp}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
-        {item.bottle_count ? (
-          <Text style={styles.rowCount}>{item.bottle_count} bottle{item.bottle_count === 1 ? '' : 's'}{wineCount ? ` · ${wineCount} wine${wineCount === 1 ? '' : 's'}` : ''}</Text>
+        {bottleTotal ? (
+          <Text style={styles.rowCount}>{bottleTotal} bottle{bottleTotal === 1 ? '' : 's'}{wineCount ? ` · ${wineCount} wine${wineCount === 1 ? '' : 's'}` : ''}</Text>
         ) : null}
         {item.note ? <Text style={styles.rowNote} numberOfLines={2}>{item.note}</Text> : null}
       </View>
@@ -315,11 +325,9 @@ export default function LineupLibraryScreen() {
     : null;
 
   // Whole-library tally shown in gold under the header, mirroring the Full
-  // Cellar List summary. Prefer the stored bottle_count, else sum the wines.
-  const lineupBottles = filtered.reduce(
-    (sum, l) => sum + (l.bottle_count ?? (l.wines?.reduce((s, w) => s + (w.count ?? 1), 0) ?? 0)),
-    0,
-  );
+  // Library summary — count ALL bottles across lineups (matched + off-cellar),
+  // not just the cellar bottles that were archived.
+  const lineupBottles = filtered.reduce((sum, l) => sum + lineupBottleTotal(l), 0);
 
   // Lineups captured but not yet confirmed/actioned. `wines == null` means the
   // photo was saved (Archive a Night / + Add) without its bottles being
