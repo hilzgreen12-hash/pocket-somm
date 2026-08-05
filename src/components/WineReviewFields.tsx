@@ -24,6 +24,9 @@ interface Props {
   onReview: (s: string) => void;
   personalNotes: string;
   onPersonalNotes: (s: string) => void;
+  // When false, the Personal Notes field is hidden — cellar reviews keep their
+  // private note as the card-only "Cellar Note" instead.
+  showPersonalNotes?: boolean;
   // Location — an editable city (Vinster GPS-prefills it via the callers) plus a
   // place name (restaurant / home / other). A city is required to save.
   city: string;
@@ -63,7 +66,7 @@ interface Props {
 export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
-  review, onReview, personalNotes, onPersonalNotes,
+  review, onReview, personalNotes, onPersonalNotes, showPersonalNotes = true,
   city, onCity, locationName, onLocationName, showLocation = true, drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
@@ -152,18 +155,22 @@ export function WineReviewFields({
       />
 
       {/* Personal Notes */}
-      <View style={styles.dictateRow}>
-        <Text style={styles.sectionTitle}>Personal Notes</Text>
-        <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} />
-      </View>
-      <TextInput
-        style={[styles.input, styles.noteInput]}
-        value={personalNotes}
-        onChangeText={onPersonalNotes}
-        placeholder="Just for you — anything you'd rather keep private."
-        placeholderTextColor={colors.textMuted}
-        multiline numberOfLines={4} textAlignVertical="top"
-      />
+      {showPersonalNotes ? (
+        <>
+          <View style={styles.dictateRow}>
+            <Text style={styles.sectionTitle}>Personal Notes</Text>
+            <MicButton value={personalNotes} onChangeText={onPersonalNotes} onClear={() => onPersonalNotes('')} />
+          </View>
+          <TextInput
+            style={[styles.input, styles.noteInput]}
+            value={personalNotes}
+            onChangeText={onPersonalNotes}
+            placeholder="Just for you — anything you'd rather keep private."
+            placeholderTextColor={colors.textMuted}
+            multiline numberOfLines={4} textAlignVertical="top"
+          />
+        </>
+      ) : null}
 
       {/* Drinking Window — the user's own call, as a start + end year. */}
       <Text style={styles.fieldLabel}>Drinking Window — your call (optional)</Text>

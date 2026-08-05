@@ -144,7 +144,9 @@ export function ReviewDetailModal({
                   </View>
                 )}
 
-                {(e.personalNotes ?? '').trim() ? (
+                {/* Cellar reviews keep their private note as the card-only
+                    "Cellar Note", so it never appears here. */}
+                {review.source !== 'cellar' && (e.personalNotes ?? '').trim() ? (
                   <View style={styles.subSection}>
                     <Text style={styles.sectionLabel}>Personal Notes</Text>
                     <Text style={styles.sectionBody}>{e.personalNotes}</Text>
