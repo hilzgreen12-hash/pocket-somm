@@ -13,6 +13,7 @@ import { detectLineup, prepareImageBase64 } from '../../../src/api/label';
 import { matchLineupToCellar } from '../../../src/services/archiveNight';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
+import { Ionicons } from '@expo/vector-icons';
 import { MicButton } from '../../../src/components/MicButton';
 import { showAlert } from '../../../src/components/AppAlert';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
@@ -43,15 +44,30 @@ export default function LineupDetailScreen() {
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
   const [fav, setFav] = useState(false);
+  // Free-text venue (restaurant / bar / home), edited inline via the pin field.
+  const [venue, setVenue] = useState('');
   const hydrated = useRef(false);
   useEffect(() => {
     if (lineup && !hydrated.current) {
       hydrated.current = true;
       setNote(lineup.note ?? '');
+      setVenue(lineup.venue ?? '');
       setFav(lineup.is_favourite);
       lineupSignedUrl(lineup.image_path).then(setPhotoUrl);
     }
   }, [lineup]);
+
+  async function saveVenue() {
+    if (!lineup) return;
+    if ((venue.trim() || null) === (lineup.venue?.trim() || null)) return; // unchanged
+    try {
+      await updateLineupStamp(lineup.id, { venue });
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+    } catch (err) {
+      showAlert({ title: 'Could not save venue', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   // Edit the date + location stamp (tap the stamp below the photo).
   const [stampOpen, setStampOpen] = useState(false);
@@ -295,7 +311,7 @@ export default function LineupDetailScreen() {
   );
 
   const dateStr = new Date(lineup.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const stamp = [dateStr, lineup.city].filter(Boolean).join(' · ');
+  const stamp = [dateStr, lineup.city, lineup.venue].filter(Boolean).join(' · ');
   const wines: LineupWine[] = lineup.wines ?? [];
 
   return (
@@ -311,11 +327,24 @@ export default function LineupDetailScreen() {
             <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Share'}</Text>
           </TouchableOpacity>
         </View>
-        {/* Date · location as the header title (tap to edit), dropped below the
-            back/share row. */}
+        {/* Date · City · Venue as the header title (tap to edit date/city). */}
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}<Text style={styles.stampEditHint}>  ✎</Text></Text>
+          <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}</Text>
         </TouchableOpacity>
+        {/* Venue — a pin + inline input the user fills; saves on blur/submit. */}
+        <View style={styles.venueRow}>
+          <Ionicons name="location-outline" size={16} color={colors.gold} />
+          <TextInput
+            style={styles.venueInput}
+            value={venue}
+            onChangeText={setVenue}
+            onEndEditing={saveVenue}
+            onSubmitEditing={saveVenue}
+            placeholder="Venue"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="done"
+          />
+        </View>
         {/* Match this lineup to a restaurant review — the header shows
             "Matched to <name>" once linked. */}
         <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -569,6 +598,8 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.lg },
+  venueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.sm, paddingHorizontal: spacing.xl },
+  venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, minWidth: 120, textAlign: 'center', paddingVertical: 2 },
   matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
   matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
