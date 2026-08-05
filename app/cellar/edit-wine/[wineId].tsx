@@ -5,6 +5,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar, useWishList } from '../../../src/hooks/useCellar';
 import { useAttachLabelPhoto } from '../../../src/hooks/useAttachLabelPhoto';
+import { usePreferences } from '../../../src/hooks/usePreferences';
+import { valueWine } from '../../../src/services/pricing';
 import { updateCellarWine } from '../../../src/api/cellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
@@ -20,6 +22,7 @@ export default function EditWineScreen() {
   const qc = useQueryClient();
   const { wines } = useCellar();
   const { wines: wishlist } = useWishList();
+  const { preferences } = usePreferences();
   const attachPhoto = useAttachLabelPhoto();
   const wine = wines.find((w) => w.id === wineId) ?? wishlist.find((w) => w.id === wineId) ?? null;
 
@@ -50,13 +53,51 @@ export default function EditWineScreen() {
     }
     setSaving(true);
     try {
-      await updateCellarWine(wine.id, {
+      const updates: Record<string, unknown> = {
         producer: producer.trim() || null,
         region: region.trim() || null,
         wine_name: wineName.trim() || producer.trim(),
         vintage: vintage.trim() || null,
         style: style.trim() || null,
-      });
+      };
+
+      // Identity changed (e.g. a Riserva corrected to the standard bottling) →
+      // it's a different wine, so re-derive the market value + intel from
+      // Wine-Searcher for the NEW identity instead of keeping the old figures.
+      const identityChanged =
+        (producer.trim()) !== (wine.producer ?? '') ||
+        (wineName.trim() || producer.trim()) !== (wine.wine_name ?? '') ||
+        (vintage.trim()) !== (wine.vintage ?? '');
+      if (identityChanged) {
+        try {
+          const currency = (preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').toUpperCase();
+          const v = await valueWine(
+            { producer: producer.trim(), region: region.trim(), wineName: wineName.trim() || null, vintage: vintage.trim() || 'NV', style: style.trim() || null } as any,
+            currency,
+          );
+          Object.assign(updates, {
+            estimated_value: v.estimatedValue,
+            estimated_value_currency: v.currency,
+            estimated_value_at: v.estimatedValue != null ? new Date().toISOString() : null,
+            estimated_value_source: v.estimatedValue != null ? v.valueSource : null,
+            estimated_value_scope: v.priceScope ?? null,
+            critic_score: v.criticScore,
+            critic_score_note: v.criticScoreNote,
+            tasting_notes: v.tastingNotes,
+            drinking_window_from: v.drinkingWindowFrom,
+            drinking_window_to: v.drinkingWindowTo,
+            drinking_window_status: v.drinkingWindowStatus,
+            grape_variety: v.grapeVariety,
+            ws_wine_id: v.wsWineId ?? null,
+            ws_wine_name: v.wsWineName ?? null,
+            // If the recorded purchase price was an auto-estimate (never a figure
+            // the user typed), refresh it to the new wine's value too.
+            ...(wine.purchase_price_estimated ? { purchase_price: v.estimatedValue, purchase_price_currency: v.currency } : {}),
+          });
+        } catch { /* keep the identity edit even if the revalue lookup fails */ }
+      }
+
+      await updateCellarWine(wine.id, updates);
       // The wine's identity shows in every surface it's placed in — refresh them all.
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['wishlist'] });
