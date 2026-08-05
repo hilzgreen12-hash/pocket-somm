@@ -22,6 +22,7 @@ import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { ArchiveNoteModal } from '../../../src/components/ArchiveNoteModal';
+import { foldAccents } from '../../../src/utils/wineIdentity';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { RenameModal } from '../../../src/components/RenameModal';
@@ -1120,7 +1121,7 @@ export default function RackGridScreen() {
   }
 
   const filteredWines = useMemo(() => {
-    const q = searchQuery.toLowerCase().trim();
+    const q = foldAccents(searchQuery.trim());
     if (!q) return winesInRack;
     // Match drinking-window status too ("drinking now", "declining", "too
     // young", "approaching"), alongside producer / name / region / vintage.
@@ -1128,11 +1129,11 @@ export default function RackGridScreen() {
       ? STATUS_SEARCH.filter(({ terms }) => terms.some((t) => t.includes(q) || q.includes(t))).map((s) => s.status)
       : [];
     return winesInRack.filter(({ wine }) =>
-      wine.wine_name.toLowerCase().includes(q) ||
-      (wine.producer ?? '').toLowerCase().includes(q) ||
-      (wine.region ?? '').toLowerCase().includes(q) ||
-      (wine.grape_variety ?? '').toLowerCase().includes(q) ||
-      (wine.vintage ?? '').toString().includes(q) ||
+      foldAccents(wine.wine_name).includes(q) ||
+      foldAccents(wine.producer ?? '').includes(q) ||
+      foldAccents(wine.region ?? '').includes(q) ||
+      foldAccents(wine.grape_variety ?? '').includes(q) ||
+      foldAccents(String(wine.vintage ?? '')).includes(q) ||
       statuses.includes(effectiveMaturity(wine))
     );
   }, [winesInRack, searchQuery]);

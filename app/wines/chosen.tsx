@@ -29,6 +29,7 @@ import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity, cityKey } from '../../src/utils/city';
+import { foldAccents } from '../../src/utils/wineIdentity';
 import { wineNameKey } from '../../src/utils/wineConnections';
 import { splitLocationString } from '../../src/services/reviewSync';
 import { colors, spacing } from '../../src/constants/theme';
@@ -517,7 +518,7 @@ export default function ChosenWinesScreen() {
   // Apply filters. Search is applied last so the chips still own the
   // visible "shape" — typing a query just narrows whatever filters
   // are on, matching Full Cellar List's behaviour.
-  const q = search.trim().toLowerCase();
+  const q = foldAccents(search.trim());
   const filtered = items.filter((it) => {
     // Wish List wines never appear here, and bare (unreviewed) restaurant/other
     // picks live in You · Your Restaurants until reviewed.
@@ -533,10 +534,9 @@ export default function ChosenWinesScreen() {
     if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
     if (q) {
       const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
-      const hay = [w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null]
+      const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null]
         .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
+        .join(' '));
       if (!hay.includes(q)) return false;
     }
     return true;

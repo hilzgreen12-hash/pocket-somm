@@ -20,6 +20,13 @@ const norm = (s: string | null | undefined) => (s ?? '')
 // deliberately NOT here — "Brunello di Montalcino" keeps its "di".
 const ARTICLES = new Set(['il', 'lo', 'la', 'le', 'les', 'gli', 'the', 'el', 'los', 'las', 'der', 'die', 'das']);
 
+// Fold accents + lowercase for accent-insensitive text search ("Müller" ==
+// "Muller"). Keeps everything else (punctuation, digits) so it's safe for
+// free-text "does this contain that" matching, unlike the stricter key below.
+export function foldAccents(s: string | null | undefined): string {
+  return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+}
+
 // Order- and field-placement-independent identity key. A label scan and a list
 // scan of the same wine often split producer vs name differently (or repeat the
 // producer inside the name), so we match on the SET of significant words across

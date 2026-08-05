@@ -21,6 +21,7 @@ import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity, cityKey } from '../../src/utils/city';
+import { foldAccents } from '../../src/utils/wineIdentity';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { ScanArchiveItem } from '../../src/hooks/useScanHistory';
@@ -461,19 +462,19 @@ export default function RestaurantReviewsScreen() {
   );
 
   const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = foldAccents(search.trim());
     return reviewed.filter((item) => {
       if (dateFilter !== 'all' && monthKey(item.capturedAt) !== dateFilter) return false;
       if (favouriteFilter === 'fav' && !item.isFavourite) return false;
       // Free-text search across restaurant name, location, and the wines
       // (bottle picks) chosen on that visit.
       if (q) {
-        const nameHit = (item.restaurantName ?? '').toLowerCase().includes(q);
-        const cityHit = (item.city ?? '').toLowerCase().includes(q);
+        const nameHit = foldAccents(item.restaurantName ?? '').includes(q);
+        const cityHit = foldAccents(item.city ?? '').includes(q);
         const pickHit = chosenWines.some((cw) =>
           cw.scan_session_id === item.id && (
-            (cw.wine_name ?? '').toLowerCase().includes(q) ||
-            (cw.producer ?? '').toLowerCase().includes(q)
+            foldAccents(cw.wine_name ?? '').includes(q) ||
+            foldAccents(cw.producer ?? '').includes(q)
           )
         );
         if (!nameHit && !cityHit && !pickHit) return false;

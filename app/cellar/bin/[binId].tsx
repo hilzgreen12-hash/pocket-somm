@@ -13,6 +13,7 @@ import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 import type { BinCell, CellarWine } from '../../../src/types/wine';
+import { foldAccents } from '../../../src/utils/wineIdentity';
 
 const SQRT2 = Math.SQRT2;
 const CANVAS_H = 380;
@@ -104,15 +105,15 @@ export default function BinDetailScreen() {
     [cells, labels],
   );
 
-  const q = searchQuery.toLowerCase().trim();
+  const q = foldAccents(searchQuery.trim());
   const filteredEntries = useMemo(() => {
     if (!q) return entries;
     return entries.filter(({ wine }) =>
-      wine.wine_name.toLowerCase().includes(q) ||
-      (wine.producer ?? '').toLowerCase().includes(q) ||
-      (wine.region ?? '').toLowerCase().includes(q) ||
-      (wine.grape_variety ?? '').toLowerCase().includes(q) ||
-      (wine.vintage ?? '').toString().includes(q)
+      foldAccents(wine.wine_name).includes(q) ||
+      foldAccents(wine.producer ?? '').includes(q) ||
+      foldAccents(wine.region ?? '').includes(q) ||
+      foldAccents(wine.grape_variety ?? '').includes(q) ||
+      foldAccents(String(wine.vintage ?? '')).includes(q)
     );
   }, [entries, q]);
 
