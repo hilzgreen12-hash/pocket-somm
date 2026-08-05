@@ -37,6 +37,10 @@ export default function LineupDetailScreen() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
+  // The note reads as plain text once saved; editing opens a popup with the
+  // input, and saving converts it back to text.
+  const [noteEditorOpen, setNoteEditorOpen] = useState(false);
+  const [noteDraft, setNoteDraft] = useState('');
   const [fav, setFav] = useState(false);
   const hydrated = useRef(false);
   useEffect(() => {
@@ -102,6 +106,42 @@ export default function LineupDetailScreen() {
   const [included, setIncluded] = useState<Set<number>>(new Set());
   const [savingWines, setSavingWines] = useState(false);
 
+  // Per-wine manual edit (replaces whole-photo re-identify): correct one bottle's
+  // producer / name / vintage in place and persist the lineup's wines list.
+  const [editWineIndex, setEditWineIndex] = useState<number | null>(null);
+  const [editProducer, setEditProducer] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editVintage, setEditVintage] = useState('');
+  const [savingWineEdit, setSavingWineEdit] = useState(false);
+
+  function openWineEdit(index: number, w: LineupWine) {
+    setEditWineIndex(index);
+    setEditProducer(w.producer ?? '');
+    setEditName(w.wine_name ?? '');
+    setEditVintage(w.vintage != null ? String(w.vintage) : '');
+  }
+
+  async function saveWineEdit() {
+    if (!lineup || editWineIndex == null || savingWineEdit) return;
+    const current: LineupWine[] = lineup.wines ?? [];
+    const next = current.map((w, i) =>
+      i === editWineIndex
+        ? { ...w, producer: editProducer.trim() || null, wine_name: editName.trim() || editProducer.trim(), vintage: editVintage.trim() || null }
+        : w,
+    );
+    setSavingWineEdit(true);
+    try {
+      await setLineupWines(lineup.id, next);
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      setEditWineIndex(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingWineEdit(false);
+    }
+  }
+
   async function identifyWines() {
     if (!lineup || identifying) return;
     setIdentifying(true);
@@ -156,14 +196,20 @@ export default function LineupDetailScreen() {
   const shareCardRef = useRef<View>(null);
   const capturedRef = useRef(false);
 
-  async function saveNoteNow() {
+  function openNoteEditor() {
+    setNoteDraft(note);
+    setNoteEditorOpen(true);
+  }
+
+  async function saveNoteFromEditor() {
     if (!lineup || savingNote) return;
     setSavingNote(true);
     try {
-      await setLineupNote(lineup.id, note);
+      await setLineupNote(lineup.id, noteDraft);
+      setNote(noteDraft);
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
       qc.invalidateQueries({ queryKey: ['lineup', id] });
-      showAlert({ title: 'Saved', body: 'Your note is kept with this lineup.' });
+      setNoteEditorOpen(false);
     } catch (err) {
       showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -231,53 +277,55 @@ export default function LineupDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text accessibilityLabel="Back" style={styles.back}>←</Text>
-        </TouchableOpacity>
-        {/* Date · location as the header title (tap to edit). */}
+        {/* Back + Share on their own row, so the stamp's tap area no longer sits
+            against the back arrow (which is what hijacked Back into the editor). */}
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
+            <Text accessibilityLabel="Back" style={styles.back}>←</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 10, left: 16, right: 10 }}>
+            <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Share'}</Text>
+          </TouchableOpacity>
+        </View>
+        {/* Date · location as the header title (tap to edit), dropped below the
+            back/share row. */}
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}<Text style={styles.stampEditHint}>  ✎</Text></Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Share'}</Text>
         </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled">
           <View style={styles.photoWrap}>
-            {photoUrl ? <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
+            {photoUrl ? <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" /> : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
             <TouchableOpacity style={styles.favStar} onPress={toggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
               <Text style={[styles.favStarText, fav && styles.favStarActive]}>{fav ? '★' : '☆'}</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Note */}
-          <View style={styles.dictateRow}>
-            <Text style={styles.sectionLabel}>Your note</Text>
-            <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} />
+          {/* Note — reads as plain text once saved; "Edit" reopens the input in a
+              popup, and saving there converts it back to text. */}
+          <View style={styles.noteBlock}>
+            <View style={styles.noteHeadRow}>
+              <Text style={styles.noteHeadLabel}>Your note</Text>
+              {note.trim() ? (
+                <TouchableOpacity onPress={openNoteEditor} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                  <Text style={styles.viewLink}>Edit</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+            {note.trim() ? (
+              <Text style={styles.noteText}>{note}</Text>
+            ) : (
+              <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
+                <Text style={styles.addNoteLink}>+ Add a note</Text>
+              </TouchableOpacity>
+            )}
           </View>
-          <TextInput
-            style={styles.noteInput}
-            value={note}
-            onChangeText={setNote}
-            placeholder="A memory from this night — who you were with, what you thought…"
-            placeholderTextColor={colors.textMuted}
-            multiline
-            textAlignVertical="top"
-          />
-          <TouchableOpacity style={[styles.saveNoteBtn, savingNote && { opacity: 0.5 }]} onPress={saveNoteNow} disabled={savingNote} activeOpacity={0.85}>
-            <Text style={styles.saveNoteText}>{savingNote ? 'Saving…' : 'Save note'}</Text>
-          </TouchableOpacity>
 
           {/* Wines */}
           <View style={styles.winesHeaderRow}>
             <Text style={styles.sectionLabel}>Wines in this lineup</Text>
-            {wines.length > 0 ? (
-              <TouchableOpacity onPress={identifyWines} disabled={identifying} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.reIdentifyLink}>{identifying ? 'Reading…' : 'Re-identify'}</Text>
-              </TouchableOpacity>
-            ) : null}
           </View>
           {wines.length === 0 ? (
             <View>
@@ -289,10 +337,6 @@ export default function LineupDetailScreen() {
           ) : (
             <View style={styles.wineList}>
               {wines.map((w, i) => {
-                // Cellar status + quantity for this bottle (only active cellar
-                // wines carry a quantity; archived ones are flagged separately).
-                const cellarWine = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
-                const cellarQty = cellarWine?.quantity ?? null;
                 // Whether this wine has been reviewed anywhere (any vintage).
                 const conn = findWineConnections(
                   { producer: w.producer, wineName: w.wine_name, vintage: w.vintage },
@@ -305,27 +349,25 @@ export default function LineupDetailScreen() {
                       {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                     </Text>
                     <View style={styles.tagRow}>
-                      {/* Cellar: a link when it's in the live cellar, else a stamp. */}
-                      {w.cellar_wine_id ? (
-                        w.archived ? (
-                          <Text style={styles.stampTag}>Yours · Archived</Text>
-                        ) : (
-                          <TouchableOpacity onPress={() => router.push(`/cellar/${w.cellar_wine_id}` as any)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                            <Text style={styles.viewLink}>View In Your Cellar{cellarQty != null ? ` · ${cellarQty} bottle${cellarQty === 1 ? '' : 's'}` : ''}</Text>
-                          </TouchableOpacity>
-                        )
-                      ) : (
-                        <Text style={styles.stampTag}>Off-cellar</Text>
-                      )}
-                      {/* Review: a link to the review cards when reviewed, else a
-                          stamp. Reviewing is done from Your Wine Reviews, not here. */}
-                      {conn.reviewCount > 0 ? (
-                        <TouchableOpacity onPress={() => router.push('/wines/chosen')} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                          <Text style={styles.viewLink}>View Your Review</Text>
-                        </TouchableOpacity>
-                      ) : (
-                        <Text style={styles.stampTag}>Not reviewed</Text>
-                      )}
+                      {/* One status stamp: Yours (in the cellar) or Off cellar. */}
+                      <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Yours' : 'Off cellar'}</Text>
+                      {/* Review — becomes View/Edit Review once one's written. A
+                          cellar wine's review lives on its card; off-cellar wines
+                          go through Your Wine Reviews. */}
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (w.cellar_wine_id) { router.push(`/cellar/${w.cellar_wine_id}` as any); return; }
+                          if (conn.reviewCount > 0) { router.push('/wines/chosen'); return; }
+                          router.push(`/wines/chosen?seedAdd=1&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}` as any);
+                        }}
+                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                      >
+                        <Text style={styles.viewLink}>{conn.reviewCount > 0 ? 'View/Edit Review' : 'Review'}</Text>
+                      </TouchableOpacity>
+                      {/* Edit this bottle's identity (replaces whole-photo re-identify). */}
+                      <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.viewLink}>Edit</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 </View>
@@ -361,6 +403,49 @@ export default function LineupDetailScreen() {
             />
             <TouchableOpacity style={[styles.stampSaveBtn, savingStamp && { opacity: 0.5 }]} onPress={saveStamp} disabled={savingStamp} activeOpacity={0.85}>
               <Text style={styles.stampSaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Your note — editor popup. Saving converts the note back to text. */}
+      <Modal visible={noteEditorOpen} transparent animationType="fade" onRequestClose={() => setNoteEditorOpen(false)}>
+        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setNoteEditorOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
+            <View style={styles.dictateRowFlush}>
+              <Text style={styles.stampTitle}>Your note</Text>
+              <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} />
+            </View>
+            <TextInput
+              style={styles.noteEditorInput}
+              value={noteDraft}
+              onChangeText={setNoteDraft}
+              placeholder="A memory from this night — who you were with, what you thought…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              textAlignVertical="top"
+              autoFocus
+            />
+            <TouchableOpacity style={[styles.stampSaveBtn, savingNote && { opacity: 0.5 }]} onPress={saveNoteFromEditor} disabled={savingNote} activeOpacity={0.85}>
+              <Text style={styles.stampSaveText}>{savingNote ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Edit one bottle's identity. */}
+      <Modal visible={editWineIndex !== null} transparent animationType="fade" onRequestClose={() => setEditWineIndex(null)}>
+        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setEditWineIndex(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
+            <Text style={styles.stampTitle}>Edit wine</Text>
+            <Text style={styles.stampFieldLabel}>Producer</Text>
+            <TextInput style={styles.stampInput} value={editProducer} onChangeText={setEditProducer} placeholder="e.g. Château Batailley" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.stampFieldLabel}>Wine name</Text>
+            <TextInput style={styles.stampInput} value={editName} onChangeText={setEditName} placeholder="e.g. Grand Cru Classé" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.stampFieldLabel}>Vintage</Text>
+            <TextInput style={styles.stampInput} value={editVintage} onChangeText={(t) => setEditVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
+            <TouchableOpacity style={[styles.stampSaveBtn, savingWineEdit && { opacity: 0.5 }]} onPress={saveWineEdit} disabled={savingWineEdit} activeOpacity={0.85}>
+              <Text style={styles.stampSaveText}>{savingWineEdit ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -416,11 +501,12 @@ export default function LineupDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
-  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  headerStampWrap: { flex: 1, alignItems: 'center', paddingHorizontal: spacing.sm },
+  headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.lg },
   headerStamp: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
   shareText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
@@ -450,7 +536,14 @@ const styles = StyleSheet.create({
   confirmCancel: { alignItems: 'center', paddingVertical: spacing.md, marginTop: spacing.xs },
   confirmCancelText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
+  dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   sectionLabel: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm },
+  noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
+  noteHeadLabel: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text },
+  noteText: { paddingHorizontal: spacing.xl, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
+  addNoteLink: { paddingHorizontal: spacing.xl, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  noteEditorInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 100, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
   noteInput: { marginHorizontal: spacing.xl, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 90, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   saveNoteBtn: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   saveNoteText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
