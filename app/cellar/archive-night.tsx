@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -13,6 +13,8 @@ import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src
 import { matchLineupToCellar, archiveBottles, type NightMatch } from '../../src/services/archiveNight';
 import { saveLineupArchive, setLineupNote, type LineupArchive, type LineupWine } from '../../src/api/lineups';
 import { captureCity } from '../../src/utils/captureCity';
+import { foldAccents } from '../../src/utils/wineIdentity';
+import type { CellarWine } from '../../src/types/wine';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { MicButton } from '../../src/components/MicButton';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
@@ -147,6 +149,57 @@ export default function ArchiveNightScreen() {
     setCounts((prev) => {
       const next = Math.max(0, Math.min(maxQty, (prev[wineId] ?? 0) + delta));
       return { ...prev, [wineId]: next };
+    });
+  }
+
+  // Manual cellar match — Vinster's auto-match can miss a bottle it struggles to
+  // read. Tapping any lined-up wine (matched or not) opens a "Which wine from
+  // your cellar is this?" search so the user can pick the right cellar wine and
+  // add it to (or correct it within) the matched list.
+  const [pickerFor, setPickerFor] = useState<
+    { kind: 'unmatched'; index: number } | { kind: 'matched'; wineId: string } | null
+  >(null);
+  const [pickerSearch, setPickerSearch] = useState('');
+
+  function openPicker(target: { kind: 'unmatched'; index: number } | { kind: 'matched'; wineId: string }) {
+    setPickerSearch('');
+    setPickerFor(target);
+  }
+
+  function assignCellarWine(w: CellarWine) {
+    const target = pickerFor;
+    setPickerFor(null);
+    if (!target) return;
+
+    const mergeMatch = (list: NightMatch[], addCount: number): NightMatch[] => {
+      const existing = list.find((m) => m.wine.id === w.id);
+      if (existing) return list.map((m) => (m.wine.id === w.id ? { ...m, count: m.count + addCount } : m));
+      return [...list, { wine: w, count: addCount, anyUnconfident: false }];
+    };
+    const seedCount = (prev: Record<string, number>, addCount: number) => ({
+      ...prev,
+      [w.id]: Math.min(w.quantity, (prev[w.id] ?? 0) + addCount),
+    });
+
+    if (target.kind === 'unmatched') {
+      const detectedQty = unmatched[target.index]?.quantity ?? 1;
+      setUnmatched((prev) => prev.filter((_, idx) => idx !== target.index));
+      setMatches((prev) => mergeMatch(prev, detectedQty));
+      setCounts((prev) => seedCount(prev, detectedQty));
+      return;
+    }
+
+    // Re-assigning a matched row to a different cellar wine — carry its count.
+    const oldId = target.wineId;
+    if (oldId === w.id) return;
+    setMatches((prev) => {
+      const carried = prev.find((m) => m.wine.id === oldId)?.count ?? 1;
+      return mergeMatch(prev.filter((m) => m.wine.id !== oldId), carried);
+    });
+    setCounts((prev) => {
+      const carried = prev[oldId] ?? 0;
+      const { [oldId]: _removed, ...rest } = prev;
+      return { ...rest, [w.id]: Math.min(w.quantity, (rest[w.id] ?? 0) + carried) };
     });
   }
 
@@ -377,13 +430,14 @@ export default function ArchiveNightScreen() {
                 return (
                   <View key={m.wine.id} style={[styles.row, n === 0 && styles.rowMuted]}>
                     <LabelThumb path={m.wine.label_image_path} fallbackText={m.wine.wine_name} style={styles.thumb} />
-                    <View style={styles.rowText}>
+                    <TouchableOpacity style={styles.rowText} onPress={() => openPicker({ kind: 'matched', wineId: m.wine.id })} activeOpacity={0.7}>
                       <Text style={styles.rowName} numberOfLines={2}>{label}</Text>
                       <Text style={styles.rowMeta} numberOfLines={1}>
                         {m.wine.producer}{m.wine.quantity ? ` · ${m.wine.quantity} in cellar` : ''}
                       </Text>
                       {m.anyUnconfident ? <Text style={styles.unconfident}>Low-confidence read — check this one</Text> : null}
-                    </View>
+                      <Text style={styles.matchLink}>Not this wine? Pick from cellar</Text>
+                    </TouchableOpacity>
                     <View style={styles.stepper}>
                       <TouchableOpacity style={styles.stepBtn} onPress={() => adjust(m.wine.id, -1, m.wine.quantity)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                         <Text style={styles.stepBtnText}>−</Text>
@@ -403,11 +457,14 @@ export default function ArchiveNightScreen() {
             <>
               <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Not in your cellar</Text>
               {unmatched.map((b, i) => (
-                <Text key={i} style={styles.unmatchedLine}>
-                  · {[b.vintage, b.producer, b.wineName].filter(Boolean).join(' ')}
-                </Text>
+                <TouchableOpacity key={i} style={styles.unmatchedRow} onPress={() => openPicker({ kind: 'unmatched', index: i })} activeOpacity={0.7}>
+                  <Text style={styles.unmatchedLine}>
+                    · {[b.vintage, b.producer, b.wineName].filter(Boolean).join(' ')}
+                  </Text>
+                  <Text style={styles.matchLink}>This is in my cellar — find it</Text>
+                </TouchableOpacity>
               ))}
-              <Text style={styles.hintSmall}>These won't be archived.</Text>
+              <Text style={styles.hintSmall}>Tap a bottle that's actually yours to match it. The rest won't be archived.</Text>
             </>
           )}
 
@@ -426,6 +483,61 @@ export default function ArchiveNightScreen() {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* "Which wine from your cellar is this?" — manual match picker. Type or
+          dictate to search the cellar; picking a wine adds/corrects the match. */}
+      <Modal visible={pickerFor !== null} transparent animationType="fade" onRequestClose={() => setPickerFor(null)}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Which wine from your cellar is this?</Text>
+            <View style={styles.pickerSearchRow}>
+              <TextInput
+                style={styles.pickerSearchInput}
+                value={pickerSearch}
+                onChangeText={setPickerSearch}
+                placeholder="Type or dictate the wine…"
+                placeholderTextColor={colors.textMuted}
+                autoFocus
+                autoCorrect={false}
+              />
+              <MicButton value={pickerSearch} onChangeText={setPickerSearch} onClear={() => setPickerSearch('')} />
+            </View>
+            {(() => {
+              const q = foldAccents(pickerSearch.trim());
+              const rows = wines
+                .filter((w) => {
+                  if (!q) return true;
+                  const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null].filter(Boolean).join(' '));
+                  return hay.includes(q);
+                })
+                .sort((a, b) => (a.wine_name ?? '').localeCompare(b.wine_name ?? ''));
+              return (
+                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                  {rows.length === 0 ? (
+                    <Text style={styles.pickerEmpty}>No cellar wines match.</Text>
+                  ) : rows.map((w) => {
+                    const wl = w.vintage ? `${w.vintage} ${w.wine_name}` : w.wine_name;
+                    return (
+                      <TouchableOpacity key={w.id} style={styles.pickerOption} onPress={() => assignCellarWine(w)} activeOpacity={0.7}>
+                        <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.pickerThumb} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.pickerOptionName} numberOfLines={2}>{wl}</Text>
+                          <Text style={styles.pickerOptionMeta} numberOfLines={1}>
+                            {[w.producer, w.quantity ? `${w.quantity} in cellar` : null].filter(Boolean).join(' · ')}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+              );
+            })()}
+            <TouchableOpacity style={styles.pickerCancel} onPress={() => setPickerFor(null)}>
+              <Text style={styles.pickerCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* Restaurant review on a blank manual session, saved to Your Restaurants.
           Cancelling without saving removes the empty draft. */}
@@ -529,4 +641,20 @@ const styles = StyleSheet.create({
   stepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.gold, lineHeight: 20 },
   stepCount: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, minWidth: 18, textAlign: 'center' },
   unmatchedLine: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, lineHeight: 20 },
+  unmatchedRow: { paddingVertical: spacing.xs },
+  // Gold affordance link on lineup rows — opens the manual cellar picker.
+  matchLink: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 3 },
+  // Manual cellar picker modal.
+  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  pickerSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
+  pickerTitle: { fontFamily: fonts.bodySemibold, fontSize: 18, color: colors.text, marginBottom: spacing.md },
+  pickerSearchRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  pickerSearchInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
+  pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
+  pickerOption: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickerThumb: { width: 34, height: 44, borderRadius: 4 },
+  pickerOptionName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  pickerOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  pickerCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
+  pickerCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });
