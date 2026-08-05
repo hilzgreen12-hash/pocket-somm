@@ -179,8 +179,9 @@ export default function CellarWineDetail() {
   const [removeLocationId, setRemoveLocationId] = useState<string | null>(null);
 
   // Cellar Note — a short private note shown ONLY on the wine card (never in a
-  // review). Edited through a small dictate/type popup, capped at 50 chars.
+  // review). Edited through a small dictate/type popup, capped at 100 chars.
   const [cellarNoteOpen, setCellarNoteOpen] = useState(false);
+  const [cellarNoteExpanded, setCellarNoteExpanded] = useState(false);
   const [noteText, setNoteText] = useState(wine?.cellar_note ?? '');
   const [savingNote, setSavingNote] = useState(false);
 
@@ -610,7 +611,7 @@ export default function CellarWineDetail() {
     try {
       await updateWine.mutateAsync({
         id: wine!.id,
-        updates: { cellar_note: noteText.trim().slice(0, 50) || null },
+        updates: { cellar_note: noteText.trim().slice(0, 100) || null },
       });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       setCellarNoteOpen(false);
@@ -1617,21 +1618,31 @@ export default function CellarWineDetail() {
 
         {!isWishlist && (
         <View style={styles.reviewCol}>
-          {/* Cellar Note — a short private note, card-only. Opens a small
-              dictate/type popup; never links to the review card. */}
+          {/* Cellar Note — a short private note, card-only. Same chevron header
+              as Your Review (so the two align); expand to see the note. Editing
+              opens a small dictate/type popup; never links to the review card. */}
           <View style={styles.vinsterHeaderRow}>
-            <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
-          </View>
-          {wine.cellar_note ? (
-            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
-              <Text style={styles.noteText}>{wine.cellar_note}</Text>
-              <Text style={styles.editReviewLink}>Edit Cellar Note</Text>
+            <TouchableOpacity onPress={() => setCellarNoteExpanded((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
+              <Ionicons name={cellarNoteExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
             </TouchableOpacity>
-          ) : (
+          </View>
+          {cellarNoteExpanded ? (
+            wine.cellar_note ? (
+              <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+                <Text style={styles.noteText}>{wine.cellar_note}</Text>
+                <Text style={styles.editReviewLink}>Edit Cellar Note</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+                <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
+              </TouchableOpacity>
+            )
+          ) : !wine.cellar_note ? (
             <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
               <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
             </TouchableOpacity>
-          )}
+          ) : null}
         </View>
         )}
       </View>
@@ -1963,20 +1974,20 @@ export default function CellarWineDetail() {
           <View style={styles.cnSheet}>
             <View style={styles.cnHeaderRow}>
               <Text style={styles.cnTitle}>Cellar Note</Text>
-              <MicButton value={noteText} onChangeText={(t) => setNoteText(t.slice(0, 50))} onClear={() => setNoteText('')} />
+              <MicButton value={noteText} onChangeText={(t) => setNoteText(t.slice(0, 100))} onClear={() => setNoteText('')} />
             </View>
-            <Text style={styles.cnBody}>A short private note, shown only here on the wine card — 50 characters or less.</Text>
+            <Text style={styles.cnBody}>A short private note, shown only here on the wine card — 100 characters or less.</Text>
             <TextInput
               style={styles.cnInput}
               value={noteText}
-              onChangeText={(t) => setNoteText(t.slice(0, 50))}
+              onChangeText={(t) => setNoteText(t.slice(0, 100))}
               placeholder="e.g. Gift from Dad — lay down till 2030"
               placeholderTextColor={colors.textMuted}
-              maxLength={50}
+              maxLength={100}
               multiline
               autoFocus
             />
-            <Text style={styles.cnCount}>{noteText.length}/50</Text>
+            <Text style={styles.cnCount}>{noteText.length}/100</Text>
             <TouchableOpacity style={styles.cnSaveBtn} onPress={handleSaveCellarNote} disabled={savingNote} activeOpacity={0.85}>
               <Text style={styles.cnSaveText}>{savingNote ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>

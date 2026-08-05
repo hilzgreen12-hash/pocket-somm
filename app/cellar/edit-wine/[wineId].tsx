@@ -10,6 +10,7 @@ import { valueWine } from '../../../src/services/pricing';
 import { updateCellarWine } from '../../../src/api/cellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
+import { BottleSizePicker } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
@@ -30,6 +31,7 @@ export default function EditWineScreen() {
   const [region, setRegion] = useState('');
   const [wineName, setWineName] = useState('');
   const [vintage, setVintage] = useState('');
+  const [bottleSizeMl, setBottleSizeMl] = useState(750);
   const [style, setStyle] = useState('');
   const [saving, setSaving] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -40,6 +42,7 @@ export default function EditWineScreen() {
       setRegion(wine.region ?? '');
       setWineName(wine.wine_name ?? '');
       setVintage(wine.vintage ?? '');
+      setBottleSizeMl(wine.bottle_size_ml ?? 750);
       setStyle(wine.style ?? '');
       setLoaded(true);
     }
@@ -58,6 +61,7 @@ export default function EditWineScreen() {
         region: region.trim() || null,
         wine_name: wineName.trim() || producer.trim(),
         vintage: vintage.trim() || null,
+        bottle_size_ml: bottleSizeMl,
         style: style.trim() || null,
       };
 
@@ -154,6 +158,9 @@ export default function EditWineScreen() {
 
           <Text style={styles.label}>Vintage</Text>
           <TextInput style={styles.input} value={vintage} onChangeText={(t) => setVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
+
+          <Text style={styles.label}>Bottle Size</Text>
+          <BottleSizePicker value={bottleSizeMl} onChange={setBottleSizeMl} />
 
           <Text style={styles.label}>Style</Text>
           <TextInput style={styles.input} value={style} onChangeText={setStyle} placeholder="e.g. Red, White, Rosé, Sparkling, Fortified" placeholderTextColor={colors.textMuted} autoCapitalize="words" />
