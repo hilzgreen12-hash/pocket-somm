@@ -1,0 +1,23 @@
+{
+  "region": "Côte d'Or",
+  "source": "Recovered 2026-08-05 from the published Cellar Atlas artifact (Côte d'Or). Full styled SVG in cote-dor.svg. Village anchors below are the label positions in the SVG's own coordinate space (viewBox 0 0 1516 1540); use them to plot the user's real cellar producers beside the correct village. The 'Domaine …' labels in the SVG are demo placeholders and are replaced by the user's cellar in-app.",
+  "viewBox": "0 0 1516 1540",
+  "villages": [
+    { "name": "Marsannay", "x": 1167.8, "y": 344.4, "cote": "Nuits" },
+    { "name": "Gevrey-Chambertin", "x": 1140.7, "y": 478.0, "cote": "Nuits" },
+    { "name": "Morey-Saint-Denis", "x": 1130.3, "y": 554.5, "cote": "Nuits" },
+    { "name": "Chambolle-Musigny", "x": 1116.3, "y": 610.5, "cote": "Nuits" },
+    { "name": "Vougeot", "x": 1122.2, "y": 666.5, "cote": "Nuits" },
+    { "name": "Vosne-Romanée", "x": 1108.7, "y": 722.5, "cote": "Nuits" },
+    { "name": "Nuits-Saint-Georges", "x": 1089.1, "y": 778.5, "cote": "Nuits" },
+    { "name": "Aloxe-Corton", "x": 936.0, "y": 940.2, "cote": "Beaune" },
+    { "name": "Savigny-lès-Beaune", "x": 874.2, "y": 996.2, "cote": "Beaune" },
+    { "name": "Beaune", "x": 850.6, "y": 1063.0, "cote": "Beaune" },
+    { "name": "Pommard", "x": 803.3, "y": 1119.0, "cote": "Beaune" },
+    { "name": "Volnay", "x": 781.5, "y": 1175.0, "cote": "Beaune" },
+    { "name": "Meursault", "x": 741.2, "y": 1231.0, "cote": "Beaune" },
+    { "name": "Puligny-Montrachet", "x": 708.2, "y": 1296.5, "cote": "Beaune" },
+    { "name": "Chassagne-Montrachet", "x": 676.0, "y": 1352.5, "cote": "Beaune" },
+    { "name": "Santenay", "x": 617.8, "y": 1408.5, "cote": "Beaune" }
+  ]
+}
