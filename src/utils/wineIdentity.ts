@@ -14,12 +14,19 @@ const norm = (s: string | null | undefined) => (s ?? '')
   .replace(/[^a-z0-9]+/g, ' ')
   .trim();
 
+// Definite articles that appear (or not) on a producer name without changing the
+// wine — "Il Marroneto" == "Marroneto", "Le Pin" == "Pin". Dropped from the key.
+// Prepositions that carry meaning inside an appellation (di, de, del, du…) are
+// deliberately NOT here — "Brunello di Montalcino" keeps its "di".
+const ARTICLES = new Set(['il', 'lo', 'la', 'le', 'les', 'gli', 'the', 'el', 'los', 'las', 'der', 'die', 'das']);
+
 // Order- and field-placement-independent identity key. A label scan and a list
 // scan of the same wine often split producer vs name differently (or repeat the
 // producer inside the name), so we match on the SET of significant words across
 // BOTH fields: same words in any order/placement → same wine; different words →
-// different wine (kept conservative so distinct cuvées don't merge).
+// different wine (kept conservative so distinct cuvées don't merge). Definite
+// articles are dropped so "Il Marroneto" and "Marroneto" match.
 export function wineNameKey(producer: string | null | undefined, wineName: string | null | undefined): string {
-  const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter(Boolean);
+  const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter((t) => t && !ARTICLES.has(t));
   return Array.from(new Set(tokens)).sort().join(' ');
 }
