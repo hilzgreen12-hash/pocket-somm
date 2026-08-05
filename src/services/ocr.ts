@@ -9,6 +9,7 @@ const ExtractedWineSchema = z.object({
   region: z.string().nullish().transform((v) => v ?? ''),
   appellation: z.string().nullish(),
   grape: z.string().nullish(),
+  colour: z.string().nullish(),
   vintage: z.number().nullable().catch(null),
   menuPrice: z.number().nullable().catch(null),
   currency: z.string().default('GBP'),
