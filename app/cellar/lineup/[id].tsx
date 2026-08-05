@@ -7,7 +7,8 @@ import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, updateLineupStamp, setLineupWines, type LineupWine } from '../../../src/api/lineups';
+import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, updateLineupStamp, setLineupWines, setLineupRestaurant, type LineupWine } from '../../../src/api/lineups';
+import { useScanHistory } from '../../../src/hooks/useScanHistory';
 import { detectLineup, prepareImageBase64 } from '../../../src/api/label';
 import { matchLineupToCellar } from '../../../src/services/archiveNight';
 import { File, Paths } from 'expo-file-system';
@@ -99,6 +100,29 @@ export default function LineupDetailScreen() {
   const { wines: cellarWines } = useCellar();
   const { chosenWines } = useChosenWines();
   const { labels } = useLabels();
+  const { archive: restaurantArchive } = useScanHistory();
+
+  // Match this lineup to a restaurant review in Your Restaurants (scan_sessions).
+  const [restaurantPickerOpen, setRestaurantPickerOpen] = useState(false);
+  const [savingMatch, setSavingMatch] = useState(false);
+  const matchedRestaurant = lineup?.restaurant_session_id
+    ? restaurantArchive.find((a) => a.id === lineup.restaurant_session_id) ?? null
+    : null;
+
+  async function matchRestaurant(sessionId: string | null) {
+    if (!lineup || savingMatch) return;
+    setSavingMatch(true);
+    try {
+      await setLineupRestaurant(lineup.id, sessionId);
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      setRestaurantPickerOpen(false);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingMatch(false);
+    }
+  }
 
   // "Identify wines" — Vinster reads the archived photo, then the user confirms.
   const [identifying, setIdentifying] = useState(false);
@@ -292,6 +316,15 @@ export default function LineupDetailScreen() {
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}<Text style={styles.stampEditHint}>  ✎</Text></Text>
         </TouchableOpacity>
+        {/* Match this lineup to a restaurant review — the header shows
+            "Matched to <name>" once linked. */}
+        <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          {matchedRestaurant ? (
+            <Text style={styles.matchedText} numberOfLines={1}>Matched to {matchedRestaurant.restaurantName?.trim() || 'a restaurant'}</Text>
+          ) : (
+            <Text style={styles.matchLink} numberOfLines={2}>Match this lineup to a review in Your Restaurants</Text>
+          )}
+        </TouchableOpacity>
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
@@ -451,6 +484,35 @@ export default function LineupDetailScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* Match to a restaurant review in Your Restaurants. */}
+      <Modal visible={restaurantPickerOpen} transparent animationType="fade" onRequestClose={() => setRestaurantPickerOpen(false)}>
+        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setRestaurantPickerOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
+            <Text style={styles.stampTitle}>Match to a restaurant</Text>
+            {restaurantArchive.length === 0 ? (
+              <Text style={styles.muted}>No restaurant reviews yet. Add one in Your Restaurants first.</Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
+                {restaurantArchive.map((a) => {
+                  const active = a.id === lineup.restaurant_session_id;
+                  return (
+                    <TouchableOpacity key={a.id} style={styles.pickerOption} onPress={() => matchRestaurant(a.id)} disabled={savingMatch} activeOpacity={0.7}>
+                      <Text style={[styles.pickerOptionText, active && { color: colors.gold }]} numberOfLines={1}>{a.restaurantName?.trim() || 'Unnamed restaurant'}</Text>
+                      <Text style={styles.pickerOptionMeta} numberOfLines={1}>{[a.city?.trim(), a.capturedAt ? new Date(a.capturedAt).toLocaleDateString('en-GB') : ''].filter(Boolean).join(' · ')}{active ? '  ✓' : ''}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+            {matchedRestaurant ? (
+              <TouchableOpacity style={styles.pickerRemove} onPress={() => matchRestaurant(null)} disabled={savingMatch} activeOpacity={0.7}>
+                <Text style={styles.pickerRemoveText}>Remove match</Text>
+              </TouchableOpacity>
+            ) : null}
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Confirm the wines Vinster identified — tap a wine to include/exclude. */}
       <Modal visible={confirmWines !== null} transparent animationType="fade" onRequestClose={() => setConfirmWines(null)}>
         <View style={styles.stampOverlay}>
@@ -507,6 +569,14 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.lg },
+  matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
+  matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
+  matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+  pickerOption: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  pickerOptionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
+  pickerOptionMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  pickerRemove: { alignItems: 'center', paddingTop: spacing.md },
+  pickerRemoveText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   headerStamp: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
   shareText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
