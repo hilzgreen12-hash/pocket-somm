@@ -21,6 +21,7 @@ import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
+import { ArchiveNoteModal } from '../../../src/components/ArchiveNoteModal';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { RenameModal } from '../../../src/components/RenameModal';
@@ -115,6 +116,10 @@ export default function RackGridScreen() {
   // "Archive Wine" on a multi-bottle wine → ask how many (or Archive All).
   const [archiveModal, setArchiveModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
   const [archiveCount, setArchiveCount] = useState('1');
+  // Optional removal note captured in both archive paths.
+  const [archiveNote, setArchiveNote] = useState('');
+  // Single-bottle archive → the shared note modal (mirrors the wine card).
+  const [singleArchive, setSingleArchive] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
   const [archiving, setArchiving] = useState(false);
   // Moving an already-placed wine INTO this rack via "Select from Cellar List".
   const { data: allLocations = [] } = useQuery({
@@ -915,7 +920,7 @@ export default function RackGridScreen() {
         onPress: () => {
           // Multiple bottles → ask how many (with an Archive All option).
           // Single bottle → the simple confirm is enough.
-          if (qty > 1) { setArchiveCount('1'); setArchiveModal({ wineId, wineName: wine.wine_name, qty }); }
+          if (qty > 1) { setArchiveCount('1'); setArchiveNote(''); setArchiveModal({ wineId, wineName: wine.wine_name, qty }); }
           else confirmArchiveWine(wineId, wine.wine_name, qty);
         },
       },
@@ -944,40 +949,36 @@ export default function RackGridScreen() {
   // wine stays in the Cellar Archive (and Removal History). Mirrors the wine
   // card's full-archive branch, scoped to the entire quantity.
   function confirmArchiveWine(wineId: string, wineName: string, qty: number) {
+    setSingleArchive({ wineId, wineName, qty });
+  }
+  async function handleSingleArchive(note: string) {
+    const target = singleArchive;
+    if (!target || archiving) return;
+    const { wineId, qty } = target;
     const today = new Date().toISOString().slice(0, 10);
-    showAlert({
-      title: qty > 1 ? `Archive all ${qty} bottles?` : 'Archive wine?',
-      body: qty > 1
-        ? `Move all ${qty} bottles of ${wineName} to your Cellar Archive. They'll leave the Cellar List and this rack but stay in your records.`
-        : `Move ${wineName} to your Cellar Archive. It'll leave the Cellar List and this rack but stay in your records.`,
-      buttons: [
-        {
-          text: 'Archive',
-          onPress: async () => {
-            try {
-              await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count: qty });
-              await updateWine.mutateAsync({
-                id: wineId,
-                updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` },
-              });
-              await clearWineFromRacks(wineId);
-              if (session?.user.id) {
-                qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
-                  (old ?? []).filter((w) => w.id !== wineId));
-                qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-                qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
-              }
-              qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
-              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
-              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-            } catch (err) {
-              showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-            }
-          },
-        },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
+    setArchiving(true);
+    try {
+      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count: qty, note: note || null });
+      await updateWine.mutateAsync({
+        id: wineId,
+        updates: { quantity: qty, archived_at: `${today}T12:00:00.000Z` },
+      });
+      await clearWineFromRacks(wineId);
+      if (session?.user.id) {
+        qc.setQueryData<CellarWine[]>(['cellar', session.user.id], (old) =>
+          (old ?? []).filter((w) => w.id !== wineId));
+        qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+        qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      }
+      qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      setSingleArchive(null);
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setArchiving(false);
+    }
   }
 
   // Archive from the multi-bottle modal. `archiveAll` archives the whole
@@ -996,7 +997,7 @@ export default function RackGridScreen() {
     const wine = wines.find((w) => w.id === wineId);
     setArchiving(true);
     try {
-      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count });
+      await addCellarWineRemoval({ cellarWineId: wineId, removedAt: today, count, note: archiveNote.trim() || null });
       qc.invalidateQueries({ queryKey: ['cellar-removals', wineId] });
 
       if (count === qty) {
@@ -1080,7 +1081,7 @@ export default function RackGridScreen() {
         {
           text: 'Archive Wine',
           onPress: () => {
-            if (qty > 1) { setArchiveCount('1'); setArchiveModal({ wineId: wine.id, wineName: wine.wine_name, qty }); }
+            if (qty > 1) { setArchiveCount('1'); setArchiveNote(''); setArchiveModal({ wineId: wine.id, wineName: wine.wine_name, qty }); }
             else confirmArchiveWine(wine.id, wine.wine_name, qty);
           },
         },
@@ -1881,6 +1882,15 @@ export default function RackGridScreen() {
               selectTextOnFocus
             />
 
+            <TextInput
+              style={[styles.placeInput, { marginTop: spacing.sm }]}
+              value={archiveNote}
+              onChangeText={(t) => setArchiveNote(t.slice(0, 50))}
+              placeholder="Note (optional) — where or with whom"
+              placeholderTextColor={colors.textMuted}
+              maxLength={50}
+            />
+
             <TouchableOpacity
               style={[styles.placeConfirmBtn, archiving && { opacity: 0.6 }]}
               onPress={() => handleRackArchive(false)}
@@ -1901,6 +1911,16 @@ export default function RackGridScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      {/* Single-bottle archive — the shared note modal. */}
+      <ArchiveNoteModal
+        visible={!!singleArchive}
+        title="Archive wine?"
+        body={singleArchive ? `Move ${singleArchive.wineName} to your Cellar Archive. It'll leave the Cellar List and this rack but stay in your records.` : ''}
+        busy={archiving}
+        onConfirm={handleSingleArchive}
+        onClose={() => setSingleArchive(null)}
+      />
 
       {/* Delete-a-multi-bottle-wine modal — how many to permanently remove, or Delete All. */}
       <Modal visible={!!deleteModal} transparent animationType="fade" onRequestClose={() => !deleting && setDeleteModal(null)}>

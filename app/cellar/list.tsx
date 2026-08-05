@@ -18,7 +18,8 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { useLineupStore } from '../../src/stores/lineupStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { archiveCellarWine, deleteCellarWine } from '../../src/api/cellar';
+import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval } from '../../src/api/cellar';
+import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
 import { showAlert } from '../../src/components/AppAlert';
@@ -257,20 +258,29 @@ export default function FullCellarListScreen() {
       ],
     });
   }
+  // Archive from the list opens the note modal (mirrors the wine card): capture
+  // an optional "where / with whom" note + log the removal event so it shows in
+  // the wine's Bottles in my Archive, then archive the whole listing.
+  const [archiveWine, setArchiveWine] = useState<CellarWine | null>(null);
   function confirmArchiveOne(w: CellarWine) {
-    showAlert({
-      title: 'Archive this wine?',
-      body: 'It moves to Your Archive and leaves any rack or location it was placed in. Your reviews and history stay.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Archive', onPress: async () => {
-          setBusy(true);
-          try { await clearWineFromRacks(w.id); await archiveCellarWine(w.id); invalidateCellar(); }
-          catch (err) { showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' }); }
-          finally { setBusy(false); }
-        } },
-      ],
-    });
+    setArchiveWine(w);
+  }
+  async function handleArchiveConfirm(note: string) {
+    const w = archiveWine;
+    if (!w) return;
+    setBusy(true);
+    try {
+      await addCellarWineRemoval({ cellarWineId: w.id, removedAt: new Date().toISOString().slice(0, 10), count: w.quantity ?? 1, note: note || null });
+      await clearWineFromRacks(w.id);
+      await archiveCellarWine(w.id);
+      qc.invalidateQueries({ queryKey: ['cellar-removals', w.id] });
+      invalidateCellar();
+      setArchiveWine(null);
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setBusy(false);
+    }
   }
   function confirmDeleteOne(w: CellarWine) {
     showAlert({
@@ -1225,6 +1235,15 @@ export default function FullCellarListScreen() {
           <Text style={styles.scanningText}>Reading the label…</Text>
         </View>
       )}
+
+      <ArchiveNoteModal
+        visible={!!archiveWine}
+        title="Archive this wine?"
+        body="It moves to Your Archive and leaves any rack or location it was placed in. Your reviews and history stay."
+        busy={busy}
+        onConfirm={handleArchiveConfirm}
+        onClose={() => setArchiveWine(null)}
+      />
     </View>
   );
 }
