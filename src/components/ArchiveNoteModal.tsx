@@ -9,17 +9,28 @@ interface Props {
   body: string;
   busy?: boolean;
   confirmLabel?: string;
-  onConfirm: (note: string) => void;
+  // Total bottles the user owns of this wine (across the WHOLE cellar). When > 1
+  // the modal asks how many to archive via a manual number field — no option
+  // buttons. Omit / 1 → archives the single bottle.
+  maxCount?: number;
+  onConfirm: (count: number, note: string) => void;
   onClose: () => void;
 }
 
-// Shared "archive this wine?" confirmation with an optional 50-char removal note
-// (where / with whom you drank it). Used by the quick-archive flows — the Full
-// Cellar List and rack long-press — so the note is captured there too, matching
-// the wine card's own archive form.
-export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'Archive', onConfirm, onClose }: Props) {
+// Shared archive confirmation — consistent across every archive flow (wine card,
+// Full Cellar List, rack). When the user owns more than one bottle it asks how
+// many to archive (manual input), plus an optional 50-char removal note (where /
+// with whom you drank it), and Save / Cancel.
+export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'Save', maxCount = 1, onConfirm, onClose }: Props) {
+  const asksCount = maxCount > 1;
+  const [count, setCount] = useState('1');
   const [note, setNote] = useState('');
-  useEffect(() => { if (visible) setNote(''); }, [visible]);
+  useEffect(() => { if (visible) { setCount('1'); setNote(''); } }, [visible]);
+
+  function confirm() {
+    const n = asksCount ? Math.max(1, Math.min(parseInt(count, 10) || 1, maxCount)) : 1;
+    onConfirm(n, note.trim());
+  }
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -27,6 +38,21 @@ export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'A
         <View style={styles.sheet}>
           <Text style={styles.title}>{title}</Text>
           <Text style={styles.body}>{body}</Text>
+
+          {asksCount ? (
+            <>
+              <Text style={styles.label}>How many of your {maxCount} bottles?</Text>
+              <TextInput
+                style={styles.input}
+                value={count}
+                onChangeText={(t) => setCount(t.replace(/[^0-9]/g, '').slice(0, 3))}
+                keyboardType="number-pad"
+                placeholder="1"
+                placeholderTextColor={colors.textMuted}
+                selectTextOnFocus
+              />
+            </>
+          ) : null}
 
           <Text style={styles.label}>Note (optional)</Text>
           <TextInput
@@ -39,7 +65,7 @@ export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'A
           />
           <Text style={styles.hint}>{note.length}/50 — where or with whom you drank it.</Text>
 
-          <TouchableOpacity style={[styles.confirmBtn, busy && styles.disabled]} onPress={() => onConfirm(note.trim())} disabled={busy} activeOpacity={0.85}>
+          <TouchableOpacity style={[styles.confirmBtn, busy && styles.disabled]} onPress={confirm} disabled={busy} activeOpacity={0.85}>
             {busy ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.confirmText}>{confirmLabel}</Text>}
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose} disabled={busy}>
