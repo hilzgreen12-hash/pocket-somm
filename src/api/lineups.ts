@@ -30,6 +30,8 @@ export interface LineupArchive {
   note_updated_at: string | null;
   wines: LineupWine[] | null;
   city: string | null;
+  // Migration 085 — a matched restaurant review (scan_sessions id), if any.
+  restaurant_session_id: string | null;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -122,6 +124,16 @@ export async function setLineupNote(id: string, note: string | null): Promise<vo
   const { error } = await supabase
     .from('lineup_archives')
     .update({ note: clean, note_updated_at: clean ? new Date().toISOString() : null })
+    .eq('id', id);
+  if (error) throw error;
+}
+
+// Match (or clear) the restaurant review this lineup belongs to. Pass null to
+// unmatch. The id is a scan_sessions row (Your Restaurants).
+export async function setLineupRestaurant(id: string, sessionId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('lineup_archives')
+    .update({ restaurant_session_id: sessionId })
     .eq('id', id);
   if (error) throw error;
 }
