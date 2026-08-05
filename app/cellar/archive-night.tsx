@@ -12,6 +12,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
 import { matchLineupToCellar, archiveBottles, type NightMatch } from '../../src/services/archiveNight';
+import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { saveLineupArchive, setLineupNote, updateLineupStamp, type LineupArchive, type LineupWine } from '../../src/api/lineups';
 import { captureCity } from '../../src/utils/captureCity';
 import { foldAccents } from '../../src/utils/wineIdentity';
@@ -38,6 +39,15 @@ export default function ArchiveNightScreen() {
   const [matches, setMatches] = useState<NightMatch[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [unmatched, setUnmatched] = useState<DetectedBottle[]>([]);
+  // Matched wine ids the user has UN-ticked (excluded from the archive). Default
+  // empty = every matched wine is included.
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // Cosmetic ticks on off-cellar rows (they have no cellar bottles to archive).
+  const [offCellarTicked, setOffCellarTicked] = useState<Set<number>>(new Set());
+  // Per-wine identity edit → re-match against the cellar to move it between the
+  // Matched / Not-in-your-cellar sections.
+  const [editTarget, setEditTarget] = useState<{ kind: 'matched'; wineId: string } | { kind: 'unmatched'; index: number } | null>(null);
+  const [editWineDraft, setEditWineDraft] = useState({ producer: '', wineName: '', vintage: '', bottleSizeMl: 750 });
   const [archivedCount, setArchivedCount] = useState(0);
   // Whether the lineup photo made it into Your Lineup Library. Bottle archiving
   // is the critical action and must not be blocked by a photo failure, but we
@@ -223,7 +233,82 @@ export default function ArchiveNightScreen() {
     });
   }
 
-  const totalToArchive = matches.reduce((sum, m) => sum + (counts[m.wine.id] ?? 0), 0);
+  const totalToArchive = matches.reduce((sum, m) => (excluded.has(m.wine.id) ? sum : sum + (counts[m.wine.id] ?? 0)), 0);
+
+  // Lineup composition for the stats bar — every bottle/wine photographed.
+  const lineupWineCount = matches.length + unmatched.length;
+  const lineupBottleCount =
+    matches.reduce((s, m) => s + m.count, 0) + unmatched.reduce((s, b) => s + (b.quantity ?? 1), 0);
+
+  function toggleExcluded(wineId: string) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(wineId)) next.delete(wineId); else next.add(wineId);
+      return next;
+    });
+  }
+  function toggleOffCellar(i: number) {
+    setOffCellarTicked((prev) => {
+      const next = new Set(prev);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      return next;
+    });
+  }
+
+  function openEditWine(target: { kind: 'matched'; wineId: string } | { kind: 'unmatched'; index: number }) {
+    if (target.kind === 'matched') {
+      const m = matches.find((x) => x.wine.id === target.wineId);
+      if (!m) return;
+      setEditWineDraft({ producer: m.wine.producer ?? '', wineName: m.wine.wine_name ?? '', vintage: m.wine.vintage != null ? String(m.wine.vintage) : '', bottleSizeMl: m.wine.bottle_size_ml ?? 750 });
+    } else {
+      const b = unmatched[target.index];
+      if (!b) return;
+      setEditWineDraft({ producer: b.producer ?? '', wineName: b.wineName ?? '', vintage: b.vintage != null ? String(b.vintage) : '', bottleSizeMl: b.bottleSizeMl ?? 750 });
+    }
+    setEditTarget(target);
+  }
+
+  // Save an identity edit, then re-match against the live cellar so the wine
+  // lands in the right section (Matched vs Not in your cellar).
+  function saveEditWine() {
+    const target = editTarget;
+    if (!target) return;
+    const priorCount =
+      target.kind === 'matched' ? (counts[target.wineId] ?? 0) : (unmatched[target.index]?.quantity ?? 1);
+    const bottle: DetectedBottle = {
+      producer: editWineDraft.producer.trim() || null,
+      wineName: editWineDraft.wineName.trim() || editWineDraft.producer.trim(),
+      vintage: editWineDraft.vintage.trim() || null,
+      confident: true,
+      quantity: Math.max(1, priorCount),
+      bottleSizeMl: editWineDraft.bottleSizeMl,
+    } as DetectedBottle;
+
+    const { matched: mm, unmatched: uu } = matchLineupToCellar([bottle], wines);
+    setEditTarget(null);
+
+    // Remove the edited wine from wherever it currently lives.
+    if (target.kind === 'matched') {
+      setMatches((prev) => prev.filter((m) => m.wine.id !== target.wineId));
+      setCounts((prev) => { const { [target.wineId]: _drop, ...rest } = prev; return rest; });
+      setExcluded((prev) => { const next = new Set(prev); next.delete(target.wineId); return next; });
+    } else {
+      setUnmatched((prev) => prev.filter((_, idx) => idx !== target.index));
+      setOffCellarTicked(new Set()); // indices shift; clear cosmetic ticks
+    }
+
+    if (mm.length) {
+      const nm = mm[0];
+      setMatches((prev) => {
+        const existing = prev.find((m) => m.wine.id === nm.wine.id);
+        if (existing) return prev.map((m) => (m.wine.id === nm.wine.id ? { ...m, count: m.count + nm.count } : m));
+        return [...prev, nm];
+      });
+      setCounts((prev) => ({ ...prev, [nm.wine.id]: Math.min(nm.wine.quantity, (prev[nm.wine.id] ?? 0) + Math.max(1, priorCount)) }));
+    } else {
+      setUnmatched((prev) => [...prev, bottle]);
+    }
+  }
 
   async function handleSaveNote() {
     if (!savedLineup || savingNote || !note.trim()) return;
@@ -286,6 +371,7 @@ export default function ArchiveNightScreen() {
     const today = new Date().toISOString().split('T')[0];
     try {
       for (const m of matches) {
+        if (excluded.has(m.wine.id)) continue;
         const n = counts[m.wine.id] ?? 0;
         if (n > 0) await archiveBottles(m.wine, n, today);
       }
@@ -304,7 +390,7 @@ export default function ArchiveNightScreen() {
               wine_name: m.wine.wine_name,
               vintage: m.wine.vintage,
               cellar_wine_id: m.wine.id,
-              archived: (counts[m.wine.id] ?? 0) > 0,
+              archived: !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0,
               count: m.count,
             })),
             ...unmatched.map((b) => ({
@@ -415,53 +501,77 @@ export default function ArchiveNightScreen() {
       ) : (
         // review
         <ScrollView contentContainerStyle={styles.content}>
-          {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
-
-          {matches.length === 0 ? (
-            <Text style={styles.hint}>Vinster couldn't match any of these bottles to your cellar. Try a clearer photo with the front labels showing.</Text>
+          {matches.length === 0 && unmatched.length === 0 ? (
+            <>
+              {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
+              <Text style={styles.hint}>Vinster couldn't match any of these bottles to your cellar. Try a clearer photo with the front labels showing.</Text>
+            </>
           ) : (
             <>
-              <Text style={styles.sectionLabel}>Matched in your cellar</Text>
-              {matches.map((m) => {
-                const n = counts[m.wine.id] ?? 0;
-                const label = m.wine.vintage ? `${m.wine.vintage} ${m.wine.wine_name}` : m.wine.wine_name;
-                return (
-                  <View key={m.wine.id} style={[styles.row, n === 0 && styles.rowMuted]}>
-                    <LabelThumb path={m.wine.label_image_path} fallbackText={m.wine.wine_name} style={styles.thumb} />
-                    <TouchableOpacity style={styles.rowText} onPress={() => openPicker({ kind: 'matched', wineId: m.wine.id })} activeOpacity={0.7}>
-                      <Text style={styles.rowName} numberOfLines={2}>{label}</Text>
-                      <Text style={styles.rowMeta} numberOfLines={1}>
-                        {m.wine.producer}{m.wine.quantity ? ` · ${m.wine.quantity} in cellar` : ''}
-                      </Text>
-                      {m.anyUnconfident ? <Text style={styles.unconfident}>Low-confidence read — check this one</Text> : null}
-                      <Text style={styles.matchLink}>Not this wine? Pick from cellar</Text>
-                    </TouchableOpacity>
-                    <View style={styles.stepper}>
-                      <TouchableOpacity style={styles.stepBtn} onPress={() => adjust(m.wine.id, -1, m.wine.quantity)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Text style={styles.stepBtnText}>−</Text>
-                      </TouchableOpacity>
-                      <Text style={styles.stepCount}>{n}</Text>
-                      <TouchableOpacity style={styles.stepBtn} onPress={() => adjust(m.wine.id, 1, m.wine.quantity)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Text style={styles.stepBtnText}>+</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                );
-              })}
-            </>
-          )}
+              {/* Yellow stats bar below the header, then the lineup photo. */}
+              <View style={styles.statsBar}>
+                <Text style={styles.statsBarText}>
+                  {lineupBottleCount} {lineupBottleCount === 1 ? 'Bottle' : 'Bottles'} · {lineupWineCount} {lineupWineCount === 1 ? 'Wine' : 'Wines'}
+                </Text>
+              </View>
+              {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
 
-          {unmatched.length > 0 && (
-            <>
-              <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Not in your cellar</Text>
-              {unmatched.map((b, i) => (
-                <TouchableOpacity key={i} style={styles.unmatchedRow} onPress={() => openPicker({ kind: 'unmatched', index: i })} activeOpacity={0.7}>
-                  <Text style={styles.unmatchedLine}>
-                    · {[b.vintage, b.producer, b.wineName].filter(Boolean).join(' ')}
-                  </Text>
-                  <Text style={styles.matchLink}>This is in my cellar — find it</Text>
-                </TouchableOpacity>
-              ))}
+              {matches.length > 0 ? (
+                <>
+                  <Text style={styles.sectionLabel}>Matched in your cellar</Text>
+                  {matches.map((m) => {
+                    const n = counts[m.wine.id] ?? 0;
+                    const ticked = !excluded.has(m.wine.id);
+                    const label = m.wine.vintage ? `${m.wine.vintage} ${m.wine.wine_name}` : m.wine.wine_name;
+                    return (
+                      <View key={m.wine.id} style={[styles.row, !ticked && styles.rowMuted]}>
+                        <TouchableOpacity style={styles.checkbox} onPress={() => toggleExcluded(m.wine.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={[styles.checkboxText, ticked && styles.checkboxTextOn]}>{ticked ? '☑' : '☐'}</Text>
+                        </TouchableOpacity>
+                        <View style={styles.rowText}>
+                          <Text style={styles.rowName} numberOfLines={2}>{label}, {n}x{bottleSizeCl(m.wine.bottle_size_ml ?? 750)}cl</Text>
+                          <View style={styles.stepperInline}>
+                            <TouchableOpacity style={styles.stepBtn} onPress={() => adjust(m.wine.id, -1, m.wine.quantity)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Text style={styles.stepBtnText}>−</Text>
+                            </TouchableOpacity>
+                            <Text style={styles.stepCount}>{n}</Text>
+                            <TouchableOpacity style={styles.stepBtn} onPress={() => adjust(m.wine.id, 1, m.wine.quantity)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Text style={styles.stepBtnText}>+</Text>
+                            </TouchableOpacity>
+                          </View>
+                          {m.anyUnconfident ? <Text style={styles.unconfident}>Low-confidence read — check this one</Text> : null}
+                        </View>
+                        <TouchableOpacity onPress={() => openEditWine({ kind: 'matched', wineId: m.wine.id })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={styles.editLink}>Edit</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </>
+              ) : null}
+
+              {unmatched.length > 0 && (
+                <>
+                  <Text style={[styles.sectionLabel, { marginTop: spacing.lg }]}>Not in your cellar</Text>
+                  {unmatched.map((b, i) => {
+                    const ticked = offCellarTicked.has(i);
+                    const label = [b.vintage, b.producer, b.wineName].filter(Boolean).join(' ') || 'Unreadable bottle';
+                    return (
+                      <View key={i} style={styles.row}>
+                        <TouchableOpacity style={styles.checkbox} onPress={() => toggleOffCellar(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={[styles.checkboxText, ticked && styles.checkboxTextOn]}>{ticked ? '☑' : '☐'}</Text>
+                        </TouchableOpacity>
+                        <View style={styles.rowText}>
+                          <Text style={styles.rowName} numberOfLines={2}>{label}, {b.quantity ?? 1}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
+                        </View>
+                        <TouchableOpacity onPress={() => openEditWine({ kind: 'unmatched', index: i })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Text style={styles.editLink}>Edit</Text>
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  })}
+                </>
+              )}
             </>
           )}
 
@@ -580,6 +690,30 @@ export default function ArchiveNightScreen() {
             ) : null}
             <TouchableOpacity style={[styles.overlaySaveBtn, missingStillBlank && styles.primaryBtnDisabled]} onPress={handleMissingSave} disabled={missingStillBlank} activeOpacity={0.85}>
               <Text style={styles.overlaySaveText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Edit a lined-up wine's identity — on save it re-matches against the
+          cellar and moves between the Matched / Not-in-your-cellar sections. */}
+      <Modal visible={editTarget !== null} transparent animationType="fade" onRequestClose={() => setEditTarget(null)}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <Text style={styles.pickerTitle}>Edit wine</Text>
+            <Text style={styles.editFieldLabel}>Producer</Text>
+            <TextInput style={styles.editInput} value={editWineDraft.producer} onChangeText={(t) => setEditWineDraft((d) => ({ ...d, producer: t }))} placeholder="e.g. Château Batailley" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.editFieldLabel}>Wine name</Text>
+            <TextInput style={styles.editInput} value={editWineDraft.wineName} onChangeText={(t) => setEditWineDraft((d) => ({ ...d, wineName: t }))} placeholder="Cuvée / wine name" placeholderTextColor={colors.textMuted} />
+            <Text style={styles.editFieldLabel}>Vintage</Text>
+            <TextInput style={styles.editInput} value={editWineDraft.vintage} onChangeText={(t) => setEditWineDraft((d) => ({ ...d, vintage: t.slice(0, 7) }))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
+            <Text style={styles.editFieldLabel}>Format</Text>
+            <BottleSizePicker value={editWineDraft.bottleSizeMl} onChange={(ml) => setEditWineDraft((d) => ({ ...d, bottleSizeMl: ml }))} />
+            <TouchableOpacity style={[styles.overlaySaveBtn, { marginTop: spacing.lg }]} onPress={saveEditWine} activeOpacity={0.85}>
+              <Text style={styles.overlaySaveText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.pickerCancel} onPress={() => setEditTarget(null)}>
+              <Text style={styles.pickerCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -762,9 +896,19 @@ const styles = StyleSheet.create({
   rowMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   unconfident: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.gold, marginTop: 2 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  stepperInline: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 6 },
   stepBtn: { width: 30, height: 30, borderRadius: 15, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   stepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.gold, lineHeight: 20 },
   stepCount: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, minWidth: 18, textAlign: 'center' },
+  // Consistent gold stats bar shared with Add a Lineup.
+  statsBar: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  statsBarText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  checkbox: { paddingRight: 2 },
+  checkboxText: { fontSize: 22, color: colors.textMuted, lineHeight: 24 },
+  checkboxTextOn: { color: colors.gold },
+  editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  editFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.md, marginBottom: 4 },
+  editInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
   unmatchedLine: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, lineHeight: 20 },
   unmatchedRow: { paddingVertical: spacing.xs },
   // Gold affordance link on lineup rows — opens the manual cellar picker.
