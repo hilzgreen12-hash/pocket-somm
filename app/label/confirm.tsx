@@ -568,14 +568,24 @@ export default function LabelConfirmScreen() {
       ) : null}
 
       {/* Manual entry: predictive search fills producer/name/region/style from a
-          real wine — the fields below stay editable. */}
+          real wine, and — once the producer is typed — a link to match the
+          entry to one of Vinster's known bottlings, so a hand-typed name gets
+          canonicalised (e.g. "Marroneto" → "Il Marroneto Brunello di
+          Montalcino") and doesn't become a near-duplicate. */}
       {isManual ? (
-        <WineSearchInput onSelect={(r) => {
-          setProducer(r.producer);
-          setWineName(r.wineName ?? '');
-          setRegion(r.region ?? '');
-          setStyle(r.style ?? '');
-        }} />
+        <>
+          <WineSearchInput onSelect={(r) => {
+            setProducer(r.producer);
+            setWineName(r.wineName ?? '');
+            setRegion(r.region ?? '');
+            setStyle(r.style ?? '');
+          }} />
+          <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
+            <Text style={styles.candLinkText}>
+              {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Typed it yourself? Tap to match your entry to an approved bottling.'}
+            </Text>
+          </TouchableOpacity>
+        </>
       ) : null}
 
       <Text style={styles.label}>Producer</Text>
