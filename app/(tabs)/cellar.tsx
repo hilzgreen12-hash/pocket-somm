@@ -102,12 +102,12 @@ export default function CellarTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
-          <Text style={styles.buttonText}>Full Cellar List: Add & Edit</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
+          <Text style={styles.buttonText}>Home Wine Storage: Add & Edit</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={styles.buttonText}>Home Wine Storage: Add & Edit</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
+          <Text style={styles.buttonText}>Full Cellar List: Add & Edit</Text>
         </TouchableOpacity>
       </View>
 
