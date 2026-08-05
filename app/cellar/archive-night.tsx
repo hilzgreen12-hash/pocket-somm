@@ -118,6 +118,7 @@ export default function ArchiveNightScreen() {
       setArchivedCount(0);
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
       setStage('done');
+      showAlert({ title: 'Saved', body: 'Photo saved to your Lineup Library.' });
     } catch (err) {
       showAlert({ title: 'Could not save the lineup', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
@@ -319,14 +320,14 @@ export default function ArchiveNightScreen() {
         <View style={styles.cameraWrap}>
           {imageUri ? <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
           <View style={styles.previewActions}>
+            <TouchableOpacity style={styles.previewNeutral} onPress={() => { if (imageUri) void analyze(imageUri); }} activeOpacity={0.85}>
+              <Text style={styles.previewNeutralText}>Review Now & Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.previewNeutral} onPress={() => { if (imageUri) void saveForLater(imageUri); }} activeOpacity={0.85}>
+              <Text style={styles.previewNeutralText}>Save & Review Later</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.previewSecondary} onPress={() => { setImageUri(null); setStage('capture'); }} activeOpacity={0.85}>
               <Text style={styles.previewSecondaryText}>Retake</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.previewPrimary} onPress={() => { if (imageUri) void saveForLater(imageUri); }} activeOpacity={0.85}>
-              <Text style={styles.previewPrimaryText}>Save to Lineup Library</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.previewSecondary} onPress={() => { if (imageUri) void analyze(imageUri); }} activeOpacity={0.85}>
-              <Text style={styles.previewSecondaryText}>Review Now</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -586,10 +587,11 @@ const styles = StyleSheet.create({
   previewActions: {
     position: 'absolute', bottom: 40, left: spacing.xl, right: spacing.xl, gap: spacing.sm,
   },
-  previewPrimary: { backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
-  previewPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.background },
   previewSecondary: { borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
   previewSecondaryText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Neutral (white) preview actions — only Retake is gold.
+  previewNeutral: { borderWidth: 1, borderColor: '#FFFFFF', backgroundColor: 'rgba(0,0,0,0.55)', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
+  previewNeutralText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   headerSpacer: { width: 44 },
