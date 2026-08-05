@@ -45,6 +45,42 @@ export interface WineCandidate {
   style: string | null;
 }
 
+// Normalized key for de-duplicating candidates that are the SAME wine listed
+// under slightly different names. Strips the Bordeaux-style CLASSIFICATION
+// phrases that get appended inconsistently (a classification, not a distinct
+// cuvée), so "Château Batailley" and "Château Batailley Grand Cru Classé"
+// collapse to one. Deliberately leaves cuvée words (Réserve, Cuvée…) and
+// Burgundy "Grand Cru" (an appellation tier) intact — those mark real, distinct
+// wines that must stay separate.
+function candidateKey(name: string): string {
+  return (name ?? '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\b(premier|deuxieme|troisieme|quatrieme|cinquieme|1er|2eme|3eme|4eme|5eme)?\s*grand\s+cru\s+classe\b/g, ' ')
+    .replace(/\bcru\s+classe\b/g, ' ')
+    .replace(/\bcru\s+bourgeois(\s+(exceptionnel|superieur))?\b/g, ' ')
+    .replace(/\bclasse?\s+en\s+\d{4}\b/g, ' ')
+    .replace(/\b1855\b/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function dedupeCandidates(list: WineCandidate[]): WineCandidate[] {
+  const byKey = new Map<string, WineCandidate>();
+  for (const c of list) {
+    const key = candidateKey(c.wineName) || `__${(c.wineName ?? '').toLowerCase()}`;
+    const existing = byKey.get(key);
+    if (!existing) { byKey.set(key, c); continue; }
+    // Same wine — keep the cleaner (shorter) display name, fill any missing
+    // region / style from the other so nothing useful is lost.
+    const keepC = (c.wineName?.length ?? 0) < (existing.wineName?.length ?? 0);
+    const base = keepC ? c : existing;
+    const other = keepC ? existing : c;
+    byKey.set(key, { wineName: base.wineName, region: base.region ?? other.region, style: base.style ?? other.style });
+  }
+  return Array.from(byKey.values());
+}
+
 // Ask Claude for the real, distinct wines a producer makes that could match a
 // weakly-identified scan — used to let the user confirm the exact bottling.
 export async function fetchWineCandidates(input: { producer?: string | null; region?: string | null; wineName?: string | null; vintage?: string | null }): Promise<WineCandidate[]> {
@@ -54,7 +90,7 @@ export async function fetchWineCandidates(input: { producer?: string | null; reg
     wineName: input.wineName ?? '',
     vintage: input.vintage ?? '',
   }) as { candidates?: WineCandidate[] };
-  return data.candidates ?? [];
+  return dedupeCandidates(data.candidates ?? []);
 }
 
 export interface LabelImageCandidate {
