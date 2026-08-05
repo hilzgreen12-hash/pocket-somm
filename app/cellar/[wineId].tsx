@@ -1584,36 +1584,10 @@ export default function CellarWineDetail() {
       <View style={styles.cardDivider} />
       <Text style={styles.reviewsHeader}>Reviews</Text>
 
-      {/* Personal Notes (left) beside Your Review (right); Vinster's Review
-          sits full-width beneath. Fills the blank space the stacked layout left.
-          Wishlist wines have no Personal Notes, so Your Review takes the row. */}
+      {/* Your Review (left) beside Personal Notes (right); Vinster's Review
+          sits full-width beneath. Wishlist wines have no Personal Notes, so
+          Your Review takes the row. */}
       <View style={styles.reviewRow}>
-        {!isWishlist && (
-        <View style={styles.reviewCol}>
-          {/* Personal Notes — same chevron + auto-save-on-collapse pattern. */}
-          <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={toggleNote} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-              <Text style={styles.vinsterReviewTitle}>Personal Notes</Text>
-              <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-            </TouchableOpacity>
-          </View>
-          {wine.user_notes ? (
-            editingNote ? (
-              <>
-                <Text style={styles.noteText}>{wine.user_notes}</Text>
-                <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-                  <Text style={styles.editReviewLink}>Edit Personal Note</Text>
-                </TouchableOpacity>
-              </>
-            ) : null
-          ) : (
-            <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
-              <Text style={styles.addReviewLink}>+ Add Personal Note</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-        )}
-
         <View style={styles.reviewCol}>
           {/* Your Review — the chevron drills through to the full review page.
               Score + Drinking Window stay on the card below. */}
@@ -1665,6 +1639,32 @@ export default function CellarWineDetail() {
             </TouchableOpacity>
           )}
         </View>
+
+        {!isWishlist && (
+        <View style={styles.reviewCol}>
+          {/* Personal Notes — same chevron + auto-save-on-collapse pattern. */}
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={toggleNote} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Personal Notes</Text>
+              <Ionicons name={editingNote ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+          {wine.user_notes ? (
+            editingNote ? (
+              <>
+                <Text style={styles.noteText}>{wine.user_notes}</Text>
+                <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+                  <Text style={styles.editReviewLink}>Edit Personal Note</Text>
+                </TouchableOpacity>
+              </>
+            ) : null
+          ) : (
+            <TouchableOpacity onPress={() => setReviewModalOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.addReviewLink}>+ Add Personal Note</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        )}
       </View>
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
@@ -2072,7 +2072,7 @@ const styles = StyleSheet.create({
   reviewQuickStatsCol: { gap: spacing.sm, marginBottom: spacing.md },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
-  vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.xs },
+  vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   vinsterReviewTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: '#FFFFFF' },
   // Full-width separator between card sections.
   cardDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: spacing.md },
@@ -2324,7 +2324,7 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyItalic,
   },
   // Gold "+ Add Review" link (no review yet) + "Edit Review" link (review exists).
-  addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
+  addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: 0 },
   reviewEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
   reviewEntryBlock: { marginTop: spacing.sm, marginBottom: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
   reviewEntryMeta: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginBottom: 4 },
