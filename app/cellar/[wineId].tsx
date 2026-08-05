@@ -95,12 +95,6 @@ function RemovalRow({ removal }: { removal: { id: string; removed_at: string; co
 export default function CellarWineDetail() {
   useKeepAwake();
   const { wineId, from } = useLocalSearchParams<{ wineId: string; from?: string }>();
-  // When the user came in by tapping a slot on a rack grid, the
-  // "In {rack name} →" affordance on the Bottles stat would just point
-  // them back to where they came from — hide it in that case. The link
-  // stays visible when entering via Full Cellar List, where it acts as a
-  // legitimate shortcut to the rack.
-  const cameFromRack = from === 'rack';
   // Coming in via Profile → Wine Reviews — the chef-pairing button on
   // this card is swapped for a Post Review to Community CTA so the user
   // can share what they just wrote with other Vinster users.
@@ -1538,9 +1532,11 @@ export default function CellarWineDetail() {
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
-          {/* Hide the rack shortcut when we arrived FROM a rack slot — it would
-              just point back to where the user already is (cameFromRack). */}
-          {!cameFromRack && wineRacks.map(({ rack, count }) => (
+          {/* Per-location breakdown — always shown so a wine split across a
+              fridge and a rack reads "1 in My Wine Fridge · 2 in Large Wine
+              Rack", not just a bare total. (Tapping the rack you came from just
+              returns to it — harmless, and worth it for the full picture.) */}
+          {wineRacks.map(({ rack, count }) => (
             <TouchableOpacity key={rack.id} onPress={() => router.push(`/cellar/rack/${rack.id}?highlight=${wine.id}`)}>
               <Text style={styles.statAction}>{count} bottle{count === 1 ? '' : 's'} in {rack.name} →</Text>
             </TouchableOpacity>
