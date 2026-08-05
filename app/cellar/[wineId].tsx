@@ -905,6 +905,9 @@ export default function CellarWineDetail() {
           estimated_value_currency: v.currency,
           estimated_value_at: new Date().toISOString(),
           estimated_value_source: v.valueSource,
+          // The Wine-Searcher offer spread the headline value averages.
+          estimated_value_low: v.estimatedValueLow ?? null,
+          estimated_value_high: v.estimatedValueHigh ?? null,
           // Exact-vintage vs all-vintage fallback, so the value's sub-label and
           // the market note below stay accurate after this refetch.
           estimated_value_scope: v.priceScope ?? null,
@@ -1460,6 +1463,11 @@ export default function CellarWineDetail() {
                 {formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}
                 <Text style={styles.estimateUpdateLink}> (update)</Text>
               </Text>
+              {wine.estimated_value_source === 'wine-searcher' && wine.estimated_value_low != null && wine.estimated_value_high != null ? (
+                <Text style={styles.statSub}>
+                  Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}
+                </Text>
+              ) : null}
               {wine.estimated_value_at ? (
                 <Text style={styles.statSub}>
                   {wine.estimated_value_source === 'wine-searcher'

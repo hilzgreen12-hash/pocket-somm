@@ -242,6 +242,10 @@ export interface CellarWine {
   estimated_value: number | null;
   estimated_value_currency: string | null;
   estimated_value_at: string | null;
+  // Low/high of the Wine-Searcher offer spread the headline value averages
+  // (migration 083). Null when unknown or a Vinster estimate.
+  estimated_value_low?: number | null;
+  estimated_value_high?: number | null;
   // Where Estimated Value came from (migration 053): 'wine-searcher' = real
   // market data, 'vinster' = Claude estimate. Null on legacy/untouched rows.
   estimated_value_source: string | null;

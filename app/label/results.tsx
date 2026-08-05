@@ -518,6 +518,10 @@ export default function LabelResultsScreen() {
       estimated_value: intel.estimatedValue ?? prefetchedValue?.value ?? null,
       estimated_value_currency: userCurrency,
       estimated_value_at: (intel.estimatedValue != null || prefetchedValue != null) ? new Date().toISOString() : null,
+      // The Wine-Searcher offer spread the headline value averages (from full
+      // intel; the price-prefetch add path has only the single figure).
+      estimated_value_low: intel.estimatedValueLow ?? null,
+      estimated_value_high: intel.estimatedValueHigh ?? null,
       // Real Wine-Searcher market price vs Claude estimate — drives the card's
       // value source label.
       estimated_value_source: intel.estimatedValue != null ? (intel.valueSource ?? 'vinster') : (prefetchedValue?.source ?? null),
@@ -1327,6 +1331,9 @@ export default function LabelResultsScreen() {
                   <Text style={[styles.statValue, styles.estimatedValueGold]}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
                   {intel.valueSource === 'wine-searcher' ? (
                     <Text style={styles.statSub}>{intel.priceScope === 'all-vintage' ? 'All vintages' : 'Wine-Searcher'}</Text>
+                  ) : null}
+                  {intel.valueSource === 'wine-searcher' && intel.estimatedValueLow != null && intel.estimatedValueHigh != null ? (
+                    <Text style={styles.statSub}>Range {formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–{formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}</Text>
                   ) : null}
                 </>
               ) : (
