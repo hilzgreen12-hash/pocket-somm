@@ -64,12 +64,13 @@ export default function ArchiveNightScreen() {
   // text, not boxed inputs). Seeded from the saved lineup row.
   const [stampDate, setStampDate] = useState('');
   const [stampLocation, setStampLocation] = useState('');
+  const [stampVenue, setStampVenue] = useState('');
   const [savingStamp, setSavingStamp] = useState(false);
-  // "Please input the date and location" prompt when Save is pressed with either
+  // "Please input the date, city and venue" prompt when Save is pressed with any
   // missing. missingFields freezes which were blank at open time so their inputs
   // don't vanish mid-type.
   const [missingPromptOpen, setMissingPromptOpen] = useState(false);
-  const [missingFields, setMissingFields] = useState<{ date: boolean; location: boolean }>({ date: false, location: false });
+  const [missingFields, setMissingFields] = useState<{ date: boolean; location: boolean; venue: boolean }>({ date: false, location: false, venue: false });
 
   // Seed the stamp fields once the lineup row lands (date defaults to its
   // archived date, location to any GPS-captured city).
@@ -77,6 +78,7 @@ export default function ArchiveNightScreen() {
     if (!savedLineup) return;
     setStampDate((savedLineup.archived_at ?? '').split('T')[0] || new Date().toISOString().split('T')[0]);
     setStampLocation(savedLineup.city ?? '');
+    setStampVenue(savedLineup.venue ?? '');
   }, [savedLineup?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // "Where did you enjoy these bottles?" — Private Location is just selectable
   // for now (no input flow yet); A Restaurant opens the full review modal on a
@@ -333,6 +335,7 @@ export default function ArchiveNightScreen() {
       await updateLineupStamp(savedLineup.id, {
         archivedAt: stampDate.trim() ? `${stampDate.trim()}T12:00:00.000Z` : undefined,
         city: stampLocation.trim() || null,
+        venue: stampVenue.trim() || null,
       });
       if (note.trim()) await setLineupNote(savedLineup.id, note);
       if (session?.user.id) qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
@@ -344,25 +347,24 @@ export default function ArchiveNightScreen() {
     }
   }
 
+  // Save lands the user on Your Lineup Library.
   function handleStampSave() {
-    // Both the date and the location are required — prompt for whatever's blank.
+    // Date, city and venue are all required — prompt for whatever's blank.
     const needDate = !stampDate.trim();
     const needLoc = !stampLocation.trim();
-    if (needDate || needLoc) { setMissingFields({ date: needDate, location: needLoc }); setMissingPromptOpen(true); return; }
-    void persistStampAndNote().then(() => router.back()).catch(() => {});
+    const needVenue = !stampVenue.trim();
+    if (needDate || needLoc || needVenue) { setMissingFields({ date: needDate, location: needLoc, venue: needVenue }); setMissingPromptOpen(true); return; }
+    void persistStampAndNote().then(() => router.replace('/cellar/lineups')).catch(() => {});
   }
 
-  async function handleViewLibrary() {
-    // Save whatever's entered (best-effort) then jump to the Lineup Library.
-    if (savedLineup) { try { await persistStampAndNote(); } catch { /* surfaced already */ } }
-    router.replace('/cellar/lineups');
-  }
-
-  const missingStillBlank = (missingFields.date && !stampDate.trim()) || (missingFields.location && !stampLocation.trim());
+  const missingStillBlank =
+    (missingFields.date && !stampDate.trim()) ||
+    (missingFields.location && !stampLocation.trim()) ||
+    (missingFields.venue && !stampVenue.trim());
   function handleMissingSave() {
     if (missingStillBlank) return; // stay open until the prompted fields are filled
     setMissingPromptOpen(false);
-    void persistStampAndNote().then(() => router.back()).catch(() => {});
+    void persistStampAndNote().then(() => router.replace('/cellar/lineups')).catch(() => {});
   }
 
   async function confirmArchive() {
@@ -604,7 +606,8 @@ export default function ArchiveNightScreen() {
                 <Image source={{ uri: imageUri }} style={[styles.overlayPhoto, { height: Math.round(Dimensions.get('window').height / 3) }]} resizeMode="contain" />
               ) : null}
 
-              {/* Editable date · location — gold editable TEXT, not boxed inputs. */}
+              {/* Date · City · Venue — gold editable TEXT, centred below the photo.
+                  All three required to save. */}
               <View style={styles.stampRow}>
                 <TextInput
                   style={styles.stampText}
@@ -617,38 +620,44 @@ export default function ArchiveNightScreen() {
                 />
                 <Text style={styles.stampSep}>·</Text>
                 <TextInput
-                  style={[styles.stampText, styles.stampLoc]}
+                  style={styles.stampText}
                   value={stampLocation}
                   onChangeText={setStampLocation}
-                  placeholder="Add a location"
+                  placeholder="City"
+                  placeholderTextColor={colors.textMuted}
+                />
+                <Text style={styles.stampSep}>·</Text>
+                <TextInput
+                  style={styles.stampText}
+                  value={stampVenue}
+                  onChangeText={setStampVenue}
+                  placeholder="Venue"
                   placeholderTextColor={colors.textMuted}
                 />
               </View>
 
-              <Text style={styles.notePrompt}>Keep a note for reference in your Lineup Library</Text>
-              <View style={styles.noteRow}>
-                <TextInput
-                  style={styles.noteInput}
-                  value={note}
-                  onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
-                  placeholder="Tap the mic to speak, or type a few words…"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  textAlignVertical="top"
-                />
-                <View style={styles.noteIcons}>
+              {/* Note — icons sit above and to the right of the input. */}
+              <View style={styles.noteHeadRow}>
+                <Text style={styles.notePrompt}>Keep a note for reference in your Lineup Library</Text>
+                <View style={styles.noteIconsRow}>
                   <MicButton value={note} onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }} />
                   <TouchableOpacity onPress={() => setNote('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear note">
                     <Ionicons name="trash-outline" size={22} color={colors.textMuted} />
                   </TouchableOpacity>
                 </View>
               </View>
+              <TextInput
+                style={styles.noteInputFull}
+                value={note}
+                onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
+                placeholder="Tap the mic to speak, or type a few words…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                textAlignVertical="top"
+              />
 
               <TouchableOpacity style={[styles.overlaySaveBtn, savingStamp && styles.primaryBtnDisabled]} onPress={handleStampSave} disabled={savingStamp} activeOpacity={0.85}>
                 <Text style={styles.overlaySaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.overlaySecondaryBtn} onPress={handleViewLibrary} activeOpacity={0.85}>
-                <Text style={styles.overlaySecondaryText}>View Lineup Library</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.overlayCancel} onPress={() => router.back()} activeOpacity={0.7}>
                 <Text style={styles.overlayCancelText}>Cancel</Text>
@@ -664,7 +673,7 @@ export default function ArchiveNightScreen() {
         <View style={styles.promptOverlay}>
           <View style={styles.promptSheet}>
             <Text style={styles.promptTitle}>
-              Please input the {missingFields.date && missingFields.location ? 'date and location' : missingFields.date ? 'date' : 'location'}
+              Please input the {[missingFields.date && 'date', missingFields.location && 'city', missingFields.venue && 'venue'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}
             </Text>
             {missingFields.date ? (
               <TextInput
@@ -683,9 +692,19 @@ export default function ArchiveNightScreen() {
                 style={styles.promptInput}
                 value={stampLocation}
                 onChangeText={setStampLocation}
-                placeholder="Location"
+                placeholder="City"
                 placeholderTextColor={colors.textMuted}
                 autoFocus={!missingFields.date}
+              />
+            ) : null}
+            {missingFields.venue ? (
+              <TextInput
+                style={styles.promptInput}
+                value={stampVenue}
+                onChangeText={setStampVenue}
+                placeholder="Venue"
+                placeholderTextColor={colors.textMuted}
+                autoFocus={!missingFields.date && !missingFields.location}
               />
             ) : null}
             <TouchableOpacity style={[styles.overlaySaveBtn, missingStillBlank && styles.primaryBtnDisabled]} onPress={handleMissingSave} disabled={missingStillBlank} activeOpacity={0.85}>
@@ -854,7 +873,10 @@ const styles = StyleSheet.create({
   // Count summary in gold; "Fun session!" + note prompt in white.
   doneCount: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },
   doneBlurb: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 22, marginTop: spacing.sm, textAlign: 'center' },
-  notePrompt: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 20, marginTop: spacing.sm },
+  notePrompt: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 20 },
+  noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  noteIconsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  noteInputFull: { minHeight: 88, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text },
   locationRow: { flexDirection: 'row', gap: spacing.sm },
   locationBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   locationBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
@@ -870,15 +892,14 @@ const styles = StyleSheet.create({
   noteIcons: { alignItems: 'center', gap: spacing.sm, paddingTop: 4 },
   overlayRoot: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
   overlaySheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%', paddingTop: spacing.sm },
-  overlayContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 40, gap: spacing.md },
+  overlayContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 40, gap: spacing.sm },
   overlayTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center' },
   overlayPhoto: { width: '100%', borderRadius: 12, backgroundColor: '#000' },
-  stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  stampText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, textAlign: 'center', minWidth: 96 },
+  stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 },
+  stampText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, textAlign: 'center', minWidth: 80, flexShrink: 1 },
   stampSep: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
-  stampLoc: { flexShrink: 1, flexGrow: 1, minWidth: 120, textAlign: 'left' },
   overlaySaveBtn: { alignSelf: 'stretch', backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  overlaySaveText: { color: colors.background, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  overlaySaveText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
   overlaySecondaryBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
   overlaySecondaryText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
   overlayCancel: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: 2 },
