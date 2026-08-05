@@ -1374,13 +1374,16 @@ export default function RackGridScreen() {
       </Text>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
-        {/* Functionality statement — replaces the old hint + the swipe bar. */}
-        <Text style={styles.rackHint}>
-          Short Press a slot to Add Wine or View Intel. Long Press a slot to Add Multiples of the same wine or Edit slot contents. Pinch the grid to Zoom In.
-        </Text>
-        <Text style={styles.rackHintLine2}>
-          <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add 6 bottles at a time
-        </Text>
+        {/* Functionality statement — one instruction per centred line. */}
+        <View style={styles.rackHintBlock}>
+          <Text style={styles.rackHintCentred}>Add Single Bottles & View Wine Intel with a Short Press</Text>
+          <Text style={styles.rackHintCentred}>Add Multiples of the same wine with a Long Press</Text>
+          <Text style={styles.rackHintCentred}>Edit a slot with a Long Press</Text>
+          <Text style={styles.rackHintCentred}>
+            <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add up to six different bottles at a time
+          </Text>
+          <Text style={styles.rackHintCentred}>Pinch Rack to Zoom</Text>
+        </View>
 
         {/* When "Add a Lineup" is tapped, a single yellow prompt sits directly
             below the blurb. Tapping an empty slot records the start and clears
@@ -1398,6 +1401,8 @@ export default function RackGridScreen() {
 
         {winesInRack.length > 0 && (
           <>
+            {/* Separator between the instructions and the filters. */}
+            <View style={styles.rackHintDivider} />
             {/* Filter carousel — mirrors the Full Cellar List chips. List opens
                 the rack's bottle list, Maturity highlights by drinking readiness,
                 each saved custom filter is its own chip, and + Add creates one. */}
@@ -2240,6 +2245,9 @@ const styles = StyleSheet.create({
   rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 4, lineHeight: 20 },
   rackHintLine2: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, lineHeight: 20 },
   rackHintLink: { fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline' },
+  rackHintBlock: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, gap: 4 },
+  rackHintCentred: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  rackHintDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
   searchInput: { flex: 1, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
