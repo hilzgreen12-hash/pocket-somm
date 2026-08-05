@@ -110,6 +110,10 @@ export default function ScanLineupScreen() {
   const [editIndex, setEditIndex] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState({ producer: '', wineName: '', region: '', vintage: '', bottleSizeMl: 750, quantity: 1, overrideImageUri: null as string | null });
   const [scanningEdit, setScanningEdit] = useState(false);
+  // "+ Add more bottles vertically" — the per-wine bottle count, moved out of the
+  // Edit sheet into its own small stepper popup.
+  const [bottlesIndex, setBottlesIndex] = useState<number | null>(null);
+  const [bottlesQty, setBottlesQty] = useState(1);
 
   // If the store already holds a lineup (we've returned mid-flow after
   // onboarding a wine), open straight onto the review list.
@@ -237,6 +241,15 @@ export default function ScanLineupScreen() {
       overrideImageUri: b.overrideImageUri ?? null,
     });
     setEditIndex(i);
+  }
+  function openBottles(i: number) {
+    setBottlesIndex(i);
+    setBottlesQty(lineupWines[i].quantity ?? 1);
+  }
+  function saveBottles() {
+    if (bottlesIndex == null) return;
+    updateBottle(bottlesIndex, { quantity: Math.max(1, bottlesQty) });
+    setBottlesIndex(null);
   }
   function confirmEdit() {
     if (editIndex == null) return;
@@ -489,11 +502,20 @@ export default function ScanLineupScreen() {
         // Rack-placement review: tick each bottle to confirm (or Edit it), then
         // "Add Bottles" places the whole lineup into the rack.
         <ScrollView contentContainerStyle={styles.content}>
-          {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
           {lineupWines.length === 0 ? (
-            <Text style={styles.hint}>Vinster couldn't read any bottles. Try a clearer photo with the front labels showing.</Text>
+            <>
+              {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
+              <Text style={styles.hint}>Vinster couldn't read any bottles. Try a clearer photo with the front labels showing.</Text>
+            </>
           ) : (
             <>
+              {/* Yellow stats bar below the header, then the lineup photo. */}
+              <View style={styles.statsBar}>
+                <Text style={styles.statsBarText}>
+                  {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {lineupWines.length} {lineupWines.length === 1 ? 'Wine' : 'Wines'}
+                </Text>
+              </View>
+              {imageUri ? <Image source={{ uri: imageUri }} style={styles.previewSmall} resizeMode="contain" /> : null}
               <View style={styles.listHeadRow}>
                 <Text style={styles.sectionLabel}>Place in {lineupRackName}</Text>
                 {!allConfirmed ? (
@@ -502,11 +524,10 @@ export default function ScanLineupScreen() {
                   </TouchableOpacity>
                 ) : null}
               </View>
-              <Text style={styles.summaryLine}>{totalBottles} {totalBottles === 1 ? 'bottle' : 'bottles'} / {lineupWines.length} {lineupWines.length === 1 ? 'wine' : 'wines'}</Text>
-              <Text style={styles.hint}>Tick each wine to confirm, or Edit to fix a read or set how many bottles. Wines run {orientation.toLowerCase()} from your start slot; each wine's extra bottles run {orientation === 'Horizontal' ? 'down its column' : 'across its row'}.</Text>
               {lineupWines.map((b, i) => {
                 const isOn = confirmed.has(i);
                 const name = [b.producer, b.wineName].filter(Boolean).join(' ') || 'Unreadable bottle';
+                const qty = b.quantity ?? 1;
                 return (
                   <View key={i} style={styles.lineupRow}>
                     <TouchableOpacity style={styles.checkbox} onPress={() => toggleConfirm(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -514,10 +535,11 @@ export default function ScanLineupScreen() {
                     </TouchableOpacity>
                     <View style={styles.rowText}>
                       <Text style={styles.rowName} numberOfLines={2}>
-                        {b.vintage ? `${b.vintage} ` : ''}{name}
-                        <Text style={styles.formatTag}>  {bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
+                        {b.vintage ? `${b.vintage} ` : ''}{name}, {qty}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl
                       </Text>
-                      <Text style={styles.bottleLine}>{b.quantity ?? 1} {(b.quantity ?? 1) === 1 ? 'btl' : 'btls'} · Edit to add more vertically</Text>
+                      <TouchableOpacity onPress={() => openBottles(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.addBottlesLink}>+ Add more bottles vertically</Text>
+                      </TouchableOpacity>
                       {!b.confident && !isOn ? <Text style={styles.unconfident}>Low-confidence read — check it</Text> : null}
                     </View>
                     <TouchableOpacity onPress={() => openEdit(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -619,16 +641,6 @@ export default function ScanLineupScreen() {
             <TextInput style={styles.editInput} value={editDraft.vintage} onChangeText={(t) => setEditDraft((d) => ({ ...d, vintage: t }))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} />
             <Text style={styles.editFieldLabel}>Format</Text>
             <BottleSizePicker value={editDraft.bottleSizeMl} onChange={(ml) => setEditDraft((d) => ({ ...d, bottleSizeMl: ml }))} />
-            <Text style={styles.editFieldLabel}>Bottles ({orientation === 'Horizontal' ? 'stacked down' : 'across'} from this wine)</Text>
-            <View style={styles.qtyRow}>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => setEditDraft((d) => ({ ...d, quantity: Math.max(1, d.quantity - 1) }))} activeOpacity={0.7}>
-                <Text style={styles.qtyBtnText}>−</Text>
-              </TouchableOpacity>
-              <Text style={styles.qtyValue}>{editDraft.quantity}</Text>
-              <TouchableOpacity style={styles.qtyBtn} onPress={() => setEditDraft((d) => ({ ...d, quantity: Math.min(20, d.quantity + 1) }))} activeOpacity={0.7}>
-                <Text style={styles.qtyBtnText}>+</Text>
-              </TouchableOpacity>
-            </View>
             <TouchableOpacity style={[styles.secondaryBtn, { marginTop: spacing.lg }]} onPress={handleScanInEdit} disabled={scanningEdit} activeOpacity={0.85}>
               <Text style={styles.secondaryBtnText}>{scanningEdit ? 'Reading…' : 'Scan Wine Label'}</Text>
             </TouchableOpacity>
@@ -640,6 +652,32 @@ export default function ScanLineupScreen() {
               <Text style={styles.editDiscardText}>Discard</Text>
             </TouchableOpacity>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* "+ Add more bottles vertically" — set how many of this wine run
+          vertically from its slot. Moved out of the Edit sheet. */}
+      <Modal visible={bottlesIndex !== null} transparent animationType="fade" onRequestClose={() => setBottlesIndex(null)}>
+        <View style={styles.editOverlay}>
+          <View style={styles.bottlesSheet}>
+            <Text style={styles.editTitle}>Add more bottles</Text>
+            <Text style={styles.editFieldLabel}>Bottles ({orientation === 'Horizontal' ? 'stacked down' : 'across'} from this wine)</Text>
+            <View style={styles.qtyRow}>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => setBottlesQty((q) => Math.max(1, q - 1))} activeOpacity={0.7}>
+                <Text style={styles.qtyBtnText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.qtyValue}>{bottlesQty}</Text>
+              <TouchableOpacity style={styles.qtyBtn} onPress={() => setBottlesQty((q) => Math.min(20, q + 1))} activeOpacity={0.7}>
+                <Text style={styles.qtyBtnText}>+</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity style={[styles.primaryBtn, { marginTop: spacing.lg }]} onPress={saveBottles} activeOpacity={0.85}>
+              <Text style={styles.primaryBtnText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.editDiscard} onPress={() => setBottlesIndex(null)}>
+              <Text style={styles.editDiscardText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
@@ -687,6 +725,10 @@ const styles = StyleSheet.create({
   doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
   summaryLine: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
+  // Consistent gold stats bar shared with Archive a Night.
+  statsBar: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  statsBarText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  addBottlesLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, marginTop: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowText: { flex: 1 },
   rowName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
@@ -719,6 +761,7 @@ const styles = StyleSheet.create({
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   editOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'flex-end' },
   editSheet: { backgroundColor: colors.background, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: spacing.xl, maxHeight: '88%' },
+  bottlesSheet: { backgroundColor: colors.background, borderTopLeftRadius: 18, borderTopRightRadius: 18, padding: spacing.xl },
   editTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   editFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.xs },
   editInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text },
