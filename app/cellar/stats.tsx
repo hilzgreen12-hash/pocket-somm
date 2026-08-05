@@ -357,7 +357,7 @@ export default function CellarStatsScreen() {
                 {winesUnvaluable.length > 0 ? (
                   <View style={styles.missingValueRow}>
                     <Text style={styles.missingValueText}>
-                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink} onPress={handleUpdateMissingValues}>Update All</Text> · <Text style={styles.missingIntelLink} onPress={() => setValueEditor('estimate')}>View Wines</Text>
+                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink} onPress={handleUpdateMissingValues}>Update All</Text> · <Text style={styles.missingIntelLink} onPress={() => setValueEditor('estimate')}>View Wines to Update</Text>
                     </Text>
                   </View>
                 ) : null}
