@@ -939,11 +939,11 @@ export default function RackGridScreen() {
   // the row archived and clears its slots; partial decrements the live row, clones
   // an archive row for the removed bottles, and frees that many slots — so the
   // "Bottles in My Archive" stat stays correct. Note is logged on the removal.
-  async function handleSingleArchive(count: number, note: string) {
+  async function handleSingleArchive(count: number, note: string, date: string) {
     const target = singleArchive;
     if (!target || archiving) return;
     const { wineId, qty } = target;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = date;
     const wine = wines.find((w) => w.id === wineId);
     setArchiving(true);
     try {
