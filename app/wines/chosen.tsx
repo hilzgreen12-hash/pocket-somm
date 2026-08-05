@@ -205,6 +205,10 @@ export default function ChosenWinesScreen() {
   // to a picker over the live cellar (a cellar review must attach to a real
   // bottle). addSource carries the chosen collection into AddChosenWineModal.
   const [collectionChooserOpen, setCollectionChooserOpen] = useState(false);
+  // "+ Add → Restaurant Wine" first shows the restaurant wines you've already
+  // recorded and not yet reviewed, so you review those rather than re-entering
+  // them. "Add Wine Anyway" drops through to the Scan/Upload/Manual chooser.
+  const [restaurantAwaitingOpen, setRestaurantAwaitingOpen] = useState(false);
   const [addSource, setAddSource] = useState<'restaurant' | 'other'>('other');
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [cellarPickerSearch, setCellarPickerSearch] = useState('');
@@ -952,7 +956,7 @@ export default function ChosenWinesScreen() {
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
             <Text style={styles.chooserTitle}>Add a Wine Review</Text>
             <Text style={styles.chooserBody}>Which kind of wine are you reviewing?</Text>
-            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setCollectionChooserOpen(false); setAddSource('restaurant'); setChooserOpen(true); }} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.chooserBtn} onPress={() => { setCollectionChooserOpen(false); setAddSource('restaurant'); setRestaurantAwaitingOpen(true); }} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Restaurant Wine</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setCollectionChooserOpen(false); setCellarPickerSearch(''); setCellarPickerOpen(true); }} activeOpacity={0.85}>
@@ -963,6 +967,61 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setCollectionChooserOpen(false)} style={styles.chooserCancel}>
               <Text style={styles.chooserCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* "+ Add" → Restaurant Wine — first offer the restaurant wines already
+          recorded and awaiting review (tap one to review it). If there are none,
+          say so and let the user "Add Wine Anyway", which drops into the usual
+          Scan / Upload / Manual chooser. */}
+      <Modal visible={restaurantAwaitingOpen} transparent animationType="fade" onRequestClose={() => setRestaurantAwaitingOpen(false)}>
+        <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setRestaurantAwaitingOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
+            <Text style={styles.dropdownTitle}>Restaurant Wine</Text>
+            {awaitingReview.length === 0 ? (
+              <>
+                <Text style={styles.pickerEmpty}>You have no restaurant wines awaiting review.</Text>
+                <TouchableOpacity
+                  onPress={() => { setRestaurantAwaitingOpen(false); setChooserOpen(true); }}
+                  style={styles.addAnywayWrap}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.addAnywayLink}>Add Wine Anyway</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={styles.chooserBody}>Pick a wine you've recorded and want to review.</Text>
+                <ScrollView style={{ maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+                  {awaitingReview.map((w) => (
+                    <TouchableOpacity
+                      key={`await-pick-${w.id}`}
+                      style={styles.dropdownOption}
+                      onPress={() => { setRestaurantAwaitingOpen(false); setEditingWine(w); }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.dropdownOptionText} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
+                      {[locationLine(w), w.chosen_at ? formatDate(w.chosen_at) : ''].filter(Boolean).length ? (
+                        <Text style={styles.awaitingMeta} numberOfLines={1}>
+                          {[locationLine(w), w.chosen_at ? formatDate(w.chosen_at) : ''].filter(Boolean).join(' · ')}
+                        </Text>
+                      ) : null}
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity
+                  onPress={() => { setRestaurantAwaitingOpen(false); setChooserOpen(true); }}
+                  style={styles.addAnywayWrap}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.addAnywayLink}>Add Wine Anyway</Text>
+                </TouchableOpacity>
+              </>
+            )}
+            <TouchableOpacity style={styles.dropdownCancel} onPress={() => setRestaurantAwaitingOpen(false)}>
+              <Text style={styles.dropdownCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -1554,6 +1613,8 @@ const styles = StyleSheet.create({
   // Cellar-wine picker (+ Add → Cellar Wine).
   pickerSearch: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.sm },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
+  addAnywayWrap: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.xs },
+  addAnywayLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
   pickerReviewed: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.gold, marginLeft: spacing.sm },
   awaitingRow: { marginHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   awaitingName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
