@@ -99,35 +99,18 @@ export default function CellarStatsScreen() {
   // Wines whose purchase price is an auto-estimate the user hasn't confirmed.
   const winesEstimatedPurchase = wines.filter((w) => w.purchase_price != null && w.purchase_price_estimated);
 
-  // % change from purchase to estimated current value, on the wines that have
-  // BOTH (and in the same currency, so the comparison is like-for-like).
-  let matchedCount = 0;
-  const matchedByCode: Record<string, { p: number; v: number }> = {};
-  for (const w of wines) {
-    if (w.purchase_price == null || w.estimated_value == null) continue;
-    const pc = (w.purchase_price_currency ?? 'GBP').toUpperCase();
-    const vc = (w.estimated_value_currency ?? 'GBP').toUpperCase();
-    if (pc !== vc) continue;
-    matchedCount += 1;
-    const b = matchedByCode[pc] ?? { p: 0, v: 0 };
-    b.p += Number(w.purchase_price) * w.quantity;
-    b.v += Number(w.estimated_value) * w.quantity;
-    matchedByCode[pc] = b;
-  }
-  // Compare the WHOLE-unit rounded totals (the app displays currency to zero
-  // decimals). Otherwise a stored estimate of e.g. 100.10 against a purchase of
-  // 100 — which read as identical on screen — shows a phantom 0.1% change.
-  const changeEntries = Object.entries(matchedByCode)
-    .map(([code, b]) => ({ code, p: Math.round(b.p), v: Math.round(b.v) }))
-    .filter((e) => e.p > 0)
-    .map((e) => ({ code: e.code, pct: ((e.v - e.p) / e.p) * 100 }));
-  // The change is computed ONLY on wines that have both a purchase price and a
-  // current value IN THE SAME CURRENCY. If some wines are missing one value, or
-  // have both but in mismatched currencies (so they're excluded from the %),
-  // the headline totals cover a different set than the %, so we caption the
-  // basis to keep it honest.
-  const bothValuesCount = wines.filter((w) => w.purchase_price != null && w.estimated_value != null).length;
-  const changePartial = changeEntries.length > 0 && (winesNoPurchase.length > 0 || winesNeedingEstimate.length > 0 || matchedCount < bothValuesCount);
+  // % change from Total Purchase Value to Total Current Value, per currency, so
+  // the figure matches the two totals shown directly above it (rather than a
+  // matched subset that could read 0% while the totals plainly differ). Compares
+  // the WHOLE-unit rounded totals, since the app displays currency to zero
+  // decimals. Only currencies that have a purchase total to compare are shown.
+  const changeEntries = Object.keys(purchaseByCurrency)
+    .filter((code) => Math.round(purchaseByCurrency[code]) > 0 && valueByCurrency[code] != null)
+    .map((code) => {
+      const p = Math.round(purchaseByCurrency[code]);
+      const v = Math.round(valueByCurrency[code] as number);
+      return { code, pct: ((v - p) / p) * 100 };
+    });
 
   // Which value-editor sheet is open (user fills in what Vinster couldn't find).
   const [valueEditor, setValueEditor] = useState<'estimate' | 'purchase' | 'purchase-estimated' | null>(null);
@@ -173,8 +156,10 @@ export default function CellarStatsScreen() {
 
   // Condition breakdown — four buckets matching the rack drinking-window
   // statuses: Peak / Approaching / Too Young / Declining.
+  // Condition relates to the WINE, not the bottle count — count distinct wines
+  // in each drinking-window bucket, not their bottle quantities.
   const sumByStatus = (status: string) =>
-    wines.filter((w) => w.drinking_window_status === status).reduce((s, w) => s + w.quantity, 0);
+    wines.filter((w) => w.drinking_window_status === status).length;
   const peakCount = sumByStatus('peak');
   const approachingCount = sumByStatus('approaching');
   const tooYoungCount = sumByStatus('too_young');
@@ -370,11 +355,11 @@ export default function CellarStatsScreen() {
                 {/* Wines Vinster couldn't value — left-indented directly under
                     Total Estimated Current Value. */}
                 {winesUnvaluable.length > 0 ? (
-                  <TouchableOpacity style={styles.missingValueRow} onPress={handleUpdateMissingValues} activeOpacity={0.7}>
+                  <View style={styles.missingValueRow}>
                     <Text style={styles.missingValueText}>
-                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink}>Update All</Text>
+                      {winesUnvaluable.length} Missing Value{winesUnvaluable.length === 1 ? '' : 's'} · <Text style={styles.missingIntelLink} onPress={handleUpdateMissingValues}>Update All</Text> · <Text style={styles.missingIntelLink} onPress={() => setValueEditor('estimate')}>View Wines</Text>
                     </Text>
-                  </TouchableOpacity>
+                  </View>
                 ) : null}
 
                 {/* Last estimate date + Recalculate on ONE left-indented line. */}
@@ -518,7 +503,7 @@ const styles = StyleSheet.create({
   missingIntelRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, alignItems: 'center' },
   missingIntelText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
   // Left-aligned, borderless variant — sits directly under Total Purchase Value.
-  missingValueRow: { paddingLeft: spacing.xl + spacing.md, paddingRight: spacing.xl, paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
+  missingValueRow: { paddingTop: 2, paddingBottom: spacing.xs, alignItems: 'flex-start' },
   missingValueText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted },
   missingIntelLink: { fontFamily: fonts.headingSemibold, color: colors.gold },
   statsRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: colors.border },
