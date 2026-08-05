@@ -84,13 +84,28 @@ export default function LabelConfirmScreen() {
   const { session } = useAuth();
   const qc = useQueryClient();
 
-  const [producer, setProducer] = useState(wineDetails?.producer ?? '');
-  const [region, setRegion] = useState(wineDetails?.region ?? '');
-  const [wineName, setWineName] = useState(wineDetails?.wineName ?? '');
-  const [vintage, setVintage] = useState(wineDetails?.vintage ?? '');
-  const [style, setStyle] = useState(wineDetails?.style ?? '');
+  // Manual input always starts blank — not every entry point resets the label
+  // store first, so seeding from a leftover scan would carry the PREVIOUS wine's
+  // details (and, via the store, its photo) into this fresh manual entry.
+  const [producer, setProducer] = useState(isManual ? '' : (wineDetails?.producer ?? ''));
+  const [region, setRegion] = useState(isManual ? '' : (wineDetails?.region ?? ''));
+  const [wineName, setWineName] = useState(isManual ? '' : (wineDetails?.wineName ?? ''));
+  const [vintage, setVintage] = useState(isManual ? '' : (wineDetails?.vintage ?? ''));
+  const [style, setStyle] = useState(isManual ? '' : (wineDetails?.style ?? ''));
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
+
+  // Manual entry starts with a blank "+ Add" thumbnail: clear any leftover scan
+  // image / intel on mount so a previous scan's photo can't be auto-applied to
+  // this new wine (the entry points that don't reset the store first). The user
+  // adds a photo deliberately from the wine card afterwards.
+  useEffect(() => {
+    if (isManual) {
+      useLabelStore.getState().setImageUri(null);
+      setIntelligence(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // Rack/fridge slot placement (context=place). The ONLY extra input is the
   // bottle format, collected inline on this Confirm screen — no popup, no
   // "how many bottles", no fill direction. A short tap drops ONE bottle in the
@@ -171,6 +186,9 @@ export default function LabelConfirmScreen() {
   // best web match, no picker (the wine-card "Find Label Online" keeps its
   // picker for deliberate choice). Best-effort: never blocks the flow.
   async function ensureAutoLabel(pProducer: string, pWineName: string | null) {
+    // Manual entries keep a blank "+ Add" thumbnail — the user chooses the photo
+    // deliberately from the wine card, so don't auto-fetch one here.
+    if (isManual) return;
     if (useLabelStore.getState().imageUri) return;
     if (!pProducer.trim()) return;
     try {
