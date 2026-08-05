@@ -229,6 +229,21 @@ export default function RacksScreen() {
     router.push('/cellar/storage-location/new' as any);
   }
 
+  // Top-level "+ Add Location" — offers every storage kind in one prompt.
+  function handleAddAnyStorage() {
+    showAlert({
+      title: 'Add storage',
+      body: 'What would you like to add?',
+      buttons: [
+        { text: 'Add a Wine Rack', onPress: () => handleAddType('rack') },
+        { text: 'Add a Wine Fridge', onPress: () => handleAddType('fridge') },
+        { text: 'Add a Wine Bin (diamond shaped)', onPress: () => router.push('/cellar/bin/resize' as any) },
+        { text: 'Add an Other Location', onPress: () => router.push('/cellar/storage-location/new' as any) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
   // Clear any stale "place this wine" intent left over from an earlier,
   // abandoned add flow. Creating a rack here is a fresh start — the new
   // rack should open empty, not demanding the user place a wine they chose
@@ -279,10 +294,7 @@ export default function RacksScreen() {
         />
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          <Text style={styles.pageIntroLead}>Replicate your home storage in Vinster.</Text>
-          <Text style={styles.pageIntro}>
-            Whether you've got organised storage solutions or cases under the stairs Vinster will help you keep track of what's where.
-          </Text>
+          <Text style={styles.pageIntroLead}>Replicate your home wine storage in Vinster.</Text>
 
           {totalLocations > 0 && (
             <Text style={styles.homeSummary}>
@@ -292,11 +304,17 @@ export default function RacksScreen() {
 
           <View style={styles.divider} />
 
+          <TouchableOpacity onPress={handleAddAnyStorage} activeOpacity={0.7} style={styles.addLocationRow}>
+            <Text style={styles.addLocationLink}>+ Add Location</Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
           {/* Wine Racks & Fridges — a horizontal carousel of racks/fridges with
               a permanent "+ Add" tile at the end. */}
           <Text style={styles.blockHeader}>Racks, Fridges & Bins</Text>
           {(rackCount + fridgeCount + bins.length) > 0 && (
-            <Text style={styles.homeSummary}>
+            <Text style={styles.homeSummaryLeft}>
               {rackCount} {rackCount === 1 ? 'Rack' : 'Racks'} · {fridgeCount} {fridgeCount === 1 ? 'Fridge' : 'Fridges'} · {bins.length} {bins.length === 1 ? 'Bin' : 'Bins'}
             </Text>
           )}
@@ -339,7 +357,7 @@ export default function RacksScreen() {
               List "Locations" filter, so those are NOT shown here. */}
           <Text style={styles.blockHeader}>Other Home Storage</Text>
           {storageLocations.length > 0 && (
-            <Text style={styles.homeSummary}>
+            <Text style={styles.homeSummaryLeft}>
               {storageLocations.length} Home Storage {storageLocations.length === 1 ? 'Location' : 'Locations'}
             </Text>
           )}
@@ -393,6 +411,11 @@ const styles = StyleSheet.create({
   // Gold whole-screen tally under the blurb — same treatment as the Full
   // Cellar List summary ("X wines · X bottles").
   homeSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.xs },
+  // Left-aligned variant used beneath the section headers so the stats line up
+  // under the header rather than centred.
+  homeSummaryLeft: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'left', paddingHorizontal: spacing.xl, paddingBottom: spacing.xs },
+  addLocationRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.xs, alignItems: 'center' },
+  addLocationLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   // Left-aligned section subheader (Wine Racks & Fridges / Other Locations).
   blockHeader: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.3, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 4 },
   blockBlurb: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 20, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
