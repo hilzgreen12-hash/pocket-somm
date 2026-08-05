@@ -1,5 +1,6 @@
-import { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput, Modal } from 'react-native';
+import { useRef, useState, useEffect } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput, Modal, Dimensions } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -11,7 +12,7 @@ import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
 import { matchLineupToCellar, archiveBottles, type NightMatch } from '../../src/services/archiveNight';
-import { saveLineupArchive, setLineupNote, type LineupArchive, type LineupWine } from '../../src/api/lineups';
+import { saveLineupArchive, setLineupNote, updateLineupStamp, type LineupArchive, type LineupWine } from '../../src/api/lineups';
 import { captureCity } from '../../src/utils/captureCity';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import type { CellarWine } from '../../src/types/wine';
@@ -49,6 +50,24 @@ export default function ArchiveNightScreen() {
   const [showInstruction, setShowInstruction] = useState(true);
   const [savingNote, setSavingNote] = useState(false);
   const [noteSaved, setNoteSaved] = useState(false);
+  // Editable date + location "stamp" on the Night Archived overlay (editable
+  // text, not boxed inputs). Seeded from the saved lineup row.
+  const [stampDate, setStampDate] = useState('');
+  const [stampLocation, setStampLocation] = useState('');
+  const [savingStamp, setSavingStamp] = useState(false);
+  // "Please input the date and location" prompt when Save is pressed with either
+  // missing. missingFields freezes which were blank at open time so their inputs
+  // don't vanish mid-type.
+  const [missingPromptOpen, setMissingPromptOpen] = useState(false);
+  const [missingFields, setMissingFields] = useState<{ date: boolean; location: boolean }>({ date: false, location: false });
+
+  // Seed the stamp fields once the lineup row lands (date defaults to its
+  // archived date, location to any GPS-captured city).
+  useEffect(() => {
+    if (!savedLineup) return;
+    setStampDate((savedLineup.archived_at ?? '').split('T')[0] || new Date().toISOString().split('T')[0]);
+    setStampLocation(savedLineup.city ?? '');
+  }, [savedLineup?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   // "Where did you enjoy these bottles?" — Private Location is just selectable
   // for now (no input flow yet); A Restaurant opens the full review modal on a
   // blank manual restaurant session, saved to Your Restaurants.
@@ -220,6 +239,47 @@ export default function ArchiveNightScreen() {
     }
   }
 
+  // Persist the editable date + location stamp and the note to the saved lineup
+  // row. Shared by Save and the "missing fields" prompt.
+  async function persistStampAndNote() {
+    if (!savedLineup) return;
+    setSavingStamp(true);
+    try {
+      await updateLineupStamp(savedLineup.id, {
+        archivedAt: stampDate.trim() ? `${stampDate.trim()}T12:00:00.000Z` : undefined,
+        city: stampLocation.trim() || null,
+      });
+      if (note.trim()) await setLineupNote(savedLineup.id, note);
+      if (session?.user.id) qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+      throw err;
+    } finally {
+      setSavingStamp(false);
+    }
+  }
+
+  function handleStampSave() {
+    // Both the date and the location are required — prompt for whatever's blank.
+    const needDate = !stampDate.trim();
+    const needLoc = !stampLocation.trim();
+    if (needDate || needLoc) { setMissingFields({ date: needDate, location: needLoc }); setMissingPromptOpen(true); return; }
+    void persistStampAndNote().then(() => router.back()).catch(() => {});
+  }
+
+  async function handleViewLibrary() {
+    // Save whatever's entered (best-effort) then jump to the Lineup Library.
+    if (savedLineup) { try { await persistStampAndNote(); } catch { /* surfaced already */ } }
+    router.replace('/cellar/lineups');
+  }
+
+  const missingStillBlank = (missingFields.date && !stampDate.trim()) || (missingFields.location && !stampLocation.trim());
+  function handleMissingSave() {
+    if (missingStillBlank) return; // stay open until the prompted fields are filled
+    setMissingPromptOpen(false);
+    void persistStampAndNote().then(() => router.back()).catch(() => {});
+  }
+
   async function confirmArchive() {
     if (!session?.user.id || totalToArchive === 0) return;
     setStage('archiving');
@@ -280,13 +340,17 @@ export default function ArchiveNightScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Archive a Night</Text>
-        <View style={styles.headerSpacer} />
-      </View>
+      {/* The "Night Archived" step is a bottom-rising overlay, so it drops the
+          shared "Archive a Night" header. */}
+      {stage !== 'done' ? (
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Archive a Night</Text>
+          <View style={styles.headerSpacer} />
+        </View>
+      ) : null}
 
       {stage === 'capture' ? (
         !permission ? (
@@ -343,78 +407,9 @@ export default function ArchiveNightScreen() {
           <Text style={styles.hint}>Saving your lineup…</Text>
         </View>
       ) : stage === 'done' ? (
-        <KeyboardAwareScrollView contentContainerStyle={styles.doneContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-          <Text style={styles.doneTitle}>{archivedCount > 0 ? 'Night Archived' : 'Lineup Saved'}</Text>
-          <Text style={styles.doneCount}>
-            {archivedCount > 0
-              ? `${archivedCount} bottle${archivedCount === 1 ? '' : 's'} moved to your archive. The photo is saved in Your Lineup Library.`
-              : "Saved to Your Lineup Library. It'll show as “awaiting attention” until you confirm which bottles came from your cellar and archive them — you can do that anytime from the library."}
-          </Text>
-
-          {savedLineup ? (
-            <>
-              <Text style={styles.doneBlurb}>Fun session! Can you tell Vinster a little more about it?</Text>
-
-              <Text style={styles.notePrompt}>Where did you enjoy these bottles?</Text>
-              <View style={styles.locationRow}>
-                <TouchableOpacity
-                  style={[styles.locationBtn, locationChoice === 'private' && styles.locationBtnActive]}
-                  onPress={() => setLocationChoice('private')}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.locationBtnText, locationChoice === 'private' && styles.locationBtnTextActive]}>Private Location</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.locationBtn, locationChoice === 'restaurant' && styles.locationBtnActive]}
-                  onPress={handleChooseRestaurant}
-                  disabled={openingRestaurant}
-                  activeOpacity={0.85}
-                >
-                  <Text style={[styles.locationBtnText, locationChoice === 'restaurant' && styles.locationBtnTextActive]}>
-                    {openingRestaurant ? '…' : locationChoice === 'restaurant' ? '✓ Restaurant' : 'A Restaurant'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              <Text style={styles.notePrompt}>
-                What stood out? A note about this lineup will be kept next to the photo in Your Lineup Library.
-              </Text>
-              <View style={styles.noteRow}>
-                <TextInput
-                  style={styles.noteInput}
-                  value={note}
-                  onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
-                  placeholder="Tap the mic to speak, or type a few words…"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  textAlignVertical="top"
-                />
-                <MicButton value={note} onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }} />
-              </View>
-              <TouchableOpacity
-                style={[styles.saveNoteBtn, (!note.trim() || savingNote) && styles.primaryBtnDisabled]}
-                onPress={handleSaveNote}
-                disabled={!note.trim() || savingNote}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.saveNoteText}>
-                  {noteSaved ? '✓ Note saved' : savingNote ? 'Saving…' : 'Save note'}
-                </Text>
-              </TouchableOpacity>
-            </>
-          ) : null}
-
-          <TouchableOpacity
-            style={styles.doneBtn}
-            onPress={() => router.replace(archivedCount > 0 ? '/cellar/list?archived=1' : '/cellar/lineups')}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.doneBtnText}>{archivedCount > 0 ? 'View Cellar Archive' : 'View in Lineup Library'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.doneBtn} onPress={() => router.back()} activeOpacity={0.85}>
-            <Text style={styles.doneBtnText}>Done</Text>
-          </TouchableOpacity>
-        </KeyboardAwareScrollView>
+        // The Night Archived overlay rises from the bottom (rendered below);
+        // this is just its dark backdrop.
+        <View style={styles.doneBackdrop} />
       ) : (
         // review
         <ScrollView contentContainerStyle={styles.content}>
@@ -484,6 +479,110 @@ export default function ArchiveNightScreen() {
           </TouchableOpacity>
         </ScrollView>
       )}
+
+      {/* Night Archived — a bottom-rising overlay: photo, editable date · location
+          stamp (gold editable text), a note with mic + trash, then Save /
+          View Lineup Library / Cancel. */}
+      <Modal visible={stage === 'done'} transparent animationType="slide" onRequestClose={() => router.back()}>
+        <View style={styles.overlayRoot}>
+          <View style={styles.overlaySheet}>
+            <KeyboardAwareScrollView contentContainerStyle={styles.overlayContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+              <Text style={styles.overlayTitle}>{archivedCount > 0 ? 'Night Archived' : 'Lineup Saved'}</Text>
+
+              {imageUri ? (
+                <Image source={{ uri: imageUri }} style={[styles.overlayPhoto, { height: Math.round(Dimensions.get('window').height / 3) }]} resizeMode="cover" />
+              ) : null}
+
+              {/* Editable date · location — gold editable TEXT, not boxed inputs. */}
+              <View style={styles.stampRow}>
+                <TextInput
+                  style={styles.stampText}
+                  value={stampDate}
+                  onChangeText={(t) => setStampDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+                  placeholder="YYYY-MM-DD"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="numbers-and-punctuation"
+                  maxLength={10}
+                />
+                <Text style={styles.stampSep}>·</Text>
+                <TextInput
+                  style={[styles.stampText, styles.stampLoc]}
+                  value={stampLocation}
+                  onChangeText={setStampLocation}
+                  placeholder="Add a location"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+
+              <Text style={styles.notePrompt}>Keep a note for reference in your Lineup Library</Text>
+              <View style={styles.noteRow}>
+                <TextInput
+                  style={styles.noteInput}
+                  value={note}
+                  onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
+                  placeholder="Tap the mic to speak, or type a few words…"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  textAlignVertical="top"
+                />
+                <View style={styles.noteIcons}>
+                  <MicButton value={note} onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }} />
+                  <TouchableOpacity onPress={() => setNote('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear note">
+                    <Ionicons name="trash-outline" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <TouchableOpacity style={[styles.overlaySaveBtn, savingStamp && styles.primaryBtnDisabled]} onPress={handleStampSave} disabled={savingStamp} activeOpacity={0.85}>
+                <Text style={styles.overlaySaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.overlaySecondaryBtn} onPress={handleViewLibrary} activeOpacity={0.85}>
+                <Text style={styles.overlaySecondaryText}>View Lineup Library</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.overlayCancel} onPress={() => router.back()} activeOpacity={0.7}>
+                <Text style={styles.overlayCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </KeyboardAwareScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* "Please input the date and location" — shown when Save is pressed with
+          either missing; edits the same stamp fields, with its own Save. */}
+      <Modal visible={missingPromptOpen} transparent animationType="fade" onRequestClose={() => setMissingPromptOpen(false)}>
+        <View style={styles.promptOverlay}>
+          <View style={styles.promptSheet}>
+            <Text style={styles.promptTitle}>
+              Please input the {missingFields.date && missingFields.location ? 'date and location' : missingFields.date ? 'date' : 'location'}
+            </Text>
+            {missingFields.date ? (
+              <TextInput
+                style={styles.promptInput}
+                value={stampDate}
+                onChangeText={(t) => setStampDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+                placeholder="Date (YYYY-MM-DD)"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="numbers-and-punctuation"
+                maxLength={10}
+                autoFocus
+              />
+            ) : null}
+            {missingFields.location ? (
+              <TextInput
+                style={styles.promptInput}
+                value={stampLocation}
+                onChangeText={setStampLocation}
+                placeholder="Location"
+                placeholderTextColor={colors.textMuted}
+                autoFocus={!missingFields.date}
+              />
+            ) : null}
+            <TouchableOpacity style={[styles.overlaySaveBtn, missingStillBlank && styles.primaryBtnDisabled]} onPress={handleMissingSave} disabled={missingStillBlank} activeOpacity={0.85}>
+              <Text style={styles.overlaySaveText}>Save</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* "Which wine from your cellar is this?" — manual match picker. Type or
           dictate to search the cellar; picking a wine adds/corrects the match. */}
@@ -631,6 +730,29 @@ const styles = StyleSheet.create({
   // Save note — gold, but the SAME footprint as the View Cellar Archive / Done buttons.
   saveNoteBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   saveNoteText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  // Night Archived overlay (bottom sheet).
+  doneBackdrop: { flex: 1, backgroundColor: colors.background },
+  noteIcons: { alignItems: 'center', gap: spacing.sm, paddingTop: 4 },
+  overlayRoot: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'flex-end' },
+  overlaySheet: { backgroundColor: colors.background, borderTopLeftRadius: 20, borderTopRightRadius: 20, maxHeight: '94%', paddingTop: spacing.sm },
+  overlayContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 40, gap: spacing.md },
+  overlayTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center' },
+  overlayPhoto: { width: '100%', borderRadius: 12, backgroundColor: '#000' },
+  stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  stampText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, textAlign: 'center', minWidth: 96 },
+  stampSep: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+  stampLoc: { flexShrink: 1, flexGrow: 1, minWidth: 120, textAlign: 'left' },
+  overlaySaveBtn: { alignSelf: 'stretch', backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  overlaySaveText: { color: colors.background, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  overlaySecondaryBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
+  overlaySecondaryText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
+  overlayCancel: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: 2 },
+  overlayCancelText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textDecorationLine: 'underline' },
+  // "Please input the date and location" prompt.
+  promptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  promptSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, gap: spacing.sm },
+  promptTitle: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
+  promptInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowMuted: { opacity: 0.45 },
   thumb: { width: 40, height: 52, borderRadius: 4 },
