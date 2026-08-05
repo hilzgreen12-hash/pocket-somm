@@ -9,7 +9,7 @@ import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { clearChosenReview } from '../../src/api/chosenWines';
-import { useCellar } from '../../src/hooks/useCellar';
+import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
 import { ReviewDetailModal } from '../../src/components/ReviewDetailModal';
@@ -155,6 +155,7 @@ type ReviewItem =
 export default function ChosenWinesScreen() {
   const { chosenWines, isLoading, remove } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
+  const { wines: archivedWines } = useArchive();
   const qc = useQueryClient();
   const { setImage, setWineDetails, setError } = useLabelStore();
   const attachPhoto = useAttachLabelPhoto();
@@ -842,6 +843,18 @@ export default function ChosenWinesScreen() {
     }
   }
 
+  // Bottle tallies for the open review — how many bottles of THIS wine the user
+  // holds in the active cellar vs the archive. Matched on the same robust
+  // name-token + vintage key the reviews list uses, summed by quantity so the
+  // figures update as bottles are added or archived.
+  const detailBottleCounts = (() => {
+    if (!detailItem) return { cellar: 0, archive: 0 };
+    const key = reviewKey(detailItem.wine);
+    const tally = (rows: CellarWine[]) =>
+      rows.filter((w) => reviewKey(w) === key).reduce((n, w) => n + (w.quantity ?? 1), 0);
+    return { cellar: tally(cellarWines), archive: tally(archivedWines) };
+  })();
+
   return (
     <View style={styles.container}>
       <EditChosenWineModal
@@ -857,6 +870,8 @@ export default function ChosenWinesScreen() {
               ? fromCellar(detailItem.wine as CellarWine)
               : fromChosenGroup((detailItem as Extract<ReviewItem, { source: 'restaurant' }>).entries))
           : null}
+        cellarBottles={detailBottleCounts.cellar}
+        archiveBottles={detailBottleCounts.archive}
         visible={!!detailItem}
         onClose={() => setDetailItem(null)}
         onAddReview={() => {

@@ -261,18 +261,13 @@ export default function CellarWineDetail() {
   // never inline on the card. This opens it.
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
 
-  // +Add Review: offer a brand-new review or importing one already written in
-  // Your Wine Reviews (an identity-matched chosen review) onto this bottle.
+  // +Add Review goes straight to the review input screen — no "create vs import"
+  // prompt. Any review the user already wrote in Dine → Your Wine Reviews is
+  // pulled in automatically by the auto-link effect below, so there's nothing to
+  // import by hand; the user just writes their review (append-only) and Back
+  // returns them to this wine intel screen.
   function openAddReview() {
-    showAlert({
-      title: 'Add a review',
-      body: 'Create a new review, or import one you already wrote in Your Wine Reviews?',
-      buttons: [
-        { text: 'Create New Review', onPress: () => setReviewModalOpen(true) },
-        { text: 'Import from Your Wine Reviews', onPress: () => { void importFromWineReviews(); } },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
+    setReviewModalOpen(true);
   }
 
   // Auto-link an existing review: if this cellar wine carries no review yet but
@@ -306,28 +301,6 @@ export default function CellarWineDetail() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wine?.id, isWishlist, isArchived]);
-
-  async function importFromWineReviews() {
-    if (!session?.user.id || !wine) return;
-    try {
-      const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, wsWineId: wine.ws_wine_id });
-      if (!match) { showAlert({ title: 'No matching review', body: "You don't have a review of this wine in Your Wine Reviews to import." }); return; }
-      const entry = buildEntry({
-        note: match.tasting_note ?? '',
-        personalNotes: match.other_observations ?? '',
-        score: match.user_score,
-        location: [match.restaurant_name, match.city].map((s) => (s ?? '').trim()).filter(Boolean).join(', '),
-        date: match.chosen_at ? match.chosen_at.split('T')[0] : null,
-        drinkingWindow: match.user_drinking_window ?? '',
-      });
-      const next = [...entriesOf(wine), entry];
-      await updateWine.mutateAsync({ id: wine.id, updates: { review_entries: next, ...flatMirror(latestEntry(next)) } });
-      setReviewExpanded(true);
-      showAlert({ title: 'Review imported', body: 'It now shows on this bottle.' });
-    } catch (err) {
-      showAlert({ title: 'Could not import', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
 
   // Vinster's Note — collapsed by default now (was always visible).
   // The "(what's this)" link surfaces a short explanation modal so a
@@ -1619,20 +1592,17 @@ export default function CellarWineDetail() {
               </TouchableOpacity>
             </View>
           ) : (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
-            <View style={styles.reviewQuickStatsCol}>
-              <View style={styles.reviewQuickCell}>
-                <Text style={styles.reviewQuickLabel}>Score</Text>
-                <Text style={[styles.reviewQuickValue, wine.review_score == null && styles.reviewQuickValueMuted]}>
-                  {wine.review_score != null ? `${wine.review_score}/100` : '—'}
+            // Collapsed summary: just the score (gold) and the review date,
+            // separated by a dash. No "Score" label, no drinking window.
+            <Text style={styles.reviewScoreLine} numberOfLines={1}>
+              {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
+              {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+              {wine.review_date ? (
+                <Text style={styles.reviewScoreDate}>
+                  {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </Text>
-              </View>
-              <View style={styles.reviewQuickCell}>
-                <Text style={styles.reviewQuickLabel}>Drinking Window</Text>
-                <Text style={[styles.reviewQuickValue, !wine.user_drinking_window && styles.reviewQuickValueMuted]} numberOfLines={1}>
-                  {wine.user_drinking_window || '—'}
-                </Text>
-              </View>
-            </View>
+              ) : null}
+            </Text>
           ) : (
             <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
               <Text style={styles.addReviewLink}>+ Add Review</Text>
@@ -2067,9 +2037,6 @@ const styles = StyleSheet.create({
   // The row carries the horizontal padding; each column just flexes.
   reviewRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.lg, alignItems: 'flex-start' },
   reviewCol: { flex: 1, paddingTop: spacing.sm },
-  // Quick stats stacked (Score above Drinking Window) — the narrow column can't
-  // fit them side by side cleanly.
-  reviewQuickStatsCol: { gap: spacing.sm, marginBottom: spacing.md },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
   vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -2300,29 +2267,11 @@ const styles = StyleSheet.create({
     gap: spacing.md,
     marginBottom: spacing.md,
   },
-  reviewQuickCell: {
-    flex: 1,
-  },
-  // Inter — quick stat label
-  reviewQuickLabel: {
-    fontFamily: fonts.bodySemibold,
-    fontSize: 11,
-    color: colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 2,
-  },
-  // Inter — quick stat value read-out
-  reviewQuickValue: {
-    fontFamily: fonts.bodySemibold,
-    fontSize: 15,
-    color: colors.text,
-  },
-  // Inter — muted variant
-  reviewQuickValueMuted: {
-    color: colors.textMuted,
-    fontFamily: fonts.bodyItalic,
-  },
+  // Collapsed "Your Review" summary line: score in gold, then the date.
+  reviewScoreLine: { marginTop: 2 },
+  reviewScoreValue: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+  reviewScoreDash: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
+  reviewScoreDate: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
   // Gold "+ Add Review" link (no review yet) + "Edit Review" link (review exists).
   addReviewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: 0 },
   reviewEmptyText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.sm },
