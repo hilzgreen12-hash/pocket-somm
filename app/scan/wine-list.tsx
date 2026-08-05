@@ -244,7 +244,7 @@ export default function WineListScreen() {
         <View style={styles.section}>
           <TouchableOpacity onPress={() => toggleSection('wineType')} activeOpacity={0.7} style={styles.accordionRow}>
             <View style={styles.accordionLeft}>
-              <Text style={styles.question}>What wine style would you like?</Text>
+              <Text style={styles.question}>Choose a wine style/colour</Text>
               {!wineTypeOpen && <Text style={[styles.selectionSummary, styles.selectionSummaryActive]}>{wineTypeLabel}</Text>}
             </View>
             <Text style={styles.chevron}>{wineTypeOpen ? '▴' : '▾'}</Text>
