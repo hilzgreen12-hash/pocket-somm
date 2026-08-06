@@ -830,7 +830,7 @@ const styles = StyleSheet.create({
   },
   // "Not this wine? Choose from other bottlings" — a gold link under the fields.
   candLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
-  candLinkText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  candLinkText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   // Bottling picker modal (matches the results-screen "Which wine is this?").
   candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
