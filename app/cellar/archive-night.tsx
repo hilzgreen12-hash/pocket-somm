@@ -1,6 +1,5 @@
 import { useRef, useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput, Modal, Dimensions } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -602,12 +601,8 @@ export default function ArchiveNightScreen() {
             <KeyboardAwareScrollView contentContainerStyle={styles.overlayContent} keyboardShouldPersistTaps="handled" bottomOffset={24}>
               <Text style={styles.overlayTitle}>{archivedCount > 0 ? 'Night Archived' : 'Lineup Saved'}</Text>
 
-              {imageUri ? (
-                <Image source={{ uri: imageUri }} style={[styles.overlayPhoto, { height: Math.round(Dimensions.get('window').height / 3) }]} resizeMode="contain" />
-              ) : null}
-
-              {/* Date · City · Venue — gold editable TEXT, centred below the photo.
-                  All three required to save. */}
+              {/* Date · City · Venue — a stats bar directly beneath the title,
+                  above the photo. Editable; all three required to save. */}
               <View style={styles.stampRow}>
                 <TextInput
                   style={styles.stampText}
@@ -636,14 +631,19 @@ export default function ArchiveNightScreen() {
                 />
               </View>
 
-              {/* Note — icons sit above and to the right of the input. */}
+              {imageUri ? (
+                <Image source={{ uri: imageUri }} style={[styles.overlayPhoto, { height: Math.round(Dimensions.get('window').height / 3) }]} resizeMode="contain" />
+              ) : null}
+
+              {/* Note — mic + gold bin (MicButton's own clear) sit above-right. */}
               <View style={styles.noteHeadRow}>
                 <Text style={styles.notePrompt}>Keep a note for reference in your Lineup Library</Text>
                 <View style={styles.noteIconsRow}>
-                  <MicButton value={note} onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }} />
-                  <TouchableOpacity onPress={() => setNote('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear note">
-                    <Ionicons name="trash-outline" size={22} color={colors.textMuted} />
-                  </TouchableOpacity>
+                  <MicButton
+                    value={note}
+                    onChangeText={(t) => { setNote(t); if (noteSaved) setNoteSaved(false); }}
+                    onClear={() => { setNote(''); if (noteSaved) setNoteSaved(false); }}
+                  />
                 </View>
               </View>
               <TextInput
@@ -656,8 +656,8 @@ export default function ArchiveNightScreen() {
                 textAlignVertical="top"
               />
 
-              <TouchableOpacity style={[styles.overlaySaveBtn, savingStamp && styles.primaryBtnDisabled]} onPress={handleStampSave} disabled={savingStamp} activeOpacity={0.85}>
-                <Text style={styles.overlaySaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
+              <TouchableOpacity style={[styles.overlaySaveBtnWhite, savingStamp && styles.primaryBtnDisabled]} onPress={handleStampSave} disabled={savingStamp} activeOpacity={0.85}>
+                <Text style={styles.overlaySaveTextWhite}>{savingStamp ? 'Saving…' : 'Save'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.overlayCancel} onPress={() => router.back()} activeOpacity={0.7}>
                 <Text style={styles.overlayCancelText}>Cancel</Text>
@@ -719,7 +719,13 @@ export default function ArchiveNightScreen() {
       <Modal visible={editTarget !== null} transparent animationType="fade" onRequestClose={() => setEditTarget(null)}>
         <View style={styles.pickerOverlay}>
           <View style={styles.pickerSheet}>
-            <Text style={styles.pickerTitle}>Edit wine</Text>
+            <Text style={styles.editWineHeader} numberOfLines={2}>
+              {[editWineDraft.producer, editWineDraft.wineName].filter(Boolean).join(' ') || 'Edit wine'}
+              {editWineDraft.vintage.trim() ? ` ${editWineDraft.vintage.trim()}` : ''}
+            </Text>
+            {editTarget?.kind === 'matched' ? (
+              <Text style={styles.editFromCellar}>This is from My Full Cellar List, find it.</Text>
+            ) : null}
             <Text style={styles.editFieldLabel}>Producer</Text>
             <TextInput style={styles.editInput} value={editWineDraft.producer} onChangeText={(t) => setEditWineDraft((d) => ({ ...d, producer: t }))} placeholder="e.g. Château Batailley" placeholderTextColor={colors.textMuted} />
             <Text style={styles.editFieldLabel}>Wine name</Text>
@@ -728,8 +734,8 @@ export default function ArchiveNightScreen() {
             <TextInput style={styles.editInput} value={editWineDraft.vintage} onChangeText={(t) => setEditWineDraft((d) => ({ ...d, vintage: t.slice(0, 7) }))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
             <Text style={styles.editFieldLabel}>Format</Text>
             <BottleSizePicker value={editWineDraft.bottleSizeMl} onChange={(ml) => setEditWineDraft((d) => ({ ...d, bottleSizeMl: ml }))} />
-            <TouchableOpacity style={[styles.overlaySaveBtn, { marginTop: spacing.lg }]} onPress={saveEditWine} activeOpacity={0.85}>
-              <Text style={styles.overlaySaveText}>Save</Text>
+            <TouchableOpacity style={[styles.editSaveBtn, { marginTop: spacing.lg }]} onPress={saveEditWine} activeOpacity={0.85}>
+              <Text style={styles.editSaveText}>Save</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.pickerCancel} onPress={() => setEditTarget(null)}>
               <Text style={styles.pickerCancelText}>Cancel</Text>
@@ -895,11 +901,20 @@ const styles = StyleSheet.create({
   overlayContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 40, gap: spacing.sm },
   overlayTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center' },
   overlayPhoto: { width: '100%', borderRadius: 12, backgroundColor: '#000' },
-  stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6 },
+  stampRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap', gap: 6, marginTop: spacing.sm, marginBottom: spacing.md, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   stampText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, paddingVertical: 2, textAlign: 'center', minWidth: 80, flexShrink: 1 },
   stampSep: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   overlaySaveBtn: { alignSelf: 'stretch', backgroundColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   overlaySaveText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
+  // Night Archived overlay Save — unfilled white bubble, white font.
+  overlaySaveBtnWhite: { alignSelf: 'stretch', backgroundColor: 'transparent', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  overlaySaveTextWhite: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
+  // Edit-wine Save — unfilled bubble, gold outline + gold font.
+  editSaveBtn: { alignSelf: 'stretch', backgroundColor: 'transparent', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
+  editSaveText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16 },
+  // Edit-wine header + "from your cellar list" prompt.
+  editWineHeader: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text, marginBottom: 4 },
+  editFromCellar: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
   overlaySecondaryBtn: { alignSelf: 'stretch', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center' },
   overlaySecondaryText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16 },
   overlayCancel: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: 2 },
