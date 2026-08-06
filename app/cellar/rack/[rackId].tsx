@@ -1373,32 +1373,64 @@ export default function RackGridScreen() {
         {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
       </Text>
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.lg, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
-        {/* Functionality statement — one instruction per centred line. */}
-        <View style={styles.rackHintBlock}>
-          <Text style={styles.rackHintCentred}>Add Single Bottles & View Wine Intel with a Short Press</Text>
-          <Text style={styles.rackHintCentred}>Add Multiples of the same wine with a Long Press</Text>
-          <Text style={styles.rackHintCentred}>Edit a slot with a Long Press</Text>
-          <Text style={styles.rackHintCentred}>
-            <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add up to six different bottles at a time
-          </Text>
-          <Text style={styles.rackHintCentred}>Pinch Rack to Zoom</Text>
-        </View>
-
-        {/* When "Add a Lineup" is tapped, a single yellow prompt sits directly
-            below the blurb. Tapping an empty slot records the start and clears
-            this (the "Before you photograph" step then opens on scan-lineup). */}
-        {lineupSetup && (
-          <View style={styles.lineupPrompt}>
-            <Text style={styles.lineupPromptText}>
-              {rack.storage_type === 'fridge'
-                ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right.'
-                : 'Select the slot for the first bottle of the lineup — bottles place left to right from there.'}
-            </Text>
-            <Text style={styles.lineupPromptCancel} onPress={() => setLineupSetup(false)}>Cancel</Text>
+      {/* STATIC header (outside the scroll view). When an Add Multiples / Add
+          More flow is active, its bar sits here in place of the instructions so
+          it never overlays the grid below; only the filters + grid scroll. */}
+      {multiSelectMode && !addMoreWine ? (
+        <View style={styles.multiBar}>
+          <View style={styles.multiBarInner}>
+            <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional empty slots to fill</Text>
+            <View style={styles.multiBarBtns}>
+              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelMultiSelect} activeOpacity={0.8}>
+                <Text style={styles.multiBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.multiBarPlace} onPress={placeIntoSelected} activeOpacity={0.8}>
+                <Text style={styles.multiBarPlaceText}>Place a wine →</Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        )}
+        </View>
+      ) : addMoreWine ? (
+        <View style={styles.multiBar}>
+          <View style={styles.multiBarInner}>
+            <Text style={styles.multiBarHeader} numberOfLines={1}>Add more {addMoreWine.wineName}</Text>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'bottle' : 'bottles'} · short press the empty slots to fill</Text>
+            <View style={styles.multiBarBtns}>
+              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelAddMore} activeOpacity={0.8}>
+                <Text style={styles.multiBarCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.multiBarPlace, multiSlots.size === 0 && { opacity: 0.4 }]} onPress={placeMoreIntoSelected} disabled={multiSlots.size === 0} activeOpacity={0.8}>
+                <Text style={styles.multiBarPlaceText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      ) : (
+        <>
+          <View style={styles.rackHintBlock}>
+            <Text style={styles.rackHintCentred}>Add Single Bottles & View Wine Intel with a Short Press</Text>
+            <Text style={styles.rackHintCentred}>Add Multiples of the same wine with a Long Press</Text>
+            <Text style={styles.rackHintCentred}>Edit a slot with a Long Press</Text>
+            <Text style={styles.rackHintCentred}>
+              <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add up to six different bottles at a time
+            </Text>
+            <Text style={styles.rackHintCentred}>Pinch Rack to Zoom</Text>
+          </View>
+          {lineupSetup && (
+            <View style={styles.lineupPrompt}>
+              <Text style={styles.lineupPromptText}>
+                {rack.storage_type === 'fridge'
+                  ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right.'
+                  : 'Select the slot for the first bottle of the lineup — bottles place left to right from there.'}
+              </Text>
+              <Text style={styles.lineupPromptCancel} onPress={() => setLineupSetup(false)}>Cancel</Text>
+            </View>
+          )}
+        </>
+      )}
 
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {winesInRack.length > 0 && (
           <>
             {/* Separator between the instructions and the filters. */}
@@ -1589,43 +1621,6 @@ export default function RackGridScreen() {
       </KeyboardAwareScrollView>
 
 
-      {/* Multi-slot selection bar — floats above the grid while the user is
-          hand-picking a set of empty slots to fill with one wine. */}
-      {multiSelectMode && !addMoreWine ? (
-        <View style={styles.multiBar} pointerEvents="box-none">
-          <View style={styles.multiBarInner}>
-            <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
-            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional empty slots to fill</Text>
-            <View style={styles.multiBarBtns}>
-              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelMultiSelect} activeOpacity={0.8}>
-                <Text style={styles.multiBarCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.multiBarPlace} onPress={placeIntoSelected} activeOpacity={0.8}>
-                <Text style={styles.multiBarPlaceText}>Place a wine →</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
-
-      {/* Add More Bottles bar — short-press empty slots to add one bottle each
-          of the chosen wine, running total, then Save. */}
-      {addMoreWine ? (
-        <View style={styles.multiBar} pointerEvents="box-none">
-          <View style={styles.multiBarInner}>
-            <Text style={styles.multiBarHeader} numberOfLines={1}>Add more {addMoreWine.wineName}</Text>
-            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'bottle' : 'bottles'} · short press the empty slots to fill</Text>
-            <View style={styles.multiBarBtns}>
-              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelAddMore} activeOpacity={0.8}>
-                <Text style={styles.multiBarCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.multiBarPlace, multiSlots.size === 0 && { opacity: 0.4 }]} onPress={placeMoreIntoSelected} disabled={multiSlots.size === 0} activeOpacity={0.8}>
-                <Text style={styles.multiBarPlaceText}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      ) : null}
 
       {/* Placement modal — opens when the user taps an empty slot while a
           pending wine is set. Asks how many bottles to place; orientation
@@ -2231,7 +2226,7 @@ const styles = StyleSheet.create({
   slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
   rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingTop: spacing.sm },
   slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
-  multiBar: { position: 'absolute', left: 0, right: 0, bottom: 0, paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, paddingTop: spacing.md },
+  multiBar: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
   multiBarHeader: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center', letterSpacing: 0.3 },
   multiBarText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.text, textAlign: 'center' },
