@@ -38,6 +38,7 @@ import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '..
 import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageLocationCases } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
+import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { MicButton } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
@@ -521,11 +522,16 @@ export default function CellarWineDetail() {
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
-      showAlert({ title: 'Added to location', body: `Now living in ${storageLocations.find((l) => l.id === locationId)?.name ?? 'the location'}.` });
+      // Ask how it's packaged in this Other Home Storage location.
+      setPackagingLocationId(locationId);
     } catch (err) {
       showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
+
+  // The Other Home Storage location a wine was just filed into → drives the
+  // "How is this wine packaged?" prompt.
+  const [packagingLocationId, setPackagingLocationId] = useState<string | null>(null);
 
   // "Add to Location" on an unplaced wine — place it in a live rack/fridge, file
   // it into an Other Home Storage location, or tag it under a Cellar List location.
@@ -1965,6 +1971,20 @@ export default function CellarWineDetail() {
         visible={reviewModalOpen}
         onClose={() => setReviewModalOpen(false)}
         onSaved={() => qc.invalidateQueries({ queryKey: ['cellar'] })}
+      />
+
+      {/* "How is this wine packaged?" — after filing this wine into an Other
+          Home Storage location. */}
+      <PackagingPrompt
+        visible={packagingLocationId !== null}
+        wineId={wine?.id ?? null}
+        locationId={packagingLocationId}
+        userId={session?.user.id ?? ''}
+        onClose={() => setPackagingLocationId(null)}
+        onDone={() => {
+          if (packagingLocationId) qc.invalidateQueries({ queryKey: ['storage-location-cases', packagingLocationId] });
+          qc.invalidateQueries({ queryKey: ['cellar'] });
+        }}
       />
 
       {/* Cellar Note popup — dictate or type a short private note (<=50 chars).

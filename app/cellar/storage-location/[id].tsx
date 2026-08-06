@@ -12,6 +12,7 @@ import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../.
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { useRacks } from '../../../src/hooks/useRacks';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
+import { PackagingPrompt } from '../../../src/components/PackagingPrompt';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { useLabelStore } from '../../../src/stores/labelStore';
@@ -165,10 +166,15 @@ export default function StorageLocationScreen() {
     qc.invalidateQueries({ queryKey: ['bin-cells'] });
   }
 
+  // Set after a wine lands in this location so the "How is this wine packaged?"
+  // prompt opens for it. Also driven by the long-press "Update Packaging".
+  const [packagingWineId, setPackagingWineId] = useState<string | null>(null);
+
   async function executeMove(w: CellarWine, count: number, _fromName: string | null) {
     const N = w.quantity ?? 1;
     const M = Math.max(1, Math.min(count, N));
     try {
+      let landedWineId = w.id;
       if (M >= N) {
         // Whole listing moves here — clear any rack slots / bin cell / case.
         await clearWineFromRacks(w.id);
@@ -178,10 +184,13 @@ export default function StorageLocationScreen() {
         await updateCellarWine(w.id, { quantity: N - M });
         if (slotAssignments.some((s) => s.cellar_wine_id === w.id)) await removeSlotsForWine(w.id, M);
         const { id: _id, created_at: _c, updated_at: _u, ...rest } = w;
-        await addCellarWine({ ...rest, quantity: M, storage_location_id: id, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
+        const created = await addCellarWine({ ...rest, quantity: M, storage_location_id: id, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
+        landedWineId = (created as any)?.id ?? w.id;
       }
       invalidateAfterMove(w);
       setMoveModal(null);
+      // Now ask how it's packaged in this Other Home Storage location.
+      setPackagingWineId(landedWineId);
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -534,23 +543,9 @@ export default function StorageLocationScreen() {
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
       buttons: [
-        { text: 'Remove from Location', onPress: () => showAlert({
-          title: `Remove from ${location?.name ?? 'this location'}?`,
-          body: 'It stays in your cellar as a loose bottle — this only takes it out of this location.',
-          buttons: [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Remove', onPress: () => runSingle('Removed', w.id, async (wid) => { await assignWineToCase(wid, null); await assignWineToStorageLocation(wid, null); }) },
-          ],
-        }) },
         { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        { text: 'Archive', onPress: () => showAlert({
-          title: 'Archive this wine?',
-          body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',
-          buttons: [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Archive', onPress: () => runSingle('Archived', w.id, async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
-          ],
-        }) },
+        { text: 'Update Packaging', onPress: () => setPackagingWineId(w.id) },
+        { text: 'Move Wine', onPress: () => openMoveWine(w) },
         { text: 'Delete', style: 'destructive', onPress: () => showAlert({
           title: 'Delete this wine?',
           body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
@@ -560,6 +555,58 @@ export default function StorageLocationScreen() {
           ],
         }) },
         { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // "Move Wine" → back to the Full Cellar List, to a different location, or to
+  // the Archive. Replaces the old Remove-from-Location + Archive entries.
+  function openMoveWine(w: CellarWine) {
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      body: 'Where would you like to move this wine?',
+      buttons: [
+        { text: 'Move to Cellar List', onPress: () => showAlert({
+          title: `Move out of ${location?.name ?? 'this location'}?`,
+          body: 'It goes back to your Full Cellar List as a loose bottle. Nothing else changes.',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Move to Cellar List', onPress: () => runSingle('Moved', w.id, async (wid) => { await assignWineToCase(wid, null); await assignWineToStorageLocation(wid, null); }) },
+          ],
+        }) },
+        { text: 'Move to Different Location', onPress: () => openMoveToDifferentLocation(w) },
+        { text: 'Archive', onPress: () => showAlert({
+          title: 'Archive this wine?',
+          body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',
+          buttons: [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Archive', onPress: () => runSingle('Archived', w.id, async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
+          ],
+        }) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  function openMoveToDifferentLocation(w: CellarWine) {
+    const others = allLocations.filter((l) => l.id !== id);
+    if (!others.length) {
+      showAlert({ title: 'No other locations', body: 'You have no other home storage locations to move this into yet.' });
+      return;
+    }
+    showAlert({
+      title: 'Move to which location?',
+      buttons: [
+        ...others.map((l) => ({
+          text: l.name,
+          onPress: () => runSingle('Moved', w.id, async (wid) => {
+            await clearWineFromRacks(wid);
+            await assignWineToCase(wid, null);
+            await assignWineToStorageLocation(wid, l.id);
+            qc.invalidateQueries({ queryKey: ['storage-location-wines', l.id] });
+          }),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }
@@ -1061,6 +1108,16 @@ export default function StorageLocationScreen() {
 
       {/* Select from Cellar List — pick an existing wine to place/move here. */}
       <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
+
+      {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
+      <PackagingPrompt
+        visible={packagingWineId !== null}
+        wineId={packagingWineId}
+        locationId={id}
+        userId={userId ?? ''}
+        onClose={() => setPackagingWineId(null)}
+        onDone={() => { void deleteEmptyCasesForLocation(id).catch(() => {}); invalidateAfterBulk(); qc.invalidateQueries({ queryKey: ['storage-location-cases', id] }); }}
+      />
 
       {/* Move quantity — "You have N bottles, how many are we moving?" */}
       <Modal visible={moveModal !== null} transparent animationType="fade" onRequestClose={() => setMoveModal(null)}>
