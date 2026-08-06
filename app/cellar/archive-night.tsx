@@ -523,7 +523,8 @@ export default function ArchiveNightScreen() {
                   {matches.map((m) => {
                     const n = counts[m.wine.id] ?? 0;
                     const ticked = !excluded.has(m.wine.id);
-                    const label = m.wine.vintage ? `${m.wine.vintage} ${m.wine.wine_name}` : m.wine.wine_name;
+                    // Full title — producer included, same shape as the unmatched rows.
+                    const label = [m.wine.vintage, m.wine.producer, m.wine.wine_name].filter(Boolean).join(' ') || m.wine.wine_name;
                     return (
                       <View key={m.wine.id} style={[styles.row, !ticked && styles.rowMuted]}>
                         <TouchableOpacity style={styles.checkbox} onPress={() => toggleExcluded(m.wine.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
