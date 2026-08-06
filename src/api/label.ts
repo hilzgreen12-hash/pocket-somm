@@ -46,10 +46,13 @@ export interface WineCandidate {
 }
 
 // Normalized key for de-duplicating candidates that are the SAME wine listed
-// under slightly different names. Strips the Bordeaux-style CLASSIFICATION
+// under slightly different names. Strips (a) the Bordeaux-style CLASSIFICATION
 // phrases that get appended inconsistently (a classification, not a distinct
 // cuvée), so "Château Batailley" and "Château Batailley Grand Cru Classé"
-// collapse to one. Deliberately leaves cuvée words (Réserve, Cuvée…) and
+// collapse to one; and (b) the estate qualifier "Château"/"Domaine" that Claude
+// sometimes includes on one variant and drops on another, so "Roc de Cambes" and
+// "Château Roc de Cambes" collapse too. Deliberately leaves cuvée words (Réserve,
+// Cuvée…), "Clos" (part of real appellation names like Clos de Vougeot) and
 // Burgundy "Grand Cru" (an appellation tier) intact — those mark real, distinct
 // wines that must stay separate.
 function candidateKey(name: string): string {
@@ -61,6 +64,7 @@ function candidateKey(name: string): string {
     .replace(/\bcru\s+bourgeois(\s+(exceptionnel|superieur))?\b/g, ' ')
     .replace(/\bclasse?\s+en\s+\d{4}\b/g, ' ')
     .replace(/\b1855\b/g, ' ')
+    .replace(/\b(chateaux?|domaines?)\b/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
