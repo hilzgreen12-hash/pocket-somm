@@ -223,7 +223,11 @@ export default function ScanLineupScreen() {
 
   const addedCount = lineupWines.filter(isAdded).length;
   const allDone = lineupWines.length > 0 && addedCount === lineupWines.length;
-  const lineupRackName = racks.find((r) => r.id === originRackId)?.name ?? 'the rack';
+  const lineupRack = racks.find((r) => r.id === originRackId);
+  const lineupRackName = lineupRack?.name ?? 'the rack';
+  // Only true racks stack extra bottles vertically down a column — fridges and
+  // bins don't, so the "+ Add more bottles vertically" link is rack-only.
+  const isRackType = (lineupRack?.storage_type ?? 'rack') === 'rack';
   const allConfirmed = lineupWines.length > 0 && confirmed.size === lineupWines.length;
   // Total physical bottles vs distinct wines — duplicates (same producer + name
   // + vintage) are batched, so these differ when the lineup has repeats.
@@ -537,9 +541,11 @@ export default function ScanLineupScreen() {
                       <Text style={styles.rowName} numberOfLines={2}>
                         {b.vintage ? `${b.vintage} ` : ''}{name}, {qty}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl
                       </Text>
-                      <TouchableOpacity onPress={() => openBottles(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.addBottlesLink}>+ Add more bottles vertically</Text>
-                      </TouchableOpacity>
+                      {isRackType ? (
+                        <TouchableOpacity onPress={() => openBottles(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                          <Text style={styles.addBottlesLink}>+ Add more bottles vertically</Text>
+                        </TouchableOpacity>
+                      ) : null}
                       {!b.confident && !isOn ? <Text style={styles.unconfident}>Low-confidence read — check it</Text> : null}
                     </View>
                     <TouchableOpacity onPress={() => openEdit(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
