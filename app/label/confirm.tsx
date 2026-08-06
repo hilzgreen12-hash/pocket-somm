@@ -93,6 +93,9 @@ export default function LabelConfirmScreen() {
   const [wineName, setWineName] = useState(isManual ? '' : (wineDetails?.wineName ?? ''));
   const [vintage, setVintage] = useState(isManual ? '' : (wineDetails?.vintage ?? ''));
   const [style, setStyle] = useState(isManual ? '' : (wineDetails?.style ?? ''));
+  // After picking a wine from the predictive search, the vintage still isn't set
+  // (the search has no vintage), so flag the field gold until the user fills it.
+  const [highlightVintage, setHighlightVintage] = useState(false);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
 
@@ -579,6 +582,7 @@ export default function LabelConfirmScreen() {
             setWineName(r.wineName ?? '');
             setRegion(r.region ?? '');
             setStyle(r.style ?? '');
+            if (!vintage.trim()) setHighlightVintage(true);
           }} />
           <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
             <Text style={styles.candLinkText}>
@@ -617,9 +621,9 @@ export default function LabelConfirmScreen() {
 
       <Text style={styles.label}>Vintage</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, highlightVintage && styles.inputHighlight]}
         value={vintage}
-        onChangeText={setVintage}
+        onChangeText={(t) => { setVintage(t); if (highlightVintage) setHighlightVintage(false); }}
         placeholder="e.g. 2019 or NV"
         placeholderTextColor={colors.textMuted}
         keyboardType="default"
@@ -803,6 +807,9 @@ const styles = StyleSheet.create({
     color: colors.text,
     backgroundColor: colors.surface,
   },
+  // Gold highlight — draws attention to the vintage after a predictive pick,
+  // since the search can't supply it.
+  inputHighlight: { borderColor: colors.gold, borderWidth: 1.5, backgroundColor: 'rgba(224,184,74,0.10)' },
   // Bin diamond inline quantity + format — labels in gold to signal the
   // bin-specific fields added to this shared screen.
   binFieldLabel: { color: colors.gold },

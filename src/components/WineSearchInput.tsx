@@ -19,8 +19,12 @@ export function WineSearchInput({ onSelect }: Props) {
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const reqIdRef = useRef(0);
+  // Set true when the query was filled by picking a suggestion, so the effect
+  // doesn't immediately re-search (and re-open the dropdown) for that value.
+  const skipSearch = useRef(false);
 
   useEffect(() => {
+    if (skipSearch.current) { skipSearch.current = false; setLoading(false); setOpen(false); return; }
     const q = query.trim();
     if (q.length < 3) { setResults([]); setLoading(false); setOpen(false); return; }
     setLoading(true);
@@ -43,7 +47,10 @@ export function WineSearchInput({ onSelect }: Props) {
 
   function choose(r: WineSearchResult) {
     onSelect(r);
-    setQuery('');
+    // Keep the chosen wine in the bar (rather than clearing it) so the user can
+    // see what they picked; suppress the follow-up search it would trigger.
+    skipSearch.current = true;
+    setQuery([r.producer, r.wineName].filter(Boolean).join(' '));
     setResults([]);
     setOpen(false);
   }
