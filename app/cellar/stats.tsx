@@ -311,9 +311,12 @@ export default function CellarStatsScreen() {
               {totalWines} {totalWines === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'}
             </Text>
             {topRegions.length > 0 ? (
-              <Text style={styles.summarySub}>
-                {topRegions.map(([region, count]) => `${pct(count, totalBottles)} ${region}`).join('  ·  ')}
-              </Text>
+              <>
+                <View style={styles.summaryDivider} />
+                <Text style={styles.summarySub}>
+                  {topRegions.map(([region, count]) => `${pct(count, totalBottles)} ${region}`).join('  ·  ')}
+                </Text>
+              </>
             ) : null}
             <TouchableOpacity onPress={() => router.push('/cellar/regions-map')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
               <Text style={styles.viewMapsLink}>View In Maps</Text>
@@ -533,7 +536,8 @@ const styles = StyleSheet.create({
   summaryBar: { alignItems: 'center', paddingVertical: spacing.lg, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryLine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
   summarySub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-  viewMapsLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline', marginTop: 2 },
+  summaryDivider: { alignSelf: 'stretch', height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: 2 },
+  viewMapsLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', marginTop: 2 },
   section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   // Cormorant — section header
   sectionTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
