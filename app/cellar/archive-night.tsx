@@ -708,8 +708,8 @@ export default function ArchiveNightScreen() {
                 autoFocus={!missingFields.date && !missingFields.location}
               />
             ) : null}
-            <TouchableOpacity style={[styles.overlaySaveBtn, missingStillBlank && styles.primaryBtnDisabled]} onPress={handleMissingSave} disabled={missingStillBlank} activeOpacity={0.85}>
-              <Text style={styles.overlaySaveText}>Save</Text>
+            <TouchableOpacity style={[styles.overlaySaveBtnWhite, missingStillBlank && styles.primaryBtnDisabled]} onPress={handleMissingSave} disabled={missingStillBlank} activeOpacity={0.85}>
+              <Text style={styles.overlaySaveTextWhite}>Save</Text>
             </TouchableOpacity>
           </View>
         </View>
