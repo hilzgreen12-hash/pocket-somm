@@ -838,7 +838,9 @@ export default function RestaurantReviewsScreen() {
       ) : null}
 
       <EditChosenWineModal
-        wine={editingWine}
+        // Live row (not the snapshot) so a label photo attached in the modal
+        // shows immediately.
+        wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={editingWine !== null}
         initialIdentityEdit={editWineIdentity}
         onClose={() => { setEditingWine(null); setEditWineIdentity(false); }}

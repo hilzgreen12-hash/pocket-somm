@@ -878,7 +878,9 @@ export default function ChosenWinesScreen() {
   return (
     <View style={styles.container}>
       <EditChosenWineModal
-        wine={editingWine}
+        // Pass the LIVE row (not the snapshot) so a label photo attached from
+        // inside the modal shows immediately — the snapshot never refreshes.
+        wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
         onClose={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
         onSaved={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
