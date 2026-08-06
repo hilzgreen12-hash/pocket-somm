@@ -10,6 +10,7 @@ import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { LabelThumb } from './LabelThumb';
 import { WineReviewFields } from './WineReviewFields';
+import { WineSearchInput } from './WineSearchInput';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { usePreferences } from '../hooks/usePreferences';
@@ -303,6 +304,19 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 <View style={styles.divider} />
 
                 <Text style={styles.sectionLabel}>The wine</Text>
+
+                {/* Predictive search — type the wine and pick a real match to fill
+                    the fields below (vintage stays yours to enter). Manual typing
+                    still works. Hidden when a label photo already sourced these. */}
+                {!labelImageUri ? (
+                  <WineSearchInput onSelect={(r) => {
+                    setProducer(r.producer ?? '');
+                    setWineName(r.wineName ?? '');
+                    setRegion(r.region ?? '');
+                    if (r.style) setStyle(r.style);
+                    if (saved) setSaved(false);
+                  }} />
+                ) : null}
 
                 {/* Scanned / uploaded label sits to the left of the identity fields,
                     mirroring a cellar wine card. */}
