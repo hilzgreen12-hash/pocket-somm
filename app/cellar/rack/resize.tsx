@@ -102,12 +102,20 @@ export default function RackResizeScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 60 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+        {/* Name — no label; the placeholder says what to enter. */}
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder={isFridge ? 'Input Fridge name here' : 'Input Rack name here'}
+          placeholderTextColor={colors.textMuted}
+        />
+
+        {/* Bubble blurb, directly under the name input. */}
         <Text style={styles.intro}>Drag the bubble in the middle of the grid to size your {isFridge ? 'fridge' : 'rack'}.{isFridge ? ' For each row create a space for bottles facing forward and backward.' : ''}</Text>
 
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{rows} × {cols}</Text>
-          <Text style={styles.badgeSub}>{rows * cols} bottle slots</Text>
-        </View>
+        {/* Yellow stats bar — same as the completed rack; Slots update live. */}
+        <Text style={styles.statsBar}>0 Wines · 0 Bottles · {rows * cols} {rows * cols === 1 ? 'Slot' : 'Slots'}</Text>
 
         <GestureHandlerRootView style={{ height: CANVAS_H }}>
           <View style={styles.canvas} onLayout={(e) => setVpw(e.nativeEvent.layout.width)}>
@@ -141,8 +149,8 @@ export default function RackResizeScreen() {
           </View>
         </GestureHandlerRootView>
 
-        {/* Precision fallback — fine-tune without fighting the gesture. */}
-        <View style={styles.nudgeRow}>
+        {/* Precision fallback — centred, Horizontal above Vertical. */}
+        <View style={styles.nudgeCol}>
           <View style={styles.nudgeGroup}>
             <Text style={styles.nudgeLabel}>Horizontal</Text>
             <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(0, -1)}><Text style={styles.nudgeBtnText}>−</Text></TouchableOpacity>
@@ -156,15 +164,6 @@ export default function RackResizeScreen() {
             <TouchableOpacity style={styles.nudgeBtn} onPress={() => nudge(1, 0)}><Text style={styles.nudgeBtnText}>+</Text></TouchableOpacity>
           </View>
         </View>
-
-        <Text style={styles.fieldLabel}>{isFridge ? 'Fridge' : 'Rack'} name</Text>
-        <TextInput
-          style={styles.input}
-          value={name}
-          onChangeText={setName}
-          placeholder={isFridge ? 'e.g. Kitchen Wine Fridge' : 'e.g. Dining Room Rack'}
-          placeholderTextColor={colors.textMuted}
-        />
 
         <TouchableOpacity style={styles.saveBtn} onPress={handleSave} activeOpacity={0.85}>
           <Text style={styles.saveBtnText}>{isFridge ? 'Save Fridge' : 'Save Rack'}</Text>
@@ -184,7 +183,11 @@ const styles = StyleSheet.create({
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  intro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, textAlign: 'center', marginBottom: spacing.lg },
+  intro: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.md },
+  // Gold stats bar — matches the completed rack summary.
+  statsBar: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center', marginBottom: spacing.md },
+  // Stacked, centred nudge groups (Horizontal above Vertical).
+  nudgeCol: { alignItems: 'center', gap: spacing.md, marginTop: spacing.lg },
   badge: { alignItems: 'center', marginBottom: spacing.md },
   badgeText: { fontSize: 30, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 1 },
   badgeSub: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
