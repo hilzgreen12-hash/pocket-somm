@@ -53,61 +53,22 @@ export default function CameraScreen() {
 
     let uri = photo.uri;
 
-    // Crop photo to the guide frame area.
-    // Step 1: normalise orientation — ImageManipulator applies EXIF rotation when
-    // writing the file, giving us reliable width/height values in screen space.
-    if (frameRect) {
+    // Normalise orientation only — ImageManipulator re-encodes with the EXIF
+    // rotation baked in, so the preview and OCR always see the photo upright.
+    // We deliberately DON'T crop to the guide frame any more: the screen→pixel
+    // crop math occasionally picked the wrong branch (when the reported
+    // dimensions came back landscape) and produced a sideways, part-cropped
+    // image — and for a wine LIST you want the whole thing, not the framed
+    // portion. The frame stays as a visual aid for holding the phone steady.
+    try {
       const normalised = await ImageManipulator.manipulateAsync(
         uri,
         [],
         { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
       );
-
-      const { width: screenW, height: screenH } = Dimensions.get('window');
-      const photoW = normalised.width;
-      const photoH = normalised.height;
-
-      // After normalisation the photo should be portrait when the phone is portrait.
-      // Map guide-frame screen coordinates → photo pixel coordinates.
-      // If the photo aspect is wider than the screen (preview crops L/R),
-      // scale by height; otherwise scale by width.
-      let cropX: number, cropY: number, cropW: number, cropH: number;
-
-      const screenRatio = screenH / screenW;
-      const photoRatio = photoH / photoW;
-
-      if (photoRatio >= screenRatio) {
-        // Photo is taller than screen preview — preview crops top & bottom
-        const scale = photoW / screenW;
-        const yOffset = (photoH - screenH * scale) / 2;
-        cropX = frameRect.x * scale;
-        cropY = frameRect.y * scale + yOffset;
-        cropW = frameRect.width * scale;
-        cropH = frameRect.height * scale;
-      } else {
-        // Photo is wider than screen preview — preview crops left & right
-        const scale = photoH / screenH;
-        const xOffset = (photoW - screenW * scale) / 2;
-        cropX = frameRect.x * scale + xOffset;
-        cropY = frameRect.y * scale;
-        cropW = frameRect.width * scale;
-        cropH = frameRect.height * scale;
-      }
-
-      // Clamp to photo bounds
-      const safeX = Math.max(0, Math.min(Math.round(cropX), photoW - 2));
-      const safeY = Math.max(0, Math.min(Math.round(cropY), photoH - 2));
-      const safeW = Math.min(Math.round(cropW), photoW - safeX);
-      const safeH = Math.min(Math.round(cropH), photoH - safeY);
-
-      if (safeW > 10 && safeH > 10) {
-        const cropped = await ImageManipulator.manipulateAsync(
-          normalised.uri,
-          [{ crop: { originX: safeX, originY: safeY, width: safeW, height: safeH } }],
-          { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
-        );
-        uri = cropped.uri;
-      }
+      uri = normalised.uri;
+    } catch (e) {
+      console.warn('[Camera] orientation normalise failed, using raw photo:', e);
     }
 
     setImage(uri);
