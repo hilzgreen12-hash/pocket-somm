@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -29,15 +30,21 @@ function villageOf(w: { region?: string | null; appellation?: string | null; win
   return null;
 }
 
-// "View In Maps" — the home for the cellar region map. The full visual/atlas map
-// is still to come; for now this shows the complete region breakdown (the data
-// the map will draw from) so the entry point is live and useful.
+// Is this grouped region the one the Côte d'Or (Burgundy) map covers?
+function isBurgundy(region: string): boolean {
+  const r = foldAccents(region).toLowerCase();
+  return r.includes('burgundy') || r.includes('bourgogne') || r.includes("cote d'or");
+}
+
+// "View In Maps" — top three cellar regions by share; tap one to reveal its map.
+// Only Côte d'Or (Burgundy) has a plotted map today; the others reveal a
+// placeholder until their atlas ships.
 export default function CellarRegionsMapScreen() {
   const { wines } = useCellar();
   const totalWines = wines.length;
   const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
-  const regions = mostRepresentedRegions(wines, 999);
-  const topCount = regions.length ? regions[0][1] : 0;
+  const top3 = mostRepresentedRegions(wines, 999).slice(0, 3);
+  const [expanded, setExpanded] = useState<string | null>(top3.length ? top3[0][0] : null);
 
   // Group the user's Côte d'Or producers by village for the map overlay.
   const producersByVillage: Record<string, string[]> = {};
@@ -69,40 +76,45 @@ export default function CellarRegionsMapScreen() {
           </Text>
         </View>
 
-        {/* Côte d'Or map with the user's producers plotted onto their villages.
-            Shown when they hold Côte d'Or wines; other regions still list below. */}
-        {coteDorWineCount > 0 ? (
-          <View style={styles.mapSection}>
-            <Text style={styles.mapTitle}>Côte d'Or</Text>
-            <CoteDorMap producersByVillage={producersByVillage} />
-            <Text style={styles.mapCaption}>Your Côte d'Or producers, on their villages. More regions to come.</Text>
-          </View>
-        ) : (
-          <View style={styles.mapPlaceholder}>
-            <Text style={styles.mapPlaceholderTitle}>Côte d'Or map</Text>
-            <Text style={styles.mapPlaceholderBody}>
-              Add wines from a Côte d'Or (Burgundy) village and they'll appear on the map here. Maps for more regions are on the way.
-            </Text>
-          </View>
-        )}
-
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Your Regions</Text>
-          {regions.length === 0 ? (
+          <Text style={styles.sectionTitle}>Your Top Regions</Text>
+          {top3.length === 0 ? (
             <Text style={styles.muted}>No region data yet. Add wines with a region to see them here.</Text>
           ) : (
-            regions.map(([region, count]) => (
-              <View key={region} style={styles.regionRow}>
-                <View style={styles.regionTop}>
-                  <Text style={styles.regionLabel} numberOfLines={1}>{region}</Text>
-                  <Text style={styles.regionPct}>{pct(count, totalBottles)}</Text>
+            top3.map(([region, count]) => {
+              const open = expanded === region;
+              const hasMap = isBurgundy(region) && coteDorWineCount > 0;
+              return (
+                <View key={region} style={styles.regionBlock}>
+                  <TouchableOpacity style={styles.regionTop} onPress={() => setExpanded(open ? null : region)} activeOpacity={0.7}>
+                    <Text style={styles.regionLabel} numberOfLines={1}>{region}</Text>
+                    <View style={styles.regionRight}>
+                      <Text style={styles.regionPct}>{pct(count, totalBottles)}</Text>
+                      <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
+                    </View>
+                  </TouchableOpacity>
+                  {open ? (
+                    <View style={styles.mapReveal}>
+                      {hasMap ? (
+                        <>
+                          <CoteDorMap producersByVillage={producersByVillage} />
+                          <Text style={styles.mapCaption}>Your Côte d'Or producers, on their villages. Pinch to zoom.</Text>
+                        </>
+                      ) : (
+                        <View style={styles.mapPlaceholder}>
+                          <Text style={styles.mapPlaceholderTitle}>{region} map</Text>
+                          <Text style={styles.mapPlaceholderBody}>
+                            {isBurgundy(region)
+                              ? "Add wines from a Côte d'Or (Burgundy) village and they'll plot onto the map here."
+                              : `A visual ${region} map is on the way. You hold ${count} ${count === 1 ? 'bottle' : 'bottles'} from ${region}.`}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  ) : null}
                 </View>
-                <View style={styles.barTrack}>
-                  <View style={[styles.barFill, { width: `${topCount ? Math.max(4, (count / topCount) * 100) : 0}%` }]} />
-                </View>
-                <Text style={styles.regionCount}>{count} {count === 1 ? 'bottle' : 'bottles'}</Text>
-              </View>
-            ))
+              );
+            })
           )}
         </View>
       </ScrollView>
@@ -119,20 +131,19 @@ const styles = StyleSheet.create({
   content: { paddingBottom: 60 },
   summaryBar: { alignItems: 'center', paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryLine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  mapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
-  mapTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.sm },
   mapCaption: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
-  mapPlaceholder: { margin: spacing.xl, padding: spacing.lg, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', gap: spacing.xs },
+  mapPlaceholder: { padding: spacing.lg, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', gap: spacing.xs },
   mapPlaceholderTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   mapPlaceholderBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
-  section: { paddingHorizontal: spacing.xl, paddingBottom: spacing.lg },
+  section: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },
   sectionTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
   muted: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 17 },
-  regionRow: { marginBottom: spacing.md },
-  regionTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' },
-  regionLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flexShrink: 1 },
-  regionPct: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, marginLeft: spacing.md },
-  barTrack: { height: 6, borderRadius: 3, backgroundColor: colors.border, marginTop: 6, overflow: 'hidden' },
-  barFill: { height: 6, borderRadius: 3, backgroundColor: colors.gold },
-  regionCount: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 3 },
+  // Each top region: a tappable header row that expands to reveal its map.
+  regionBlock: { borderTopWidth: 1, borderTopColor: colors.border },
+  regionTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md },
+  regionLabel: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
+  regionRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  regionPct: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold },
+  chevron: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted },
+  mapReveal: { paddingBottom: spacing.lg },
 });
