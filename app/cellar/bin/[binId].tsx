@@ -376,12 +376,12 @@ export default function BinDetailScreen() {
       {isLoading || !bin ? (
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
       ) : (
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
-          {/* Two-line stats, mirroring the rack/fridge summary. */}
+        <>
+          {/* Static header — stats + instructions + moving banner. Only the
+              filters and the diamond grid below scroll. */}
           <Text style={styles.statsLine1}>{diamonds} {diamonds === 1 ? 'Diamond' : 'Diamonds'} · {halfDiamonds} Half {halfDiamonds === 1 ? 'Diamond' : 'Diamonds'}</Text>
           <Text style={styles.statsLine2}>{entries.length} {entries.length === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalCapacity} Slots</Text>
           <Text style={styles.hint}>Short tap an area to add wine or view contents. Long hold to Empty or Edit.</Text>
-
           {movingWine ? (
             <View style={styles.movingBanner}>
               <Text style={styles.movingBannerText} numberOfLines={2}>Moving {movingWine.name} — tap a diamond to file it there.</Text>
@@ -389,6 +389,7 @@ export default function BinDetailScreen() {
             </View>
           ) : null}
 
+        <ScrollView contentContainerStyle={{ paddingBottom: 80 }} keyboardShouldPersistTaps="handled">
           {/* Filter row — List reveals the contents; each saved filter is a chip
               that highlights its diamonds; + Add builds a bespoke one. */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
@@ -518,6 +519,7 @@ export default function BinDetailScreen() {
             <View style={styles.legendItem}><View style={[styles.legendSwatch, { backgroundColor: colors.gold }]} /><Text style={styles.legendText}>Full</Text></View>
           </View>
         </ScrollView>
+        </>
       )}
 
       {/* Bespoke-filter builder — name it, tick the wines it holds. */}
