@@ -13,6 +13,7 @@ import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src
 import { matchLineupToCellar, archiveBottles, type NightMatch } from '../../src/services/archiveNight';
 import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { saveLineupArchive, setLineupNote, updateLineupStamp, type LineupArchive, type LineupWine } from '../../src/api/lineups';
+import { saveManualChosenWine } from '../../src/api/chosenWines';
 import { captureCity } from '../../src/utils/captureCity';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import type { CellarWine } from '../../src/types/wine';
@@ -70,6 +71,16 @@ export default function ArchiveNightScreen() {
   // don't vanish mid-type.
   const [missingPromptOpen, setMissingPromptOpen] = useState(false);
   const [missingFields, setMissingFields] = useState<{ date: boolean; location: boolean; venue: boolean }>({ date: false, location: false, venue: false });
+  // Review Now path: "Archive X Bottles" archives the matched cellar bottles;
+  // "Confirm" opens an Archive popup (shared date/city/venue + the wine list)
+  // that places every lineup wine into Your Wine Reviews awaiting review.
+  const [archivedDone, setArchivedDone] = useState(false);
+  const [archivingBottles, setArchivingBottles] = useState(false);
+  const [archivePopupOpen, setArchivePopupOpen] = useState(false);
+  const [archiveDate, setArchiveDate] = useState('');
+  const [archiveCity, setArchiveCity] = useState('');
+  const [archiveVenue, setArchiveVenue] = useState('');
+  const [placing, setPlacing] = useState(false);
 
   // Seed the stamp fields once the lineup row lands (date defaults to its
   // archived date, location to any GPS-captured city).
@@ -366,62 +377,112 @@ export default function ArchiveNightScreen() {
     void persistStampAndNote().then(() => router.replace('/cellar/lineups')).catch(() => {});
   }
 
-  async function confirmArchive() {
-    if (!session?.user.id || totalToArchive === 0) return;
-    setStage('archiving');
-    const today = new Date().toISOString().split('T')[0];
+  const todayStr = () => new Date().toISOString().split('T')[0];
+
+  // Every lineup wine (matched cellar + off-cellar), as a plain identity list —
+  // used both for the popup's wine list and the awaiting-review placement.
+  const allLineupIdentities = [
+    ...matches.map((m) => ({ producer: m.wine.producer, wineName: m.wine.wine_name, vintage: m.wine.vintage as string | number | null })),
+    ...unmatched.map((b) => ({ producer: b.producer ?? null, wineName: b.wineName, vintage: b.vintage as string | number | null })),
+  ];
+
+  // "Archive X Bottles" — physically archive the matched cellar bottles (leaves
+  // them in the list for review placement). Stays on the review screen.
+  async function archiveMatched() {
+    if (!session?.user.id || archivingBottles || totalToArchive === 0) return;
+    setArchivingBottles(true);
+    const day = todayStr();
     try {
       for (const m of matches) {
         if (excluded.has(m.wine.id)) continue;
         const n = counts[m.wine.id] ?? 0;
-        if (n > 0) await archiveBottles(m.wine, n, today);
+        if (n > 0) await archiveBottles(m.wine, n, day);
       }
-      // Save the lineup photo to Your Lineup Library. Non-fatal: a photo
-      // failure must not lose the (already-committed) archiving, but we record
-      // the outcome so the done screen tells the truth.
-      let savedPhoto = false;
+      setArchivedCount(totalToArchive);
+      setArchivedDone(true);
+      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+    } catch (err) {
+      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setArchivingBottles(false);
+    }
+  }
+
+  // "Confirm" — open the Archive popup, pre-filling the shared date (today) and
+  // a best-effort GPS city; venue is the one field the user always supplies.
+  async function openArchivePopup() {
+    setArchiveDate((d) => d || todayStr());
+    setArchivePopupOpen(true);
+    const city = await captureCity();
+    if (city) setArchiveCity((c) => c || city);
+  }
+
+  // Finalise the Review Now path: save the lineup to the Library, then place
+  // EVERY lineup wine into Your Wine Reviews awaiting review, all tagged with the
+  // shared date · city · venue.
+  async function finalizeReviewNow() {
+    if (!session?.user.id || placing) return;
+    const d = archiveDate.trim(), c = archiveCity.trim(), v = archiveVenue.trim();
+    if (!d || !c || !v) {
+      showAlert({ title: 'Add the details', body: 'Please fill in the date, city and venue — they apply to all these wines.' });
+      return;
+    }
+    setPlacing(true);
+    try {
+      const winesArchived = archivedDone
+        ? matches.filter((m) => !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0).length
+        : 0;
+      // Save the lineup photo to the Library (non-fatal) with the shared stamp.
       if (imageUri) {
         try {
-          // Persist the lineup's bottles (migration 065): matched cellar wines
-          // (flagged as archived when the user kept a count) + off-cellar
-          // bottles. Plus a best-effort city stamp.
           const lineupWines: LineupWine[] = [
-            ...matches.map((m) => ({
-              producer: m.wine.producer,
-              wine_name: m.wine.wine_name,
-              vintage: m.wine.vintage,
-              cellar_wine_id: m.wine.id,
-              archived: !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0,
-              count: m.count,
-            })),
-            ...unmatched.map((b) => ({
-              producer: b.producer ?? null,
-              wine_name: b.wineName,
-              vintage: b.vintage,
-              cellar_wine_id: null,
-              archived: false,
-              count: b.quantity ?? 1,
-            })),
+            ...matches.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: m.wine.id, archived: archivedDone && !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0, count: m.count })),
+            ...unmatched.map((b) => ({ producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 })),
           ];
-          const city = await captureCity();
-          const row = await saveLineupArchive(session.user.id, imageUri, totalToArchive, { wines: lineupWines, city });
+          const row = await saveLineupArchive(session.user.id, imageUri, archivedCount, { wines: lineupWines, city: c });
           setSavedLineup(row);
-          savedPhoto = true;
+          await updateLineupStamp(row.id, { archivedAt: `${d}T12:00:00.000Z`, city: c, venue: v });
         } catch (e) {
           console.warn('saveLineupArchive failed:', e);
         }
       }
-      setPhotoSaved(savedPhoto);
-      qc.invalidateQueries({ queryKey: ['cellar', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
+      // Place every lineup wine into Your Wine Reviews awaiting review (no score),
+      // referenced with the shared date/city/venue.
+      for (const w of allLineupIdentities) {
+        const raw = w.vintage;
+        const vint = raw == null || raw === '' || !Number.isFinite(Number(raw)) ? null : Math.trunc(Number(raw));
+        await saveManualChosenWine(session.user.id, {
+          wineName: (w.wineName ?? w.producer ?? '').toString(),
+          producer: (w.producer ?? '').toString(),
+          region: '',
+          vintage: vint,
+          restaurantName: v,
+          city: c,
+          listPrice: null,
+          currency: 'GBP',
+          tastingNote: '',
+          otherObservations: '',
+          userScore: null,
+          isFavourite: false,
+          source: 'restaurant',
+          reviewDate: d,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
-      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['rack-slots'] });
-      setArchivedCount(totalToArchive);
-      setStage('done');
+      setArchivePopupOpen(false);
+      showAlert({
+        title: 'Night archived',
+        body: `${winesArchived} wine${winesArchived === 1 ? '' : 's'} archived and all lineup wines placed in Your Wine Reviews awaiting review.`,
+        buttons: [{ text: 'OK', onPress: () => router.replace('/cellar/lineups') }],
+      });
     } catch (err) {
-      showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
-      setStage('review');
+      showAlert({ title: 'Could not place reviews', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setPlacing(false);
     }
   }
 
@@ -549,6 +610,18 @@ export default function ArchiveNightScreen() {
                       </View>
                     );
                   })}
+                  {/* Archive the matched cellar bottles — skinny gold bubble,
+                      Cellar-tab width. */}
+                  <TouchableOpacity
+                    style={[styles.archiveBottlesBtn, (archivingBottles || totalToArchive === 0 || archivedDone) && styles.primaryBtnDisabled]}
+                    onPress={archiveMatched}
+                    disabled={archivingBottles || totalToArchive === 0 || archivedDone}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.archiveBottlesText}>
+                      {archivedDone ? `✓ ${archivedCount} Bottle${archivedCount === 1 ? '' : 's'} Archived` : archivingBottles ? 'Archiving…' : `Archive ${totalToArchive} Bottle${totalToArchive === 1 ? '' : 's'}`}
+                    </Text>
+                  </TouchableOpacity>
                 </>
               ) : null}
 
@@ -578,14 +651,11 @@ export default function ArchiveNightScreen() {
           )}
 
           <TouchableOpacity
-            style={[styles.primaryBtn, totalToArchive === 0 && styles.primaryBtnDisabled]}
-            onPress={confirmArchive}
-            disabled={totalToArchive === 0}
+            style={styles.primaryBtn}
+            onPress={openArchivePopup}
             activeOpacity={0.85}
           >
-            <Text style={styles.primaryBtnText}>
-              {totalToArchive === 0 ? 'Nothing selected' : `Archive ${totalToArchive} bottle${totalToArchive === 1 ? '' : 's'}`}
-            </Text>
+            <Text style={styles.primaryBtnText}>Confirm</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.secondaryBtn} onPress={() => { setStage('capture'); setImageUri(null); }} activeOpacity={0.85}>
             <Text style={styles.secondaryBtnText}>Retake</Text>
@@ -664,6 +734,45 @@ export default function ArchiveNightScreen() {
                 <Text style={styles.overlayCancelText}>Cancel</Text>
               </TouchableOpacity>
             </KeyboardAwareScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Archive popup (Review Now → Confirm) — a shared, editable Date · City ·
+          Venue that applies to every wine, the wine list below, then Confirm.
+          Confirm places all lineup wines into Your Wine Reviews awaiting review. */}
+      <Modal visible={archivePopupOpen} transparent animationType="fade" onRequestClose={() => setArchivePopupOpen(false)}>
+        <View style={styles.pickerOverlay}>
+          <View style={styles.pickerSheet}>
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <Text style={styles.archivePopupTitle}>Archive</Text>
+              <Text style={styles.archivePopupSub}>These apply to all the wines below.</Text>
+              <View style={styles.archiveFieldRow}>
+                <Text style={styles.archiveFieldLabel}>Date</Text>
+                <TextInput style={styles.archiveFieldInput} value={archiveDate} onChangeText={(t) => setArchiveDate(t.replace(/[^0-9-]/g, '').slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textMuted} keyboardType="numbers-and-punctuation" maxLength={10} />
+              </View>
+              <View style={styles.archiveFieldRow}>
+                <Text style={styles.archiveFieldLabel}>City</Text>
+                <TextInput style={styles.archiveFieldInput} value={archiveCity} onChangeText={setArchiveCity} placeholder="City" placeholderTextColor={colors.textMuted} />
+              </View>
+              <View style={styles.archiveFieldRow}>
+                <Text style={styles.archiveFieldLabel}>Venue</Text>
+                <TextInput style={styles.archiveFieldInput} value={archiveVenue} onChangeText={setArchiveVenue} placeholder="Venue" placeholderTextColor={colors.textMuted} />
+              </View>
+              <View style={styles.archiveWineList}>
+                {allLineupIdentities.map((w, i) => (
+                  <Text key={i} style={styles.archiveWineItem} numberOfLines={2}>
+                    {[w.vintage, w.producer, w.wineName].filter(Boolean).join(' ') || 'Unnamed wine'}
+                  </Text>
+                ))}
+              </View>
+              <TouchableOpacity style={[styles.editSaveBtn, { marginTop: spacing.md }, placing && styles.primaryBtnDisabled]} onPress={finalizeReviewNow} disabled={placing} activeOpacity={0.85}>
+                <Text style={styles.editSaveText}>{placing ? 'Placing…' : 'Confirm'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.pickerCancel} onPress={() => setArchivePopupOpen(false)}>
+                <Text style={styles.pickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -865,6 +974,18 @@ const styles = StyleSheet.create({
   preview: { width: '80%', height: 240, borderRadius: 12, backgroundColor: '#000' },
   previewSmall: { width: '100%', height: 160, borderRadius: 12, backgroundColor: '#000', marginBottom: spacing.md },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
+  // Skinny gold "Archive X Bottles" — Cellar-tab bubble proportions (thinner
+  // than the primary button), spanning the content width.
+  archiveBottlesBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
+  archiveBottlesText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Archive popup — header, editable shared fields, wine list.
+  archivePopupTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.gold, marginBottom: 2 },
+  archivePopupSub: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginBottom: spacing.md },
+  archiveFieldRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  archiveFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, width: 52 },
+  archiveFieldInput: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 4 },
+  archiveWineList: { marginTop: spacing.md },
+  archiveWineItem: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   primaryBtnDisabled: { opacity: 0.5 },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   secondaryBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
