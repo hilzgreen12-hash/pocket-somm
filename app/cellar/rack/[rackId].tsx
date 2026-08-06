@@ -1409,13 +1409,11 @@ export default function RackGridScreen() {
       ) : (
         <>
           <View style={styles.rackHintBlock}>
-            <Text style={styles.rackHintCentred}>Add Single Bottles & View Wine Intel with a Short Press</Text>
-            <Text style={styles.rackHintCentred}>Add Multiples of the same wine with a Long Press</Text>
-            <Text style={styles.rackHintCentred}>Edit a slot with a Long Press</Text>
-            <Text style={styles.rackHintCentred}>
-              <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text> to add up to six different bottles at a time
-            </Text>
-            <Text style={styles.rackHintCentred}>Pinch Rack to Zoom</Text>
+            <Text style={styles.rackHintBullet}>•  Add Single Bottles & View Wine Intel with a Short Press</Text>
+            <Text style={styles.rackHintBullet}>•  Add Multiples of the same wine with a Long Press</Text>
+            <Text style={styles.rackHintBullet}>•  Edit a Slot with a Long Press</Text>
+            <Text style={styles.rackHintBullet}>•  Pinch Rack to Zoom</Text>
+            <Text style={styles.rackHintBullet}>•  Add up to six different bottles at a time with <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text></Text>
           </View>
           {lineupSetup && (
             <View style={styles.lineupPrompt}>
@@ -2242,6 +2240,7 @@ const styles = StyleSheet.create({
   rackHintLink: { fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline' },
   rackHintBlock: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, gap: 4 },
   rackHintCentred: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
+  rackHintBullet: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'left', lineHeight: 20 },
   rackHintDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.background, paddingHorizontal: spacing.md },
   // Inter — form input
