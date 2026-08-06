@@ -392,7 +392,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
@@ -451,6 +451,20 @@ export default function ChosenWinesScreen() {
       }
       return;
     }
+    if (params.openCellarReviewInput) {
+      // From a lineup wine with no review yet — open that cellar bottle's review
+      // INPUT (a fresh entry), not the read-only card.
+      const key = `openCellarInput:${params.openCellarReviewInput}`;
+      if (handledParamRef.current === key) return;
+      const w = cellarWines.find((x) => x.id === params.openCellarReviewInput)
+        ?? archivedWines.find((x) => x.id === params.openCellarReviewInput);
+      if (w) {
+        handledParamRef.current = key;
+        setEditingCellarLatest(false);
+        setEditingCellarWine(w);
+      }
+      return;
+    }
     if (params.seedAdd === '1') {
       const key = `add:${params.sp}|${params.sw}|${params.sv}`;
       if (handledParamRef.current === key) return;
@@ -464,7 +478,7 @@ export default function ChosenWinesScreen() {
       setAddOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openReview, params.openCellarReview, params.seedAdd, params.sp, params.sw, params.sv, params.sr, chosenWines, cellarWines, archivedWines]);
+  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.seedAdd, params.sp, params.sw, params.sv, params.sr, chosenWines, cellarWines, archivedWines]);
 
   // "Don't show me this again" — a direct action (no tick box): opt out
   // permanently and dismiss.

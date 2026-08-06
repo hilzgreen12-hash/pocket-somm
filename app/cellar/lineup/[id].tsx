@@ -311,7 +311,7 @@ export default function LineupDetailScreen() {
   );
 
   const dateStr = new Date(lineup.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const stamp = [dateStr, lineup.city, lineup.venue].filter(Boolean).join(' · ');
+  const stamp = [dateStr, lineup.city].filter(Boolean).join(' · ');
   const wines: LineupWine[] = lineup.wines ?? [];
 
   return (
@@ -327,13 +327,16 @@ export default function LineupDetailScreen() {
             <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Share'}</Text>
           </TouchableOpacity>
         </View>
-        {/* Date · City · Venue as the header title (tap to edit date/city). */}
+        {/* Screen title. */}
+        <Text style={styles.headerTitle}>Your Lineup</Text>
+        {/* Date · City below the title (tap to edit date/city). */}
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}</Text>
         </TouchableOpacity>
-        {/* Venue — a pin + inline input the user fills; saves on blur/submit. */}
+        {/* Venue — in white, beneath the date/city; a pin + inline input the user
+            fills, saved on blur/submit. */}
         <View style={styles.venueRow}>
-          <Ionicons name="location-outline" size={16} color={colors.gold} />
+          <Ionicons name="location-outline" size={16} color={colors.text} />
           <TextInput
             style={styles.venueInput}
             value={venue}
@@ -413,18 +416,25 @@ export default function LineupDetailScreen() {
                     <View style={styles.tagRow}>
                       {/* One status stamp: Yours (in the cellar) or Off cellar. */}
                       <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Yours' : 'Off cellar'}</Text>
-                      {/* Review — becomes View/Edit Review once one's written. A
-                          cellar wine's review lives on its card; off-cellar wines
-                          go through Your Wine Reviews. */}
+                      {/* Review — goes straight to the review INPUT (not the wine
+                          card). Once a review exists it reads "Visit Review" and
+                          opens the existing review instead. */}
                       <TouchableOpacity
                         onPress={() => {
-                          if (w.cellar_wine_id) { router.push(`/cellar/${w.cellar_wine_id}` as any); return; }
-                          if (conn.reviewCount > 0) { router.push('/wines/chosen'); return; }
+                          const hasReview = conn.reviewCount > 0;
+                          if (w.cellar_wine_id) {
+                            // Cellar bottle: open its review card if reviewed, else its review input.
+                            const param = hasReview ? 'openCellarReview' : 'openCellarReviewInput';
+                            router.push(`/wines/chosen?${param}=${w.cellar_wine_id}` as any);
+                            return;
+                          }
+                          // Off-cellar: the existing review list if reviewed, else a seeded new review.
+                          if (hasReview) { router.push('/wines/chosen'); return; }
                           router.push(`/wines/chosen?seedAdd=1&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}` as any);
                         }}
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
-                        <Text style={styles.viewLink}>{conn.reviewCount > 0 ? 'View/Edit Review' : 'Review'}</Text>
+                        <Text style={styles.viewLink}>{conn.reviewCount > 0 ? 'Visit Review' : 'Review'}</Text>
                       </TouchableOpacity>
                       {/* Edit this bottle's identity (replaces whole-photo re-identify). */}
                       <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -597,9 +607,10 @@ const styles = StyleSheet.create({
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.lg },
-  venueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.sm, paddingHorizontal: spacing.xl },
-  venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, minWidth: 120, textAlign: 'center', paddingVertical: 2 },
+  headerTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.lg },
+  headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
+  venueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.xs, paddingHorizontal: spacing.xl },
+  venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, minWidth: 120, textAlign: 'center', paddingVertical: 2 },
   matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
   matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
@@ -623,7 +634,7 @@ const styles = StyleSheet.create({
   stampInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   stampSaveBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
   stampSaveText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
-  winesHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginHorizontal: spacing.xl },
+  winesHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   reIdentifyLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   identifyBtn: { marginHorizontal: spacing.xl, marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
   identifyBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
