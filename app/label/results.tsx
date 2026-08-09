@@ -1229,13 +1229,16 @@ export default function LabelResultsScreen() {
       <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
       <View style={styles.header}>
-        {/* When the result came from a scan/upload, show that label photo on the
-            card. Manual entries have no imageUri, so nothing renders. */}
+        {/* Wine-card layout: the scanned/uploaded label photo on the left, the
+            wine identity (name · region · grape) on its right. Manual entries
+            have no imageUri, so the text column simply fills the row. */}
         {imageUri ? <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" /> : null}
-        <Text style={styles.producer}>{wine.producer}</Text>
-        {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
-        <Text style={styles.detail}>{wine.region} · {wine.vintage}</Text>
-        {intel.grapeVariety && <Text style={styles.grape}>{intel.grapeVariety}</Text>}
+        <View style={styles.headerText}>
+          <Text style={styles.producer}>{wine.producer}</Text>
+          {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
+          <Text style={styles.detail}>{wine.region} · {wine.vintage}</Text>
+          {intel.grapeVariety && <Text style={styles.grape}>{intel.grapeVariety}</Text>}
+        </View>
       </View>
 
       {/* Generate Wine Intel came back empty → prompt to check the name/format. */}
@@ -1902,8 +1905,9 @@ const styles = StyleSheet.create({
   reReadOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   reReadText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF' },
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
-  header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  heroImage: { alignSelf: 'center', width: 130, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginBottom: spacing.md },
+  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginRight: spacing.md },
+  headerText: { flex: 1 },
   candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
   candTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
