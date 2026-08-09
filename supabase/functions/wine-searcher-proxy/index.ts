@@ -146,42 +146,56 @@ function buildWsUrl(name: string, vintageValue: string | null, cur: string): str
 // query or fall back to the Claude estimate. Logs the return code so misses are
 // diagnosable (vintage miss vs name miss) from the function logs.
 async function lookupWineSearcher(name: string, vintageValue: string | null, cur: string) {
-  let res: Response;
-  try {
-    res = await fetch(buildWsUrl(name, vintageValue, cur), {
+  const url = buildWsUrl(name, vintageValue, cur);
+  // Retry TRANSIENT failures — timeout, network drop, upstream 5xx, or
+  // return-code 7 ("API Access Suspended", a rate-limit/outage). These must NOT
+  // be mistaken for "this wine has no price": a false miss here skips the
+  // all-vintage average in the caller and blanks the price. A genuine no-match
+  // (return-code non-zero and not 7) returns null straight away — no retry.
+  // SECURITY: buildWsUrl inlines WINE_SEARCHER_API_KEY into the URL, and Deno
+  // embeds the full request URL in transport-level fetch errors — so we NEVER
+  // log or re-throw the raw error, only a sanitised reason with no URL.
+  const MAX_ATTEMPTS = 2;
+  let transient = 'request failed';
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    if (attempt > 1) await new Promise((r) => setTimeout(r, 400));
+    let res: Response;
+    try {
       // Without a timeout an unresponsive upstream blocks until the platform
-      // wall-clock kill, and the retry path below makes that two serial hangs
-      // before the caller sees anything.
-      signal: AbortSignal.timeout(10_000),
-    });
-  } catch (err) {
-    // SECURITY: buildWsUrl inlines WINE_SEARCHER_API_KEY into the URL as a
-    // query param, and Deno embeds the full request URL in transport-level
-    // fetch errors. Letting that error propagate would write the plaintext
-    // key into the function logs via the console.error in the handler below.
-    // Re-throw a message that carries no URL.
-    const reason = err instanceof Error && err.name === 'TimeoutError' ? 'timed out' : 'request failed';
-    throw new Error(`Wine-Searcher ${reason}`);
+      // wall-clock kill.
+      res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
+    } catch (err) {
+      transient = err instanceof Error && err.name === 'TimeoutError' ? 'timed out' : 'request failed';
+      continue; // network / timeout — retry
+    }
+    if (res.status >= 500) { transient = `returned ${res.status}`; continue; } // upstream 5xx — retry
+    if (!res.ok) throw new Error(`Wine-Searcher returned ${res.status}`); // 4xx — permanent
+    const xml = await res.text();
+    const returnCode = tag(xml, 'return-code');
+    console.log(`[wine-searcher-proxy] name="${name}" vintage=${vintageValue ?? 'ALL'} return-code=${returnCode} attempt=${attempt}`);
+    if (returnCode === '0') {
+      return {
+        averageMarketPrice: num(xml, 'price-average'),
+        minPrice: num(xml, 'price-min'),
+        maxPrice: num(xml, 'price-max'),
+        criticScore: num(xml, 'ws-score'),
+        currency: tag(xml, 'list-currency-code') ?? cur,
+        region: tag(xml, 'region'),
+        grape: tag(xml, 'grape'),
+        wsWineId: tag(xml, 'wine-name-id'),
+        // Canonical wine name — best-effort: the confirmed sample only documented
+        // <wine-name-id>, so this is null when the tag is absent. The id is the
+        // anchor; the name is only for display.
+        wineName: tag(xml, 'wine-name'),
+      };
+    }
+    if (returnCode === '7') { transient = 'API access suspended'; continue; } // transient suspension — retry
+    return null; // genuine no-match
   }
-  if (!res.ok) throw new Error(`Wine-Searcher returned ${res.status}`);
-  const xml = await res.text();
-  const returnCode = tag(xml, 'return-code');
-  console.log(`[wine-searcher-proxy] name="${name}" vintage=${vintageValue ?? 'ALL'} return-code=${returnCode}`);
-  if (returnCode !== '0') return null;
-  return {
-    averageMarketPrice: num(xml, 'price-average'),
-    minPrice: num(xml, 'price-min'),
-    maxPrice: num(xml, 'price-max'),
-    criticScore: num(xml, 'ws-score'),
-    currency: tag(xml, 'list-currency-code') ?? cur,
-    region: tag(xml, 'region'),
-    grape: tag(xml, 'grape'),
-    wsWineId: tag(xml, 'wine-name-id'),
-    // Canonical wine name — best-effort: the confirmed sample only documented
-    // <wine-name-id>, so this is null when the tag is absent. The id is the
-    // anchor; the name is only for display.
-    wineName: tag(xml, 'wine-name'),
-  };
+  // Every attempt failed transiently. Signal it (throw, don't return null) so
+  // the caller can still broaden to the all-vintage query rather than caching a
+  // false miss.
+  throw new Error(`Wine-Searcher ${transient}`);
 }
 
 Deno.serve(async (req) => {
@@ -241,15 +255,34 @@ Deno.serve(async (req) => {
     // matches far more strictly than the website's fuzzy search. The all-vintage
     // figure is a better answer than a blank, and still anchors the critic score.
     const hasRealVintage = vintageParam !== 'NV';
-    let result = await lookupWineSearcher(wineName, String(vintageParam), cur);
+    let result: Awaited<ReturnType<typeof lookupWineSearcher>> = null;
     let priceScope: 'vintage' | 'all-vintage' = 'vintage';
-    if (!result && hasRealVintage) {
-      result = await lookupWineSearcher(wineName, null, cur);
-      priceScope = 'all-vintage';
+    // Exact vintage first. A transient throw here must NOT stop us broadening to
+    // the all-vintage average — catch it and fall through to that query.
+    try {
+      result = await lookupWineSearcher(wineName, String(vintageParam), cur);
+    } catch (e) {
+      console.error('[wine-searcher-proxy] exact-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
+    }
+    // Broaden to the all-vintage average when the exact vintage EITHER didn't
+    // match OR matched but carries no market price (some vintages list a score
+    // but no live price). Keep the exact match's score/anchor when it had them.
+    if (hasRealVintage && (!result || result.averageMarketPrice == null)) {
+      try {
+        const allV = await lookupWineSearcher(wineName, null, cur);
+        if (allV && (allV.averageMarketPrice != null || !result)) {
+          result = result
+            ? { ...allV, criticScore: result.criticScore ?? allV.criticScore, wsWineId: result.wsWineId ?? allV.wsWineId, wineName: result.wineName ?? allV.wineName }
+            : allV;
+          priceScope = 'all-vintage';
+        }
+      } catch (e) {
+        console.error('[wine-searcher-proxy] all-vintage lookup failed transiently:', e instanceof Error ? e.message : 'error');
+      }
     }
 
-    // return-code != 0 on both attempts (e.g. 7 = "API Access Suspended", or a
-    // genuine no-match) → fall back to the Claude estimate.
+    // Genuine no-match (or both queries down after retries) → the client falls
+    // back to a labelled Vinster estimate, so a price is still shown.
     if (!result) {
       return new Response(JSON.stringify(UNAVAILABLE), {
         headers: { 'Content-Type': 'application/json' },
