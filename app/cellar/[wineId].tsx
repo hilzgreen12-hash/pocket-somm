@@ -1455,7 +1455,7 @@ export default function CellarWineDetail() {
                 {formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })}
                 <Text style={styles.estimateUpdateLink}> (update)</Text>
               </Text>
-              {wine.estimated_value_source === 'wine-searcher' && wine.estimated_value_low != null && wine.estimated_value_high != null ? (
+              {wine.estimated_value_low != null && wine.estimated_value_high != null ? (
                 <Text style={styles.statSub}>
                   Range {formatCurrency(Number(wine.estimated_value_low), wine.estimated_value_currency, { decimals: 0 })}–{formatCurrency(Number(wine.estimated_value_high), wine.estimated_value_currency, { decimals: 0 })}
                 </Text>
@@ -1464,7 +1464,7 @@ export default function CellarWineDetail() {
                 <Text style={styles.statSub}>
                   {wine.estimated_value_source === 'wine-searcher'
                     ? (wine.estimated_value_scope === 'all-vintage' ? 'WS · all vintages · ' : 'Wine-Searcher · ')
-                    : ''}
+                    : wine.estimated_value_source === 'vinster' ? 'Vinster estimate · ' : ''}
                   {new Date(wine.estimated_value_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </Text>
               ) : null}
@@ -1493,6 +1493,13 @@ export default function CellarWineDetail() {
             <Text style={styles.scoreNoteLabel}>About this value</Text>
             <Text style={styles.scoreNoteText}>
               No live market price for the {wine.vintage || 'listed'} vintage on Wine-Searcher — this is its global average across all vintages of the wine, in {wine.estimated_value_currency ?? 'GBP'}.
+            </Text>
+          </View>
+        ) : wine.estimated_value_source === 'vinster' && wine.estimated_value != null ? (
+          <View style={styles.scoreNoteBlock}>
+            <Text style={styles.scoreNoteLabel}>About this value</Text>
+            <Text style={styles.scoreNoteText}>
+              No market listing found on Wine-Searcher for this wine — this is Vinster's own estimate from the producer, region and vintage, in {wine.estimated_value_currency ?? 'GBP'}. Treat it as a guide, not a confirmed market price.
             </Text>
           </View>
         ) : wine.estimated_value == null ? (

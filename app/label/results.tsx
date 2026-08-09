@@ -1332,10 +1332,8 @@ export default function LabelResultsScreen() {
               {intel.estimatedValue != null ? (
                 <>
                   <Text style={[styles.statValue, styles.estimatedValueGold]}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
-                  {intel.valueSource === 'wine-searcher' ? (
-                    <Text style={styles.statSub}>{intel.priceScope === 'all-vintage' ? 'All vintages' : 'Wine-Searcher'}</Text>
-                  ) : null}
-                  {intel.valueSource === 'wine-searcher' && intel.estimatedValueLow != null && intel.estimatedValueHigh != null ? (
+                  <Text style={styles.statSub}>{intel.valueSource === 'wine-searcher' ? (intel.priceScope === 'all-vintage' ? 'All vintages' : 'Wine-Searcher') : 'Vinster estimate'}</Text>
+                  {intel.estimatedValueLow != null && intel.estimatedValueHigh != null ? (
                     <Text style={styles.statSub}>Range {formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–{formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}</Text>
                   ) : null}
                 </>
@@ -1360,6 +1358,10 @@ export default function LabelResultsScreen() {
           {intel.valueSource === 'wine-searcher' && intel.priceScope === 'all-vintage' ? (
             <Text style={styles.marketNote}>
               No live market price for the {wine.vintage || 'listed'} vintage on Wine-Searcher — showing its global average across all vintages of this wine, in {userCurrency}.
+            </Text>
+          ) : intel.valueSource === 'vinster' && intel.estimatedValue != null ? (
+            <Text style={styles.marketNote}>
+              No market listing found on Wine-Searcher for this wine — this is Vinster's own estimate from the producer, region and vintage, in {userCurrency}. Treat it as a guide, not a confirmed market price.
             </Text>
           ) : intel.estimatedValue == null ? (
             <Text style={styles.marketNote}>
