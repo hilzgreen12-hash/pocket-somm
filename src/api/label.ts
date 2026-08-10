@@ -97,6 +97,43 @@ export async function fetchWineCandidates(input: { producer?: string | null; reg
   return dedupeCandidates(data.candidates ?? []);
 }
 
+// One wine in a producer's range, ordered by prestige. `band` is a RELATIVE
+// price/prestige tier (1 = entry … 5 = flagship) within this producer's own
+// lineup — not an absolute price. `isThis` marks the scanned wine.
+export interface ProducerRangeWine {
+  wineName: string;
+  band: number;
+  tier: string | null;
+  isThis: boolean;
+}
+export interface ProducerRange {
+  wines: ProducerRangeWine[];
+  // One-line placement of the scanned wine within the range.
+  summary: string | null;
+}
+
+// Ask Claude for the producer's core lineup (entry → flagship) so the intel
+// card can show WHERE the scanned wine sits — the "range" context most wine
+// apps don't offer. Best-effort: returns an empty range when the producer
+// can't be confidently placed, so the caller simply omits the section.
+export async function fetchProducerRange(input: { producer?: string | null; region?: string | null; wineName?: string | null; vintage?: string | null }): Promise<ProducerRange> {
+  const data = await invokeFunction('producer-range', {
+    producer: input.producer ?? '',
+    region: input.region ?? '',
+    wineName: input.wineName ?? '',
+    vintage: input.vintage ?? '',
+  }) as { wines?: ProducerRangeWine[]; summary?: string | null };
+  const wines = (Array.isArray(data.wines) ? data.wines : [])
+    .map((w) => ({
+      wineName: typeof w?.wineName === 'string' ? w.wineName : '',
+      band: Math.max(1, Math.min(5, Math.round(Number(w?.band)) || 3)),
+      tier: typeof w?.tier === 'string' && w.tier.trim() ? w.tier.trim() : null,
+      isThis: w?.isThis === true,
+    }))
+    .filter((w) => w.wineName);
+  return { wines, summary: typeof data.summary === 'string' && data.summary.trim() ? data.summary.trim() : null };
+}
+
 export interface LabelImageCandidate {
   url: string;
   thumbnail: string;

@@ -127,6 +127,11 @@ export interface WineIntelligence {
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
   grapeVariety: string | null;
   tastingNotes: string;
+  // "In the know" sommelier commentary — how this vintage fared for the wine's
+  // region/style and how this producer stacked up against its peers that year.
+  // Distinct from tastingNotes (character in the glass); this is context/verdict.
+  // Null when Vinster has no specific vintage/producer knowledge to share.
+  insiderNote?: string | null;
   // Single best per-bottle estimate. Returned null readily — only set when
   // Vinster is reasonably confident — since a wrong number is worse than
   // none. The low/high bracket a plausible range; valueConfidence flags how

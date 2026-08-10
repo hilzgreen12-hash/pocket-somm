@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
@@ -26,7 +26,8 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
-import { getWineIntelligence, fetchWineCandidates, prepareImageBase64, scanLabel, type WineCandidate } from '../../src/api/label';
+import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
+import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -142,6 +143,12 @@ export default function LabelResultsScreen() {
   const [regenerating, setRegenerating] = useState(false);
   const [reReading, setReReading] = useState(false);
   const candidatesTriedRef = useRef(false);
+  // Producer range ("where this wine sits in the lineup") — fetched once on the
+  // Wine Intel card. Best-effort: an empty result simply hides the section.
+  const [producerRange, setProducerRange] = useState<ProducerRange | null>(null);
+  const [producerRangeLoading, setProducerRangeLoading] = useState(false);
+  const producerRangeTriedRef = useRef(false);
+  const [sharing, setSharing] = useState(false);
 
   // "Upload Again" — re-pick a label and regenerate intel in place (the upload
   // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
@@ -178,6 +185,9 @@ export default function LabelResultsScreen() {
       setCandidates([]);
       setCandidatesOpen(false);
       setNoIntelDismissed(false);
+      // New wine → re-map the producer range for it.
+      producerRangeTriedRef.current = false;
+      setProducerRange(null);
       // Replace the auto-saved library label so it reflects the CORRECTED wine —
       // drop the misread one, then save the new read (best-effort).
       try {
@@ -213,6 +223,53 @@ export default function LabelResultsScreen() {
       } catch { /* silent — NoIntelPrompt stays as the fallback */ }
     })();
   }, [intelligence, isIntelOnlyFlow, wineDetailsConfirmed]);
+
+  // "Where this wine sits in the producer's range" — fetched once on the Wine
+  // Intel card (the producer is the reliable anchor). Silent on failure.
+  useEffect(() => {
+    if (producerRangeTriedRef.current) return;
+    if (!isIntelOnlyFlow || !wineDetailsConfirmed?.producer?.trim()) return;
+    producerRangeTriedRef.current = true;
+    setProducerRangeLoading(true);
+    (async () => {
+      try {
+        const r = await fetchProducerRange({
+          producer: wineDetailsConfirmed.producer,
+          region: wineDetailsConfirmed.region,
+          wineName: wineDetailsConfirmed.wineName,
+          vintage: wineDetailsConfirmed.vintage,
+        });
+        if (r.wines.length > 0) setProducerRange(r);
+      } catch { /* silent — the section simply doesn't render */ }
+      finally { setProducerRangeLoading(false); }
+    })();
+  }, [isIntelOnlyFlow, wineDetailsConfirmed]);
+
+  // Share the wine intel as plain text (identity + the three headline numbers +
+  // Vinster's note), with the standard install footer. Mirrors the review-share
+  // text path used elsewhere in the app.
+  async function handleShare() {
+    if (sharing) return;
+    setSharing(true);
+    try {
+      const w = wineDetailsConfirmed;
+      const header = [w?.producer, w?.wineName, w?.vintage].filter((s) => s && String(s).trim()).join(' ');
+      const scoreLine = intel.criticScore != null ? `\nScore: ${intel.criticScore}/100` : '';
+      const valueLine = intel.estimatedValue != null
+        ? `\nValue: ${formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}${intel.valueSource === 'vinster' ? ' (Vinster estimate)' : ''}`
+        : '';
+      const windowLine = intel.drinkingWindowFrom && intel.drinkingWindowTo
+        ? `\nDrinking window: ${intel.drinkingWindowFrom}–${intel.drinkingWindowTo}`
+        : '';
+      const noteLine = intel.tastingNotes?.trim() ? `\n\n"${intel.tastingNotes.trim()}"` : '';
+      const message = `${header}${scoreLine}${valueLine}${windowLine}${noteLine}${VINSTER_TEXT_SHARE_FOOTER}`;
+      await Share.share({ message, title: header || 'Wine Intel' });
+    } catch (err) {
+      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSharing(false);
+    }
+  }
 
   // Confirm a candidate → update the identity and regenerate intel for it.
   async function pickCandidate(c: WineCandidate) {
@@ -1211,18 +1268,17 @@ export default function LabelResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
-      {/* Scan Again — the intel flow now skips the confirm-details step, so this
-          is how the user re-reads a bottle when the label was misread. */}
+      {/* Share the intel card (top-right). Replaces the old Scan/Upload Again
+          action — re-reading a bottle is still available from the Scan tab. */}
       {isIntelOnlyFlow ? (
         <TouchableOpacity
           style={styles.scanAgainBtn}
-          onPress={isUploadFlow
-            ? handleUploadAgain
-            : () => router.replace(`/label/camera?context=intel${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` as any)}
+          onPress={handleShare}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           activeOpacity={0.7}
+          disabled={sharing}
         >
-          <Text style={styles.scanAgainText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
+          <Text style={styles.scanAgainText}>{sharing ? 'Sharing…' : 'Share'}</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -1306,47 +1362,29 @@ export default function LabelResultsScreen() {
           generated later, only from Generate Wine Intel). */}
       {!isAddFlow && (
         <>
-          {/* The three key numbers in the compact cellar-card format — tight
-              under the grape rather than three tall stacked sections. */}
-          <View style={styles.statsGrid}>
-            <View style={styles.statCell}>
-              <Text style={styles.statLabel}>Avg Critic Score</Text>
-              <Text style={[styles.statValue, intel.criticScore == null && styles.statValueMuted]}>
-                {intel.criticScore != null ? intel.criticScore : '—'}
+          {/* The three headline numbers as a single inline stats bar:
+              Score · Value · Drinking Window → XX/100 · £XX · XXXX/XXXX.
+              The value's source/estimate context lives in the note below. */}
+          <View style={styles.statBar}>
+            <View style={styles.statBarItem}>
+              <Text style={[styles.statBarValue, intel.criticScore == null && styles.statBarValueMuted]}>
+                {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
               </Text>
-              {intel.verified === false && (intel.criticScore != null || intel.estimatedValue != null) ? (
-                <TouchableOpacity
-                  onPress={() => showAlert({
-                    title: 'Estimated by Vinster',
-                    body: "Vinster couldn't find this exact wine in Wine-Searcher's live database, so this score and value are Vinster's own estimates — based on the producer, region, style and vintage — not verified against a real listing. Check the wine name is complete (a missed cuvée is the usual cause), or pick the exact bottling if Vinster asked which wine this is.",
-                  })}
-                  hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.estimatedByLink}>Estimated by Vinster</Text>
-                </TouchableOpacity>
-              ) : null}
+              <Text style={styles.statBarLabel}>Score</Text>
             </View>
-            <View style={styles.statCell}>
-              <Text style={styles.statLabel}>Market Value</Text>
-              {intel.estimatedValue != null ? (
-                <>
-                  <Text style={[styles.statValue, styles.estimatedValueGold]}>{formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}</Text>
-                  <Text style={styles.statSub}>{intel.valueSource === 'wine-searcher' ? (intel.priceScope === 'all-vintage' ? 'All vintages' : 'Wine-Searcher') : 'Vinster estimate'}</Text>
-                  {intel.estimatedValueLow != null && intel.estimatedValueHigh != null ? (
-                    <Text style={styles.statSub}>Range {formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–{formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}</Text>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={[styles.statValue, styles.statValueMuted]}>None listed</Text>
-              )}
+            <Text style={styles.statBarSep}>·</Text>
+            <View style={styles.statBarItem}>
+              <Text style={[styles.statBarValue, intel.estimatedValue != null ? styles.estimatedValueGold : styles.statBarValueMuted]}>
+                {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
+              </Text>
+              <Text style={styles.statBarLabel}>Value</Text>
             </View>
-            <View style={styles.statCell}>
-              <Text style={styles.statLabel}>Drinking Window</Text>
-              <Text style={[styles.statValue, { color: windowM.color }]}>{windowM.text}</Text>
-              {intel.drinkingWindowFrom && intel.drinkingWindowTo ? (
-                <Text style={styles.statSub}>{intel.drinkingWindowFrom}–{intel.drinkingWindowTo}</Text>
-              ) : null}
+            <Text style={styles.statBarSep}>·</Text>
+            <View style={styles.statBarItem}>
+              <Text style={[styles.statBarValue, intel.drinkingWindowFrom && intel.drinkingWindowTo ? { color: windowM.color } : styles.statBarValueMuted]}>
+                {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom}/${intel.drinkingWindowTo}` : '—'}
+              </Text>
+              <Text style={styles.statBarLabel}>Drinking Window</Text>
             </View>
           </View>
 
@@ -1361,7 +1399,7 @@ export default function LabelResultsScreen() {
             </Text>
           ) : intel.valueSource === 'vinster' && intel.estimatedValue != null ? (
             <Text style={styles.marketNote}>
-              No market listing found on Wine-Searcher for this wine — this is Vinster's own estimate from the producer, region and vintage, in {userCurrency}. Treat it as a guide, not a confirmed market price.
+              No market listing found on Wine-Searcher for this wine{intel.verified === false ? ', so the score and value are Vinster’s own estimates' : ' — this is Vinster’s own estimate'} from the producer, region and vintage, in {userCurrency}. Treat it as a guide, not a confirmed market price.
             </Text>
           ) : intel.estimatedValue == null ? (
             <Text style={styles.marketNote}>
@@ -1373,6 +1411,46 @@ export default function LabelResultsScreen() {
             <VinstersNoteHeading />
             <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
           </View>
+
+          {/* The Inside Line — the "sommelier best friend" verdict: how this
+              vintage actually fared and how this producer stacked up against its
+              peers that year. Real in-the-know context, not a dictionary entry. */}
+          {intel.insiderNote?.trim() ? (
+            <View style={styles.section}>
+              <Text style={styles.insiderTitle}>The Inside Line</Text>
+              <Text style={styles.insiderBody}>{intel.insiderNote.trim()}</Text>
+            </View>
+          ) : null}
+
+          {/* Where this wine sits in the producer's range — the context most
+              wine apps don't offer. Wine Intel card only (needs a live lookup). */}
+          {isIntelOnlyFlow && (producerRangeLoading || (producerRange && producerRange.wines.length > 0)) ? (
+            <View style={styles.section}>
+              <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
+              {producerRange ? (
+                <>
+                  {producerRange.wines.map((rw, i) => (
+                    <View key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]}>
+                      <View style={styles.rangeRowMain}>
+                        <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
+                        <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
+                      </View>
+                      <View style={styles.rangeRight}>
+                        <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(userCurrency).repeat(rw.band)}</Text>
+                        {rw.tier ? <Text style={styles.rangeTier}>{rw.tier}</Text> : null}
+                      </View>
+                    </View>
+                  ))}
+                  {producerRange.summary ? <Text style={styles.rangeSummary}>{producerRange.summary}</Text> : null}
+                </>
+              ) : (
+                <View style={styles.rangeLoading}>
+                  <ActivityIndicator color={colors.gold} />
+                  <Text style={styles.rangeLoadingText}>Mapping the range…</Text>
+                </View>
+              )}
+            </View>
+          ) : null}
         </>
       )}
 
@@ -1948,9 +2026,35 @@ const styles = StyleSheet.create({
   badgeWindow: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
+  // Inline headline stats bar: Score · Value · Drinking Window.
+  statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
+  statBarValue: { fontSize: 20, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+  statBarValueMuted: { color: colors.textMuted, fontFamily: fonts.bodySemibold },
+  statBarLabel: { fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' },
+  statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
   // Compact 2-column stat grid mirroring the cellar wine card.
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
+  // "The Inside Line" — sommelier-best-friend commentary.
+  insiderTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
+  insiderBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 23 },
+  // Producer range ladder — entry → flagship, this wine highlighted.
+  rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
+  rangeRowThis: { backgroundColor: 'rgba(212,176,96,0.10)', borderRadius: 8, paddingHorizontal: spacing.sm, borderBottomColor: 'transparent' },
+  rangeRowMain: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: spacing.xs },
+  rangeMarker: { fontSize: 14, color: colors.gold, width: 14, textAlign: 'center' },
+  rangeMarkerHidden: { opacity: 0 },
+  rangeName: { flex: 1, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text },
+  rangeNameThis: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  rangeRight: { alignItems: 'flex-end' },
+  rangeBand: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1 },
+  rangeBandThis: { color: colors.gold },
+  rangeTier: { fontSize: 10, fontFamily: fonts.bodyRegular, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 },
+  rangeSummary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, marginTop: spacing.md },
   statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
