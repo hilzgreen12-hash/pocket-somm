@@ -264,12 +264,29 @@ export default function LabelResultsScreen() {
       // The user has already confirmed the wine — don't re-prompt the post-card
       // "which wine is this?" disambiguation for the same result.
       candidatesTriedRef.current = true;
+      // Re-map the producer range for the (possibly corrected) producer.
+      producerRangeTriedRef.current = false;
+      setProducerRange(null);
       setAwaitingConfirm(false);
     } catch {
       showAlert({ title: 'Could not get intel', body: 'Please try again.' });
     } finally {
       setConfirmGenerating(false);
     }
+  }
+  // Manual correction: open the confirm/search step over an existing card, for
+  // when the read looks confident but is simply the wrong wine (e.g. OCR swapped
+  // in a different real producer, which verifies and never auto-prompts).
+  function openManualConfirm() {
+    confirmTriedRef.current = false;
+    setConfirmOptions([]);
+    setAwaitingConfirm(true);
+  }
+  // Confirm-step "keep" action: on a manual re-confirm keep the existing card;
+  // on the initial (no-card) confirm, generate intel for the read as-is.
+  function keepCurrentOrRead() {
+    if (intelligence) { setAwaitingConfirm(false); return; }
+    if (wineDetailsConfirmed) resolveConfirm(wineDetailsConfirmed);
   }
   // A picked match keeps the read's vintage/size but takes the corrected
   // producer / name / region / style from the search result.
@@ -572,10 +589,11 @@ export default function LabelResultsScreen() {
   const wine = wineDetailsConfirmed;
   const intel = intelligence ?? EMPTY_INTEL;
 
-  // Confirm-first screen: shown when a scan couldn't be verified and no card has
-  // been generated yet. The user picks the correct wine (typo/OCR-corrected) or
-  // confirms their read; either way resolveConfirm() then builds the card.
-  if (awaitingConfirm && !intelligence) {
+  // Confirm screen: shown either when a scan couldn't be verified (no card yet),
+  // or when the user taps "Not this wine?" to correct a confident misread over an
+  // existing card. The user picks the correct wine (typo/OCR-corrected) or keeps
+  // what's there; picking rebuilds the card, keeping leaves it untouched.
+  if (awaitingConfirm) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity
@@ -606,9 +624,11 @@ export default function LabelResultsScreen() {
             </View>
           ) : (
             <>
-              <Text style={styles.confirmTitle}>Is this the wine?</Text>
+              <Text style={styles.confirmTitle}>{intelligence ? 'Which wine is this?' : 'Is this the wine?'}</Text>
               <Text style={styles.confirmBody}>
-                Vinster couldn’t confirm this exact wine, so the label may have been misread. Pick the correct wine and Vinster will build the card for it — or confirm your read is right.
+                {intelligence
+                  ? 'Not the right wine? Pick the correct one below and Vinster will rebuild the card for it — or keep the current one.'
+                  : 'Vinster couldn’t confirm this exact wine, so the label may have been misread. Pick the correct wine and Vinster will build the card for it — or confirm your read is right.'}
               </Text>
               {confirmLoading ? (
                 <View style={styles.confirmLoading}>
@@ -632,9 +652,11 @@ export default function LabelResultsScreen() {
               ) : (
                 <Text style={styles.confirmBody}>No close matches found — you can still get intel for your read.</Text>
               )}
-              <TouchableOpacity style={styles.confirmPrimary} onPress={() => resolveConfirm(wine)} activeOpacity={0.85}>
+              <TouchableOpacity style={styles.confirmPrimary} onPress={keepCurrentOrRead} activeOpacity={0.85}>
                 <Text style={styles.confirmPrimaryText}>
-                  {confirmOptions.length > 0 ? 'None of these — my read is correct' : 'My read is correct — get intel'}
+                  {intelligence
+                    ? 'Keep the current wine'
+                    : (confirmOptions.length > 0 ? 'None of these — my read is correct' : 'My read is correct — get intel')}
                 </Text>
               </TouchableOpacity>
             </>
@@ -1434,6 +1456,15 @@ export default function LabelResultsScreen() {
         </View>
       </View>
 
+      {/* Always-available correction: even a confident card can be the wrong wine
+          (OCR can swap in a different real producer, which verifies and never
+          auto-prompts). This reopens the typo/OCR-tolerant search. */}
+      {isIntelOnlyFlow && intelligence ? (
+        <TouchableOpacity onPress={openManualConfirm} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} style={styles.wrongWineLink} activeOpacity={0.7}>
+          <Text style={styles.wrongWineText}>Not this wine? Search for the right one</Text>
+        </TouchableOpacity>
+      ) : null}
+
       {/* Generate Wine Intel came back empty → prompt to check the name/format. */}
       {/* Weak intel: if we found candidate bottlings, the disambiguation modal
           takes over; otherwise fall back to the check-details prompt. */}
@@ -2202,6 +2233,9 @@ const styles = StyleSheet.create({
   confirmRowMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   confirmPrimary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
+  // "Not this wine?" correction link under the header on the intel card.
+  wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.sm },
+  wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textDecorationLine: 'underline' },
   statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },

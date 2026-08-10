@@ -40,13 +40,13 @@ async function inferStyle(
 
 const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photograph. Extract the following information from this label:
 
-1. producer: The winery, estate, family, or maker — the entity that produced the wine. The producer is the SAME across every bottle that maker releases. For example: "Mullineux" produces Schist, Iron, and Granite cuvées; "Penfolds" produces Grange, Bin 28, etc.; "Domaine de la Romanée-Conti" produces La Tâche, Romanée-Conti, etc. The producer is usually a family/estate name, château, domaine, or recognisable winery brand and is often printed prominently as the maker's signature. Use your knowledge of the wine world — if you recognise the maker, that is the producer.
+1. producer: The winery, estate, family, or maker — the entity that produced the wine, read EXACTLY as printed on the label. TRANSCRIBE what is actually on the bottle; do not "identify" the wine from general knowledge. CRITICAL — NO FAMOUS-PRODUCER SUBSTITUTION: never replace the printed producer with a different, more famous, or better-known maker. If the label reads "Casanova di Neri", the producer is "Casanova di Neri" — NOT Biondi Santi or any other better-known house from the same appellation. A well-known APPELLATION on the label (e.g. "Brunello di Montalcino", "Barolo", "Chablis") is NOT a producer and must never pull your answer toward the region's most famous estate. The producer is the SAME across every bottle that maker releases (e.g. "Mullineux" produces Schist, Iron, and Granite cuvées; "Penfolds" produces Grange, Bin 28, etc.) and is usually a family/estate name, château, domaine, or winery brand printed as the maker's signature. Read every word of it as written. Use wine knowledge ONLY to correct an obvious character-level misread of THAT SAME name (a smudged or ambiguous letter) — never to swap in a different estate. If the producer text is not clearly legible, set confidence to "low" rather than guessing a recognisable name.
 
 2. region: The wine region, appellation, or country of origin (e.g. "Margaux, Bordeaux", "Swartland, South Africa").
 
 3. wineName: The specific cuvée, vineyard, or bottling name — what distinguishes this bottle from OTHER bottles by the same producer (e.g. "Schist", "Grange", "La Tâche", "Le Montrachet"). Capture the COMPLETE cuvée name, including any range/series word AND the specific bottling within it — do NOT drop part of a multi-word name. For example a "Gaston Brochet Assemblage Tome IV" must read "Assemblage Tome IV" (the range "Assemblage" plus the bottling "Tome IV"), never just "Assemblage". Set to null only when the bottle has no specific cuvée name and is sold simply under the producer's name.
 
-   DISAMBIGUATION RULE: if you see two prominent names on the label, the producer is the maker's brand (often appears in a signature, logo, or as the legal/contact name) and the wine name is the specific cuvée label (often a single word or a vineyard/blend name). Do NOT swap them. If unsure, prefer the more well-known/recognisable name as the producer.
+   DISAMBIGUATION RULE: if you see two prominent names on the label, the producer is the maker's brand (often appears in a signature, logo, or as the legal/contact name) and the wine name is the specific cuvée label (often a single word or a vineyard/blend name). Do NOT swap them. Decide which is which from the label's LAYOUT and wording — NEVER by which name is more famous. If you genuinely cannot tell which is the producer, set confidence to "low" rather than guessing a recognisable name.
 
 4. vintage: The vintage year as a 4-digit string (e.g. "2019"), "NV" if the label explicitly states non-vintage, or null if no vintage information is visible.
 
@@ -64,8 +64,12 @@ Deno.serve(async (req) => {
   try {
     const { base64Image } = await req.json();
 
+    // Sonnet (not Haiku) for the vision read: OCR fidelity on the producer name
+    // is critical — a confident misread that swaps in a different real producer
+    // is the worst outcome (it verifies against Wine-Searcher and never prompts
+    // a correction), and Sonnet reads small/stylised label text far better.
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-4-6',
       max_tokens: 512,
       messages: [{
         role: 'user',
