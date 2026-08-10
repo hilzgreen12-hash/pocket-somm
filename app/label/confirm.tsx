@@ -191,9 +191,11 @@ export default function LabelConfirmScreen() {
   // best web match, no picker (the wine-card "Find Label Online" keeps its
   // picker for deliberate choice). Best-effort: never blocks the flow.
   async function ensureAutoLabel(pProducer: string, pWineName: string | null) {
-    // Manual entries keep a blank "+ Add" thumbnail — the user chooses the photo
-    // deliberately from the wine card, so don't auto-fetch one here.
-    if (isManual) return;
+    // Manual entries into the CELLAR keep a blank "+ Add" thumbnail (the user
+    // picks the photo deliberately from the wine card). But a manual entry headed
+    // to the Wine Intel card should still show a label — fetch one so the intel
+    // screen isn't photo-less.
+    if (isManual && context !== 'intel') return;
     if (useLabelStore.getState().imageUri) return;
     if (!pProducer.trim()) return;
     try {

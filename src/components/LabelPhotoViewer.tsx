@@ -7,7 +7,10 @@ import { fonts } from '../constants/fonts';
 
 interface Props {
   visible: boolean;
-  path: string | null | undefined;
+  path?: string | null | undefined;
+  // A direct image URI (a freshly-scanned local file, or any http URL) to show
+  // instead of resolving a stored `path`. Takes precedence over path when set.
+  uri?: string | null;
   fallbackText?: string | null;
   onClose: () => void;
 }
@@ -17,10 +20,11 @@ interface Props {
 // handler on the JS thread (no Reanimated worklet plugin in this project). A
 // <Modal> renders in its own native hierarchy, so it gets its OWN
 // GestureHandlerRootView or the gestures are dead.
-export function LabelPhotoViewer({ visible, path, fallbackText, onClose }: Props) {
+export function LabelPhotoViewer({ visible, path, uri, fallbackText, onClose }: Props) {
   const { width } = useWindowDimensions();
-  const url = useLabelImageUrl(path);
-  const loading = !!path && !url;
+  const resolved = useLabelImageUrl(path);
+  const url = uri ?? resolved;
+  const loading = !uri && !!path && !resolved;
 
   const scale = useRef(new Animated.Value(1)).current;
   const tx = useRef(new Animated.Value(0)).current;

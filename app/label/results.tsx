@@ -3,6 +3,7 @@ import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal,
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
+import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -159,6 +160,8 @@ export default function LabelResultsScreen() {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
   const confirmTriedRef = useRef(false);
+  // Tap-to-enlarge the label photo on the confirm screen (pinch/zoom/pan).
+  const [zoomOpen, setZoomOpen] = useState(false);
 
   // "Upload Again" — re-pick a label and regenerate intel in place (the upload
   // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
@@ -287,6 +290,62 @@ export default function LabelResultsScreen() {
   function keepCurrentOrRead() {
     if (intelligence) { setAwaitingConfirm(false); return; }
     if (wineDetailsConfirmed) resolveConfirm(wineDetailsConfirmed);
+  }
+  // "Scan Again" / "Upload Again" from the confirm screen — re-capture a photo
+  // and re-run the same read + verify-first, so a bad photo can be redone
+  // without leaving the flow. Camera re-opens the scanner; upload re-picks from
+  // the library in place.
+  async function recaptureFromConfirm() {
+    if (!isUploadFlow) {
+      router.replace(`/label/camera?context=intel${backTo ? `&backTo=${encodeURIComponent(backTo)}` : ''}` as any);
+      return;
+    }
+    if (reReading) return;
+    if (!(await ensureMediaPermission('library'))) return;
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (result.canceled || !result.assets[0]) return;
+    const uri = result.assets[0].uri;
+    setReReading(true);
+    try {
+      const base64 = await prepareImageBase64(uri);
+      const details = await scanLabel(base64);
+      setImage(uri, base64);
+      setWineDetails(details);
+      const confirmed: WineDetailsComplete = {
+        producer: (details.producer ?? '').trim(),
+        region: (details.region ?? '').trim(),
+        wineName: (details.wineName ?? '').trim() || null,
+        vintage: (details.vintage ?? '').trim(),
+        style: (details.style ?? '').trim() || null,
+        bottleSizeMl: details.bottleSizeMl ?? null,
+        quantity: details.quantity ?? 1,
+      };
+      setWineDetailsConfirmed(confirmed);
+      // Verify-first again: a confident re-read goes straight to the card; an
+      // unconfirmed one stays on the confirm screen with fresh matches.
+      const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
+      const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
+      let verified = false;
+      try {
+        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, userCurrency);
+        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
+      } catch { verified = false; }
+      if (verified) {
+        const intel = await generateWineIntel(confirmed, userCurrency);
+        setIntelligence(intel);
+        useLastIntelStore.getState().setLast(confirmed, intel);
+        setAwaitingConfirm(false);
+      } else {
+        setIntelligence(null);
+        confirmTriedRef.current = false;
+        setConfirmOptions([]);
+        setAwaitingConfirm(true);
+      }
+    } catch {
+      showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
+    } finally {
+      setReReading(false);
+    }
   }
   // A picked match keeps the read's vintage/size but takes the corrected
   // producer / name / region / style from the search result.
@@ -606,10 +665,15 @@ export default function LabelResultsScreen() {
         <Text style={styles.pageTitle}>Confirm this wine</Text>
 
         <View style={styles.header}>
-          {imageUri ? <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" /> : null}
+          {imageUri ? (
+            <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85}>
+              <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
+            </TouchableOpacity>
+          ) : null}
+          {/* Title info only: producer / wine name, then region · vintage. */}
           <View style={styles.headerText}>
-            <Text style={styles.producer}>{wine.producer}</Text>
-            {wine.wineName ? <Text style={styles.wineName}>{wine.wineName}</Text> : null}
+            <Text style={styles.producer}>{wine.producer || wine.wineName}</Text>
+            {wine.producer && wine.wineName ? <Text style={styles.wineName}>{wine.wineName}</Text> : null}
             {[wine.region, wine.vintage].filter(Boolean).length ? (
               <Text style={styles.detail}>{[wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
             ) : null}
@@ -624,12 +688,7 @@ export default function LabelResultsScreen() {
             </View>
           ) : (
             <>
-              <Text style={styles.confirmTitle}>{intelligence ? 'Which wine is this?' : 'Is this the wine?'}</Text>
-              <Text style={styles.confirmBody}>
-                {intelligence
-                  ? 'Not the right wine? Pick the correct one below and Vinster will rebuild the card for it — or keep the current one.'
-                  : 'Vinster couldn’t confirm this exact wine, so the label may have been misread. Pick the correct wine and Vinster will build the card for it — or confirm your read is right.'}
-              </Text>
+              <Text style={styles.confirmTitle}>Confirm which wine this is</Text>
               {confirmLoading ? (
                 <View style={styles.confirmLoading}>
                   <ActivityIndicator color={colors.gold} />
@@ -650,18 +709,32 @@ export default function LabelResultsScreen() {
                   </TouchableOpacity>
                 ))
               ) : (
-                <Text style={styles.confirmBody}>No close matches found — you can still get intel for your read.</Text>
+                <Text style={styles.confirmBody}>No close matches found — try another photo.</Text>
               )}
-              <TouchableOpacity style={styles.confirmPrimary} onPress={keepCurrentOrRead} activeOpacity={0.85}>
-                <Text style={styles.confirmPrimaryText}>
-                  {intelligence
-                    ? 'Keep the current wine'
-                    : (confirmOptions.length > 0 ? 'None of these — my read is correct' : 'My read is correct — get intel')}
-                </Text>
-              </TouchableOpacity>
+              {/* Keep the current wine only applies to a manual re-confirm over an
+                  existing card; the initial confirm offers a re-capture instead. */}
+              {intelligence ? (
+                <TouchableOpacity style={styles.confirmPrimary} onPress={keepCurrentOrRead} activeOpacity={0.85}>
+                  <Text style={styles.confirmPrimaryText}>Keep the current wine</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.confirmPrimary} onPress={recaptureFromConfirm} activeOpacity={0.85}>
+                  <Text style={styles.confirmPrimaryText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
+                </TouchableOpacity>
+              )}
             </>
           )}
         </View>
+
+        <LabelPhotoViewer visible={zoomOpen} uri={imageUri} onClose={() => setZoomOpen(false)} />
+
+        {/* Re-reading overlay while a re-capture is processed. */}
+        <Modal visible={reReading} transparent animationType="fade">
+          <View style={styles.reReadOverlay}>
+            <ActivityIndicator size="large" color={colors.gold} />
+            <Text style={styles.reReadText}>Finding this wine…</Text>
+          </View>
+        </Modal>
       </ScrollView>
     );
   }
@@ -1563,15 +1636,15 @@ export default function LabelResultsScreen() {
               When there's no live price at all, state it plainly. */}
           {intel.valueSource === 'wine-searcher' && intel.priceScope === 'all-vintage' ? (
             <Text style={styles.marketNote}>
-              No live market price for the {wine.vintage || 'listed'} vintage on Wine-Searcher — showing its global average across all vintages of this wine, in {userCurrency}.
+              Wine-Searcher average across all vintages — no price for this exact vintage
             </Text>
           ) : intel.valueSource === 'vinster' && intel.estimatedValue != null ? (
             <Text style={styles.marketNote}>
-              No market listing found on Wine-Searcher for this wine{intel.verified === false ? ', so the score and value are Vinster’s own estimates' : ' — this is Vinster’s own estimate'} from the producer, region and vintage, in {userCurrency}. Treat it as a guide, not a confirmed market price.
+              Value and score in this case are Vinster's estimate — no Wine-Searcher match for this exact wine exists
             </Text>
           ) : intel.estimatedValue == null ? (
             <Text style={styles.marketNote}>
-              No live market price on Wine-Searcher for this wine and vintage. Try checking the closest vintage, or the wine's global page on Wine-Searcher.
+              No Wine-Searcher price for this wine
             </Text>
           ) : null}
 
@@ -2240,7 +2313,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
   statSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  marketNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, marginTop: spacing.sm, marginBottom: spacing.xs },
+  marketNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, marginHorizontal: spacing.xl },
   estimatedByLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: 3 },
   estimatedValueGold: { color: colors.gold },
   // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
