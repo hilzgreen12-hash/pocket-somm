@@ -56,6 +56,10 @@ export interface WineRecommendation {
   valueNote?: string | null;
   // Top pick (#1) only — one brief synthesis sentence on why it leads.
   standoutNote?: string | null;
+  // Set only on an alternative-list generation when Vinster deliberately
+  // re-recommends an already-seen wine — the explicit "Vinster is recommending
+  // this wine again because of its outstanding …" endorsement. Null otherwise.
+  repeatNote?: string | null;
   // One brief tasting-only sentence — what the wine actually tastes
   // like, not why it was picked. No vintage notes, no producer info,
   // no scores. Surfaces on the compact card and on the share card so

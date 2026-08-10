@@ -64,6 +64,9 @@ const WineRecommendationSchema = z.object({
   // is an estimate.
   valueNote: z.string().nullable().optional(),
   standoutNote: z.string().nullable().optional(),
+  // Set only when an already-seen wine is deliberately re-recommended on an
+  // "alternative list" — the explicit "Vinster is recommending this again…" note.
+  repeatNote: z.string().nullable().optional(),
 });
 
 const RecommendationResponseSchema = z.object({

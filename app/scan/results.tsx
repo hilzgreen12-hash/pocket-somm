@@ -845,6 +845,14 @@ export default function ResultsScreen() {
                   </View>
                 )}
 
+                {/* Alternative-list re-recommendation: Vinster deliberately
+                    brought back a wine the diner already saw, and says why. */}
+                {wine.repeatNote ? (
+                  <View style={styles.repeatNotice}>
+                    <Text style={styles.repeatText}>★ {wine.repeatNote}</Text>
+                  </View>
+                ) : null}
+
                 {/* Top pick only — one gold synthesis line (no bullet),
                     sitting directly above the four parameter notes. */}
                 {i === 0 && standoutText ? (
@@ -1386,6 +1394,23 @@ const styles = StyleSheet.create({
   },
   outsideText: {
     fontFamily: fonts.bodyRegular,
+    fontSize: 16,
+    color: colors.gold,
+    lineHeight: 22,
+  },
+  // A deliberate re-recommendation on an alternative list — a positive
+  // endorsement, so a filled gold band rather than the muted "outside" notice.
+  repeatNotice: {
+    backgroundColor: 'rgba(212,176,96,0.18)',
+    borderLeftWidth: 3,
+    borderLeftColor: colors.gold,
+    borderRadius: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 8,
+    marginBottom: spacing.sm,
+  },
+  repeatText: {
+    fontFamily: fonts.bodySemibold,
     fontSize: 16,
     color: colors.gold,
     lineHeight: 22,
