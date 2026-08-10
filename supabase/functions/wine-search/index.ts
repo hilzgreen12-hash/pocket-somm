@@ -26,11 +26,21 @@ Deno.serve(async (req) => {
 
     const prompt = `A user is searching for a wine to add to their cellar. Their partial search text is: "${q}".
 
+The search text may be the PRODUCER, but very often it is a CUVÉE, a single-vineyard name, or a wine/bottling name — NOT the producer. Your job is to resolve each match to its REAL producer.
+
+CRITICAL — the "producer" field must always be the actual winery / estate that MAKES the wine, never an echo of the user's text when that text is really a cuvée or vineyard. Words like "Tenuta"/"Tenute", "Clos", "Château", "Domaine", "Quinta", "Weingut" can be part of a CUVÉE or single-vineyard name rather than the estate name — do not assume the typed words are the producer. Resolve the true producer and put the cuvée in "wineName".
+Worked examples:
+- "Tenuta Nuova" → producer "Casanova di Neri", wineName "Brunello di Montalcino Tenuta Nuova" (Tenuta Nuova is Casanova di Neri's cru — NOT a producer)
+- "Sassicaia" → producer "Tenuta San Guido", wineName "Sassicaia"
+- "Cristal" → producer "Louis Roederer", wineName "Cristal"
+- "Bin 707" → producer "Penfolds", wineName "Bin 707 Cabernet Sauvignon"
+If you genuinely cannot resolve the real producer for a match, still give your best real identification of the producer rather than repeating the search text as the producer; if nothing real matches at all, omit it.
+
 Return up to 8 REAL wines that best match this text, ordered most-likely first, as they would appear in a wine database. Prefer recognisable producers and their known bottlings. Use correct, consistent formatting and capitalisation (e.g. "Château Margaux", not "chateau margaux"). Do NOT invent wines — only real ones. If the text is too vague to match anything real, return an empty array.
 
 Return ONLY a JSON array (no markdown, no prose) of objects with exactly these keys:
-- "producer": the winery / estate / producer (e.g. "Penfolds")
-- "wineName": the specific cuvée / bottling name (e.g. "Grange", "Bin 707 Cabernet Sauvignon"), or null if the wine is sold simply under the producer name
+- "producer": the winery / estate / producer that actually makes the wine (e.g. "Penfolds", "Casanova di Neri") — NEVER a cuvée or vineyard name
+- "wineName": the specific cuvée / bottling name (e.g. "Grange", "Bin 707 Cabernet Sauvignon", "Brunello di Montalcino Tenuta Nuova"), or null if the wine is sold simply under the producer name
 - "region": the wine's region / appellation (e.g. "Barossa Valley, South Australia"), or null
 - "style": one of "Red", "White", "Rosé", "Sparkling", "Fortified", or null`;
 
