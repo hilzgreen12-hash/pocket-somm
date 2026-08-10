@@ -26,6 +26,11 @@ Deno.serve(async (req) => {
 
     const prompt = `A user is searching for a wine to add to their cellar. Their partial search text is: "${q}".
 
+The search text may contain SPELLING MISTAKES or OCR misreads (it can come from a scanned label). Correct obvious misspellings to the real wine the user most likely means, the way a wine merchant's search would — do not take the typo literally. Examples:
+- "Droil Chablis" → Domaine Droin, i.e. "Jean-Paul & Benoît Droin", Chablis (the "l" is a misread "n")
+- "Chateau Margeaux" → "Château Margaux"
+- "Penfols Grange" → "Penfolds", "Grange"
+
 The search text may be the PRODUCER, but very often it is a CUVÉE, a single-vineyard name, or a wine/bottling name — NOT the producer. Your job is to resolve each match to its REAL producer.
 
 CRITICAL — the "producer" field must always be the actual winery / estate that MAKES the wine, never an echo of the user's text when that text is really a cuvée or vineyard. Words like "Tenuta"/"Tenute", "Clos", "Château", "Domaine", "Quinta", "Weingut" can be part of a CUVÉE or single-vineyard name rather than the estate name — do not assume the typed words are the producer. Resolve the true producer and put the cuvée in "wineName".
