@@ -1522,10 +1522,17 @@ export default function LabelResultsScreen() {
             have no imageUri, so the text column simply fills the row. */}
         {imageUri ? <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" /> : null}
         <View style={styles.headerText}>
-          <Text style={styles.producer}>{wine.producer}</Text>
-          {wine.wineName && <Text style={styles.wineName}>{wine.wineName}</Text>}
-          <Text style={styles.detail}>{wine.region} · {wine.vintage}</Text>
-          {intel.grapeVariety && <Text style={styles.grape}>{intel.grapeVariety}</Text>}
+          {/* Full wine name on one line — matches the cellar wine card:
+              "Domaine Tempier Bandol Rosé 2010" — with region and grape below. */}
+          <Text style={styles.producer} numberOfLines={2}>
+            {(() => {
+              const sameName = wine.wineName?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+              const parts = sameName ? [wine.producer, wine.vintage] : [wine.producer, wine.wineName, wine.vintage];
+              return parts.filter(Boolean).join(' ');
+            })()}
+          </Text>
+          {wine.region ? <Text style={styles.detail}>{wine.region}</Text> : null}
+          {intel.grapeVariety ? <Text style={styles.grape}>{intel.grapeVariety}</Text> : null}
         </View>
       </View>
 
