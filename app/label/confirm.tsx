@@ -6,7 +6,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings, searchLabelImages, fetchWineCandidates, prepareImageBase64, scanLabel, type WineCandidate } from '../../src/api/label';
+import { generatePairings, searchLabelImages, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineNameKey } from '../../src/utils/wineIdentity';
@@ -137,6 +137,11 @@ export default function LabelConfirmScreen() {
   // Single-select tick in the "Which wine is this?" list (lineup-style rows).
   const [selectedCand, setSelectedCand] = useState<number | null>(null);
   const [loadingCandidates, setLoadingCandidates] = useState(false);
+  // Manual entry → confirm the approved wine-name match before building the card.
+  const [matchOpen, setMatchOpen] = useState(false);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [matchOptions, setMatchOptions] = useState<WineSearchResult[]>([]);
+  const pendingConfirmRef = useRef<WineDetailsComplete | null>(null);
   // Auto-open once when the scan came back low-confidence (undefined confidence
   // — older scan-label responses / non-scan flows — never auto-opens).
   const autoTriedRef = useRef(false);
@@ -277,6 +282,17 @@ export default function LabelConfirmScreen() {
       return;
     }
 
+    // Manual entry → confirm the approved wine-name match first, then build the
+    // card for the match the user picks (or their typed entry if nothing matches).
+    if (isManual) {
+      await confirmManualMatch(confirmed);
+      return;
+    }
+    await proceedIntel(confirmed);
+  }
+
+  // Generate the Wine Intel card for a confirmed identity and route to results.
+  async function proceedIntel(confirmed: WineDetailsComplete) {
     setLoading(true);
     try {
       // generateWineIntel queries Wine-Searcher first (real market price +
@@ -302,6 +318,45 @@ export default function LabelConfirmScreen() {
     } finally {
       setLoading(false);
     }
+  }
+
+  // Look up the approved wine-name match(es) for a manual entry and show a quick
+  // confirmation. No match found (or the lookup fails) → proceed with the typed
+  // entry rather than blocking.
+  async function confirmManualMatch(confirmed: WineDetailsComplete) {
+    pendingConfirmRef.current = confirmed;
+    setMatchLoading(true);
+    setMatchOptions([]);
+    setMatchOpen(true);
+    try {
+      const q = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim();
+      const list = q ? await searchWines(q) : [];
+      setMatchOptions(list);
+      if (list.length === 0) {
+        setMatchOpen(false);
+        await proceedIntel(confirmed);
+      }
+    } catch {
+      setMatchOpen(false);
+      await proceedIntel(confirmed);
+    } finally {
+      setMatchLoading(false);
+    }
+  }
+
+  // Pick an approved match: keep the typed vintage/size/quantity, take the
+  // canonical producer / name / region / style from the match.
+  function pickMatch(r: WineSearchResult) {
+    const base = pendingConfirmRef.current;
+    if (!base) return;
+    setMatchOpen(false);
+    void proceedIntel({
+      ...base,
+      producer: r.producer || base.producer,
+      wineName: r.wineName ?? base.wineName,
+      region: r.region ?? base.region,
+      style: r.style ?? base.style,
+    });
   }
 
   // Save the wine and drop it into the tapped slot (and the slots that follow,
@@ -587,11 +642,8 @@ export default function LabelConfirmScreen() {
             setStyle(r.style ?? '');
             if (!vintage.trim()) setHighlightVintage(true);
           }} />
-          <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
-            <Text style={styles.candLinkText}>
-              {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Typed it yourself? Tap to match your entry to an approved bottling.'}
-            </Text>
-          </TouchableOpacity>
+          {/* Gold header for the input fields, matching "Search your wine" above. */}
+          <Text style={styles.inputYourWineLabel}>Input Your Wine</Text>
         </>
       ) : null}
 
@@ -702,6 +754,36 @@ export default function LabelConfirmScreen() {
       {/* "Which wine is this?" — this producer's plausible bottlings, so the
           user can fix a misread cuvée before confirming. Opens automatically on
           a low-confidence scan; also reachable via the link above. */}
+      {/* Manual-entry match confirmation: pick the approved wine before Vinster
+          builds the intel card. */}
+      <Modal visible={matchOpen} transparent animationType="fade" onRequestClose={() => { if (!matchLoading) setMatchOpen(false); }}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            <Text style={styles.candTitle}>Confirm the wine</Text>
+            <Text style={styles.candBody}>Select the approved match for your entry so Vinster builds the card for the right wine.</Text>
+            {matchLoading ? (
+              <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Finding the match…</Text></View>
+            ) : (
+              <>
+                <ScrollView style={{ maxHeight: 320 }}>
+                  {matchOptions.map((r, i) => (
+                    <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.candRow} onPress={() => pickMatch(r)} activeOpacity={0.7}>
+                      <View style={styles.candRowText}>
+                        <Text style={styles.candItemName} numberOfLines={2}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region, vintage })}</Text>
+                        {r.style ? <Text style={styles.candItemMeta} numberOfLines={1}>{r.style}</Text> : null}
+                      </View>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                <TouchableOpacity style={styles.candCancel} onPress={() => { const b = pendingConfirmRef.current; setMatchOpen(false); if (b) void proceedIntel(b); }} activeOpacity={0.7}>
+                  <Text style={styles.candCancelText}>Use what I typed</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       <Modal visible={candidatesOpen} transparent animationType="fade" onRequestClose={() => setCandidatesOpen(false)}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
@@ -794,6 +876,17 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemibold,
     color: colors.textMuted,
     marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  // Gold section header above the manual input fields — mirrors the
+  // "Search your wine" label on WineSearchInput.
+  inputYourWineLabel: {
+    fontSize: 13,
+    fontFamily: fonts.bodySemibold,
+    color: colors.gold,
+    marginTop: spacing.md,
+    marginBottom: spacing.xs,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
