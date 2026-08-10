@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ActivityIndicator, StyleSheet } from 'react-native';
 import { searchWines, type WineSearchResult } from '../api/label';
+import { formatWineTitle } from '../utils/wineTitle';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -78,10 +79,10 @@ export function WineSearchInput({ onSelect }: Props) {
             results.map((r, i) => (
               <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
                 <Text style={styles.optionName} numberOfLines={2}>
-                  {[r.producer, r.wineName].filter(Boolean).join(' · ')}
+                  {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}
                 </Text>
-                {(r.region || r.style) ? (
-                  <Text style={styles.optionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text>
+                {r.style ? (
+                  <Text style={styles.optionMeta} numberOfLines={1}>{r.style}</Text>
                 ) : null}
               </TouchableOpacity>
             ))

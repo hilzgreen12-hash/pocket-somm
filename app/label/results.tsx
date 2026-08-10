@@ -26,8 +26,9 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
-import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
+import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, searchWines, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type WineSearchResult } from '../../src/api/label';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
+import { formatWineTitle } from '../../src/utils/wineTitle';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -85,7 +86,7 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh, backTo, via } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string }>();
+  const { context, fresh, backTo, via, confirm } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string }>();
   const isUploadFlow = via === 'upload';
   const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
@@ -149,6 +150,15 @@ export default function LabelResultsScreen() {
   const [producerRangeLoading, setProducerRangeLoading] = useState(false);
   const producerRangeTriedRef = useRef(false);
   const [sharing, setSharing] = useState(false);
+  // Confirm-first: when the scan couldn't be verified against Wine-Searcher,
+  // camera.tsx routes here with confirm=1 and no intel yet. We show typo/OCR-
+  // tolerant matches and only generate the card once the user picks or confirms
+  // their read — so Vinster never builds a card for a misread/fictional wine.
+  const [awaitingConfirm, setAwaitingConfirm] = useState(confirm === '1');
+  const [confirmOptions, setConfirmOptions] = useState<WineSearchResult[]>([]);
+  const [confirmLoading, setConfirmLoading] = useState(false);
+  const [confirmGenerating, setConfirmGenerating] = useState(false);
+  const confirmTriedRef = useRef(false);
 
   // "Upload Again" — re-pick a label and regenerate intel in place (the upload
   // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
@@ -224,11 +234,63 @@ export default function LabelResultsScreen() {
     })();
   }, [intelligence, isIntelOnlyFlow, wineDetailsConfirmed]);
 
+  // Confirm-first: load typo/OCR-tolerant matches for the unverified read so the
+  // user can pick the correct wine before Vinster builds the card.
+  useEffect(() => {
+    if (!awaitingConfirm || confirmTriedRef.current || !wineDetailsConfirmed) return;
+    confirmTriedRef.current = true;
+    const q = [wineDetailsConfirmed.producer, wineDetailsConfirmed.wineName].filter(Boolean).join(' ').trim();
+    if (!q) return; // nothing to search on — the panel still offers "read is correct"
+    setConfirmLoading(true);
+    (async () => {
+      try {
+        const list = await searchWines(q);
+        setConfirmOptions(list);
+      } catch { /* silent — the panel falls back to "my read is correct" */ }
+      finally { setConfirmLoading(false); }
+    })();
+  }, [awaitingConfirm, wineDetailsConfirmed]);
+
+  // Resolve the confirm step: generate the card for the chosen identity (a picked
+  // match, or the read as-is) and drop out of the confirm state.
+  async function resolveConfirm(identity: WineDetailsComplete) {
+    if (confirmGenerating) return;
+    setConfirmGenerating(true);
+    try {
+      const generated = await generateWineIntel(identity, userCurrency);
+      setWineDetailsConfirmed(identity);
+      setIntelligence(generated);
+      useLastIntelStore.getState().setLast(identity, generated);
+      // The user has already confirmed the wine — don't re-prompt the post-card
+      // "which wine is this?" disambiguation for the same result.
+      candidatesTriedRef.current = true;
+      setAwaitingConfirm(false);
+    } catch {
+      showAlert({ title: 'Could not get intel', body: 'Please try again.' });
+    } finally {
+      setConfirmGenerating(false);
+    }
+  }
+  // A picked match keeps the read's vintage/size but takes the corrected
+  // producer / name / region / style from the search result.
+  function pickConfirmOption(r: WineSearchResult) {
+    if (!wineDetailsConfirmed) return;
+    resolveConfirm({
+      ...wineDetailsConfirmed,
+      producer: r.producer || wineDetailsConfirmed.producer,
+      wineName: r.wineName ?? wineDetailsConfirmed.wineName,
+      region: r.region ?? wineDetailsConfirmed.region,
+      style: r.style ?? wineDetailsConfirmed.style,
+    });
+  }
+
   // "Where this wine sits in the producer's range" — fetched once on the Wine
-  // Intel card (the producer is the reliable anchor). Silent on failure.
+  // Intel card (the producer is the reliable anchor). Silent on failure. Held
+  // off during the confirm step so it runs for the CONFIRMED producer, not a
+  // misread one.
   useEffect(() => {
     if (producerRangeTriedRef.current) return;
-    if (!isIntelOnlyFlow || !wineDetailsConfirmed?.producer?.trim()) return;
+    if (!isIntelOnlyFlow || awaitingConfirm || !wineDetailsConfirmed?.producer?.trim()) return;
     producerRangeTriedRef.current = true;
     setProducerRangeLoading(true);
     (async () => {
@@ -243,7 +305,7 @@ export default function LabelResultsScreen() {
       } catch { /* silent — the section simply doesn't render */ }
       finally { setProducerRangeLoading(false); }
     })();
-  }, [isIntelOnlyFlow, wineDetailsConfirmed]);
+  }, [isIntelOnlyFlow, awaitingConfirm, wineDetailsConfirmed]);
 
   // Share the wine intel as plain text (identity + the three headline numbers +
   // Vinster's note), with the standard install footer. Mirrors the review-share
@@ -468,7 +530,9 @@ export default function LabelResultsScreen() {
   const savedLabelIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (libraryPromptShown.current) return;
-    if (!isIntelOnlyFlow || fresh !== '1') return;
+    // Hold off until the wine is confirmed — otherwise we'd save the misread
+    // label + null intel to the library before the user fixes the identity.
+    if (!isIntelOnlyFlow || fresh !== '1' || awaitingConfirm) return;
     const imageUri = useLabelStore.getState().imageUri;
     const w = useLabelStore.getState().wineDetailsConfirmed;
     if (!imageUri || !w) return;
@@ -490,10 +554,11 @@ export default function LabelResultsScreen() {
       } catch { /* silent — saving the label to the library is best-effort */ }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntelOnlyFlow, fresh]);
+  }, [isIntelOnlyFlow, fresh, awaitingConfirm]);
 
-  // The Add flow legitimately has no intel; every other flow needs it.
-  if (!wineDetailsConfirmed || (!intelligence && !isAddFlow)) {
+  // The Add flow legitimately has no intel; the confirm-first step deliberately
+  // has none yet; every other flow needs it.
+  if (!wineDetailsConfirmed || (!intelligence && !isAddFlow && !awaitingConfirm)) {
     return (
       <View style={styles.center}>
         <Text style={styles.errorText}>No results available.</Text>
@@ -506,6 +571,78 @@ export default function LabelResultsScreen() {
 
   const wine = wineDetailsConfirmed;
   const intel = intelligence ?? EMPTY_INTEL;
+
+  // Confirm-first screen: shown when a scan couldn't be verified and no card has
+  // been generated yet. The user picks the correct wine (typo/OCR-corrected) or
+  // confirms their read; either way resolveConfirm() then builds the card.
+  if (awaitingConfirm && !intelligence) {
+    return (
+      <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
+        <TouchableOpacity
+          style={styles.backRow}
+          onPress={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
+        >
+          <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
+        </TouchableOpacity>
+
+        <Text style={styles.pageTitle}>Confirm this wine</Text>
+
+        <View style={styles.header}>
+          {imageUri ? <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" /> : null}
+          <View style={styles.headerText}>
+            <Text style={styles.producer}>{wine.producer}</Text>
+            {wine.wineName ? <Text style={styles.wineName}>{wine.wineName}</Text> : null}
+            {[wine.region, wine.vintage].filter(Boolean).length ? (
+              <Text style={styles.detail}>{[wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          {confirmGenerating ? (
+            <View style={styles.confirmLoading}>
+              <ActivityIndicator color={colors.gold} />
+              <Text style={styles.confirmLoadingText}>Building your wine intel…</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.confirmTitle}>Is this the wine?</Text>
+              <Text style={styles.confirmBody}>
+                Vinster couldn’t confirm this exact wine, so the label may have been misread. Pick the correct wine and Vinster will build the card for it — or confirm your read is right.
+              </Text>
+              {confirmLoading ? (
+                <View style={styles.confirmLoading}>
+                  <ActivityIndicator color={colors.gold} />
+                  <Text style={styles.confirmLoadingText}>Finding close matches…</Text>
+                </View>
+              ) : confirmOptions.length > 0 ? (
+                confirmOptions.map((r, i) => (
+                  <TouchableOpacity
+                    key={`${r.producer}-${r.wineName ?? ''}-${i}`}
+                    style={styles.confirmRow}
+                    onPress={() => pickConfirmOption(r)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmRowName} numberOfLines={2}>
+                      {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region, vintage: wine.vintage })}
+                    </Text>
+                    {r.style ? <Text style={styles.confirmRowMeta}>{r.style}</Text> : null}
+                  </TouchableOpacity>
+                ))
+              ) : (
+                <Text style={styles.confirmBody}>No close matches found — you can still get intel for your read.</Text>
+              )}
+              <TouchableOpacity style={styles.confirmPrimary} onPress={() => resolveConfirm(wine)} activeOpacity={0.85}>
+                <Text style={styles.confirmPrimaryText}>
+                  {confirmOptions.length > 0 ? 'None of these — my read is correct' : 'My read is correct — get intel'}
+                </Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      </ScrollView>
+    );
+  }
 
   function computeSlots(
     startRow: number, startCol: number,
@@ -1334,8 +1471,8 @@ export default function LabelResultsScreen() {
                       <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candRow} onPress={() => setSelectedCand(on ? null : i)} activeOpacity={0.7}>
                         <Text style={[styles.candCheck, on && styles.candCheckOn]}>{on ? '☑' : '☐'}</Text>
                         <View style={styles.candRowText}>
-                          <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
-                          {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
+                          <Text style={styles.candItemName} numberOfLines={2}>{formatWineTitle({ producer: wine.producer, wineName: c.wineName, region: c.region, vintage: wine.vintage })}</Text>
+                          {c.style ? <Text style={styles.candItemMeta} numberOfLines={1}>{c.style}</Text> : null}
                         </View>
                       </TouchableOpacity>
                     );
@@ -2055,6 +2192,16 @@ const styles = StyleSheet.create({
   rangeBandThis: { color: colors.gold },
   rangeTier: { fontSize: 10, fontFamily: fonts.bodyRegular, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 },
   rangeSummary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, marginTop: spacing.md },
+  // Confirm-first panel (shown before a card when the scan couldn't be verified).
+  confirmTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.xs },
+  confirmBody: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.textMuted, lineHeight: 21, marginBottom: spacing.md },
+  confirmLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.md },
+  confirmLoadingText: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  confirmRow: { paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  confirmRowName: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.text },
+  confirmRowMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  confirmPrimary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },

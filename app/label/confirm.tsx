@@ -10,6 +10,7 @@ import { generatePairings, searchLabelImages, fetchWineCandidates, prepareImageB
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineNameKey } from '../../src/utils/wineIdentity';
+import { formatWineTitle } from '../../src/utils/wineTitle';
 import { File, Paths } from 'expo-file-system';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -719,8 +720,8 @@ export default function LabelConfirmScreen() {
                       <TouchableOpacity key={`${c.wineName}-${i}`} style={styles.candRow} onPress={() => setSelectedCand(on ? null : i)} activeOpacity={0.7}>
                         <Text style={[styles.candCheck, on && styles.candCheckOn]}>{on ? '☑' : '☐'}</Text>
                         <View style={styles.candRowText}>
-                          <Text style={styles.candItemName} numberOfLines={2}>{c.wineName}</Text>
-                          {(c.region || c.style) ? <Text style={styles.candItemMeta} numberOfLines={1}>{[c.region, c.style].filter(Boolean).join(' · ')}</Text> : null}
+                          <Text style={styles.candItemName} numberOfLines={2}>{formatWineTitle({ producer, wineName: c.wineName, region: c.region, vintage })}</Text>
+                          {c.style ? <Text style={styles.candItemMeta} numberOfLines={1}>{c.style}</Text> : null}
                         </View>
                       </TouchableOpacity>
                     );

@@ -10,7 +10,7 @@ import { CameraOverlay, type FrameRect } from '../../src/components/scan/CameraO
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
-import { generateWineIntel } from '../../src/services/pricing';
+import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
@@ -133,7 +133,28 @@ export default function LabelCameraScreen() {
     setWineDetailsConfirmed(confirmed);
     setStatus('Finding this wine…');
     try {
-      const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
+      const currency = preferences?.defaultCurrency ?? 'GBP';
+      // Verify the read against Wine-Searcher (cheap, no AI) BEFORE committing to
+      // a card. A confident match goes straight to the intel card; an unconfirmed
+      // read (often a misspelt producer or a missed cuvée) routes to the confirm
+      // step first, so the user fixes the identity before Vinster builds a card
+      // for the wrong — or fictional — wine.
+      const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
+      const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
+      let verified = false;
+      try {
+        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
+        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
+      } catch { verified = false; }
+
+      if (!verified) {
+        // Don't generate a guessed card yet — let the user confirm the wine first.
+        setIntelligence(null);
+        router.replace(`/label/results${contextQuery}&fresh=1&confirm=1`);
+        return;
+      }
+
+      const intel = await generateWineIntel(confirmed, currency);
       setIntelligence(intel);
       useLastIntelStore.getState().setLast(confirmed, intel);
       router.replace(`/label/results${contextQuery}&fresh=1`);
