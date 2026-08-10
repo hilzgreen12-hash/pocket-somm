@@ -121,24 +121,16 @@ const UNAVAILABLE = {
 };
 
 // Build the Wine-Searcher request URL. vintageValue === null queries across ALL
-// vintages by dropping the vintage param entirely (the URL template carries one
-// by default).
+// vintages: per the Wine-Searcher API, "any vintage" is the 2-character code
+// `NV` — NOT an omitted vintage param. DROPPING the param (the old behaviour)
+// made WS return a no-match, so the exact-miss -> all-vintage-average broaden
+// silently produced nothing; sending `vintage=NV` returns the real aggregate.
 function buildWsUrl(name: string, vintageValue: string | null, cur: string): string {
-  const base = WINE_SEARCHER_URL
+  return WINE_SEARCHER_URL
     .replace('{KEY}', WINE_SEARCHER_API_KEY)
     .replace('{NAME}', encodeURIComponent(name))
-    .replace('{VINTAGE}', encodeURIComponent(vintageValue ?? ''))
+    .replace('{VINTAGE}', encodeURIComponent(vintageValue ?? 'NV'))
     .replace('{CURRENCY}', encodeURIComponent(cur));
-  if (vintageValue === null) {
-    try {
-      const u = new URL(base);
-      u.searchParams.delete('vintage');
-      return u.toString();
-    } catch {
-      return base;
-    }
-  }
-  return base;
 }
 
 // One Wine-Searcher lookup. Returns parsed (native-USD) pricing on a hit

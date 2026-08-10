@@ -12,7 +12,7 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
-import { generateWineIntel } from '../../src/services/pricing';
+import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -142,7 +142,27 @@ export default function ScanTab() {
         quantity: details.quantity ?? 1,
       };
       setWineDetailsConfirmed(confirmed);
-      const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
+      // Verify the read against Wine-Searcher (cheap, no AI) before committing to
+      // a card — same confirm-first guard as the camera scan. Confident matches
+      // go straight to the card; an unconfirmed read (misspelt producer, missed
+      // cuvée) routes to the confirm step first so the user fixes the identity.
+      const currency = preferences?.defaultCurrency ?? 'GBP';
+      const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
+      const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
+      let verified = false;
+      try {
+        const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
+        verified = pricing.source === 'wine-searcher' && pricing.matched !== false;
+      } catch { verified = false; }
+
+      if (!verified) {
+        setIntelligence(null);
+        setScanningLabel(false);
+        router.push(`/label/results?context=intel&via=upload&fresh=1&confirm=1&backTo=${backTo}`);
+        return;
+      }
+
+      const intel = await generateWineIntel(confirmed, currency);
       setIntelligence(intel);
       useLastIntelStore.getState().setLast(confirmed, intel);
       setScanningLabel(false);
