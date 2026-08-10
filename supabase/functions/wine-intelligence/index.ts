@@ -63,27 +63,37 @@ INSIDER NOTE — this is the "sommelier best friend" line, the payoff of the who
 
 Return only the raw JSON — no markdown, no explanation.`;
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: prompt }],
-    });
-
-    const text = response.content[0]?.type === 'text' ? response.content[0].text : '';
-    const match = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim().match(/\{[\s\S]*\}/);
-    if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
-
-    // Parse-then-restringify so the response is guaranteed to be valid JSON.
-    // The previous form called JSON.parse only as a truthiness guard and sent
-    // back the raw match[0] string — if Claude's output was truncated by
-    // max_tokens the parse threw and the outer catch returned a generic 500
-    // that surfaced to users as "Could not refresh / wine-intelligence: …".
-    const parsed = JSON.parse(match[0]);
-    if (!parsed) {
-      return new Response(JSON.stringify({ error: 'empty' }), {
-        headers: { 'Content-Type': 'application/json' },
+    // Up to 2 attempts. Claude is non-deterministic, so an occasional response
+    // that leads with a non-text block, wraps the JSON in prose/markdown, or gets
+    // cut off — any of which fails the {…} match or JSON.parse — is usually clean
+    // on a retry. Without this, a single bad generation threw straight to the
+    // outer catch and surfaced to the user as a 500 "Something went wrong": the
+    // intel card's intermittent failure. Mirrors the retry the recommend function
+    // already uses. (find() the text block rather than assuming content[0].)
+    async function attempt(): Promise<any> {
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1500,
+        messages: [{ role: 'user', content: prompt }],
       });
+      const textBlock = response.content.find((b) => b.type === 'text');
+      const text = textBlock?.type === 'text' ? textBlock.text : '';
+      const match = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim().match(/\{[\s\S]*\}/);
+      if (!match) throw new Error(`No JSON found: ${text.slice(0, 200)}`);
+      return JSON.parse(match[0]); // throws on truncated / invalid JSON
     }
+
+    let parsed: any = null;
+    let lastErr: unknown = null;
+    for (let i = 1; i <= 2; i++) {
+      try { parsed = await attempt(); break; }
+      catch (e) {
+        lastErr = e;
+        console.error(`wine-intelligence attempt ${i} failed:`, e instanceof Error ? e.message : e);
+      }
+    }
+    if (!parsed) throw lastErr ?? new Error('wine-intelligence: no result after retries');
+
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' },
     });
