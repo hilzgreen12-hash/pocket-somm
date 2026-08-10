@@ -52,14 +52,11 @@ export default function CameraScreen() {
     if (!photo?.uri) return;
 
     let uri = photo.uri;
+    let dims = { width: photo.width ?? 0, height: photo.height ?? 0 };
 
-    // Normalise orientation only — ImageManipulator re-encodes with the EXIF
-    // rotation baked in, so the preview and OCR always see the photo upright.
-    // We deliberately DON'T crop to the guide frame any more: the screen→pixel
-    // crop math occasionally picked the wrong branch (when the reported
-    // dimensions came back landscape) and produced a sideways, part-cropped
-    // image — and for a wine LIST you want the whole thing, not the framed
-    // portion. The frame stays as a visual aid for holding the phone steady.
+    // Normalise orientation — ImageManipulator re-encodes with the EXIF rotation
+    // baked in, so the preview and OCR always see the photo upright, and gives us
+    // the true upright pixel dimensions to crop against.
     try {
       const normalised = await ImageManipulator.manipulateAsync(
         uri,
@@ -67,8 +64,46 @@ export default function CameraScreen() {
         { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
       );
       uri = normalised.uri;
+      dims = { width: normalised.width, height: normalised.height };
     } catch (e) {
       console.warn('[Camera] orientation normalise failed, using raw photo:', e);
+    }
+
+    // Center-crop to the on-screen preview's aspect ratio. The live CameraView
+    // fills the whole window (cover), but takePictureAsync saves the sensor's
+    // FULL, wider field of view — so the captured photo shows more than the user
+    // framed, leaving the wine list small ("zoomed out") and giving OCR a smaller
+    // target. Cropping to the window aspect makes the saved photo match what was
+    // framed (WYSIWYG) and hands the read a bigger list. We crop to the full
+    // preview area (NOT the tight guide frame, whose screen→pixel math was the
+    // old buggy path) and use the post-normalise upright dims so orientation
+    // can't flip the branch. Best-effort — any issue falls back to the full photo.
+    try {
+      const { width: winW, height: winH } = Dimensions.get('window');
+      const targetAspect = winW / winH;
+      const { width: pw, height: ph } = dims;
+      if (pw > 0 && ph > 0 && targetAspect > 0) {
+        let cropW = pw, cropH = ph, originX = 0, originY = 0;
+        if (pw / ph > targetAspect) {
+          // Photo wider than the framed preview → trim the hidden sides.
+          cropW = Math.round(ph * targetAspect);
+          originX = Math.round((pw - cropW) / 2);
+        } else {
+          // Photo taller than the preview → trim top/bottom.
+          cropH = Math.round(pw / targetAspect);
+          originY = Math.round((ph - cropH) / 2);
+        }
+        if (cropW >= 8 && cropH >= 8 && cropW <= pw && cropH <= ph) {
+          const cropped = await ImageManipulator.manipulateAsync(
+            uri,
+            [{ crop: { originX, originY, width: cropW, height: cropH } }],
+            { compress: 1, format: ImageManipulator.SaveFormat.JPEG }
+          );
+          uri = cropped.uri;
+        }
+      }
+    } catch (e) {
+      console.warn('[Camera] framing crop failed, using full photo:', e);
     }
 
     setImage(uri);
