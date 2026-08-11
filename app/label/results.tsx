@@ -641,6 +641,80 @@ export default function LabelResultsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isIntelOnlyFlow, fresh, awaitingConfirm]);
 
+  // Duplicate-detection memos. These MUST run before any early-return (the guard
+  // below, and the confirm-first early-return) — otherwise toggling awaitingConfirm
+  // changes the number of hooks React sees between renders and crashes the screen
+  // ("Rendered more/fewer hooks than during the previous render").
+  //
+  // Find an existing active cellar row for the same wine identity. Match on
+  // producer + wine_name + vintage (case-insensitive). Falls back to a SWAPPED
+  // match (producer↔wine_name) so OCR flips on boutique wines like Mullineux
+  // Schist still merge into the same entry. Avoids duplicate entries and avoids
+  // regenerating wine-intelligence (non-deterministic drinking windows).
+  const matchingExisting = useMemo(() => {
+    if (!wineDetailsConfirmed || !wines) return null;
+    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+    const wantedProducer = norm(wineDetailsConfirmed.producer);
+    const wantedName = norm(wineDetailsConfirmed.wineName || wineDetailsConfirmed.producer);
+    const wantedVintage = (wineDetailsConfirmed.vintage ?? '').trim();
+    const exact = wines.find((w) =>
+      norm(w.producer) === wantedProducer &&
+      norm(w.wine_name) === wantedName &&
+      (w.vintage ?? '').trim() === wantedVintage
+    );
+    if (exact) return exact;
+    // Swapped match — OCR flipped producer and wine name on a previous scan.
+    if (wantedProducer && wantedName && wantedProducer !== wantedName) {
+      const swapped = wines.find((w) =>
+        norm(w.producer) === wantedName &&
+        norm(w.wine_name) === wantedProducer &&
+        (w.vintage ?? '').trim() === wantedVintage
+      );
+      if (swapped) return swapped;
+    }
+    return null;
+  }, [wineDetailsConfirmed, wines]);
+
+  // Fuzzy-duplicate check — a partial hand-typed name vs a fuller scanned one
+  // (e.g. "Pavillon Rouge 2009" vs "Chateau Margaux Pavillon Rouge 2009"). Same
+  // vintage required; token-subset match on combined producer + wine_name, with
+  // the shorter set needing ≥2 tokens so single grape words don't false-positive.
+  const fuzzyExisting = useMemo(() => {
+    if (!wineDetailsConfirmed || !wines) return null;
+    if (matchingExisting) return null; // exact / swapped wins
+    const wantedVintage = (wineDetailsConfirmed.vintage ?? '').trim();
+    if (!wantedVintage) return null;
+
+    function tokenise(s: string): Set<string> {
+      return new Set(
+        s.toLowerCase()
+          .replace(/[^a-z0-9 ]/g, ' ')
+          .split(/\s+/)
+          .filter((t) => t.length >= 3),
+      );
+    }
+    const wantedCombined = `${wineDetailsConfirmed.producer ?? ''} ${wineDetailsConfirmed.wineName ?? ''}`;
+    const wantedTokens = tokenise(wantedCombined);
+    if (wantedTokens.size < 2) return null;
+
+    for (const w of wines) {
+      if ((w.vintage ?? '').trim() !== wantedVintage) continue;
+      const cellarCombined = `${w.producer ?? ''} ${w.wine_name ?? ''}`;
+      const cellarTokens = tokenise(cellarCombined);
+      if (cellarTokens.size < 2) continue;
+      const [small, big] =
+        wantedTokens.size <= cellarTokens.size
+          ? [wantedTokens, cellarTokens]
+          : [cellarTokens, wantedTokens];
+      let allIn = true;
+      for (const t of small) {
+        if (!big.has(t)) { allIn = false; break; }
+      }
+      if (allIn) return w;
+    }
+    return null;
+  }, [wineDetailsConfirmed, wines, matchingExisting]);
+
   // The Add flow legitimately has no intel; the confirm-first step deliberately
   // has none yet; every other flow needs it.
   if (!wineDetailsConfirmed || (!intelligence && !isAddFlow && !awaitingConfirm)) {
@@ -870,88 +944,6 @@ export default function LabelResultsScreen() {
       setSaving(false);
     }
   }
-
-  // Find an existing active cellar row for the same wine identity. Match
-  // on producer + wine_name + vintage (case-insensitive). Falls back to a
-  // SWAPPED match (producer↔wine_name) so OCR flips on boutique wines like
-  // Mullineux Schist still merge into the same entry.
-  // Avoids duplicate entries and avoids regenerating wine-intelligence
-  // (non-deterministic, can produce slightly different drinking windows).
-  const matchingExisting = useMemo(() => {
-    if (!wineDetailsConfirmed || !wines) return null;
-    const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-    const wantedProducer = norm(wineDetailsConfirmed.producer);
-    const wantedName = norm(wineDetailsConfirmed.wineName || wineDetailsConfirmed.producer);
-    const wantedVintage = (wineDetailsConfirmed.vintage ?? '').trim();
-    const exact = wines.find((w) =>
-      norm(w.producer) === wantedProducer &&
-      norm(w.wine_name) === wantedName &&
-      (w.vintage ?? '').trim() === wantedVintage
-    );
-    if (exact) return exact;
-    // Swapped match — OCR flipped producer and wine name on a previous scan.
-    if (wantedProducer && wantedName && wantedProducer !== wantedName) {
-      const swapped = wines.find((w) =>
-        norm(w.producer) === wantedName &&
-        norm(w.wine_name) === wantedProducer &&
-        (w.vintage ?? '').trim() === wantedVintage
-      );
-      if (swapped) return swapped;
-    }
-    return null;
-  }, [wineDetailsConfirmed, wines]);
-
-  // Fuzzy-duplicate check. Catches the case where the user adds a wine
-  // by hand using a partial label and the cellar already holds the
-  // same bottle under its full, more precise name (e.g. "Pavillon
-  // Rouge 2009" entered manually vs an existing "Chateau Margaux
-  // Pavillon Rouge 2009" from a scan). Same vintage is required so
-  // we don't confuse different years of the same wine.
-  //
-  // The match runs across the COMBINED producer + wine_name string on
-  // both sides, tokenised to ≥3-character alphanumerics. One side's
-  // token set must be a subset of the other (i.e. every token in the
-  // shorter set appears in the longer set), AND that shorter set must
-  // be at least 2 tokens so we don't false-positive on single-word
-  // grape names like "Riesling".
-  const fuzzyExisting = useMemo(() => {
-    if (!wineDetailsConfirmed || !wines) return null;
-    if (matchingExisting) return null; // exact / swapped wins
-    const wantedVintage = (wineDetailsConfirmed.vintage ?? '').trim();
-    if (!wantedVintage) return null;
-
-    function tokenise(s: string): Set<string> {
-      return new Set(
-        s.toLowerCase()
-          .replace(/[^a-z0-9 ]/g, ' ')
-          .split(/\s+/)
-          .filter((t) => t.length >= 3),
-      );
-    }
-    const wantedCombined = `${wineDetailsConfirmed.producer ?? ''} ${wineDetailsConfirmed.wineName ?? ''}`;
-    const wantedTokens = tokenise(wantedCombined);
-    if (wantedTokens.size < 2) return null;
-
-    for (const w of wines) {
-      if ((w.vintage ?? '').trim() !== wantedVintage) continue;
-      const cellarCombined = `${w.producer ?? ''} ${w.wine_name ?? ''}`;
-      const cellarTokens = tokenise(cellarCombined);
-      if (cellarTokens.size < 2) continue;
-      // Subset check in the direction of the smaller set so the
-      // shorter (manual) entry counts as a match against the longer
-      // (scanned) entry, and vice-versa.
-      const [small, big] =
-        wantedTokens.size <= cellarTokens.size
-          ? [wantedTokens, cellarTokens]
-          : [cellarTokens, wantedTokens];
-      let allIn = true;
-      for (const t of small) {
-        if (!big.has(t)) { allIn = false; break; }
-      }
-      if (allIn) return w;
-    }
-    return null;
-  }, [wineDetailsConfirmed, wines, matchingExisting]);
 
   // Single place that handles all post-save routing — used by both the new-
   // entry path and the merge-with-existing path. NOTE: don't call
