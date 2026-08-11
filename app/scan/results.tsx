@@ -143,6 +143,9 @@ export default function ResultsScreen() {
   // new city immediately (autoSave.data isn't refetched on a review save).
   const [cityOverride, setCityOverride] = useState<string | null>(null);
   const [editingCity, setEditingCity] = useState(false);
+  // Inline city-edit buffer. Seeded from the current stamp city when the user
+  // taps the location, so an edit starts from Vinster's GPS guess rather than blank.
+  const [cityInput, setCityInput] = useState('');
   const qc = useQueryClient();
   const shareCardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
@@ -319,7 +322,11 @@ export default function ResultsScreen() {
       try {
         const { error } = await supabase
           .from('scan_sessions')
-          .update({ restaurant_name: trimmed || null })
+          .update({
+            restaurant_name: trimmed || null,
+            // Carry through a city the user edited before this row existed.
+            ...(cityOverride !== null ? { city: cityOverride } : {}),
+          })
           .eq('id', liveSessionId);
         if (error) throw error;
         qc.invalidateQueries({ queryKey: ['scan-archive'] });
@@ -356,6 +363,63 @@ export default function ResultsScreen() {
     } finally {
       inFlightSaveRef.current = null;
     }
+  }
+
+  // Persist an inline edit to the location/city on the results stamp. Vinster
+  // pre-fills the city from GPS, which is usually right but can read a
+  // neighbouring town; this lets the user correct it without leaving the screen.
+  // Updates the stamp immediately (cityOverride) and writes through to the
+  // scan_sessions row if one already backs this result. If no row exists yet,
+  // the override holds in memory and handleSaveRestaurant persists it when the
+  // row is created.
+  async function handleSaveCity(value: string): Promise<void> {
+    setEditingCity(false);
+    const trimmed = value.trim();
+    setCityOverride(trimmed || null);
+    const liveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+    if (!liveSessionId) return;
+    try {
+      const { error } = await supabase
+        .from('scan_sessions')
+        .update({ city: trimmed || null })
+        .eq('id', liveSessionId);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Editable city node for the restaurant stamp line. Read-only tappable text
+  // by default (keeps the pin · name · city look); flips to an inline input on
+  // tap. Rendered as a sibling of the name so tapping the city edits the city
+  // while tapping the name still opens the restaurant review.
+  function renderCity() {
+    if (editingCity) {
+      return (
+        <TextInput
+          style={styles.cityLineInput}
+          value={cityInput}
+          onChangeText={setCityInput}
+          placeholder="City"
+          placeholderTextColor="rgba(255,255,255,0.45)"
+          autoFocus
+          onBlur={() => handleSaveCity(cityInput)}
+          onSubmitEditing={() => handleSaveCity(cityInput)}
+          returnKeyType="done"
+        />
+      );
+    }
+    if (!stampCity) return null;
+    return (
+      <TouchableOpacity
+        onPress={() => { setCityInput(stampCity ?? ''); setEditingCity(true); }}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.restaurantLineCity}>· {stampCity}</Text>
+      </TouchableOpacity>
+    );
   }
 
   // Save any restaurant name in place, then open the restaurant review form
@@ -718,8 +782,9 @@ export default function ResultsScreen() {
           <TouchableOpacity style={styles.restaurantLine} onPress={openRestaurantReview} activeOpacity={0.7}>
             <Text style={styles.restaurantPin}>📍</Text>
             <Text style={styles.restaurantLineText} numberOfLines={1}>
-              {restaurantName}{stampCity ? ` · ${stampCity}` : ''}
+              {restaurantName}
             </Text>
+            {renderCity()}
           </TouchableOpacity>
         ) : editingRestaurant ? (
           <View style={styles.restaurantLine}>
@@ -735,22 +800,21 @@ export default function ResultsScreen() {
               onSubmitEditing={() => handleSaveRestaurant()}
               returnKeyType="done"
             />
-            {stampCity ? <Text style={styles.restaurantLineCity}> · {stampCity}</Text> : null}
+            {renderCity()}
           </View>
         ) : (
-          <TouchableOpacity
-            style={styles.restaurantLine}
-            onPress={() => setEditingRestaurant(true)}
-            activeOpacity={0.7}
-          >
+          <View style={styles.restaurantLine}>
             <Text style={styles.restaurantPin}>📍</Text>
-            <Text
-              style={[styles.restaurantLineText, !restaurantName && styles.restaurantLinePlaceholder]}
-              numberOfLines={1}
-            >
-              {restaurantName || 'Tap to add restaurant'}{stampCity ? ` · ${stampCity}` : ''}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditingRestaurant(true)} activeOpacity={0.7} style={styles.restaurantLineNameTap}>
+              <Text
+                style={[styles.restaurantLineText, !restaurantName && styles.restaurantLinePlaceholder]}
+                numberOfLines={1}
+              >
+                {restaurantName || 'Tap to add restaurant'}
+              </Text>
+            </TouchableOpacity>
+            {renderCity()}
+          </View>
         )}
 
         <Text style={styles.heading}>Vinster Recommends</Text>
@@ -1176,6 +1240,21 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyRegular,
     fontSize: 16,
     color: colors.text,
+  },
+  // Wraps the restaurant name so it can shrink while the (separately tappable)
+  // city stays visible on the same line.
+  restaurantLineNameTap: {
+    flexShrink: 1,
+  },
+  // Inline city editor — mirrors restaurantLineInput but narrower.
+  cityLineInput: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 16,
+    color: colors.text,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.30)',
+    minWidth: 90,
+    paddingVertical: 2,
   },
   heading: {
     fontFamily: fonts.headingSemibold,

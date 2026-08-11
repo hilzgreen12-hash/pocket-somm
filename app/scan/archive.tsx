@@ -418,7 +418,7 @@ export default function MyLabelsScreen() {
     if (!reviewId) {
       showAlert({
         title: 'Delete from Library?',
-        body: `${header}\n\nThis removes the scan from your Label Scan Library. Your cellar wine stays put.`,
+        body: `${header}\n\nAny reviews or bottles in your cellar/archive will stay put.`,
         buttons: [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Delete from Library', style: 'destructive', onPress: () => remove.mutate(label.id) },

@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
+import { saveChosenWine, saveManualChosenWine, fetchChosenWines, updateChosenWine, deleteChosenWine, patchChosenWine, type SaveChosenWineInput, type ManualSaveChosenWineInput, type UpdateChosenWineInput } from '../api/chosenWines';
 import { syncReviewToCellar } from '../services/reviewSync';
 import type { ChosenWine } from '../types/wine';
 
@@ -84,5 +84,15 @@ export function useChosenWines() {
     },
   });
 
-  return { chosenWines, isLoading, save, update, saveManual, remove };
+  // Hide a restaurant bottle-pick from the "Awaiting Review" list on Your Wine
+  // Reviews without deleting it — the row stays on the restaurant card in Your
+  // Restaurants. A soft flag, not a delete (see migration 087).
+  const dismissAwaiting = useMutation({
+    mutationFn: (id: string) => patchChosenWine(id, { review_dismissed: true }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+    },
+  });
+
+  return { chosenWines, isLoading, save, update, saveManual, remove, dismissAwaiting };
 }

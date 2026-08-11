@@ -1,6 +1,6 @@
 import { fetchWinePrice } from '../api/wine-searcher';
 import { getWineIntelligence } from '../api/label';
-import type { PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
+import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
 export async function fetchPricing(
   wineName: string,
@@ -39,6 +39,11 @@ export interface WineValuation {
   drinkingWindowTo: number | null;
   drinkingWindowStatus: string;
   grapeVariety: string | null;
+  // Genuine grape ambiguity (same producer + name sold as more than one wine,
+  // e.g. a Syrah AND a Chenin). When true the caller should confirm the variant
+  // with the user before trusting the card. See WineIntelligence.grapeAmbiguous.
+  grapeAmbiguous: boolean;
+  grapeOptions: GrapeVariant[];
   tastingNotes: string | null;
   // Canonical identity anchor when Wine-Searcher matched (null otherwise).
   wsWineId?: string | null;
@@ -82,6 +87,8 @@ export async function valueWine(
     drinkingWindowTo: intel.drinkingWindowTo ?? null,
     drinkingWindowStatus: intel.drinkingWindowStatus ?? 'unknown',
     grapeVariety: intel.grapeVariety ?? null,
+    grapeAmbiguous: intel.grapeAmbiguous ?? false,
+    grapeOptions: intel.grapeOptions ?? [],
     tastingNotes: intel.tastingNotes ?? null,
     wsWineId: wsMatched ? (pricing.wsWineId ?? null) : null,
     wsWineName: wsMatched ? (pricing.wsWineName ?? null) : null,

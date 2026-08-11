@@ -27,11 +27,14 @@ Deno.serve(async (req) => {
     }
 
     const { producer, wineName, query: rawQuery } = await req.json().catch(() => ({}));
-    const query = (rawQuery ?? `${producer ?? ''} ${wineName ?? ''}`.trim());
+    // A raw `query` is a complete free-text search (e.g. a restaurant photo
+    // search) — use it verbatim. The producer+wineName path is a wine label, so
+    // we nudge it toward a bottle/label shot with a "wine bottle" suffix.
+    const hasRawQuery = typeof rawQuery === 'string' && rawQuery.trim().length > 0;
+    const query = hasRawQuery ? rawQuery.trim() : `${producer ?? ''} ${wineName ?? ''}`.trim();
     if (!query) return json({ images: [] }, 200);
 
-    // "wine bottle" nudges results toward a bottle/label shot.
-    const q = `${query} wine bottle`;
+    const q = hasRawQuery ? query : `${query} wine bottle`;
     const res = await fetch('https://google.serper.dev/images', {
       method: 'POST',
       headers: { 'X-API-KEY': SERPER_API_KEY, 'Content-Type': 'application/json' },

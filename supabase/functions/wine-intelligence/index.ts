@@ -4,7 +4,7 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 
 Deno.serve(async (req) => {
   try {
-    const { producer, region, wineName, vintage, style, colour, currency, wsScore } = await req.json();
+    const { producer, region, wineName, vintage, style, colour, grape, currency, wsScore } = await req.json();
     // Optional Wine-Searcher aggregated critic score (0–100). When present it
     // becomes the "north star" anchor for criticScore — the Vinster score is
     // grounded in real market data but Claude may nudge it with good reason.
@@ -15,9 +15,12 @@ Deno.serve(async (req) => {
       ? style.trim()
       : (typeof colour === 'string' && colour.trim() ? colour.trim() : null);
 
+    const grapeValue: string | null = (typeof grape === 'string' && grape.trim()) ? grape.trim() : null;
+
     const vintageStr = vintage === 'NV' ? 'Non-Vintage' : vintage;
     const wineNameStr = wineName ? `\n- Wine Name: ${wineName}` : '';
     const styleStr = styleValue ? `\n- Style: ${styleValue} (confirmed by user — use this to disambiguate if producer makes multiple wines of this name)` : '';
+    const grapeStr = grapeValue ? `\n- Grape: ${grapeValue} (confirmed — this pins which wine it is when the producer sells more than one under this name; treat the grape as known)` : '';
     const wsScoreStr = wsScoreNum != null ? `\n- Wine-Searcher aggregated critic score: ${wsScoreNum}/100` : '';
     const currentYear = new Date().getFullYear();
     const cur = (currency ?? 'GBP').toString().toUpperCase();
@@ -34,7 +37,7 @@ Deno.serve(async (req) => {
 Provide intelligence on this wine:
 - Producer: ${producer}
 - Region: ${region}${wineNameStr}
-- Vintage: ${vintageStr}${styleStr}${wsScoreStr}
+- Vintage: ${vintageStr}${styleStr}${grapeStr}${wsScoreStr}
 
 Return ONLY a valid JSON object with exactly this structure:
 {
@@ -45,6 +48,8 @@ Return ONLY a valid JSON object with exactly this structure:
   "drinkingWindowTo": <4-digit year by which it should ideally be drunk, or null>,
   "drinkingWindowStatus": <"too_young" | "approaching" | "peak" | "declining">,
   "grapeVariety": <primary grape variety or blend, e.g. "Pinot Noir" or "Grenache/Syrah/Mourvèdre">,
+  "grapeAmbiguous": <boolean. Set true ONLY when this EXACT producer + wine name is genuinely released as MORE THAN ONE distinct wine under the identical name, so the grape truly cannot be known from the name alone — e.g. a single-vineyard bottling sold as BOTH a red (Syrah) and a white (Chenin Blanc), or an appellation name like Hermitage that exists as both a red and a white under the same producer+name. This is FALSE for the overwhelming majority of wines: a wine with one grape/blend (even if the grape isn't printed on the label, like most Bordeaux, Burgundy, Rioja) is NOT ambiguous — you simply state its grape in grapeVariety. Also set FALSE whenever a Style or Grape was provided in the fields above (the user has already pinned which wine it is). When in doubt, false.>,
+  "grapeOptions": <when grapeAmbiguous is true, an array of the distinct wines sharing this name, each {"grape": <variety>, "style": <"Red"|"White"|"Rosé"|"Sparkling"|"Fortified">}. Otherwise an empty array []. Maximum 4 entries — only real, distinct wines this producer makes under this exact name.>,
   "tastingNotes": <2-3 sentences describing the wine's character in an elegant sommelier style>,
   "insiderNote": <EXACTLY 2 sentences (3 only if genuinely needed), no more — tight and punchy. Genuine "in the know" insight about THIS producer and vintage — the kind of thing a sommelier friend tells you over the table, NOT a textbook definition. Focus on: how good this vintage actually was for this wine's region/style, and crucially HOW THIS PRODUCER OR WINE PERFORMED RELATIVE TO ITS PEERS that year (who excelled, who had an off year), plus any genuinely notable context (a declared vs undeclared year, a legendary or difficult vintage, a turning point for the estate). Be specific, confident and comparative where you truly know it — e.g. "1985 was a benchmark year for Vintage Port: Graham's and Fonseca declared and made age-worthy wines, while Taylor's was comparatively restrained that vintage." Do NOT repeat the tasting notes, drinking window or score. Do NOT hedge with generic filler ("a lovely wine from a good region"). If you genuinely lack specific vintage/producer knowledge, give the most specific REAL context you can; return null ONLY if you can say nothing specific and true>,
   "estimatedValue": <integer single best per-bottle retail estimate in ${cur} from typical independent merchants in the relevant market. ALWAYS provide your best estimate — never return null for any wine with a recognisable producer or region. When the wine is rare, obscure or from a small producer and you have little price data, still estimate from the producer's quality tier and reputation, the region and the vintage, and signal the uncertainty via valueConfidence:"low" (do NOT withhold a number). Account for vintage scarcity, producer reputation, and current market trends. Return null ONLY in the genuinely rare case you cannot identify the wine at all. Return the number only — no currency symbol, no decimals>,
@@ -93,6 +98,24 @@ Return only the raw JSON — no markdown, no explanation.`;
       }
     }
     if (!parsed) throw lastErr ?? new Error('wine-intelligence: no result after retries');
+
+    // Normalise the ambiguity signal so the client can gate on it safely.
+    parsed.grapeAmbiguous = parsed.grapeAmbiguous === true;
+    parsed.grapeOptions = (parsed.grapeAmbiguous && Array.isArray(parsed.grapeOptions))
+      ? parsed.grapeOptions
+          .map((o: any) => ({
+            grape: typeof o?.grape === 'string' ? o.grape.trim() : '',
+            style: typeof o?.style === 'string' && o.style.trim() ? o.style.trim() : null,
+          }))
+          .filter((o: any) => o.grape)
+          .slice(0, 4)
+      : [];
+    // A pinned style or grape means the wine is already resolved; and fewer than
+    // two real options isn't an actionable choice — treat both as unambiguous.
+    if (styleValue || grapeValue || parsed.grapeOptions.length < 2) {
+      parsed.grapeAmbiguous = false;
+      parsed.grapeOptions = [];
+    }
 
     return new Response(JSON.stringify(parsed), {
       headers: { 'Content-Type': 'application/json' },

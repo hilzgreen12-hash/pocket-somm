@@ -122,6 +122,13 @@ export interface CriticScore {
   scale: string;
 }
 
+// One distinct wine among several a producer sells under the SAME name — the
+// choices offered when a grape is genuinely ambiguous (see grapeAmbiguous).
+export interface GrapeVariant {
+  grape: string;
+  style: string | null; // Red / White / Rosé / Sparkling / Fortified, when known
+}
+
 export interface WineIntelligence {
   // Average / consensus critic score (out of 100). Shown as "Avg Critic
   // Score" on the Wine Intel card, with the per-critic breakdown below.
@@ -137,6 +144,16 @@ export interface WineIntelligence {
   drinkingWindowTo: number | null;
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
   grapeVariety: string | null;
+  // Genuine grape ambiguity: this exact producer + wine name is released as more
+  // than one wine under the identical name (e.g. a single-vineyard sold as both a
+  // Syrah and a Chenin Blanc, or a Hermitage name existing as both red and white),
+  // so the grape can't be known from the name alone. When true, the card can't be
+  // accurate until the user picks a variant — the intel screens gate on this.
+  // False for the overwhelming majority of wines, and whenever a Style/grape was
+  // supplied to pin it.
+  grapeAmbiguous?: boolean;
+  // The distinct wines sharing this name, offered to the user when grapeAmbiguous.
+  grapeOptions?: GrapeVariant[] | null;
   tastingNotes: string;
   // "In the know" sommelier commentary — how this vintage fared for the wine's
   // region/style and how this producer stacked up against its peers that year.
@@ -452,6 +469,11 @@ export interface ChosenWine {
   // Review-level wish-list flag (migration 045) — set via "Add to Wish
   // List" on the review card; drives the Wish List Wines filter.
   wishlist: boolean;
+  // Dismissed from the "Awaiting Review" list on Your Wine Reviews (migration
+  // 087). The row is NOT deleted — it still appears on the restaurant's card in
+  // Your Restaurants; this just hides it from the awaiting-review nag. Optional
+  // so cached rows written before the column existed read as undefined (falsy).
+  review_dismissed?: boolean;
   // Purchase price + AI estimated value (migration 044) — mirror the
   // equivalent cellar_wines columns so the review card can show them.
   purchase_price: number | null;

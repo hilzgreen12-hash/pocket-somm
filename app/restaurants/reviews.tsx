@@ -9,6 +9,9 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { useAuth } from '../../src/hooks/useAuth';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { createManualRestaurantSession } from '../../src/api/restaurantSessions';
+import { useAttachRestaurantPhoto } from '../../src/hooks/useAttachRestaurantPhoto';
+import { LabelThumb } from '../../src/components/LabelThumb';
+import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -193,6 +196,7 @@ export default function RestaurantReviewsScreen() {
     });
   }
   const { chosenWines, remove } = useChosenWines();
+  const attachRestaurantPhoto = useAttachRestaurantPhoto();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
   // True when the review form was auto-opened via the ?openSession deep link
@@ -259,6 +263,7 @@ export default function RestaurantReviewsScreen() {
         ratingValue: null,
         ratingAtmosphere: null,
         isFavourite: false,
+        restaurantPhotoPath: null,
       });
     } catch (err) {
       showAlert({ title: 'Could not start a review', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -672,10 +677,26 @@ export default function RestaurantReviewsScreen() {
               const hasAnyRating = item.ratingFood != null || item.ratingService != null || item.ratingWineList != null || item.ratingOverall != null || item.ratingAtmosphere != null || item.ratingValue != null;
               return (
                 <View key={item.id} style={styles.cardCompact}>
-                  {/* Restaurant header — tap to edit the restaurant review.
-                      Wines below have their own tap targets so the user can
-                      jump straight into a wine review. */}
+                  {/* Photo of the night on the left, then the restaurant header
+                      (tap to edit the review; wines are managed in the edit
+                      modal). The thumbnail has its own tap → add/change photo. */}
+                  <View style={styles.headerWithThumb}>
+                    {item.restaurantPhotoPath ? (
+                      <TouchableOpacity
+                        onPress={() => attachRestaurantPhoto.present({ sessionId: item.id, restaurant: item.restaurantName, city: item.city, hasPhoto: true })}
+                        activeOpacity={0.8}
+                      >
+                        <LabelThumb path={item.restaurantPhotoPath} fallbackText={item.restaurantName} style={styles.restaurantThumb} radius={5} frame={3} />
+                      </TouchableOpacity>
+                    ) : (
+                      <AddPhotoThumb
+                        style={styles.restaurantThumb}
+                        radius={5}
+                        onPress={() => attachRestaurantPhoto.present({ sessionId: item.id, restaurant: item.restaurantName, city: item.city })}
+                      />
+                    )}
                   <TouchableOpacity
+                    style={styles.headerTextCol}
                     onPress={() => { setEditing(item); setEditingFromLink(false); }}
                     onLongPress={() => handleLongPressRestaurant(item)}
                     delayLongPress={400}
@@ -732,6 +753,7 @@ export default function RestaurantReviewsScreen() {
                       </View>
                     )}
                   </TouchableOpacity>
+                  </View>
                 </View>
               );
             })
@@ -957,6 +979,10 @@ const styles = StyleSheet.create({
   rightCluster: { alignItems: 'flex-end', gap: spacing.xs },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   restaurantName: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Photo-of-the-night thumbnail + header, side by side.
+  headerWithThumb: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  headerTextCol: { flex: 1 },
+  restaurantThumb: { width: 54, height: 54 },
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   notePreview: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
   ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },

@@ -79,6 +79,33 @@ export async function uploadLabelImageFromUrl(userId: string, imageUrl: string, 
   return uploadLabelImage(userId, file.uri, wineId);
 }
 
+// Upload a restaurant-visit "photo of the night" to
+// wine-labels/{userId}/restaurants/{sessionId}.jpg and return the stored path
+// to persist in scan_sessions.restaurant_photo_path. Its own {userId}/restaurants/
+// prefix keeps it clear of label ({userId}/{wineId}.jpg), location and library
+// photos. Displays via labelSignedUrl / useLabelImageUrl / LabelThumb unchanged.
+export async function uploadRestaurantPhoto(userId: string, localUri: string, sessionId: string): Promise<string> {
+  const base64 = await processToBase64(localUri);
+  const bytes = base64ToBytes(base64);
+  const path = `${userId}/restaurants/${sessionId}.jpg`;
+  const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
+    contentType: 'image/jpeg',
+    upsert: true,
+  });
+  if (error) throw error;
+  primeCachedLabel(path, bytes);
+  return path;
+}
+
+// Download a web image (from "Find Online" restaurant search) to a local file,
+// then run it through the same resize/compress/upload pipeline as a user photo.
+export async function uploadRestaurantPhotoFromUrl(userId: string, imageUrl: string, sessionId: string): Promise<string> {
+  const dest = new File(Paths.cache, `fetched-restaurant-${sessionId}.img`);
+  try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
+  const file = await File.downloadFileAsync(imageUrl, dest);
+  return uploadRestaurantPhoto(userId, file.uri, sessionId);
+}
+
 // Upload a home-storage-location's portrait photo to
 // wine-labels/{userId}/locations/{locationId}.jpg and return the stored path
 // to persist in storage_locations.photo_path. Same bucket as labels, so it

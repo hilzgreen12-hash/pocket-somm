@@ -152,6 +152,15 @@ export async function searchLabelImages(input: { producer?: string | null; wineN
   return data.images ?? [];
 }
 
+// Reuses the same Serper image-search edge function, but passes a full free-text
+// `query` (which the function searches as-is — no "wine bottle" suffix) so we get
+// photos of the restaurant itself rather than bottles.
+export async function searchRestaurantImages(input: { restaurant?: string | null; city?: string | null }): Promise<LabelImageCandidate[]> {
+  const q = [input.restaurant, input.city, 'restaurant'].map((s) => (s ?? '').trim()).filter(Boolean).join(' ');
+  const data = await invokeFunction('label-image-search', { query: q }) as { images?: LabelImageCandidate[] };
+  return data.images ?? [];
+}
+
 export async function getWineIntelligence(
   wine: WineDetailsComplete,
   currency: string = 'GBP',
@@ -165,6 +174,7 @@ export async function getWineIntelligence(
     wineName: wine.wineName,
     vintage: wine.vintage,
     style: wine.style ?? null,
+    grape: wine.grape ?? null,
     currency,
     wsScore: wsScore ?? null,
   }) as WineIntelligence;

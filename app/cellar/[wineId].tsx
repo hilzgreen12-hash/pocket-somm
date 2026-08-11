@@ -44,7 +44,7 @@ import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
-import type { WineDetailsComplete, CellarWine } from '../../src/types/wine';
+import type { WineDetailsComplete, CellarWine, GrapeVariant } from '../../src/types/wine';
 
 function todayISO() {
   return new Date().toISOString().split('T')[0];
@@ -222,6 +222,15 @@ export default function CellarWineDetail() {
   const [grapeDraft, setGrapeDraft] = useState('');
   const [savingTitle, setSavingTitle] = useState(false);
 
+  // "Confirm this wine" grape prompt. Fires before the intel card is committed
+  // when the wine is genuinely ambiguous — the same producer + name sold as more
+  // than one wine (e.g. a Mullineux single-vineyard as both a Syrah and a Chenin
+  // Blanc). The card can't be accurate until Vinster knows the variety, so we ask
+  // rather than guess. Never fires for ordinary wines (grape known/inferable).
+  const [grapeConfirmOpen, setGrapeConfirmOpen] = useState(false);
+  const [grapeVariants, setGrapeVariants] = useState<GrapeVariant[]>([]);
+  const [selectedVariant, setSelectedVariant] = useState<number | null>(null);
+
   // Auto-generate intel whenever a wine card opens missing its key intel — the
   // critic score or market value. A critic score is core intel; the user must
   // never have to tap "Generate" for it. A fully-bare wine (nothing yet) shows
@@ -247,7 +256,12 @@ export default function CellarWineDetail() {
       // card refreshes in the background.
       if (fullyBare) setAutoGenerating(true);
       handleRefreshEstimate()
-        .then((produced) => { if (fullyBare) setAutoGenFailed(!produced); })
+        .then((produced) => {
+          // 'ambiguous' → handleRefreshEstimate opened the confirm prompt; the
+          // card fills once the user picks a variant, so it's not a failure.
+          if (produced === 'ambiguous') return;
+          if (fullyBare) setAutoGenFailed(!produced);
+        })
         .finally(() => setAutoGenerating(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -875,10 +889,21 @@ export default function CellarWineDetail() {
     }
   }
 
-  async function handleRefreshEstimate(): Promise<boolean> {
+  // opts pins a specific variant (from the "confirm this wine" grape prompt) and
+  // can force past the ambiguity gate. When called straight from a button onPress
+  // the press event lands in `opts` harmlessly — all its fields read undefined.
+  async function handleRefreshEstimate(opts?: {
+    wineNameForQuery?: string;
+    style?: string | null;
+    grape?: string | null;
+    force?: boolean;
+  }): Promise<boolean | 'ambiguous'> {
     if (!wine) return false;
     setRefreshingValue(true);
     const currency = preferences?.defaultCurrency ?? 'GBP';
+    // A grape is "pinned" when the user just picked a variant, or the wine
+    // already carries one — either way we trust it and skip the ambiguity gate.
+    const pinnedGrape = opts?.grape ?? wine.grape_variety ?? null;
     try {
       // valueWine() tries Wine-Searcher first (real market price + ws-score as
       // the critic-score anchor), falling back to the Claude estimate when
@@ -887,9 +912,24 @@ export default function CellarWineDetail() {
       const v = await valueWine({
         producer: wine.producer ?? '',
         region: wine.region ?? '',
-        wineName: wine.wine_name || null,
+        // A picked variant appends its grape to the query so Wine-Searcher and
+        // the intel resolve the RIGHT wine (e.g. the Syrah, not the Chenin).
+        wineName: opts?.wineNameForQuery ?? (wine.wine_name || null),
         vintage: wine.vintage || 'NV',
+        style: opts?.style ?? wine.style ?? null,
+        grape: pinnedGrape,
       } as any, currency);
+
+      // Genuine grape ambiguity (same name = two different wines) and nothing
+      // pins which one yet: don't commit a guessed card — ask the user first.
+      // The intel card really can't be accurate until Vinster knows the variety.
+      if (!opts?.force && v.grapeAmbiguous && !pinnedGrape && (v.grapeOptions?.length ?? 0) >= 2) {
+        setGrapeVariants(v.grapeOptions);
+        setSelectedVariant(null);
+        setGrapeConfirmOpen(true);
+        return 'ambiguous';
+      }
+
       await updateWine.mutateAsync({
         id: wine.id,
         updates: {
@@ -916,8 +956,10 @@ export default function CellarWineDetail() {
           drinking_window_from: v.drinkingWindowFrom ?? wine.drinking_window_from ?? null,
           drinking_window_to: v.drinkingWindowTo ?? wine.drinking_window_to ?? null,
           drinking_window_status: v.drinkingWindowStatus ?? wine.drinking_window_status ?? 'unknown',
-          // Only fill grape if we don't already have one (don't clobber a user edit).
-          grape_variety: wine.grape_variety ?? v.grapeVariety ?? null,
+          // Pin the confirmed variant's grape (and style) when the user picked
+          // one; otherwise keep any existing grape, else Vinster's best guess.
+          grape_variety: pinnedGrape ?? v.grapeVariety ?? null,
+          ...(opts?.style ? { style: opts.style } : {}),
           // Seed an estimated purchase price from the market value when the user
           // hasn't entered one — never clobber a real price they've recorded.
           purchase_price: wine.purchase_price ?? v.estimatedValue ?? null,
@@ -933,6 +975,35 @@ export default function CellarWineDetail() {
       return false;
     } finally {
       setRefreshingValue(false);
+    }
+  }
+
+  // User picked a variant in the "confirm this wine" prompt — regenerate intel
+  // pinned to that grape (behind the full-screen tracker, so the card only ever
+  // reappears finished and accurate).
+  async function confirmGrapeVariant() {
+    if (selectedVariant == null || !wine) return;
+    const opt = grapeVariants[selectedVariant];
+    if (!opt) return;
+    setGrapeConfirmOpen(false);
+    setAutoGenerating(true);
+    const wineNameForQuery = [wine.wine_name, opt.grape].filter(Boolean).join(' ');
+    try {
+      await handleRefreshEstimate({ wineNameForQuery, style: opt.style, grape: opt.grape });
+    } finally {
+      setAutoGenerating(false);
+    }
+  }
+
+  // "None of these" escape hatch — the user must always get a card, so generate
+  // with Vinster's best-guess grape rather than blocking on the prompt.
+  async function generateWithoutGrapeConfirm() {
+    setGrapeConfirmOpen(false);
+    setAutoGenerating(true);
+    try {
+      await handleRefreshEstimate({ force: true });
+    } finally {
+      setAutoGenerating(false);
     }
   }
 
@@ -1323,6 +1394,46 @@ export default function CellarWineDetail() {
         onClose={() => setPhotoViewerOpen(false)}
       />
 
+      {/* "Confirm this wine" — shown when the same producer + name is sold as
+          more than one wine (e.g. a Syrah AND a Chenin). Picking the variant
+          pins the grape so the intel card is accurate. Mirrors the scan flow's
+          confirm popup. */}
+      <Modal visible={grapeConfirmOpen} transparent animationType="fade" onRequestClose={() => setGrapeConfirmOpen(false)}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            <Text style={styles.candTitle}>Confirm this wine</Text>
+            <Text style={styles.candBody}>
+              {[wine.producer, wine.wine_name].filter(Boolean).join(' ')} is made as more than one wine under this name. Which is this? Vinster needs the grape to get the score, value and notes right.
+            </Text>
+            <View>
+              {grapeVariants.map((gv, i) => {
+                const on = selectedVariant === i;
+                return (
+                  <TouchableOpacity key={`${gv.grape}-${i}`} style={styles.candRow} onPress={() => setSelectedVariant(on ? null : i)} activeOpacity={0.7}>
+                    <Text style={[styles.candCheck, on && styles.candCheckOn]}>{on ? '☑' : '☐'}</Text>
+                    <View style={styles.candRowText}>
+                      <Text style={styles.candItemName} numberOfLines={2}>{gv.grape}</Text>
+                      {gv.style ? <Text style={styles.candItemMeta} numberOfLines={1}>{gv.style}</Text> : null}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TouchableOpacity
+              style={[styles.candConfirmBtn, selectedVariant == null && styles.candConfirmBtnDisabled]}
+              onPress={confirmGrapeVariant}
+              disabled={selectedVariant == null}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.candConfirmText}>Confirm Wine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.candCancel} onPress={generateWithoutGrapeConfirm}>
+              <Text style={styles.candCancelText}>Not sure — let Vinster choose</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Edit the title — name + grape variety. */}
       <Modal visible={titleEditOpen} transparent animationType="fade" onRequestClose={() => setTitleEditOpen(false)}>
         <KeyboardAvoidingView behavior="padding" style={styles.titleEditOverlay}>
@@ -1388,7 +1499,7 @@ export default function CellarWineDetail() {
           ) : refreshingValue ? (
             <Text style={[styles.statValue, styles.statValueMuted]}>Generating…</Text>
           ) : (
-            <TouchableOpacity onPress={handleRefreshEstimate} disabled={refreshingValue} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => handleRefreshEstimate()} disabled={refreshingValue} activeOpacity={0.7}>
               <Text style={styles.statAction}>+ Generate</Text>
             </TouchableOpacity>
           )}
@@ -1442,7 +1553,7 @@ export default function CellarWineDetail() {
         )}
         <TouchableOpacity
           style={styles.statCell}
-          onPress={handleRefreshEstimate}
+          onPress={() => handleRefreshEstimate()}
           activeOpacity={refreshingValue ? 1 : 0.7}
           disabled={refreshingValue}
         >
@@ -1695,7 +1806,7 @@ export default function CellarWineDetail() {
               <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
             ) : (
               // No AI note yet (e.g. an imported wine) — offer to generate it.
-              <TouchableOpacity style={styles.generateNoteBtn} onPress={handleRefreshEstimate} activeOpacity={0.7}>
+              <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
                 <Text style={styles.generateNoteBtnText}>Generate</Text>
               </TouchableOpacity>
             )
@@ -2087,6 +2198,22 @@ const styles = StyleSheet.create({
   region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4 },
   // Inter — grape caption
   grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold },
+  // "Confirm this wine" grape prompt — mirrors the scan flow's confirm popup.
+  candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
+  candTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  candBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },
+  candRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  candCheck: { fontSize: 24, color: colors.textMuted, width: 28, textAlign: 'center' },
+  candCheckOn: { color: colors.gold },
+  candRowText: { flex: 1 },
+  candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
+  candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  candConfirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  candConfirmBtnDisabled: { opacity: 0.4 },
+  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
+  candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // Non-standard bottle format line under the grape (e.g. "150cl bottle").
   bottleFormat: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 2 },
   tastingBlock: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },

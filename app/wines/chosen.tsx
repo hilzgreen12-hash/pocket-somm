@@ -153,7 +153,7 @@ type ReviewItem =
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
-  const { chosenWines, isLoading, remove } = useChosenWines();
+  const { chosenWines, isLoading, remove, dismissAwaiting } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
   const { wines: archivedWines } = useArchive();
   const qc = useQueryClient();
@@ -306,7 +306,22 @@ export default function ChosenWinesScreen() {
   const reviewedIdentityKeys = new Set<string>();
   for (const w of chosenWines) if (chosenHasReview(w)) reviewedIdentityKeys.add(idKey(w));
   for (const w of cellarReviews) reviewedIdentityKeys.add(idKey(w));
-  const awaitingReview = chosenWines.filter((w) => !chosenHasReview(w) && !reviewedIdentityKeys.has(idKey(w)));
+  const awaitingReview = chosenWines.filter((w) => !chosenHasReview(w) && !reviewedIdentityKeys.has(idKey(w)) && !w.review_dismissed);
+
+  // Long-press an awaiting-review pick to remove it from this list. It's a soft
+  // dismiss, not a delete — the wine stays on its restaurant's card in Your
+  // Restaurants (both screens read the same row).
+  function promptDismissAwaiting(w: ChosenWine) {
+    const label = wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'this wine');
+    showAlert({
+      title: 'Remove from Awaiting Review?',
+      body: `${label}\n\nThis clears it from Awaiting Review here. The wine stays on its restaurant in Your Restaurants.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Remove', style: 'destructive', onPress: () => dismissAwaiting.mutate(w.id) },
+      ],
+    });
+  }
 
   // One-time, dismissible prompt nudging the user to review a waiting pick.
   const { session } = useAuth();
@@ -1521,6 +1536,8 @@ export default function ChosenWinesScreen() {
                     key={`await-${w.id}`}
                     style={styles.awaitingRow}
                     onPress={() => setEditingWine(w)}
+                    onLongPress={() => promptDismissAwaiting(w)}
+                    delayLongPress={350}
                     activeOpacity={0.7}
                   >
                     <View style={styles.cardCompactOuter}>

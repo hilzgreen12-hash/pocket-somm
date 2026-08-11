@@ -15,6 +15,16 @@ export async function createManualRestaurantSession(userId: string): Promise<str
   return data.id as string;
 }
 
+// Attach (or replace / clear) the restaurant-visit photo path on a scan_sessions
+// row. Path lives in the wine-labels bucket; null clears it. Migration 088.
+export async function setRestaurantPhotoPath(sessionId: string, path: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('scan_sessions')
+    .update({ restaurant_photo_path: path })
+    .eq('id', sessionId);
+  if (error) throw error;
+}
+
 // Used to clean up a blank manual row if the user cancels the review without
 // saving anything (so empty drafts don't linger in Your Restaurants).
 export async function deleteScanSession(id: string): Promise<void> {
