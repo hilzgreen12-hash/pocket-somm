@@ -1522,7 +1522,11 @@ export default function LabelResultsScreen() {
         {/* Wine-card layout: the scanned/uploaded label photo on the left, the
             wine identity (name · region · grape) on its right. Manual entries
             have no imageUri, so the text column simply fills the row. */}
-        {imageUri ? <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" /> : null}
+        {imageUri ? (
+          <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85}>
+            <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
+          </TouchableOpacity>
+        ) : null}
         <View style={styles.headerText}>
           {/* Full wine name on one line — matches the cellar wine card:
               "Domaine Tempier Bandol Rosé 2010" — with region and grape below. */}
@@ -1537,6 +1541,9 @@ export default function LabelResultsScreen() {
           {intel.grapeVariety ? <Text style={styles.grape}>{intel.grapeVariety}</Text> : null}
         </View>
       </View>
+
+      {/* Tap the label photo to view it full-screen with pinch/zoom + pan. */}
+      <LabelPhotoViewer visible={zoomOpen} uri={imageUri} onClose={() => setZoomOpen(false)} />
 
       {/* Always-available correction: even a confident card can be the wrong wine
           (OCR can swap in a different real producer, which verifies and never
