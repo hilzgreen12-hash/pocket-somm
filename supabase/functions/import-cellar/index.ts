@@ -7,7 +7,11 @@ Deno.serve(async (req) => {
     const { base64Image } = await req.json();
 
     const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      // Sonnet, not Haiku: photo/screenshot cellar imports write straight into
+      // the user's permanent cellar, so a misread vintage/producer is a sticky
+      // error. Matches the Sonnet-5 text/PDF import path (parse-cellar-import) —
+      // same task shouldn't get a weaker read just because it's an image.
+      model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [
         {

@@ -97,7 +97,12 @@ Deno.serve(async (req) => {
     // on the client. Same pattern used by the recommend function.
     async function attemptOCR(attempt: number): Promise<any> {
       const response = await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
+        // Sonnet, not Haiku: this is the core wine-list read that feeds the
+        // (Sonnet) recommend engine. Haiku misread producers/vintages, fumbled
+        // colour-from-section-heading, and picked glass prices over bottle —
+        // garbage in for every downstream recommendation. Sonnet is the read
+        // quality the rest of the pipeline assumes.
+        model: 'claude-sonnet-4-6',
         // Headroom for the JSON output. At 8192 a normal-length list sits right
         // on the ceiling: it truncates → invalid JSON → the retry below fires a
         // second full call → the two together blow past the function's time
