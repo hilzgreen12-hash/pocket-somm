@@ -1518,41 +1518,45 @@ export default function LabelResultsScreen() {
 
       <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
-      <View style={styles.header}>
-        {/* Wine-card layout: the scanned/uploaded label photo on the left, the
-            wine identity (name · region · grape) on its right. Manual entries
-            have no imageUri, so the text column simply fills the row. */}
-        {imageUri ? (
-          <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85}>
-            <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
+      {/* Header block: the wine-card row + the "Not this wine?" link both sit
+          ABOVE the separator line (the block's bottom border). */}
+      <View style={styles.headerBlock}>
+        <View style={styles.header}>
+          {/* Wine-card layout: the scanned/uploaded label photo on the left, the
+              wine identity (name · region · grape) on its right. Manual entries
+              have no imageUri, so the text column simply fills the row. */}
+          {imageUri ? (
+            <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85}>
+              <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
+            </TouchableOpacity>
+          ) : null}
+          <View style={styles.headerText}>
+            {/* Full wine name — always written in full, wrapping to up to three
+                lines rather than truncating. */}
+            <Text style={styles.producer} numberOfLines={3}>
+              {(() => {
+                const sameName = wine.wineName?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
+                const parts = sameName ? [wine.producer, wine.vintage] : [wine.producer, wine.wineName, wine.vintage];
+                return parts.filter(Boolean).join(' ');
+              })()}
+            </Text>
+            {wine.region ? <Text style={styles.detail}>{wine.region}</Text> : null}
+            {intel.grapeVariety ? <Text style={styles.grape}>{intel.grapeVariety}</Text> : null}
+          </View>
+        </View>
+
+        {/* Always-available correction — centred, above the separator line. Even
+            a confident card can be the wrong wine (OCR can swap in a different
+            real producer, which verifies and never auto-prompts). */}
+        {isIntelOnlyFlow && intelligence ? (
+          <TouchableOpacity onPress={openManualConfirm} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} style={styles.wrongWineLink} activeOpacity={0.7}>
+            <Text style={styles.wrongWineText}>Not this wine? Search for the right one</Text>
           </TouchableOpacity>
         ) : null}
-        <View style={styles.headerText}>
-          {/* Full wine name on one line — matches the cellar wine card:
-              "Domaine Tempier Bandol Rosé 2010" — with region and grape below. */}
-          <Text style={styles.producer} numberOfLines={2}>
-            {(() => {
-              const sameName = wine.wineName?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-              const parts = sameName ? [wine.producer, wine.vintage] : [wine.producer, wine.wineName, wine.vintage];
-              return parts.filter(Boolean).join(' ');
-            })()}
-          </Text>
-          {wine.region ? <Text style={styles.detail}>{wine.region}</Text> : null}
-          {intel.grapeVariety ? <Text style={styles.grape}>{intel.grapeVariety}</Text> : null}
-        </View>
       </View>
 
       {/* Tap the label photo to view it full-screen with pinch/zoom + pan. */}
       <LabelPhotoViewer visible={zoomOpen} uri={imageUri} onClose={() => setZoomOpen(false)} />
-
-      {/* Always-available correction: even a confident card can be the wrong wine
-          (OCR can swap in a different real producer, which verifies and never
-          auto-prompts). This reopens the typo/OCR-tolerant search. */}
-      {isIntelOnlyFlow && intelligence ? (
-        <TouchableOpacity onPress={openManualConfirm} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} style={styles.wrongWineLink} activeOpacity={0.7}>
-          <Text style={styles.wrongWineText}>Not this wine? Search for the right one</Text>
-        </TouchableOpacity>
-      ) : null}
 
       {/* Generate Wine Intel came back empty → prompt to check the name/format. */}
       {/* Weak intel: if we found candidate bottlings, the disambiguation modal
@@ -2242,7 +2246,10 @@ const styles = StyleSheet.create({
   reReadOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   reReadText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF' },
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
-  header: { flexDirection: 'row', alignItems: 'center', padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // The separator line lives on the block wrapper so the "Not this wine?" link
+  // sits ABOVE it; the header row itself carries no border.
+  headerBlock: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginRight: spacing.md },
   headerText: { flex: 1 },
   candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
@@ -2264,7 +2271,7 @@ const styles = StyleSheet.create({
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  producer: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text },
+  producer: { fontSize: 15, fontFamily: fonts.bodyBold, color: colors.text },
   wineName: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.text, marginTop: 2 },
   detail: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
   grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2 },
@@ -2286,7 +2293,7 @@ const styles = StyleSheet.create({
   // Inline headline stats bar: Score · Value · Drinking Window.
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
-  statBarValue: { fontSize: 20, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+  statBarValue: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   statBarValueMuted: { color: colors.textMuted, fontFamily: fonts.bodySemibold },
   statBarLabel: { fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' },
   statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
@@ -2323,8 +2330,8 @@ const styles = StyleSheet.create({
   confirmPrimary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   // "Not this wine?" correction link under the header on the intel card.
-  wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.sm },
-  wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textDecorationLine: 'underline' },
+  wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.md },
+  wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },

@@ -34,11 +34,13 @@ Deno.serve(async (req) => {
 - Wine name / cuvée: "${wineName ?? ''}"
 - Vintage: "${vintage ?? ''}"
 
-Give the producer's core range so the user can see WHERE this wine sits within it.
+If the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then give that producer's core range so the user can see WHERE this wine sits within it.
 
-List the REAL, DISTINCT wines "${producer}" is known to make — up to 7, the ones that define their range from entry level to flagship. Order them by PRESTIGE / price, lowest first, flagship last. Do NOT invent wines; only real bottlings this producer actually makes. Do not repeat the same wine.
+List the REAL, DISTINCT wines this producer is known to make — be THOROUGH and include their WHOLE core range (up to 8), from entry level to flagship, not just the obvious few. A well-known estate's full lineup is easy to recall (e.g. Pazo de Señorans makes Albariño, Selección de Añada, Rosal, Blanco de Blancos, Con Carácter). Order them by PRESTIGE / price, lowest first, flagship last. Do NOT invent wines; only real bottlings this producer actually makes. Do not repeat the same wine.
 
 You MUST include the scanned wine itself in the list (set "isThis": true on exactly one entry — the one matching "${wineName || producer}"). If the scanned cuvée isn't among the producer's well-known wines, still place it at its approximate prestige level and flag it.
+
+Each "wineName" must be ONLY the distinguishing cuvée/bottling name — NEVER repeat the producer's name in it (e.g. "Rosal", not "Pazo de Señorans Rosal"). For a flagship sold simply under the producer's own name, use its grape or appellation.
 
 For each wine give a relative price band from 1 to 5 WITHIN THIS PRODUCER'S OWN RANGE (1 = their entry level, 5 = their flagship) — a relative ladder, not an absolute price. Also give a short tier word.
 
@@ -75,7 +77,7 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
         isThis: w?.isThis === true,
       }))
       .filter((w: RangeWine) => w.wineName)
-      .slice(0, 7);
+      .slice(0, 8);
 
     // Guarantee exactly one flagged wine: if Claude flagged none (or several),
     // keep the first flag and clear the rest; if none, leave unflagged rather
