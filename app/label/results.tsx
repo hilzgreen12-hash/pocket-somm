@@ -2271,7 +2271,7 @@ const styles = StyleSheet.create({
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
-  producer: { fontSize: 15, fontFamily: fonts.bodyBold, color: colors.text },
+  producer: { fontSize: 20.5, fontFamily: fonts.bodyBold, color: colors.text },
   wineName: { fontSize: 19, fontFamily: fonts.bodyItalic, color: colors.text, marginTop: 2 },
   detail: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.xs },
   grape: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, marginTop: 2 },
@@ -2293,7 +2293,7 @@ const styles = StyleSheet.create({
   // Inline headline stats bar: Score · Value · Drinking Window.
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
-  statBarValue: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+  statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   statBarValueMuted: { color: colors.textMuted, fontFamily: fonts.bodySemibold },
   statBarLabel: { fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' },
   statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
