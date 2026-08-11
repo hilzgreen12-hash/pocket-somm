@@ -22,6 +22,7 @@ import { getBinCell } from '../../src/api/bins';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { WineSearchInput } from '../../src/components/WineSearchInput';
+import { StartAlignedInput } from '../../src/components/StartAlignedInput';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -97,6 +98,10 @@ export default function LabelConfirmScreen() {
   // After picking a wine from the predictive search, the vintage still isn't set
   // (the search has no vintage), so flag the field gold until the user fills it.
   const [highlightVintage, setHighlightVintage] = useState(false);
+  // True once the user picks a wine from the predictive search bar — that IS the
+  // confirmation, so Confirm skips the "Confirm the wine" match popup (only a
+  // hand-typed entry needs it). Reset if they then edit the producer / wine name.
+  const [pickedFromSearch, setPickedFromSearch] = useState(false);
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
 
@@ -285,7 +290,9 @@ export default function LabelConfirmScreen() {
 
     // Manual entry → confirm the approved wine-name match first, then build the
     // card for the match the user picks (or their typed entry if nothing matches).
-    if (isManual) {
+    // A hand-typed manual entry gets the approved-match confirmation; a wine
+    // picked from the search bar is already confirmed, so skip straight to intel.
+    if (isManual && !pickedFromSearch) {
       await confirmManualMatch(confirmed);
       return;
     }
@@ -642,6 +649,8 @@ export default function LabelConfirmScreen() {
             setRegion(r.region ?? '');
             setStyle(r.style ?? '');
             if (!vintage.trim()) setHighlightVintage(true);
+            // A search-bar pick IS the confirmation — skip the match popup.
+            setPickedFromSearch(true);
           }} />
           {/* Gold header for the input fields, matching "Search your wine" above. */}
           <Text style={styles.inputYourWineLabel}>Input Your Wine</Text>
@@ -649,16 +658,16 @@ export default function LabelConfirmScreen() {
       ) : null}
 
       <Text style={styles.label}>Producer</Text>
-      <TextInput
+      <StartAlignedInput
         style={styles.input}
         value={producer}
-        onChangeText={setProducer}
+        onChangeText={(t) => { setProducer(t); setPickedFromSearch(false); }}
         placeholder="e.g. Château Margaux"
         placeholderTextColor={colors.textMuted}
       />
 
       <Text style={styles.label}>Region</Text>
-      <TextInput
+      <StartAlignedInput
         style={styles.input}
         value={region}
         onChangeText={setRegion}
@@ -667,10 +676,10 @@ export default function LabelConfirmScreen() {
       />
 
       <Text style={styles.label}>Wine Name (optional)</Text>
-      <TextInput
+      <StartAlignedInput
         style={styles.input}
         value={wineName}
-        onChangeText={setWineName}
+        onChangeText={(t) => { setWineName(t); setPickedFromSearch(false); }}
         placeholder="e.g. Reserve, Cuvée Prestige"
         placeholderTextColor={colors.textMuted}
       />

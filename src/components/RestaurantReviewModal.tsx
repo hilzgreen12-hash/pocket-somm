@@ -85,6 +85,10 @@ export function RestaurantReviewModal({
   const [restaurantName, setRestaurantName] = useState((initialName ?? '').trim());
   const [cityValue, setCityValue] = useState((city ?? '').trim());
   const [note, setNote] = useState(initialNote ?? '');
+  // A SAVED review opens read-only — plain wrapped text that reads from the first
+  // word (no scrolled-down input box). A brand-new review (no saved note) opens
+  // straight into the editable box. Tapping Edit (or the text) switches to edit.
+  const [noteEditing, setNoteEditing] = useState(() => !(initialNote ?? '').trim());
   const [overall, setOverall] = useState<number | null>(initialRatings?.overall ?? null);
   const [food, setFood] = useState<number | null>(initialRatings?.food ?? null);
   const [wineList, setWineList] = useState<number | null>(initialRatings?.wineList ?? null);
@@ -616,21 +620,35 @@ export function RestaurantReviewModal({
 
             <View style={styles.divider} />
 
-            {/* Your review — moved to the top, right under the date. */}
+            {/* Your review — moved to the top, right under the date. A saved
+                review shows as read-only text (reads from the first word); the
+                editable box + mic only appear once Edit is tapped. */}
             <View style={styles.dictateRow}>
               <Text style={styles.fieldLabel}>Your review</Text>
-              <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} />
+              {noteEditing ? (
+                <MicButton value={note} onChangeText={setNote} onClear={() => setNote('')} />
+              ) : (
+                <TouchableOpacity onPress={() => setNoteEditing(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                  <Text style={styles.editNoteLink}>Edit</Text>
+                </TouchableOpacity>
+              )}
             </View>
-            <TextInput
-              style={[styles.input, styles.noteInput]}
-              value={note}
-              onChangeText={setNote}
-              placeholder="Food, service, atmosphere, wine list quality…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-              numberOfLines={5}
-              textAlignVertical="top"
-            />
+            {noteEditing ? (
+              <TextInput
+                style={[styles.input, styles.noteInput]}
+                value={note}
+                onChangeText={setNote}
+                placeholder="Food, service, atmosphere, wine list quality…"
+                placeholderTextColor={colors.textMuted}
+                multiline
+                numberOfLines={5}
+                textAlignVertical="top"
+              />
+            ) : (
+              <TouchableOpacity onPress={() => setNoteEditing(true)} activeOpacity={0.7} style={styles.noteReadonlyWrap}>
+                <Text style={styles.noteReadonly}>{note}</Text>
+              </TouchableOpacity>
+            )}
 
             <View style={styles.divider} />
 
@@ -903,6 +921,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.md,
   },
   noteInput: { minHeight: 110, marginBottom: spacing.lg },
+  // Read-only saved review: plain wrapped text (always reads from the first word).
+  editNoteLink: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  noteReadonlyWrap: { marginBottom: spacing.lg },
+  noteReadonly: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
   ratingsBlock: {
     borderWidth: 1,
     borderColor: colors.border,
