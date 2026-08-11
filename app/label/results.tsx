@@ -162,6 +162,9 @@ export default function LabelResultsScreen() {
   const confirmTriedRef = useRef(false);
   // Tap-to-enlarge the label photo on the confirm screen (pinch/zoom/pan).
   const [zoomOpen, setZoomOpen] = useState(false);
+  // Vinster's Note + Vinster's Map are collapsible, both reduced by default.
+  const [noteExpanded, setNoteExpanded] = useState(false);
+  const [mapExpanded, setMapExpanded] = useState(false);
 
   // "Upload Again" — re-pick a label and regenerate intel in place (the upload
   // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
@@ -1669,8 +1672,22 @@ export default function LabelResultsScreen() {
           ) : null}
 
           <View style={styles.section}>
-            <VinstersNoteHeading />
-            <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text>
+            <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} />
+            {noteExpanded ? <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text> : null}
+          </View>
+
+          {/* Vinster's Map — collapsible, reduced by default. Placeholder copy
+              until the region/producer map ships. */}
+          <View style={styles.section}>
+            <TouchableOpacity style={styles.mapHeadingRow} onPress={() => setMapExpanded((v) => !v)} activeOpacity={0.7}>
+              <Text style={styles.mapTitle}>Vinster's Map</Text>
+              <Text style={styles.mapChevron}>{mapExpanded ? '▾' : '▸'}</Text>
+            </TouchableOpacity>
+            {mapExpanded ? (
+              <Text style={styles.mapBody}>
+                Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
+              </Text>
+            ) : null}
           </View>
 
           {/* The Inside Line — the "sommelier best friend" verdict: how this
@@ -2343,6 +2360,11 @@ const styles = StyleSheet.create({
   deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   deepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
+  // Vinster's Map — collapsible heading + placeholder body.
+  mapHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  mapTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
+  mapChevron: { fontSize: 15, color: colors.gold, fontFamily: fonts.bodySemibold },
+  mapBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22, marginTop: spacing.sm },
   estimateHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   estimateGenerateLink: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   estimateValue: { fontSize: 32, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.5 },
