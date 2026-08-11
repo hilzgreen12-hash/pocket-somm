@@ -36,7 +36,13 @@ Deno.serve(async (req) => {
 
 If the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then give that producer's core range so the user can see WHERE this wine sits within it.
 
-List the REAL, DISTINCT wines this producer is known to make — be THOROUGH and include their WHOLE core range (up to 8), from entry level to flagship, not just the obvious few. A well-known estate's full lineup is easy to recall (e.g. Pazo de Señorans makes Albariño, Selección de Añada, Rosal, Blanco de Blancos, Con Carácter). Order them by PRESTIGE / price, lowest first, flagship last. Do NOT invent wines; only real bottlings this producer actually makes. Do not repeat the same wine.
+List the REAL, DISTINCT wines this producer is known to make — be THOROUGH and include their WHOLE core range (up to 8), from entry level to flagship, not just the obvious few. A well-known estate's full lineup is easy to recall (e.g. Pazo de Señorans makes Albariño, Selección de Añada, Rosal, Blanco de Blancos, Con Carácter; Krug makes Grande Cuvée, Rosé, Vintage, Clos du Mesnil, Clos d'Ambonnay, Collection). Order them STRICTLY by real-world PRESTIGE / price, entry-level first, the rarest/most-expensive flagship last.
+
+ACCURACY IS CRITICAL — a wrong lineup is worse than a short one:
+- Do NOT invent bottlings. Only real wines this producer actually makes.
+- Do NOT list the same wine under several near-identical names (e.g. never "Clos d'Ambonnay", "Clos d'Ambonnay Brut" and "Clos d'Ambonnay Vintage" — that is ONE wine). One entry per distinct wine.
+- Get the ORDER right: a producer's rare single-vineyard / prestige cuvée belongs at the TOP (band 5), never at entry level (e.g. Krug's Clos d'Ambonnay and Clos du Mesnil are their most prestigious, NOT entry).
+- If you are unsure of the full range, list FEWER wines you are certain of rather than padding with guesses.
 
 You MUST include the scanned wine itself in the list (set "isThis": true on exactly one entry — the one matching "${wineName || producer}"). If the scanned cuvée isn't among the producer's well-known wines, still place it at its approximate prestige level and flag it.
 
@@ -55,7 +61,10 @@ Return ONLY a JSON object (no markdown, no prose) with exactly these keys:
 If you cannot confidently identify the producer's range, return {"wines": [], "summary": null}.`;
 
     const resp = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
+      // Sonnet, not Haiku: producer-range needs real, accurate lineup knowledge —
+      // Haiku fabricated and misranked bottlings (e.g. inventing "Clos d'Ambonnay"
+      // variants and ranking Krug's flagship as entry level).
+      model: 'claude-sonnet-4-6',
       max_tokens: 900,
       messages: [{ role: 'user', content: prompt }],
     });
