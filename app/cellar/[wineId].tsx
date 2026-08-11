@@ -310,7 +310,7 @@ export default function CellarWineDetail() {
   // The "(what's this)" link surfaces a short explanation modal so a
   // user encountering the field for the first time knows what it is.
   const [vinstersNoteOpen, setVinstersNoteOpen] = useState(false);
-  const [whatsThisOpen, setWhatsThisOpen] = useState(false);
+  const [vinstersMapOpen, setVinstersMapOpen] = useState(false);
 
   // Off-screen share card for "Share outside the app" — captured to
   // PNG and handed to the native share sheet. Same pattern Wine
@@ -1571,7 +1571,6 @@ export default function CellarWineDetail() {
           grouped under one header with consistent sub-titles and no internal
           dividers. The Chef button now sits lower, above Archive/Delete. */}
       <View style={styles.cardDivider} />
-      <Text style={styles.reviewsHeader}>Reviews</Text>
 
       {/* Your Review (left) beside Personal Notes (right); Vinster's Review
           sits full-width beneath. Wishlist wines have no Personal Notes, so
@@ -1666,6 +1665,7 @@ export default function CellarWineDetail() {
           short explainer. Hidden for wishlist wines: their stored note is
           the user's own, and Vinster's AI review only exists in the cellar. */}
       {!isWishlist ? (
+        <>
         <View style={styles.reviewSubsection}>
           <View style={styles.vinsterHeaderRow}>
             <TouchableOpacity
@@ -1680,13 +1680,17 @@ export default function CellarWineDetail() {
                 color={colors.gold}
               />
             </TouchableOpacity>
-            <TouchableOpacity onPress={() => setWhatsThisOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.whatsThisLink}>what's this</Text>
-            </TouchableOpacity>
           </View>
           {vinstersNoteOpen ? (
             wine.tasting_notes ? (
-              <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+              <>
+                <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+                {/* The former "(what's this)" explainer, now shown inline in
+                    italics right after the review. */}
+                <Text style={styles.vinsterExplainer}>
+                  Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
+                </Text>
+              </>
             ) : refreshingValue ? (
               <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
             ) : (
@@ -1697,6 +1701,23 @@ export default function CellarWineDetail() {
             )
           ) : null}
         </View>
+
+        {/* Vinster's Map — collapsible, reduced by default; same placeholder as
+            the scan intel card. */}
+        <View style={styles.reviewSubsection}>
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={() => setVinstersMapOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Vinster's Map</Text>
+              <Ionicons name={vinstersMapOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+          {vinstersMapOpen ? (
+            <Text style={styles.tastingNotes}>
+              Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
+            </Text>
+          ) : null}
+        </View>
+        </>
       ) : null}
 
       {!isWishlist && <View style={styles.cardDivider} />}
@@ -1901,22 +1922,6 @@ export default function CellarWineDetail() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* "(what's this)" explainer for Vinster's Note — a short
-          definition of the AI tasting line so first-time users know
-          what they're looking at. */}
-      <Modal visible={whatsThisOpen} transparent animationType="fade" onRequestClose={() => setWhatsThisOpen(false)}>
-        <TouchableOpacity style={styles.removeModalOverlay} activeOpacity={1} onPress={() => setWhatsThisOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.removeModalSheet} onPress={() => {}}>
-            <Text style={styles.removeModalTitle}>What is Vinster's Note?</Text>
-            <Text style={styles.removeModalBody}>
-              Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
-            </Text>
-            <TouchableOpacity style={styles.removeModalConfirmBtn} onPress={() => setWhatsThisOpen(false)}>
-              <Text style={styles.removeModalConfirmText}>Got it</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       {/* Off-screen share card for the Share button on Your Review.
           Mounted only while a share is in flight. */}
@@ -2125,6 +2130,8 @@ const styles = StyleSheet.create({
   editLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Inter — tasting notes body
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
+  // The inlined "what's this" explainer shown in italics after Vinster's Review.
+  vinsterExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginTop: spacing.sm },
   // "Generate" button shown inside Vinster's Review when there's no note yet.
   generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
