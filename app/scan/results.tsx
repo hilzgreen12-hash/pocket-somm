@@ -207,6 +207,42 @@ export default function ResultsScreen() {
     cacheScanLocally(session?.user.id ?? null, { extractedWines, recommendation, restaurantName: restaurantName || null });
   }, []);
 
+  // "Still at the same restaurant?" — if the diner scans another list within
+  // 2.5 hours of a previous scan that HAD a restaurant, offer to tag this one to
+  // the same place. Fires once, only on a fresh scan that has no restaurant yet.
+  // A previous scan with no restaurant name is ignored (the query filters them
+  // out). The current fresh scan carries no restaurant, so it's never the match.
+  const stillHereCheckedRef = useRef(false);
+  useEffect(() => {
+    if (isFromHistory || stillHereCheckedRef.current) return;
+    if (!session?.user.id || !recommendation || restaurantName.trim()) return;
+    stillHereCheckedRef.current = true;
+    (async () => {
+      try {
+        const cutoff = new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString();
+        const { data } = await supabase
+          .from('scan_sessions')
+          .select('restaurant_name, created_at')
+          .eq('user_id', session.user.id)
+          .not('restaurant_name', 'is', null)
+          .gte('created_at', cutoff)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        const name = data?.[0]?.restaurant_name?.trim();
+        if (!name || restaurantName.trim()) return; // nothing recent, or user already set one
+        showAlert({
+          title: `Are you still at ${name}?`,
+          body: 'Tag this list to the same restaurant as your last scan?',
+          buttons: [
+            { text: 'Yes', onPress: () => { setRestaurantName(name); void handleSaveRestaurant(name); } },
+            { text: 'No', style: 'cancel' },
+          ],
+        });
+      } catch { /* silent — this prompt is a convenience */ }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isFromHistory, session?.user.id, recommendation]);
+
   // Keep the "Add to Bottle Picks" buttons in their saved state across
   // navigation (e.g. List → View Last Result). The local chosenIndexes set
   // is lost on remount, so reconcile it against the persisted chosen_wines:
@@ -363,11 +399,34 @@ export default function ResultsScreen() {
     // feedback and doesn't wait on the save round-trip — this is what removes the
     // reason to tap repeatedly (which is what created the duplicates).
     setChosenIndexes((prev) => new Set([...prev, i]));
+
+    const currentRestaurant = overrides?.restaurant ?? restaurantName ?? '';
+    // findExistingReview is a LOCAL check (no network), so we know instantly
+    // whether this is a fresh pick or a re-selection of an existing review.
+    const existing = findExistingReview(chosenWines, {
+      producer: wine.producer,
+      wineName: wine.name,
+      vintage: wine.vintage,
+    });
+
+    // Fresh pick → confirm the selection IMMEDIATELY (no network wait); the save
+    // runs in the background below. This is what removes the pop-up delay.
+    if (!existing) {
+      showAlert({
+        title: 'Wine Selected',
+        body: `${wine.name} has been recorded in Your Restaurants – ${currentRestaurant.trim() || 'Your Restaurants'}.`,
+        showCloseX: true,
+        buttons: [
+          { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
+          { text: 'Later', style: 'cancel' },
+        ],
+      });
+    }
+
     try {
       const cityValue = overrides?.city
         ?? cityOverride
         ?? (isFromHistory ? (historyCity ?? '') : (autoSave.data?.[0]?.city ?? ''));
-      const currentRestaurant = overrides?.restaurant ?? restaurantName ?? '';
       // Guarantee the scan_session_id FK: resolve (or create, joining any
       // in-flight save) the session BEFORE writing the pick, so the bottle is
       // never orphaned with a null link because the background autoSave hadn't
@@ -376,18 +435,11 @@ export default function ResultsScreen() {
         ? (sessionId ?? null)
         : await handleSaveRestaurant(currentRestaurant);
 
-      const existing = findExistingReview(chosenWines, {
-        producer: wine.producer,
-        wineName: wine.name,
-        vintage: wine.vintage,
-      });
-
       if (existing) {
         // Same scan session → the user already noted this wine on this
         // list (probably tapped Quick Select twice). Treat as a no-op
         // so we don't add duplicate "Selected at" lines for one event.
         if (existing.scan_session_id && sid && existing.scan_session_id === sid) {
-          setChosenIndexes((prev) => new Set([...prev, i]));
           showAlert({
             title: 'Already noted',
             body: "You've already chosen this wine on this list.",
@@ -415,7 +467,6 @@ export default function ResultsScreen() {
             vintage: existing.vintage,
           },
         });
-        setChosenIndexes((prev) => new Set([...prev, i]));
         showAlert({
           title: 'Noted',
           body: "Added to your existing review for this wine — Vinster will fold this latest selection into your vinous amour.",
@@ -434,16 +485,7 @@ export default function ResultsScreen() {
         listPrice: null,
         isFavourite: false,
       });
-      setChosenIndexes((prev) => new Set([...prev, i]));
-      showAlert({
-        title: 'Wine Selected',
-        body: `${wine.name} has been recorded in Your Restaurants – ${currentRestaurant.trim() || 'Your Restaurants'}.`,
-        showCloseX: true,
-        buttons: [
-          { text: 'Review it now', onPress: () => setChosenModalWine(wine) },
-          { text: 'Later', style: 'cancel' },
-        ],
-      });
+      // "Wine Selected" confirmation was already shown optimistically above.
     } catch (err) {
       // Roll back the optimistic selection so the chip reflects reality.
       setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
