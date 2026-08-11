@@ -195,7 +195,7 @@ export default function WineKnowledgeScreen() {
               })()}
               <Text style={styles.body}>{knowledge.producerProfile}</Text>
 
-              <Text style={styles.sectionLabel}>Region Profile</Text>
+              <Text style={styles.sectionLabel}>Region Profile{info.region ? <Text style={styles.sectionValue}>{`:  ${info.region}`}</Text> : null}</Text>
               {(() => {
                 const s = knowledge.regionStats;
                 const items = s ? [s.climate, s.soil, s.altitude].filter(Boolean) : [];
@@ -205,7 +205,7 @@ export default function WineKnowledgeScreen() {
               })()}
               <Text style={styles.body}>{knowledge.regionProfile}</Text>
 
-              <Text style={styles.sectionLabel}>Vintage Profile</Text>
+              <Text style={styles.sectionLabel}>Vintage Profile{info.vintage ? <Text style={styles.sectionValue}>{`:  ${info.vintage}`}</Text> : null}</Text>
               {(() => {
                 const s = knowledge.vintageStats;
                 if (!s || (!s.comparableVintages && !s.describedAs)) return null;
@@ -218,7 +218,7 @@ export default function WineKnowledgeScreen() {
               })()}
               <Text style={styles.body}>{knowledge.vintageProfile}</Text>
 
-              <Text style={styles.sectionLabel}>Grape Variety</Text>
+              <Text style={styles.sectionLabel}>Grape Variety{info.grape ? <Text style={styles.sectionValue}>{`:  ${info.grape}`}</Text> : null}</Text>
               {(() => {
                 const s = knowledge.grapeStats;
                 if (!s || (!s.characteristics && !s.grownIn)) return null;
@@ -277,6 +277,10 @@ const styles = StyleSheet.create({
   shortDivider: { width: 40, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', alignSelf: 'center', marginVertical: spacing.lg },
 
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 2.5, textTransform: 'uppercase', marginTop: spacing.lg, marginBottom: spacing.xs },
+  // The wine-specific value appended to a section header (e.g. "Pomerol",
+  // "2010", "Cabernet Franc & Merlot") — one consistent font + colour, matching
+  // the header's gold but in normal case so it reads naturally.
+  sectionValue: { fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'none', letterSpacing: 0 },
   body: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
   // Compact facts bar beneath each section label — specifics, not prose.
   statsBar: { borderWidth: 1, borderColor: 'rgba(224,184,74,0.35)', borderRadius: 10, backgroundColor: 'rgba(224,184,74,0.06)', paddingVertical: spacing.sm, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
