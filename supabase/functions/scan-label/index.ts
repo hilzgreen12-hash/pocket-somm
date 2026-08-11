@@ -52,13 +52,15 @@ const LABEL_SCAN_PROMPT = `You are a wine expert analyzing a wine label photogra
 
 5. style: One of "Red", "White", "Rosé", "Sparkling", or "Fortified". This is NOT optional — every wine has a style. If the label doesn't visually state it, infer from the producer, region, appellation, or wine name. Champagne and other traditional-method sparkling wines are "Sparkling". Port, Madeira, Sherry are "Fortified". Use your best judgement; do not return null.
 
-6. bottleSizeMl: The bottle volume in millilitres as an integer. Look near the ABV / contents notice (often the lower edge of the label or the back) for text like "750ml", "75cl", "1.5L", "Magnum", "Half bottle", etc. Convert to millilitres: 75cl → 750; 37.5cl / Half → 375; 50cl → 500; 1L → 1000; 1.5L / Magnum → 1500; 3L / Jeroboam → 3000; 6L / Methuselah → 6000. Return the integer. If you can't see a clear volume on the label, return null — do NOT guess. Most standard wine bottles are 750ml; only fill this in when the label actually states it (or the bottle silhouette obviously indicates a non-standard format like a magnum).
+6. grape: The primary grape variety. READ it from the label when printed (e.g. "Albariño", "Nebbiolo", "Mourvèdre"). If it's not printed but the appellation is effectively single-grape, use that grape — e.g. Rías Baixas → Albariño, Sancerre / Pouilly-Fumé → Sauvignon Blanc, Chablis / white Burgundy → Chardonnay, Barolo / Barbaresco → Nebbiolo, Brunello di Montalcino → Sangiovese, red Burgundy → Pinot Noir. For a blend, give the primary grape or a short blend (e.g. "Grenache/Syrah/Mourvèdre"). Return null only when you genuinely cannot tell.
 
-7. confidence: How sure you are that producer + wineName together identify the EXACT bottling. Return "high" when the label is clearly legible and you're confident which specific wine this is. Return "low" when the label is blurry, partially obscured, or cropped; when text is hard to read; or when the producer makes a RANGE/SERIES of similar bottlings and you can't be certain which one this is (e.g. you can read "Assemblage" but not whether it's "Tome III" or "Tome IV"). When in doubt, prefer "low" — a low rating lets the app offer the user a list of that producer's bottlings to confirm.
+7. bottleSizeMl: The bottle volume in millilitres as an integer. Look near the ABV / contents notice (often the lower edge of the label or the back) for text like "750ml", "75cl", "1.5L", "Magnum", "Half bottle", etc. Convert to millilitres: 75cl → 750; 37.5cl / Half → 375; 50cl → 500; 1L → 1000; 1.5L / Magnum → 1500; 3L / Jeroboam → 3000; 6L / Methuselah → 6000. Return the integer. If you can't see a clear volume on the label, return null — do NOT guess. Most standard wine bottles are 750ml; only fill this in when the label actually states it (or the bottle silhouette obviously indicates a non-standard format like a magnum).
 
-Return ONLY a valid JSON object with exactly these seven keys. Set any field other than style and confidence to null if you cannot confidently identify it from the label. Do not include any explanation or markdown — only the raw JSON.
+8. confidence: How sure you are that producer + wineName together identify the EXACT bottling. Return "high" when the label is clearly legible and you're confident which specific wine this is. Return "low" when the label is blurry, partially obscured, or cropped; when text is hard to read; or when the producer makes a RANGE/SERIES of similar bottlings and you can't be certain which one this is (e.g. you can read "Assemblage" but not whether it's "Tome III" or "Tome IV"). When in doubt, prefer "low" — a low rating lets the app offer the user a list of that producer's bottlings to confirm.
 
-Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "bottleSizeMl": 750, "confidence": "high"}`;
+Return ONLY a valid JSON object with exactly these eight keys. Set producer / region / wineName / vintage / grape / bottleSizeMl to null if you cannot confidently identify them from the label (style and confidence are never null). Do not include any explanation or markdown — only the raw JSON.
+
+Example: {"producer": "Mullineux", "region": "Swartland, South Africa", "wineName": "Schist", "vintage": "2019", "style": "Red", "grape": "Syrah", "bottleSizeMl": 750, "confidence": "high"}`;
 
 Deno.serve(async (req) => {
   try {
@@ -110,6 +112,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       producer: parsed.producer ?? null,
+      grape: typeof parsed.grape === 'string' && parsed.grape.trim() ? parsed.grape.trim() : null,
       region: parsed.region ?? null,
       wineName: parsed.wineName ?? null,
       vintage,

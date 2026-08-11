@@ -138,6 +138,7 @@ export default function ScanTab() {
         wineName: (details.wineName ?? '').trim() || null,
         vintage: (details.vintage ?? '').trim(),
         style: (details.style ?? '').trim() || null,
+        grape: (details.grape ?? '').trim() || null,
         bottleSizeMl: details.bottleSizeMl ?? null,
         quantity: details.quantity ?? 1,
       };

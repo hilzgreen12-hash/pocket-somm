@@ -27,7 +27,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
-import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, searchWines, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type WineSearchResult } from '../../src/api/label';
+import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import * as ImagePicker from 'expo-image-picker';
@@ -156,7 +156,7 @@ export default function LabelResultsScreen() {
   // tolerant matches and only generate the card once the user picks or confirms
   // their read — so Vinster never builds a card for a misread/fictional wine.
   const [awaitingConfirm, setAwaitingConfirm] = useState(confirm === '1');
-  const [confirmOptions, setConfirmOptions] = useState<WineSearchResult[]>([]);
+  const [confirmOptions, setConfirmOptions] = useState<WineCandidate[]>([]);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
   const confirmTriedRef = useRef(false);
@@ -186,6 +186,7 @@ export default function LabelResultsScreen() {
         wineName: (details.wineName ?? '').trim() || null,
         vintage: (details.vintage ?? '').trim(),
         style: (details.style ?? '').trim() || null,
+        grape: (details.grape ?? '').trim() || null,
         bottleSizeMl: details.bottleSizeMl ?? null,
         quantity: details.quantity ?? 1,
       };
@@ -242,14 +243,21 @@ export default function LabelResultsScreen() {
   useEffect(() => {
     if (!awaitingConfirm || confirmTriedRef.current || !wineDetailsConfirmed) return;
     confirmTriedRef.current = true;
-    const q = [wineDetailsConfirmed.producer, wineDetailsConfirmed.wineName].filter(Boolean).join(' ').trim();
-    if (!q) return; // nothing to search on — the panel still offers "read is correct"
+    if (!wineDetailsConfirmed.producer?.trim()) return; // no producer to list a range for
     setConfirmLoading(true);
     (async () => {
       try {
-        const list = await searchWines(q);
+        // The producer's full range of wines, so the user picks the right cuvée
+        // (wine-candidates lists a producer's distinct bottlings; the narrower
+        // wine-search returned only the exact-cuvée match).
+        const list = await fetchWineCandidates({
+          producer: wineDetailsConfirmed.producer,
+          region: wineDetailsConfirmed.region,
+          wineName: wineDetailsConfirmed.wineName,
+          vintage: wineDetailsConfirmed.vintage,
+        });
         setConfirmOptions(list);
-      } catch { /* silent — the panel falls back to "my read is correct" */ }
+      } catch { /* silent — the panel falls back to "Scan Again" */ }
       finally { setConfirmLoading(false); }
     })();
   }, [awaitingConfirm, wineDetailsConfirmed]);
@@ -317,6 +325,7 @@ export default function LabelResultsScreen() {
         wineName: (details.wineName ?? '').trim() || null,
         vintage: (details.vintage ?? '').trim(),
         style: (details.style ?? '').trim() || null,
+        grape: (details.grape ?? '').trim() || null,
         bottleSizeMl: details.bottleSizeMl ?? null,
         quantity: details.quantity ?? 1,
       };
@@ -347,16 +356,16 @@ export default function LabelResultsScreen() {
       setReReading(false);
     }
   }
-  // A picked match keeps the read's vintage/size but takes the corrected
-  // producer / name / region / style from the search result.
-  function pickConfirmOption(r: WineSearchResult) {
+  // Picking a bottling from the producer's range: keep the (confident) producer,
+  // vintage, size and grape from the read; take the cuvée / region / style from
+  // the chosen candidate.
+  function pickConfirmOption(c: WineCandidate) {
     if (!wineDetailsConfirmed) return;
     resolveConfirm({
       ...wineDetailsConfirmed,
-      producer: r.producer || wineDetailsConfirmed.producer,
-      wineName: r.wineName ?? wineDetailsConfirmed.wineName,
-      region: r.region ?? wineDetailsConfirmed.region,
-      style: r.style ?? wineDetailsConfirmed.style,
+      wineName: c.wineName,
+      region: c.region ?? wineDetailsConfirmed.region,
+      style: c.style ?? wineDetailsConfirmed.style,
     });
   }
 
@@ -670,12 +679,13 @@ export default function LabelResultsScreen() {
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
           ) : null}
-          {/* Title info only: producer / wine name, then region · vintage. */}
+          {/* Only confident label info — producer, grape, region, vintage. The
+              cuvée/wine name is deliberately left OUT here (it's what's being
+              confirmed below), so we never assert an uncertain bottling. */}
           <View style={styles.headerText}>
             <Text style={styles.producer}>{wine.producer || wine.wineName}</Text>
-            {wine.producer && wine.wineName ? <Text style={styles.wineName}>{wine.wineName}</Text> : null}
-            {[wine.region, wine.vintage].filter(Boolean).length ? (
-              <Text style={styles.detail}>{[wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
+            {[wine.grape, wine.region, wine.vintage].filter(Boolean).length ? (
+              <Text style={styles.detail}>{[wine.grape, wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
             ) : null}
           </View>
         </View>
@@ -697,13 +707,13 @@ export default function LabelResultsScreen() {
               ) : confirmOptions.length > 0 ? (
                 confirmOptions.map((r, i) => (
                   <TouchableOpacity
-                    key={`${r.producer}-${r.wineName ?? ''}-${i}`}
+                    key={`${r.wineName ?? ''}-${i}`}
                     style={styles.confirmRow}
                     onPress={() => pickConfirmOption(r)}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.confirmRowName} numberOfLines={2}>
-                      {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region, vintage: wine.vintage })}
+                      {formatWineTitle({ producer: wine.producer, wineName: r.wineName, region: r.region, vintage: wine.vintage })}
                     </Text>
                     {r.style ? <Text style={styles.confirmRowMeta}>{r.style}</Text> : null}
                   </TouchableOpacity>

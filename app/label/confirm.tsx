@@ -229,6 +229,7 @@ export default function LabelConfirmScreen() {
       wineName: wineName.trim() || null,
       vintage: vintage.trim(),
       style: style.trim() || null,
+      grape: wineDetails?.grape ?? null,
       // Pass any bottle size the scanner read off the label straight
       // through to /label/results so the Add modal can pre-populate the
       // picker. The user can still adjust it on that screen.

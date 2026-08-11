@@ -33,16 +33,18 @@ Deno.serve(async (req) => {
 - Wine name / cuvée: "${wineName ?? ''}"
 - Vintage: "${vintage ?? ''}"
 
-The producer is reliable, but the specific bottling/cuvée may be incomplete or wrong (a cuvée name can be missed on the label). List up to 6 REAL, DISTINCT wines that THIS producer actually makes that could plausibly be the wine on this label. Order by how likely each is given the partial reading. Do NOT invent wines — only real bottlings this producer is known to make. Do not repeat the same wine.
+First, if the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then list THIS producer's core range so the user can pick the right bottling — the specific cuvée may have been missed or misread on the label.
+
+List the REAL, DISTINCT wines that this producer actually makes — be THOROUGH and include their whole core range (up to 8), not just the obvious one. Most estates make several bottlings; a well-known producer's full range is easy to recall (e.g. Pazo de Señorans makes Albariño, Selección de Añada, Rosal, Blanco de Blancos, and more). Order by how likely each is given the partial reading. Do NOT invent wines — only real bottlings this producer is known to make. Do not repeat the same wine.
 
 Return ONLY a JSON array (no markdown, no prose) of objects with exactly these keys:
-- "wineName": the full distinguishing name of the bottling/cuvée (e.g. "Grange", "Bin 707 Cabernet Sauvignon", "Cuvée Sir Winston Churchill")
+- "wineName": ONLY the distinguishing cuvée/bottling name — NEVER repeat the producer's name in it (e.g. for Pazo de Señorans return "Rosal", not "Pazo de Señorans Rosal"; return "Grange", "Bin 707 Cabernet Sauvignon", "Cuvée Sir Winston Churchill"). For a flagship wine sold simply under the producer's own name, use its grape or appellation as the name (e.g. "Albariño")
 - "region": the wine's region/appellation, or null
 - "style": one of "Red", "White", "Rosé", "Sparkling", "Fortified", or null`;
 
     const resp = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
-      max_tokens: 700,
+      max_tokens: 900,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -61,7 +63,7 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
         style: typeof c?.style === 'string' && c.style.trim() ? c.style.trim() : null,
       }))
       .filter((c) => c.wineName)
-      .slice(0, 6);
+      .slice(0, 8);
 
     return json({ candidates }, 200);
   } catch (err) {

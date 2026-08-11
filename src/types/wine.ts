@@ -80,6 +80,10 @@ export interface WineDetails {
   wineName: string | null;
   vintage: string | null;
   style: string | null;
+  // Primary grape variety read off the label (or inferred from a single-grape
+  // appellation). null when not determinable. Shown on the confirm screen as
+  // confident label info, so the cuvée can stay in the disambiguation options.
+  grape?: string | null;
   // Bottle volume in millilitres if the scanner can read it off the label
   // (most labels print "750ml" / "75cl" / "1.5L" near the ABV). null when
   // not detected — the user picks a size manually in that case.
@@ -100,6 +104,9 @@ export interface WineDetailsComplete {
   wineName: string | null;
   vintage: string;
   style?: string | null;
+  // Primary grape read off the label (confident label info) — carried to the
+  // confirm screen title so the cuvée can live in the options instead.
+  grape?: string | null;
   bottleSizeMl?: number | null;
   // Carried through from a batched lineup entry to seed the cellar quantity.
   quantity?: number;
