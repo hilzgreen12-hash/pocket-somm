@@ -208,10 +208,12 @@ export default function ResultsScreen() {
   }, []);
 
   // "Still at the same restaurant?" — if the diner scans another list within
-  // 2.5 hours of a previous scan that HAD a restaurant, offer to tag this one to
-  // the same place. Fires once, only on a fresh scan that has no restaurant yet.
-  // A previous scan with no restaurant name is ignored (the query filters them
-  // out). The current fresh scan carries no restaurant, so it's never the match.
+  // 4 hours of a previous scan that HAD a restaurant, offer to tag this one to
+  // the same place. Saying yes REUSES that previous scan_sessions row, so every
+  // wine pick and the review from both scans land in ONE Your Restaurants entry
+  // for the visit rather than duplicating it. Fires once, only on a fresh scan
+  // with no restaurant yet; a previous scan with no restaurant name is ignored.
+  const STILL_HERE_WINDOW_MS = 4 * 60 * 60 * 1000;
   const stillHereCheckedRef = useRef(false);
   useEffect(() => {
     if (isFromHistory || stillHereCheckedRef.current) return;
@@ -219,22 +221,31 @@ export default function ResultsScreen() {
     stillHereCheckedRef.current = true;
     (async () => {
       try {
-        const cutoff = new Date(Date.now() - 2.5 * 60 * 60 * 1000).toISOString();
+        const cutoff = new Date(Date.now() - STILL_HERE_WINDOW_MS).toISOString();
         const { data } = await supabase
           .from('scan_sessions')
-          .select('restaurant_name, created_at')
+          .select('id, restaurant_name, created_at')
           .eq('user_id', session.user.id)
           .not('restaurant_name', 'is', null)
           .gte('created_at', cutoff)
           .order('created_at', { ascending: false })
           .limit(1);
-        const name = data?.[0]?.restaurant_name?.trim();
+        const prev = data?.[0];
+        const name = prev?.restaurant_name?.trim();
         if (!name || restaurantName.trim()) return; // nothing recent, or user already set one
         showAlert({
           title: `Are you still at ${name}?`,
-          body: 'Tag this list to the same restaurant as your last scan?',
+          body: 'This list will be added to the same visit in Your Restaurants.',
           buttons: [
-            { text: 'Yes', onPress: () => { setRestaurantName(name); void handleSaveRestaurant(name); } },
+            {
+              text: 'Yes',
+              onPress: () => {
+                setRestaurantName(name);
+                // Reuse the SAME visit so picks + review consolidate into one
+                // Your Restaurants entry (no duplicate for the same 4h session).
+                if (prev?.id) savedSessionIdRef.current = prev.id;
+              },
+            },
             { text: 'No', style: 'cancel' },
           ],
         });
