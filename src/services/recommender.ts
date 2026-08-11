@@ -113,10 +113,31 @@ export async function recommendWines(input: RecommendInput): Promise<Recommendat
   // (unknown) rather than shown as a guess. Market comparison is done separately,
   // against live Wine-Searcher data, on the results screen.
   const scanCurrency = (input.currency || 'GBP').toUpperCase();
+
+  // repeatNote guard. The model sometimes tags a NEW pick as a re-recommendation
+  // (it can confuse two similar wines — e.g. two different Trebbiano d'Abruzzo).
+  // A repeatNote is only legitimate when the wine really is one of the already-
+  // seen wines, so only honour it when the pick's distinguishing words all appear
+  // in one of the excludeWines entries; otherwise strip it.
+  const tokens = (s: string) =>
+    new Set(norm(s).split(' ').filter((t) => t.length >= 3));
+  const excludeTokenSets = (input.excludeWines ?? []).map((e) => tokens(e));
+  const isAlreadySeen = (w: { producer: string; name: string; vintage: number | null }) => {
+    const wTokens = tokens(`${w.producer ?? ''} ${w.name ?? ''}`);
+    if (wTokens.size === 0) return false;
+    return excludeTokenSets.some((seen) => {
+      for (const t of wTokens) if (!seen.has(t)) return false;
+      return true;
+    });
+  };
+
   const wines: WineRecommendation[] = parsed.data.wines.map((w) => {
     const match = matchExtracted(w, input.wines);
+    // Drop a repeatNote the guard can't confirm is a genuine re-recommendation.
+    const repeatNote = w.repeatNote && isAlreadySeen(w) ? w.repeatNote : null;
     return {
       ...w,
+      repeatNote,
       menuPrice: match ? match.menuPrice : null,
       currency: match?.currency || scanCurrency,
     };
