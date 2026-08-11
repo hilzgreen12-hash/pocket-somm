@@ -165,6 +165,11 @@ export default function LabelResultsScreen() {
   // Vinster's Note + Vinster's Map are collapsible, both reduced by default.
   const [noteExpanded, setNoteExpanded] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Vintage prompt — shown when the scan couldn't read a vintage, so the user
+  // enters it (or confirms NV) rather than the intel silently assuming non-vintage.
+  const [vintagePromptOpen, setVintagePromptOpen] = useState(false);
+  const [vintageInput, setVintageInput] = useState('');
+  const vintagePromptedRef = useRef(false);
 
   // "Upload Again" — re-pick a label and regenerate intel in place (the upload
   // flow's equivalent of the camera's "Scan Again"). Stays on this screen; the
@@ -370,6 +375,34 @@ export default function LabelResultsScreen() {
       region: c.region ?? wineDetailsConfirmed.region,
       style: c.style ?? wineDetailsConfirmed.style,
     });
+  }
+
+  // The scan couldn't read a vintage → prompt for it once, so the intel isn't
+  // silently computed as non-vintage. Only fires on a fresh scan whose vintage is
+  // blank (a detected 'NV' or a real year is left alone).
+  useEffect(() => {
+    if (vintagePromptedRef.current) return;
+    if (!isIntelOnlyFlow || fresh !== '1' || awaitingConfirm || !intelligence) return;
+    if ((wineDetailsConfirmed?.vintage ?? '').trim()) return;
+    vintagePromptedRef.current = true;
+    setVintagePromptOpen(true);
+  }, [isIntelOnlyFlow, fresh, awaitingConfirm, intelligence, wineDetailsConfirmed]);
+
+  // Save the entered vintage → rebuild the card for it (score / value / drinking
+  // window all depend on the year). Reuses resolveConfirm's regenerate path.
+  async function submitVintage() {
+    const y = vintageInput.trim();
+    if (y.length !== 4) {
+      showAlert({ title: 'Enter a 4-digit year', body: 'e.g. 2018 — or choose non-vintage below.' });
+      return;
+    }
+    if (!wineDetailsConfirmed) { setVintagePromptOpen(false); return; }
+    await resolveConfirm({ ...wineDetailsConfirmed, vintage: y });
+    setVintagePromptOpen(false);
+  }
+  function confirmNoVintage() {
+    setVintagePromptOpen(false);
+    if (wineDetailsConfirmed) setWineDetailsConfirmed({ ...wineDetailsConfirmed, vintage: 'NV' });
   }
 
   // "Where this wine sits in the producer's range" — fetched once on the Wine
@@ -1579,6 +1612,38 @@ export default function LabelResultsScreen() {
         </View>
       </Modal>
 
+      {/* Vintage prompt — the label had no readable vintage. */}
+      <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={() => setVintagePromptOpen(false)}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            {confirmGenerating ? (
+              <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Updating for {vintageInput}…</Text></View>
+            ) : (
+              <>
+                <Text style={styles.candTitle}>What's the vintage?</Text>
+                <Text style={styles.candBody}>Vinster couldn't read the vintage from the label. Enter the year so the score, value and drinking window are accurate.</Text>
+                <TextInput
+                  style={styles.vintagePromptInput}
+                  value={vintageInput}
+                  onChangeText={(t) => setVintageInput(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                  placeholder="e.g. 2018"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="number-pad"
+                  maxLength={4}
+                  autoFocus
+                />
+                <TouchableOpacity style={styles.candConfirmBtn} onPress={submitVintage} activeOpacity={0.85}>
+                  <Text style={styles.candConfirmText}>Save</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.candCancel} onPress={confirmNoVintage} activeOpacity={0.7}>
+                  <Text style={styles.candCancelText}>This is a non-vintage wine (NV)</Text>
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* "Which wine is this?" — Claude's list of this producer's plausible
           bottlings, shown when intel came back weak. Picking one regenerates
           intel for the exact wine. */}
@@ -2283,6 +2348,7 @@ const styles = StyleSheet.create({
   candRowText: { flex: 1 },
   candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  vintagePromptInput: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', letterSpacing: 3, marginBottom: spacing.sm },
   candConfirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
   candConfirmBtnDisabled: { opacity: 0.4 },
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
