@@ -39,6 +39,9 @@ export interface WineValuation {
   drinkingWindowTo: number | null;
   drinkingWindowStatus: string;
   grapeVariety: string | null;
+  // "The Inside Line" — sommelier-best-friend verdict, persisted to the cellar
+  // row so the cellar wine card can show it like the scan intel card does.
+  insiderNote: string | null;
   // Genuine grape ambiguity (same producer + name sold as more than one wine,
   // e.g. a Syrah AND a Chenin). When true the caller should confirm the variant
   // with the user before trusting the card. See WineIntelligence.grapeAmbiguous.
@@ -87,6 +90,7 @@ export async function valueWine(
     drinkingWindowTo: intel.drinkingWindowTo ?? null,
     drinkingWindowStatus: intel.drinkingWindowStatus ?? 'unknown',
     grapeVariety: intel.grapeVariety ?? null,
+    insiderNote: intel.insiderNote ?? null,
     grapeAmbiguous: intel.grapeAmbiguous ?? false,
     grapeOptions: intel.grapeOptions ?? [],
     tastingNotes: intel.tastingNotes ?? null,

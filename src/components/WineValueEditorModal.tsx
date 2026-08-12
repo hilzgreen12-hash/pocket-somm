@@ -20,6 +20,11 @@ interface Props {
   // Which value the user is entering. Estimated value is stamped as a
   // user-supplied source; purchase price just records the price.
   field: 'estimated_value' | 'purchase_price';
+  // Which value to PRE-FILL each input from when the sheet opens. Defaults to
+  // `field`. Set it to seed from the OTHER value — e.g. "Input Current Values"
+  // pre-fills the purchase inputs with each wine's current (estimated) value,
+  // while still SAVING to purchase_price.
+  seedField?: 'estimated_value' | 'purchase_price';
   wines: CellarWine[];
   currency: string;
   // Optional gold prompt below the blurb to switch to entering the OTHER value
@@ -32,7 +37,7 @@ interface Props {
 // A list of wines (lineup-input style rows) each with a per-bottle value input,
 // so the user can fill in the values Vinster couldn't find — estimated current
 // value, or purchase price. Only rows with a positive number are written.
-export function WineValueEditorModal({ visible, title, subtitle, field, wines, currency, altAction, onClose, onSaved }: Props) {
+export function WineValueEditorModal({ visible, title, subtitle, field, seedField, wines, currency, altAction, onClose, onSaved }: Props) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const sym = symbolFor(currency);
@@ -42,17 +47,21 @@ export function WineValueEditorModal({ visible, title, subtitle, field, wines, c
   // so the user can double-check and adjust. Runs only on open, never mid-edit.
   const winesRef = useRef(wines); winesRef.current = wines;
   const fieldRef = useRef(field); fieldRef.current = field;
+  const seedFieldRef = useRef(seedField); seedFieldRef.current = seedField;
   useEffect(() => {
     if (!visible) return;
+    // Pre-fill from seedField when given (e.g. seed purchase inputs from each
+    // wine's current value), otherwise from the field being saved.
+    const from = seedFieldRef.current ?? fieldRef.current;
     const init: Record<string, string> = {};
     for (const w of winesRef.current) {
-      const cur = fieldRef.current === 'purchase_price' ? w.purchase_price : w.estimated_value;
+      const cur = from === 'purchase_price' ? w.purchase_price : w.estimated_value;
       if (cur != null) init[w.id] = String(cur);
     }
     setValues(init);
     // Re-seed when the value type switches (e.g. "Input Current Values" from the
     // purchase editor) so the inputs reflect the new field, not the old entries.
-  }, [visible, field]);
+  }, [visible, field, seedField]);
 
   function setVal(id: string, text: string) {
     // Keep digits + a single decimal point.

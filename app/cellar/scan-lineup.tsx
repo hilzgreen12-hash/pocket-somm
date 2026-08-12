@@ -716,7 +716,7 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   headerSpacer: { width: 44 },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
-  content: { padding: spacing.xl, paddingBottom: 60 },
+  content: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: 60 },
   centerBlock: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, gap: spacing.md },
   lead: { fontSize: 17, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', marginBottom: spacing.sm },
   hint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
   summaryLine: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
   // Consistent gold stats bar shared with Archive a Night.
-  statsBar: { alignItems: 'center', paddingVertical: spacing.md, marginBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  statsBar: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.md, marginBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   statsBarText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   addBottlesLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, marginTop: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },

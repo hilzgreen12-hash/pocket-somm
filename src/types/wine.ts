@@ -245,6 +245,9 @@ export interface CellarWine {
   drinking_window_to: number | null;
   drinking_window_status: string;
   tasting_notes: string | null;
+  // "The Inside Line" — Vinster's sommelier-best-friend verdict (migration 089).
+  // Filled from the wine-intelligence insiderNote when intel is generated.
+  insider_note?: string | null;
   grape_variety: string | null;
   // Wine colour / style (red, white, rosé…), migration 026. Nullable.
   style: string | null;

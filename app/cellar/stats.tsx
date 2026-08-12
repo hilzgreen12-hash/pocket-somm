@@ -164,6 +164,11 @@ export default function CellarStatsScreen() {
   const approachingCount = sumByStatus('approaching');
   const tooYoungCount = sumByStatus('too_young');
   const decliningCount = sumByStatus('declining');
+  // Wines Vinster can actually assess a drinking window for. The four buckets are
+  // shown as a share of THIS (so they read as a maturity mix and sum to ~100%),
+  // not of the whole cellar — most wines lack a window until their intel runs.
+  const winesWithWindow = peakCount + approachingCount + tooYoungCount + decliningCount;
+  const winesAwaitingWindow = totalWines - winesWithWindow;
 
   async function processBatch(items: CellarWine[]) {
     const currency = preferences?.defaultCurrency ?? 'GBP';
@@ -421,7 +426,7 @@ export default function CellarStatsScreen() {
                       <Text style={[styles.conditionChevron, c.count === 0 && { opacity: 0.25 }]}>{expanded ? '⌃' : '⌄'}</Text>
                     </View>
                     <Text style={styles.breakdownCount}>{c.count}</Text>
-                    <Text style={styles.breakdownPct}>{pct(c.count, totalBottles)}</Text>
+                    <Text style={styles.breakdownPct}>{pct(c.count, winesWithWindow)}</Text>
                   </TouchableOpacity>
                   {expanded ? (
                     <View style={styles.conditionWines}>
@@ -438,6 +443,11 @@ export default function CellarStatsScreen() {
                 </View>
               );
             })}
+            {winesAwaitingWindow > 0 ? (
+              <Text style={[styles.missingValueText, { marginTop: spacing.sm }]}>
+                {winesAwaitingWindow} {winesAwaitingWindow === 1 ? 'wine' : 'wines'} awaiting a drinking window — open a wine to generate its intel.
+              </Text>
+            ) : null}
           </View>
 
           {/* Style Breakdown */}
@@ -468,10 +478,10 @@ export default function CellarStatsScreen() {
                 wines: winesNoPurchase,
                 altAction: { label: 'Input Current Values', onPress: () => setValueEditor('purchase-current') } };
             case 'purchase-current':
-              return { field: 'estimated_value' as const, title: 'Input Current Values',
-                subtitle: "Enter a current value per bottle for these wines — they'll count towards your Total Current Value (Estimated Values).",
+              return { field: 'purchase_price' as const, seedField: 'estimated_value' as const, title: 'Input Current Values',
+                subtitle: "Each input is pre-filled with the wine's current value — adjust to what you actually paid where you know it, then Save. This adds to your Total Purchase Value.",
                 wines: winesNoPurchase,
-                altAction: { label: 'Input Purchase Prices', onPress: () => setValueEditor('purchase') } };
+                altAction: { label: 'Enter purchase prices from scratch', onPress: () => setValueEditor('purchase') } };
             case 'purchase-estimated':
               return { field: 'purchase_price' as const, title: 'Review Estimated Prices',
                 subtitle: 'These purchase prices are Vinster estimates. Check them and enter what you actually paid per bottle where you know it.',
@@ -494,6 +504,7 @@ export default function CellarStatsScreen() {
           <WineValueEditorModal
             visible={valueEditor !== null}
             field={cfg.field}
+            seedField={(cfg as { seedField?: 'estimated_value' | 'purchase_price' }).seedField}
             title={cfg.title}
             subtitle={cfg.subtitle}
             wines={cfg.wines}
@@ -535,7 +546,7 @@ const styles = StyleSheet.create({
   // Consistent gold stat bar (matches the app's other summary bars).
   summaryBar: { alignItems: 'center', paddingVertical: spacing.lg, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryLine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-  summarySub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
+  summarySub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   summaryDivider: { alignSelf: 'stretch', height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: 2 },
   viewMapsLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', marginTop: 2 },
   section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },

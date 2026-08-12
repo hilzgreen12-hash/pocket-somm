@@ -23,7 +23,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
-import { generatePairings } from '../../src/api/label';
+import { generatePairings, fetchProducerRange, type ProducerRange } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
@@ -43,7 +43,7 @@ import { MicButton } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import { formatCurrency } from '../../src/constants/currency';
+import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import type { WineDetailsComplete, CellarWine, GrapeVariant } from '../../src/types/wine';
 
 function todayISO() {
@@ -339,6 +339,38 @@ export default function CellarWineDetail() {
   const [sharingIntel, setSharingIntel] = useState(false);
   const [intelSharePayload, setIntelSharePayload] = useState<React.ComponentProps<typeof WineIntelShareCard> | null>(null);
 
+  // The Other Home Storage location a wine was just filed into → drives the
+  // "How is this wine packaged?" prompt. MUST live above the auto-generate
+  // early-return below — a hook after it changes the hook count when the loader
+  // shows/hides, which crashes the card ("Something went wrong") the first time
+  // a fresh wine generates intel.
+  const [packagingLocationId, setPackagingLocationId] = useState<string | null>(null);
+
+  // "The {producer} range" — a live producer-range lookup shown under Vinster's
+  // Review/Map, mirroring the scan Wine Intel card. Fetched once per wine, only
+  // after the wine has intel (so it matches the intel timing) and has a producer.
+  // These hooks MUST stay above the early-return below (see the note above).
+  const [producerRange, setProducerRange] = useState<ProducerRange | null>(null);
+  const [producerRangeLoading, setProducerRangeLoading] = useState(false);
+  const producerRangeTriedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!wine || isWishlist || isArchived) return;
+    const hasIntel = wine.critic_score != null || wine.estimated_value != null;
+    if (!hasIntel || !wine.producer?.trim()) return;
+    if (producerRangeTriedRef.current === wine.id) return;
+    producerRangeTriedRef.current = wine.id;
+    setProducerRange(null);
+    setProducerRangeLoading(true);
+    (async () => {
+      try {
+        const r = await fetchProducerRange({ producer: wine.producer, region: wine.region, wineName: wine.wine_name, vintage: wine.vintage });
+        if (r.wines.length > 0) setProducerRange(r);
+      } catch { /* silent — the section just doesn't render */ }
+      finally { setProducerRangeLoading(false); }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wine?.id, wine?.critic_score, wine?.estimated_value, isWishlist, isArchived]);
+
   // Add or replace this wine's framed label photo. Take a fresh photo or
   // pick one from the library, then upload + persist the path. Best-effort
   // with surfaced errors; this is how photo-less / manually-added wines get
@@ -542,10 +574,6 @@ export default function CellarWineDetail() {
       showAlert({ title: 'Could not add to location', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
-
-  // The Other Home Storage location a wine was just filed into → drives the
-  // "How is this wine packaged?" prompt.
-  const [packagingLocationId, setPackagingLocationId] = useState<string | null>(null);
 
   // "Add to Location" on an unplaced wine — place it in a live rack/fridge, file
   // it into an Other Home Storage location, or tag it under a Cellar List location.
@@ -953,6 +981,7 @@ export default function CellarWineDetail() {
           // Review and drinking window from the same Generate action — these
           // were previously discarded, leaving the note permanently blank.
           tasting_notes: v.tastingNotes ?? wine.tasting_notes ?? null,
+          insider_note: v.insiderNote ?? wine.insider_note ?? null,
           drinking_window_from: v.drinkingWindowFrom ?? wine.drinking_window_from ?? null,
           drinking_window_to: v.drinkingWindowTo ?? wine.drinking_window_to ?? null,
           drinking_window_status: v.drinkingWindowStatus ?? wine.drinking_window_status ?? 'unknown',
@@ -1777,57 +1806,88 @@ export default function CellarWineDetail() {
           the user's own, and Vinster's AI review only exists in the cellar. */}
       {!isWishlist ? (
         <>
-        <View style={styles.reviewSubsection}>
-          <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity
-              onPress={() => setVinstersNoteOpen((v) => !v)}
-              activeOpacity={0.7}
-              style={styles.vinsterReviewToggle}
-            >
-              <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
-              <Ionicons
-                name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'}
-                size={16}
-                color={colors.gold}
-              />
-            </TouchableOpacity>
-          </View>
-          {vinstersNoteOpen ? (
-            wine.tasting_notes ? (
-              <>
-                <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
-                {/* The former "(what's this)" explainer, now shown inline in
-                    italics right after the review. */}
-                <Text style={styles.vinsterExplainer}>
-                  Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
-                </Text>
-              </>
-            ) : refreshingValue ? (
-              <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
-            ) : (
-              // No AI note yet (e.g. an imported wine) — offer to generate it.
-              <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
-                <Text style={styles.generateNoteBtnText}>Generate</Text>
+        {/* Vinster's Review (left) beside Vinster's Map (right) — mirrors the
+            Your Review | Cellar Note row above; each expands within its column. */}
+        <View style={styles.reviewRow}>
+          <View style={styles.reviewCol}>
+            <View style={styles.vinsterHeaderRow}>
+              <TouchableOpacity onPress={() => setVinstersNoteOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
+                <Ionicons name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
               </TouchableOpacity>
-            )
-          ) : null}
+            </View>
+            {vinstersNoteOpen ? (
+              wine.tasting_notes ? (
+                <>
+                  <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+                  {/* The former "(what's this)" explainer, now shown inline. */}
+                  <Text style={styles.vinsterExplainer}>
+                    Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
+                  </Text>
+                </>
+              ) : refreshingValue ? (
+                <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
+              ) : (
+                <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
+                  <Text style={styles.generateNoteBtnText}>Generate</Text>
+                </TouchableOpacity>
+              )
+            ) : null}
+          </View>
+
+          {/* Vinster's Map — placeholder, same as the scan intel card. */}
+          <View style={styles.reviewCol}>
+            <View style={styles.vinsterHeaderRow}>
+              <TouchableOpacity onPress={() => setVinstersMapOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+                <Text style={styles.vinsterReviewTitle}>Vinster's Map</Text>
+                <Ionicons name={vinstersMapOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+              </TouchableOpacity>
+            </View>
+            {vinstersMapOpen ? (
+              <Text style={styles.tastingNotes}>
+                Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
+              </Text>
+            ) : null}
+          </View>
         </View>
 
-        {/* Vinster's Map — collapsible, reduced by default; same placeholder as
-            the scan intel card. */}
-        <View style={styles.reviewSubsection}>
-          <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={() => setVinstersMapOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-              <Text style={styles.vinsterReviewTitle}>Vinster's Map</Text>
-              <Ionicons name={vinstersMapOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-            </TouchableOpacity>
+        {/* The Inside Line — Vinster's sommelier-best-friend verdict, shown just
+            as on the scan Wine Intel card. Filled once the wine's intel runs. */}
+        {wine.insider_note?.trim() ? (
+          <View style={styles.insiderSection}>
+            <Text style={styles.insiderTitle}>The Inside Line</Text>
+            <Text style={styles.insiderBody}>{wine.insider_note.trim()}</Text>
           </View>
-          {vinstersMapOpen ? (
-            <Text style={styles.tastingNotes}>
-              Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
-            </Text>
-          ) : null}
-        </View>
+        ) : null}
+
+        {/* Where this wine sits in the producer's range — as on the intel card. */}
+        {producerRangeLoading || (producerRange && producerRange.wines.length > 0) ? (
+          <View style={styles.rangeSection}>
+            <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
+            {producerRange ? (
+              <>
+                {producerRange.wines.map((rw, i) => (
+                  <View key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]}>
+                    <View style={styles.rangeRowMain}>
+                      <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
+                      <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
+                    </View>
+                    <View style={styles.rangeRight}>
+                      <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').repeat(rw.band)}</Text>
+                      {rw.tier ? <Text style={styles.rangeTier}>{rw.tier}</Text> : null}
+                    </View>
+                  </View>
+                ))}
+                {producerRange.summary ? <Text style={styles.rangeSummary}>{producerRange.summary}</Text> : null}
+              </>
+            ) : (
+              <View style={styles.rangeLoading}>
+                <ActivityIndicator color={colors.gold} />
+                <Text style={styles.rangeLoadingText}>Mapping the range…</Text>
+              </View>
+            )}
+          </View>
+        ) : null}
         </>
       ) : null}
 
@@ -2233,6 +2293,26 @@ const styles = StyleSheet.create({
   reviewPriceInput: { flex: 1, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, paddingVertical: spacing.sm },
   autoSaveHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.sm },
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
+  // The Inside Line + producer range — mirrored from the scan Wine Intel card.
+  insiderSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  insiderTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  insiderBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 23 },
+  rangeSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
+  rangeRowThis: { backgroundColor: 'rgba(212,176,96,0.10)', borderRadius: 8, paddingHorizontal: spacing.sm, borderBottomColor: 'transparent' },
+  rangeRowMain: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: spacing.xs },
+  rangeMarker: { fontSize: 14, color: colors.gold, width: 14, textAlign: 'center' },
+  rangeMarkerHidden: { opacity: 0 },
+  rangeName: { flex: 1, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text },
+  rangeNameThis: { fontFamily: fonts.bodySemibold, color: colors.gold },
+  rangeRight: { alignItems: 'flex-end' },
+  rangeBand: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1 },
+  rangeBandThis: { color: colors.gold },
+  rangeTier: { fontSize: 10, fontFamily: fonts.bodyRegular, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 1 },
+  rangeSummary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 21, marginTop: spacing.md },
   // Two-column review row: Personal Notes (left) beside Your Review (right).
   // The row carries the horizontal padding; each column just flexes.
   reviewRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.lg, alignItems: 'flex-start' },
