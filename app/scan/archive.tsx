@@ -308,7 +308,7 @@ export default function MyLabelsScreen() {
       body: formatStamp(label),
       buttons: [
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
-        { text: 'Your Review', onPress: () => goToReview(existingId, label) },
+        { text: 'Add/View Your Review', onPress: () => goToReview(existingId, label) },
         { text: 'Delete from Library', style: 'destructive', onPress: () => confirmRemove(label, existingId) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -380,6 +380,8 @@ export default function MyLabelsScreen() {
       `sv=${encodeURIComponent(label.vintage != null ? String(label.vintage) : '')}`,
       `sr=${encodeURIComponent(label.region ?? '')}`,
       `slp=${encodeURIComponent(label.label_image_path ?? '')}`,
+      // Seed the review date with when the label was scanned, not today.
+      `sd=${encodeURIComponent(label.created_at ? label.created_at.split('T')[0] : '')}`,
     ].join('&');
     router.push(`/wines/chosen?${q}`);
   }

@@ -20,7 +20,7 @@ function fmtDate(iso: string | null): string {
 
 export function ReviewDetailModal({
   review, visible, onClose, onAddReview, onEditLatest, onDeleteEntry, thumbPath, onAddPhoto,
-  cellarBottles = 0, archiveBottles = 0,
+  cellarBottles = 0, archiveBottles = 0, onShare,
 }: {
   review: UnifiedReview | null;
   visible: boolean;
@@ -32,6 +32,7 @@ export function ReviewDetailModal({
   onAddPhoto?: () => void;
   cellarBottles?: number;
   archiveBottles?: number;
+  onShare?: () => void;
 }) {
   if (!review) return null;
   const { entries } = review; // newest first
@@ -64,6 +65,11 @@ export function ReviewDetailModal({
         <TouchableOpacity style={styles.addBtn} onPress={onAddReview} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
           <Text style={styles.addText}>+ Add Review</Text>
         </TouchableOpacity>
+        {onShare ? (
+          <TouchableOpacity style={styles.shareBtn} onPress={onShare} hitSlop={{ top: 8, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+            <Text style={styles.shareText}>Share</Text>
+          </TouchableOpacity>
+        ) : null}
 
         <ScrollView contentContainerStyle={styles.content}>
           {/* Header — mirrors the landing card: thumbnail left, wine name right. */}
@@ -169,6 +175,9 @@ const styles = StyleSheet.create({
   backText: { fontFamily: fonts.bodyRegular, fontSize: 22, color: colors.gold },
   addBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, padding: 4 },
   addText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Share sits directly below "+ Add Review".
+  shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
+  shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   content: { padding: spacing.xl, paddingTop: 96, paddingBottom: 60 },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },

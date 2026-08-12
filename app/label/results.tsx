@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { VinstersNoteHeading } from '../../src/components/VinstersNoteHeading';
+import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -1736,17 +1736,19 @@ export default function LabelResultsScreen() {
             </Text>
           ) : null}
 
-          <View style={styles.section}>
-            <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} />
+          {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
+              one above the other with no separator between them; the section's
+              bottom border is the only separator (it sits below the Map, before
+              The Inside Line). "(what's this)" is replaced by the explainer shown
+              in gold italics below the note when it's open. */}
+          <View style={styles.noteMapSection}>
+            <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} hideExplainerLink />
             {noteExpanded ? <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text> : null}
-          </View>
+            {noteExpanded ? <Text style={styles.noteExplainer}>{VINSTERS_NOTE_EXPLAINER}</Text> : null}
 
-          {/* Vinster's Map — collapsible, reduced by default. Placeholder copy
-              until the region/producer map ships. */}
-          <View style={styles.section}>
-            <TouchableOpacity style={styles.mapHeadingRow} onPress={() => setMapExpanded((v) => !v)} activeOpacity={0.7}>
+            <TouchableOpacity style={[styles.mapHeadingRow, styles.mapHeadingTight]} onPress={() => setMapExpanded((v) => !v)} activeOpacity={0.7}>
               <Text style={styles.mapTitle}>Vinster's Map</Text>
-              <Text style={styles.mapChevron}>{mapExpanded ? '▾' : '▸'}</Text>
+              <Text style={styles.mapChevron}>{mapExpanded ? '⌃' : '⌄'}</Text>
             </TouchableOpacity>
             {mapExpanded ? (
               <Text style={styles.mapBody}>
@@ -2372,6 +2374,15 @@ const styles = StyleSheet.create({
   badgeText: { fontSize: 14, fontFamily: fonts.bodySemibold },
   badgeWindow: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   section: { padding: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Vinster's Note + Map combined block — tighter than a full section, with a
+  // single bottom border (the separator before The Inside Line) and no divider
+  // between the note and the map.
+  noteMapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Pulls the Map heading up close beneath the note (squeezed together).
+  mapHeadingTight: { marginTop: spacing.sm },
+  // The "(what's this)" explainer, now shown inline in gold italics below the
+  // note when it's expanded instead of behind a link.
+  noteExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
   // Inline headline stats bar: Score · Value · Drinking Window.
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
@@ -2383,11 +2394,13 @@ const styles = StyleSheet.create({
   // Compact 2-column stat grid mirroring the cellar wine card.
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },
-  // "The Inside Line" — sommelier-best-friend commentary.
-  insiderTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
+  // "The Inside Line" — sommelier-best-friend commentary. Header matches the
+  // producer-range header (rangeTitle) and is gold, per design.
+  insiderTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   insiderBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 23 },
-  // Producer range ladder — entry → flagship, this wine highlighted.
-  rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  // Producer range ladder — entry → flagship, this wine highlighted. Header gold
+  // to match The Inside Line above it.
+  rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
@@ -2414,7 +2427,7 @@ const styles = StyleSheet.create({
   confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   // "Not this wine?" correction link under the header on the intel card.
   wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.md },
-  wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
+  wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center' },
   statLabel: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4 },
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },

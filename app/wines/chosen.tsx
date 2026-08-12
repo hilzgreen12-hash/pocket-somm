@@ -169,7 +169,7 @@ export default function ChosenWinesScreen() {
   const [addOpen, setAddOpen] = useState(false);
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
   // (null for Manual Input). Keeps all three on the same review input screen.
-  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null } | null>(null);
+  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null; date?: string | null } | null>(null);
   // Local uri of a scanned/uploaded label, retained through the Add-a-Review
   // modal so the new review can carry its label photo (Part 3). Null for Manual.
   const [pendingReviewLabelUri, setPendingReviewLabelUri] = useState<string | null>(null);
@@ -201,6 +201,9 @@ export default function ChosenWinesScreen() {
   const [monthFilter, setMonthFilter] = useState<string>('all');
   const [locationFilter, setLocationFilter] = useState<string>('All');
   const [favouriteFilter, setFavouriteFilter] = useState<'all' | 'fav'>('all');
+  // Toggled by tapping "X Wines awaiting your review" in the header — shows only
+  // the not-yet-reviewed picks; tap again to clear.
+  const [awaitingOnly, setAwaitingOnly] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
   // "+ Add" is a two-step chooser: first the collection (Restaurant / Cellar /
@@ -407,7 +410,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; sd?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
@@ -484,7 +487,7 @@ export default function ChosenWinesScreen() {
       const key = `add:${params.sp}|${params.sw}|${params.sv}`;
       if (handledParamRef.current === key) return;
       handledParamRef.current = key;
-      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null });
+      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null, date: params.sd || null });
       setPendingReviewLabelUri(null);
       // From the Label Library: identity is confirmed → review-card presentation,
       // carrying the label's existing photo path (slp).
@@ -543,12 +546,23 @@ export default function ChosenWinesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenWines, cellarReviews]);
 
-  // Whether an item is a shown review (a written chosen review or any cellar
-  // review) rather than a bare, unreviewed bottle pick — used by the Location /
-  // Month option lists and the main filter so the three agree on what's visible.
+  // A not-yet-reviewed restaurant/other pick that should surface in Your Wine
+  // Reviews as "Awaiting Review": has no review, its identity isn't already
+  // reviewed elsewhere (phantom rows), and it hasn't been dismissed. Same rule
+  // the flat `awaitingReview` list uses.
+  const isAwaitingPick = (w: ChosenWine): boolean =>
+    !chosenHasReview(w) && !reviewedIdentityKeys.has(idKey(w)) && !w.review_dismissed;
+  function isAwaitingItem(it: ReviewItem): boolean {
+    return (it.source === 'restaurant' || it.source === 'other') && isAwaitingPick(it.wine as ChosenWine);
+  }
+
+  // Whether an item belongs in the list at all — a written chosen review, any
+  // cellar review, OR an awaiting pick (which now stacks in by date alongside
+  // reviews rather than sitting in a separate section). Used by the Location /
+  // Month option lists and the main filter so they agree on what's visible.
   function isShownReview(it: ReviewItem): boolean {
     if (isWishlist(it)) return false;
-    if (it.source === 'restaurant' || it.source === 'other') return chosenHasReview(it.wine as ChosenWine);
+    if (it.source === 'restaurant' || it.source === 'other') return chosenHasReview(it.wine as ChosenWine) || isAwaitingPick(it.wine as ChosenWine);
     return true; // cellar reviews are always shown
   }
 
@@ -570,9 +584,10 @@ export default function ChosenWinesScreen() {
   // are on, matching Full Cellar List's behaviour.
   const q = foldAccents(search.trim());
   const filtered = items.filter((it) => {
-    // Wish List wines never appear here, and bare (unreviewed) restaurant/other
-    // picks live in You · Your Restaurants until reviewed.
+    // Wish List wines never appear here. Awaiting picks DO show now (stacked by
+    // date); the header's "X awaiting" toggle narrows to only them.
     if (!isShownReview(it)) return false;
+    if (awaitingOnly && !isAwaitingItem(it)) return false;
     // Collection selector: All shows everything; otherwise a single source. The
     // three collections map straight onto item.source (restaurant / cellar /
     // other) now that they're distinct slices.
@@ -763,7 +778,6 @@ export default function ChosenWinesScreen() {
   const [reviewSharing, setReviewSharing] = useState(false);
   // Scroll-to for the "awaiting review" summary link → the awaiting section.
   const listScrollRef = useRef<ScrollView>(null);
-  const [awaitingY, setAwaitingY] = useState(0);
   const [reviewSharePayload, setReviewSharePayload] = useState<{
     producer: string | null;
     wineName: string;
@@ -924,6 +938,7 @@ export default function ChosenWinesScreen() {
         cellarBottles={detailBottleCounts.cellar}
         archiveBottles={detailBottleCounts.archive}
         visible={!!detailItem}
+        onShare={() => { if (detailItem) void handleShareReview(detailItem); }}
         onClose={() => setDetailItem(null)}
         onAddReview={() => {
           const it = detailItem; if (!it) return;
@@ -1296,23 +1311,27 @@ export default function ChosenWinesScreen() {
           <View style={styles.summaryRow}>
             <Text style={styles.summaryText}>
               {(() => {
+                // Awaiting picks now live in `filtered` too, so count reviews and
+                // awaiting separately: reviews = shown items minus awaiting; wines
+                // = distinct identities across both.
                 const wineKeys = new Set(filtered.map((it) => {
                   const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
                   return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
                 }));
-                const r = filtered.length;
-                // Total wines counts reviewed AND awaiting (they're distinct sets).
-                // The awaiting section only shows under All / Restaurant, so its
-                // count + jump link only join the summary there.
-                const showAwaiting = typeFilter === 'all' || typeFilter === 'restaurant';
-                const a = showAwaiting ? awaitingReview.length : 0;
-                const n = wineKeys.size + a;
+                const r = filtered.filter((it) => !isAwaitingItem(it)).length;
+                const n = wineKeys.size;
+                // Total awaiting in the current collection (independent of the
+                // toggle, so the label stays stable when tapped).
+                const a = awaitingReview.filter((w) =>
+                  typeFilter === 'all' || (w.source === 'other' ? 'other' : 'restaurant') === typeFilter,
+                ).length;
                 return (
                   <>
                     {`${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`}
-                    {a > 0 ? (
-                      // Awaiting count drops to its own line beneath "Reviews · Wines".
-                      <Text>{'\n'}<Text style={styles.summaryLink} onPress={() => listScrollRef.current?.scrollTo({ y: Math.max(0, awaitingY - 12), animated: true })}>{`${a} ${a === 1 ? 'Wine' : 'Wines'} awaiting your review`}</Text></Text>
+                    {(a > 0 || awaitingOnly) ? (
+                      // Tap to toggle the "awaiting only" filter; tap again to clear.
+                      // Stays visible while the toggle is on so it's always escapable.
+                      <Text>{'\n'}<Text style={[styles.summaryLink, awaitingOnly && styles.summaryLinkActive]} onPress={() => setAwaitingOnly((v) => !v)}>{`${a} ${a === 1 ? 'Wine' : 'Wines'} awaiting your review${awaitingOnly ? '  ✕' : ''}`}</Text></Text>
                     ) : null}
                   </>
                 );
@@ -1439,10 +1458,13 @@ export default function ChosenWinesScreen() {
               // EditChosenWineModal; cellar reviews open the sibling
               // EditCellarReviewModal (which saves to cellar_wines).
               const isChosen = item.source !== 'cellar';
+              const awaiting = isAwaitingItem(item);
               // All reviews open the same unified detail view.
               const entries = isChosen ? (item as Extract<ReviewItem, { source: 'restaurant' }>).entries : [];
               const uni = isChosen ? fromChosenGroup(entries) : fromCellar(item.wine as CellarWine);
-              const onPress = () => setDetailItem(item);
+              // Awaiting picks open the review INPUT (write your review); reviewed
+              // items open the detail view.
+              const onPress = () => awaiting ? setEditingWine(item.wine as ChosenWine) : setDetailItem(item);
               const locText = isChosen
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
@@ -1453,7 +1475,7 @@ export default function ChosenWinesScreen() {
                   key={`${item.source}-${w.id}`}
                   style={styles.cardCompact}
                   onPress={onPress}
-                  onLongPress={() => handleLongPressReview(item)}
+                  onLongPress={() => awaiting ? promptDismissAwaiting(item.wine as ChosenWine) : handleLongPressReview(item)}
                   delayLongPress={400}
                   activeOpacity={0.7}
                 >
@@ -1504,16 +1526,23 @@ export default function ChosenWinesScreen() {
                             and the long-press delete prompt, so this
                             cosmetic removal doesn't disturb behaviour. */}
                       </View>
-                      {/* Yellow stats line — number of entries + Vinster's
-                          average score across them. */}
+                      {/* Yellow stats line — "Awaiting Review" for a pick not yet
+                          reviewed, otherwise the entry count + average score. */}
                       <Text style={styles.reviewStatsLine}>
-                        {uni.count} {uni.count === 1 ? 'Review' : 'Reviews'}{uni.averageScore != null ? ` · ${uni.averageScore} Average Score` : ''}
+                        {awaiting
+                          ? 'Awaiting Review'
+                          : `${uni.count} ${uni.count === 1 ? 'Review' : 'Reviews'}${uni.averageScore != null ? ` · ${uni.averageScore} Average Score` : ''}`}
                       </Text>
-                      {note ? (
-                        <Text style={styles.addedNote}>
-                          You added this to your {note.kind} on {formatDate(note.date)}
-                        </Text>
-                      ) : null}
+                      {/* Contextual line mirroring the cellar note: restaurant /
+                          other wines say where you had the wine; cellar wines say
+                          when you added it. */}
+                      {isChosen
+                        ? (locText ? (
+                            <Text style={styles.addedNote}>You had this wine at {locText}</Text>
+                          ) : null)
+                        : (note ? (
+                            <Text style={styles.addedNote}>You added this to your {note.kind} on {formatDate(note.date)}</Text>
+                          ) : null)}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -1521,47 +1550,8 @@ export default function ChosenWinesScreen() {
             })
           )}
 
-          {/* Bottle Picks Awaiting Review — restaurant picks not yet reviewed.
-              Tapping one opens the same review flow as Your Restaurants. Only
-              relevant under the All / Restaurant collections. */}
-          {awaitingReview.length > 0 && (typeFilter === 'all' || typeFilter === 'restaurant') ? (
-            <View style={styles.awaitingSection} onLayout={(e) => setAwaitingY(e.nativeEvent.layout.y)}>
-              <Text style={styles.awaitingHeader}>Restaurant Wines Awaiting Review</Text>
-              {awaitingReview.map((w) => {
-                const thumbPath = w.label_image_path
-                  ?? cellarByIdentity.get(wineIdentityKey(w.producer, w.wine_name, w.vintage))?.label_image_path
-                  ?? null;
-                return (
-                  <TouchableOpacity
-                    key={`await-${w.id}`}
-                    style={styles.awaitingRow}
-                    onPress={() => setEditingWine(w)}
-                    onLongPress={() => promptDismissAwaiting(w)}
-                    delayLongPress={350}
-                    activeOpacity={0.7}
-                  >
-                    <View style={styles.cardCompactOuter}>
-                      {thumbPath ? (
-                        <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
-                      ) : (
-                        <AddPhotoThumb
-                          style={styles.reviewThumb}
-                          radius={4}
-                          onPress={() => attachPhoto.present({ kind: 'chosen', wineId: w.id, producer: w.producer, wineName: w.wine_name })}
-                        />
-                      )}
-                      <View style={styles.cardCompactBody}>
-                        <Text style={styles.awaitingName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
-                        <Text style={styles.awaitingMeta} numberOfLines={1}>
-                          {[locationLine(w), formatDate(w.chosen_at)].filter(Boolean).join(' · ')}
-                        </Text>
-                      </View>
-                    </View>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ) : null}
+          {/* Awaiting-review picks now stack into the list above, sorted by date
+              (see isShownReview) — no separate bottom section. */}
         </ScrollView>
         </>
       )}
@@ -1704,6 +1694,8 @@ const styles = StyleSheet.create({
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Tappable variant of the awaiting-review line (no underline, per house style).
   summaryLink: { marginTop: 4 },
+  // Active state — the "awaiting only" toggle is on; underline + '✕' signal it.
+  summaryLinkActive: { textDecorationLine: 'underline' },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   // Mic + Camera "Add" prompts above the filters.
   addIconsRow: { flexDirection: 'row', gap: spacing.xl, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm },

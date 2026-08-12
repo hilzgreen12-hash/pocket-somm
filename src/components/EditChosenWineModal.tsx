@@ -468,20 +468,13 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         <View style={styles.sheet}>
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
-            {/* Top row: back (left) · Share (right) — Share matches the rest of
-                the app, sharing the same wine card as everywhere else. */}
+            {/* Top row: just back. Share lives on the wine review page (below
+                "+ Add Review"); editing is per-review there, so neither belongs
+                on this input screen. */}
             <View style={styles.topRow}>
               <TouchableOpacity onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
                 <Text accessibilityLabel="Back" style={styles.backText}>←</Text>
               </TouchableOpacity>
-              <View style={styles.topRight}>
-                <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
-                  <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={openIdentityEdit} hitSlop={{ top: 6, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
-                  <Text style={styles.topEditText}>Edit</Text>
-                </TouchableOpacity>
-              </View>
             </View>
 
             {/* Header — mirrors the cellar wine card: label thumbnail on the

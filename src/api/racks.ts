@@ -159,12 +159,19 @@ export async function clearWineFromRacks(cellarWineId: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function removeSlotsForWine(cellarWineId: string, count: number): Promise<number> {
+// Free up to `count` of a wine's slots. Pass `rackId` to scope removal to a
+// SINGLE rack/storage unit — essential when a wine is placed in more than one
+// unit (e.g. a rack AND the fridge): a delete issued from one unit must only
+// free that unit's bottles, never another unit's. Without a rackId it frees
+// across all racks (the legacy behaviour, used only for whole-wine deletes).
+export async function removeSlotsForWine(cellarWineId: string, count: number, rackId?: string): Promise<number> {
   if (count <= 0) return 0;
-  const { data, error } = await supabase
+  let q = supabase
     .from('rack_slots')
     .select('id')
-    .eq('cellar_wine_id', cellarWineId)
+    .eq('cellar_wine_id', cellarWineId);
+  if (rackId) q = q.eq('rack_id', rackId);
+  const { data, error } = await q
     .order('row_index', { ascending: false })
     .order('col_index', { ascending: false })
     .limit(count);

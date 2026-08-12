@@ -851,6 +851,13 @@ export default function ResultsScreen() {
           // Real Wine-Searcher data for this pick, once it has loaded in.
           const wsE = wsByIndex[i];
           const effCritic = wsE && wsE.criticScore != null ? wsE.criticScore : wine.criticScore;
+          // Headline number is Vinster's holistic score (why it's ranked here),
+          // not the raw critic score — the critic score stays as the top labelled
+          // note below. Older saved sessions have no vinsterScore, so fall back to
+          // the critic score (shown untagged) rather than an empty headline.
+          const vs = wine.vinsterScore ?? null;
+          const headlineScore = vs ?? (effCritic > 0 ? effCritic : null);
+          const headlineIsVinster = vs != null;
           const effRegion = wine.region || wsE?.region || null;
           const effGrape = wine.grape || wsE?.grape || null;
           const criticScoreText = wsE && wsE.criticScore != null
@@ -920,6 +927,9 @@ export default function ResultsScreen() {
                     <Text style={[styles.selectBarText, chosenIndexes.has(i) && styles.selectBarTextDone]}>
                       {chosenIndexes.has(i) ? 'Selected · Tap to Remove' : 'Select This Wine'}
                     </Text>
+                    {!chosenIndexes.has(i) && (
+                      <Text style={styles.selectBarSub}>Add to Your Restaurants &amp; Your Wine Reviews</Text>
+                    )}
                   </TouchableOpacity>
                 )}
 
@@ -932,16 +942,21 @@ export default function ResultsScreen() {
                     field can be missing (some lists omit the price, some
                     wines lack a critic score) — the row stays balanced
                     by rendering only the present halves. */}
-                {(wine.menuPrice != null || effCritic > 0) && (
+                {(wine.menuPrice != null || headlineScore != null) && (
                   <View style={styles.priceScoreRow}>
                     {wine.menuPrice != null && (
                       <Text style={styles.priceScoreText}>{currencySymbol(wine.currency || userPrefs?.defaultCurrency)}{wine.menuPrice}</Text>
                     )}
-                    {wine.menuPrice != null && effCritic > 0 && (
+                    {wine.menuPrice != null && headlineScore != null && (
                       <Text style={styles.priceScoreDot}> · </Text>
                     )}
-                    {effCritic > 0 && (
-                      <Text style={styles.priceScoreText}>{effCritic} pts</Text>
+                    {headlineScore != null && (
+                      <Text style={styles.priceScoreText}>
+                        {headlineScore} pts
+                        {headlineIsVinster ? (
+                          <Text style={styles.vinsterScoreTag}>{i === 0 ? ' Vinster Score' : ' (VS)'}</Text>
+                        ) : null}
+                      </Text>
                     )}
                   </View>
                 )}
@@ -1371,6 +1386,13 @@ const styles = StyleSheet.create({
     fontSize: 19,
     color: colors.textMuted,
   },
+  // "Vinster Score" / "(VS)" tag after the headline number — smaller and gold so
+  // it reads as Vinster's own metric, not a critic score.
+  vinsterScoreTag: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 13,
+    color: colors.gold,
+  },
   // Flavour-profile line — italic gold "Vinster's voice".
   wineFlavour: {
     fontSize: 14,
@@ -1466,6 +1488,15 @@ const styles = StyleSheet.create({
   },
   selectBarTextDone: {
     color: colors.gold,
+  },
+  // Second line in the select bar — smaller, explains what selecting does.
+  selectBarSub: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 10,
+    color: colors.gold,
+    letterSpacing: 0.3,
+    marginTop: 2,
+    opacity: 0.85,
   },
   // "Add a restaurant first" prompt.
   promptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },

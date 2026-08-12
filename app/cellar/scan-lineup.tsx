@@ -14,6 +14,7 @@ import { detectLineup, prepareImageBase64, scanLabel, type DetectedBottle } from
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { findCellarWineByIdentity } from '../../src/api/cellar';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
+import { wineNameKey } from '../../src/utils/wineIdentity';
 import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import type { CellarWine } from '../../src/types/wine';
 import { showAlert } from '../../src/components/AppAlert';
@@ -324,21 +325,19 @@ export default function ScanLineupScreen() {
   // Match a detected bottle to an existing cellar line by identity (producer +
   // name, vintage preferred) — mirrors matchLineupToCellar's matching.
   function findCellarMatch(b: DetectedBottle): CellarWine | null {
-    const p = norm(b.producer);
-    const n = norm(b.wineName);
-    const v = (b.vintage ?? '').trim();
-    const candidates = cellarWines.filter((w) => {
-      const wp = norm(w.producer);
-      const wn = norm(w.wine_name);
-      const producerHit = !!p && (wp === p || wn === p);
-      const nameHit = !!n && (wn === n || wp === n);
-      return producerHit || nameHit;
-    });
-    if (v) {
-      const exact = candidates.find((w) => (w.vintage ?? '').trim() === v);
-      if (exact) return exact;
-    }
-    return candidates[0] ?? null;
+    // A lineup bottle is the SAME wine as an existing cellar row ONLY when its
+    // producer, cuvée name AND vintage all match. Matching on producer alone (the
+    // old behaviour) merged different cuvées from one producer — e.g. a lineup
+    // "Mullineux Iron" collapsing onto an existing "Mullineux Schist", inheriting
+    // its label + intel and bumping its count. Compare producer+name as an
+    // order-independent set so an OCR producer/name swap still matches.
+    const target = wineNameKey(b.producer, b.wineName);
+    if (!target) return null;
+    const bv = (b.vintage ?? '').trim().toLowerCase();
+    return cellarWines.find((w) => {
+      if (wineNameKey(w.producer, w.wine_name) !== target) return false;
+      return (w.vintage ?? '').toString().trim().toLowerCase() === bv;
+    }) ?? null;
   }
 
   // Rack-placement: place each kept bottle into consecutive free slots from the

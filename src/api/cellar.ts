@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import type { CellarWine } from '../types/wine';
+import { wineNameKey } from '../utils/wineIdentity';
 
 export async function getCellarWines(userId: string): Promise<CellarWine[]> {
   const { data, error } = await supabase
@@ -227,22 +228,16 @@ export async function findCellarWineByIdentity(
     .eq('is_wishlist', false);
   if (error) throw error;
   const list = (data ?? []) as CellarWine[];
-  const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
-  const p = norm(identity.producer);
-  const n = norm(identity.wineName);
-  const v = identity.vintage != null ? String(identity.vintage).trim() : '';
-  const matches = list.filter((w) => {
-    const wp = norm(w.producer);
-    const wn = norm(w.wine_name);
-    const producerHit = !!p && (wp === p || wn === p);
-    const nameHit = !!n && (wn === n || wp === n);
-    return producerHit || nameHit;
-  });
-  if (v) {
-    const exact = matches.find((w) => (w.vintage ?? '').toString().trim() === v);
-    if (exact) return exact;
-  }
-  return matches[0] ?? null;
+  // Same wine = same producer+cuvée identity (order-independent word set, so an
+  // OCR producer/name split still matches) AND same vintage. Matching on producer
+  // alone merged distinct cuvées from one producer into a single row.
+  const target = wineNameKey(identity.producer, identity.wineName);
+  if (!target) return null;
+  const v = identity.vintage != null ? String(identity.vintage).trim().toLowerCase() : '';
+  return list.find((w) => {
+    if (wineNameKey(w.producer, w.wine_name) !== target) return false;
+    return (w.vintage ?? '').toString().trim().toLowerCase() === v;
+  }) ?? null;
 }
 
 export async function shareCellar(ownerId: string, email: string): Promise<void> {

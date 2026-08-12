@@ -127,7 +127,10 @@ export default function RackGridScreen() {
   const [rackMove, setRackMove] = useState<{ wine: CellarWine; currentName: string; max: number; rid: string; row: number; col: number } | null>(null);
   const [rackMoveQty, setRackMoveQty] = useState('');
   // "Delete Wine (Permanent)" on a multi-bottle wine → ask how many (or Delete All).
-  const [deleteModal, setDeleteModal] = useState<{ wineId: string; wineName: string; qty: number } | null>(null);
+  // `qty` = how many are deletable FROM THIS RACK (the modal caps to it);
+  // `totalQty` = the wine's global quantity, used to decide whether the last
+  // bottle anywhere is gone (→ delete the row) or just decrement.
+  const [deleteModal, setDeleteModal] = useState<{ wineId: string; wineName: string; qty: number; totalQty: number } | null>(null);
   const [deleteCount, setDeleteCount] = useState('1');
   const [deleting, setDeleting] = useState(false);
   // Placement modal — shown when the user taps an empty slot with a
@@ -923,10 +926,7 @@ export default function RackGridScreen() {
     buttons.push({
       text: 'Delete Wine (Permanent)',
       style: 'destructive',
-      onPress: () => {
-        if (qty > 1) { setDeleteCount('1'); setDeleteModal({ wineId, wineName: wine.wine_name, qty }); }
-        else confirmDeleteWine(wineId, wine.wine_name, qty);
-      },
+      onPress: () => openDeleteFlow(wine),
     });
     buttons.push({ text: 'Cancel', style: 'cancel' });
     showAlert({
@@ -980,6 +980,56 @@ export default function RackGridScreen() {
     } finally {
       setArchiving(false);
     }
+  }
+
+  // Bottles of this wine physically placed in THIS rack. A delete issued here is
+  // capped and scoped to this — never touching a bottle in another rack/fridge.
+  function rackCountOf(wineId: string): number {
+    return slots.filter((s) => s.cellar_wine_id === wineId).length;
+  }
+
+  // Route a delete correctly for where it's issued from. When the wine also
+  // lives in another storage unit, deletion is scoped to THIS rack's bottles;
+  // only when this is the wine's only home does it delete the whole row.
+  function openDeleteFlow(wine: CellarWine) {
+    const total = wine.quantity ?? 1;
+    const rc = rackCountOf(wine.id);
+    const spans = rc > 0 && rc < total; // some bottles are in another unit
+    const deletable = spans ? rc : total; // cap to this rack when it spans units
+    if (deletable > 1) {
+      setDeleteCount('1');
+      setDeleteModal({ wineId: wine.id, wineName: wine.wine_name, qty: deletable, totalQty: total });
+    } else if (spans) {
+      confirmDeleteOneFromRack(wine.id, wine.wine_name, total);
+    } else {
+      confirmDeleteWine(wine.id, wine.wine_name, total);
+    }
+  }
+
+  // Single-bottle delete scoped to this rack, when the wine also lives elsewhere.
+  function confirmDeleteOneFromRack(wineId: string, wineName: string, total: number) {
+    showAlert({
+      title: 'Delete this bottle?',
+      body: `Remove one bottle of ${wineName} from here. Your other bottle${total - 1 === 1 ? '' : 's'} in another storage unit stay put. This can't be undone.`,
+      buttons: [
+        {
+          text: 'Delete permanently',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeSlotsForWine(wineId, 1, rackId);
+              await updateWine.mutateAsync({ id: wineId, updates: { quantity: Math.max(0, total - 1) } });
+              qc.invalidateQueries({ queryKey: ['cellar'] });
+              qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+              qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
   }
 
   function confirmDeleteWine(wineId: string, wineName: string, qty: number) {
@@ -1036,10 +1086,7 @@ export default function RackGridScreen() {
         {
           text: 'Delete Wine (Permanent)',
           style: 'destructive',
-          onPress: () => {
-            if (qty > 1) { setDeleteCount('1'); setDeleteModal({ wineId: wine.id, wineName: wine.wine_name, qty }); }
-            else confirmDeleteWine(wine.id, wine.wine_name, qty);
-          },
+          onPress: () => openDeleteFlow(wine),
         },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -1052,7 +1099,7 @@ export default function RackGridScreen() {
   // this is a permanent delete, not an archive.
   async function handleRackDelete(deleteAll: boolean) {
     if (!deleteModal || deleting) return;
-    const { wineId, qty } = deleteModal;
+    const { wineId, qty, totalQty } = deleteModal;
     const count = deleteAll ? qty : (parseInt(deleteCount, 10) || 0);
     if (count < 1 || count > qty) {
       showAlert({ title: 'Invalid', body: `Enter between 1 and ${qty} bottles.` });
@@ -1060,8 +1107,9 @@ export default function RackGridScreen() {
     }
     setDeleting(true);
     try {
-      if (count === qty) {
-        // Full delete — remove the row and clear all its slots.
+      const newTotal = totalQty - count;
+      if (newTotal <= 0) {
+        // The wine's last bottles (anywhere) are gone — remove the row + all slots.
         await clearWineFromRacks(wineId);
         const { error } = await supabase.from('cellar_wines').delete().eq('id', wineId);
         if (error) throw error;
@@ -1071,14 +1119,15 @@ export default function RackGridScreen() {
         qc.invalidateQueries({ queryKey: ['cellar'] });
         qc.invalidateQueries({ queryKey: ['cellar-archive'] });
       } else {
-        // Partial — decrement the live row and free exactly `count` of its slots.
-        await updateWine.mutateAsync({ id: wineId, updates: { quantity: qty - count } });
-        await removeSlotsForWine(wineId, count);
+        // Decrement the live row and free `count` slots FROM THIS RACK only — a
+        // bottle of the same wine in another rack/fridge is never touched.
+        await updateWine.mutateAsync({ id: wineId, updates: { quantity: newTotal } });
+        await removeSlotsForWine(wineId, count, rackId);
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       setDeleteModal(null);
-      setSavedMsg(count === qty ? 'Wine deleted' : `${count} bottle${count === 1 ? '' : 's'} deleted`);
+      setSavedMsg(newTotal <= 0 ? 'Wine deleted' : `${count} bottle${count === 1 ? '' : 's'} deleted`);
     } catch (err) {
       showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -1380,15 +1429,13 @@ export default function RackGridScreen() {
         <View style={styles.multiBar}>
           <View style={styles.multiBarInner}>
             <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
-            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional empty slots to fill</Text>
-            <View style={styles.multiBarBtns}>
-              <TouchableOpacity style={styles.multiBarCancel} onPress={cancelMultiSelect} activeOpacity={0.8}>
-                <Text style={styles.multiBarCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.multiBarPlace} onPress={placeIntoSelected} activeOpacity={0.8}>
-                <Text style={styles.multiBarPlaceText}>Place a wine →</Text>
-              </TouchableOpacity>
-            </View>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional horizontal slots to fill</Text>
+            <TouchableOpacity style={[styles.multiBarPlace, styles.multiBarPlaceFull]} onPress={placeIntoSelected} activeOpacity={0.8}>
+              <Text style={styles.multiBarPlaceText}>Confirm Slots & Add Image</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.multiBarCancelLink} onPress={cancelMultiSelect} activeOpacity={0.7}>
+              <Text style={styles.multiBarCancelLinkText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       ) : addMoreWine ? (
@@ -2232,7 +2279,12 @@ const styles = StyleSheet.create({
   multiBarCancel: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   multiBarCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   multiBarPlace: { flex: 2, backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  // Full-width primary button (stacked layout, not the side-by-side row).
+  multiBarPlaceFull: { flex: undefined, alignSelf: 'stretch' },
   multiBarPlaceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.surface },
+  // Small centred "Cancel" link below the primary button.
+  multiBarCancelLink: { alignItems: 'center', paddingTop: 2 },
+  multiBarCancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },
   wineList: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, borderTopWidth: 1, borderTopColor: colors.border },
   // Inter — hint
   rackHint: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 4, lineHeight: 20 },

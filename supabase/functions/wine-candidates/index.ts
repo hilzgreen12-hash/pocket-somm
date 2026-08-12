@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
 
 First, if the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then list THIS producer's core range so the user can pick the right bottling — the specific cuvée may have been missed or misread on the label.
 
-List the REAL, DISTINCT wines that this producer actually makes — be THOROUGH and include their whole core range (up to 8), not just the obvious one. Most estates make several bottlings; a well-known producer's full range is easy to recall (e.g. Pazo de Señorans makes Albariño, Selección de Añada, Rosal, Blanco de Blancos, and more). Order by how likely each is given the partial reading.
+List the REAL, DISTINCT wines that this producer actually makes — be THOROUGH and include their whole core range (up to 8), not just the obvious one. Most estates make several bottlings; a well-known producer's core range is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño, the aged Selección de Añada, and the sweet Sol de Señoráns). Order by how likely each is given the partial reading.
 
 ACCURACY IS CRITICAL — a wrong list is worse than a short one:
 - Do NOT invent bottlings. Only real wines this producer actually makes.

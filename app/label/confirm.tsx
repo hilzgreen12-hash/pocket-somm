@@ -93,6 +93,7 @@ export default function LabelConfirmScreen() {
   const [producer, setProducer] = useState(isManual ? '' : (wineDetails?.producer ?? ''));
   const [region, setRegion] = useState(isManual ? '' : (wineDetails?.region ?? ''));
   const [wineName, setWineName] = useState(isManual ? '' : (wineDetails?.wineName ?? ''));
+  const [grape, setGrape] = useState(isManual ? '' : (wineDetails?.grape ?? ''));
   const [vintage, setVintage] = useState(isManual ? '' : (wineDetails?.vintage ?? ''));
   const [style, setStyle] = useState(isManual ? '' : (wineDetails?.style ?? ''));
   // After picking a wine from the predictive search, the vintage still isn't set
@@ -234,7 +235,7 @@ export default function LabelConfirmScreen() {
       wineName: wineName.trim() || null,
       vintage: vintage.trim(),
       style: style.trim() || null,
-      grape: wineDetails?.grape ?? null,
+      grape: grape.trim() || wineDetails?.grape || null,
       // Pass any bottle size the scanner read off the label straight
       // through to /label/results so the Add modal can pre-populate the
       // picker. The user can still adjust it on that screen.
@@ -448,7 +449,7 @@ export default function LabelConfirmScreen() {
           drinking_window_to: null,
           drinking_window_status: 'unknown',
           tasting_notes: null,
-          grape_variety: null,
+          grape_variety: grape.trim() || null,
           label_image_path: null,
           user_notes: null,
           is_wishlist: false,
@@ -534,7 +535,7 @@ export default function LabelConfirmScreen() {
           drinking_window_to: null,
           drinking_window_status: 'unknown',
           tasting_notes: null,
-          grape_variety: null,
+          grape_variety: grape.trim() || null,
           label_image_path: null,
           user_notes: null,
           is_wishlist: false,
@@ -594,6 +595,7 @@ export default function LabelConfirmScreen() {
       setProducer(details.producer ?? '');
       setRegion(details.region ?? '');
       setWineName(details.wineName ?? '');
+      setGrape(details.grape ?? '');
       setVintage(details.vintage ?? '');
       setStyle(details.style ?? '');
     } catch (err) {
@@ -682,6 +684,16 @@ export default function LabelConfirmScreen() {
         onChangeText={(t) => { setWineName(t); setPickedFromSearch(false); }}
         placeholder="e.g. Reserve, Cuvée Prestige"
         placeholderTextColor={colors.textMuted}
+      />
+
+      <Text style={styles.label}>Grape Variety</Text>
+      <TextInput
+        style={styles.input}
+        value={grape}
+        onChangeText={setGrape}
+        placeholder="e.g. Albariño, Cabernet Sauvignon"
+        placeholderTextColor={colors.textMuted}
+        autoCapitalize="words"
       />
 
       <Text style={styles.label}>Vintage</Text>

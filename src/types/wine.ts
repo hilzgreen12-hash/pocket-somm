@@ -40,6 +40,11 @@ export interface WineRecommendation {
   currency: string;
   rationale: string;
   criticScore: number;
+  // Vinster's holistic 0–100 ranking score (critic score + value + drinkability
+  // + rarity + preference fit). The headline number on the results card, distinct
+  // from criticScore — the #1 pick always has the highest vinsterScore. Optional
+  // so older saved sessions (pre-Vinster-Score) fall back to the critic score.
+  vinsterScore?: number | null;
   vintageAssessment: VintageAssessment;
   drinkingWindow: DrinkingWindow;
   rarityAssessment: RarityAssessment;

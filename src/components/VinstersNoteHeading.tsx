@@ -6,27 +6,30 @@ import { fonts } from '../constants/fonts';
 // "Vinster's Note" heading + a tappable "(what's this)" explainer.
 // Shared by the Wine Intel results screen and the cellar wine card so
 // the label and the explainer copy live in one place.
-const EXPLAINER =
+export const VINSTERS_NOTE_EXPLAINER =
   "Vinster's notes aren't lifted from any single review. Hundreds of sources from across the web are sifted — critics, producers, tasting databases — distilled, and curated into one clear, reliable insight.";
 
-// When `onToggle` is supplied, a yellow expand/collapse chevron sits between the
-// title and "(what's this)" — `expanded` picks its direction. Without it the
-// heading renders exactly as before (no chevron).
-export function VinstersNoteHeading({ expanded, onToggle }: { expanded?: boolean; onToggle?: () => void }) {
+// When `onToggle` is supplied, a yellow expand/collapse chevron sits after the
+// title — `expanded` picks its direction (down when reduced, up when open).
+// `hideExplainerLink` drops the "(what's this)" link (used where the caller shows
+// the explainer inline below the note instead).
+export function VinstersNoteHeading({ expanded, onToggle, hideExplainerLink }: { expanded?: boolean; onToggle?: () => void; hideExplainerLink?: boolean }) {
   return (
     <View style={styles.row}>
       <Text style={styles.title}>Vinster's Note</Text>
       {onToggle ? (
         <TouchableOpacity onPress={onToggle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-          <Text style={styles.chevron}>{expanded ? '▾' : '▸'}</Text>
+          <Text style={styles.chevron}>{expanded ? '⌃' : '⌄'}</Text>
         </TouchableOpacity>
       ) : null}
-      <TouchableOpacity
-        onPress={() => showAlert({ title: "Vinster's Note", body: EXPLAINER })}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Text style={styles.whatsThis}>(what's this)</Text>
-      </TouchableOpacity>
+      {!hideExplainerLink ? (
+        <TouchableOpacity
+          onPress={() => showAlert({ title: "Vinster's Note", body: VINSTERS_NOTE_EXPLAINER })}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.whatsThis}>(what's this)</Text>
+        </TouchableOpacity>
+      ) : null}
     </View>
   );
 }

@@ -35,7 +35,7 @@ interface Props {
   // Optional OCR pre-fill so Scan / Upload land on this SAME screen (no wine
   // intel card) with the wine identity already filled in — the only difference
   // from Manual Input is where the details come from.
-  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null } | null;
+  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null; date?: string | null } | null;
   // Local image uri of the scanned/uploaded label (Scan / Upload review flow).
   // When present and the review is newly CREATED, we upload it and stamp
   // chosen_wines.label_image_path so the review card shows the label photo —
@@ -109,7 +109,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       // re-enter it when reviewing a restaurant wine after the fact.
       setListPrice(initial?.listPrice != null ? String(initial.listPrice) : '');
       setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false);
-      setReviewDate(new Date().toISOString().split('T')[0]);
+      // Default the review date to when the label was scanned (e.g. reviewing a
+      // wine from the Label Library), falling back to today. Still editable.
+      setReviewDate((initial?.date && /^\d{4}-\d{2}-\d{2}$/.test(initial.date)) ? initial.date : new Date().toISOString().split('T')[0]);
       setStyle(''); setEditImageUri(null); setIdentityEditOpen(false);
       // Prefill the city from GPS for a fresh review.
       captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });

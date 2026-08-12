@@ -30,6 +30,7 @@ export default function EditWineScreen() {
   const [producer, setProducer] = useState('');
   const [region, setRegion] = useState('');
   const [wineName, setWineName] = useState('');
+  const [grape, setGrape] = useState('');
   const [vintage, setVintage] = useState('');
   const [bottleSizeMl, setBottleSizeMl] = useState(750);
   const [style, setStyle] = useState('');
@@ -41,6 +42,7 @@ export default function EditWineScreen() {
       setProducer(wine.producer ?? '');
       setRegion(wine.region ?? '');
       setWineName(wine.wine_name ?? '');
+      setGrape(wine.grape_variety ?? '');
       setVintage(wine.vintage ?? '');
       setBottleSizeMl(wine.bottle_size_ml ?? 750);
       setStyle(wine.style ?? '');
@@ -60,6 +62,7 @@ export default function EditWineScreen() {
         producer: producer.trim() || null,
         region: region.trim() || null,
         wine_name: wineName.trim() || producer.trim(),
+        grape_variety: grape.trim() || null,
         vintage: vintage.trim() || null,
         bottle_size_ml: bottleSizeMl,
         style: style.trim() || null,
@@ -93,7 +96,9 @@ export default function EditWineScreen() {
             drinking_window_from: v.drinkingWindowFrom,
             drinking_window_to: v.drinkingWindowTo,
             drinking_window_status: v.drinkingWindowStatus,
-            grape_variety: v.grapeVariety,
+            // The user's typed grape wins; only fall back to the re-derived one
+            // when they left the field blank.
+            grape_variety: grape.trim() || v.grapeVariety,
             ws_wine_id: v.wsWineId ?? null,
             ws_wine_name: v.wsWineName ?? null,
             // If the recorded purchase price was an auto-estimate (never a figure
@@ -155,6 +160,9 @@ export default function EditWineScreen() {
 
           <Text style={styles.label}>Wine Name (optional)</Text>
           <TextInput style={styles.input} value={wineName} onChangeText={setWineName} placeholder="e.g. Reserve, Cuvée Prestige" placeholderTextColor={colors.textMuted} />
+
+          <Text style={styles.label}>Grape Variety</Text>
+          <TextInput style={styles.input} value={grape} onChangeText={setGrape} placeholder="e.g. Albariño, Cabernet Sauvignon" placeholderTextColor={colors.textMuted} autoCapitalize="words" />
 
           <Text style={styles.label}>Vintage</Text>
           <TextInput style={styles.input} value={vintage} onChangeText={(t) => setVintage(t.slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
