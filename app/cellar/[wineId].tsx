@@ -1520,7 +1520,7 @@ export default function CellarWineDetail() {
       {/* Compact stats grid — score / window / bottle counts only. The
           Purchase and Estimated values are pulled out into full-width rows
           below so each has room to breathe and a clearer call to action. */}
-      <View style={styles.statsGrid}>
+      <View style={[styles.statsGrid, { paddingBottom: 0 }]}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Avg Critic Score</Text>
           {wine.critic_score != null ? (
@@ -1657,7 +1657,7 @@ export default function CellarWineDetail() {
           deciding whether to pair a meal to it. Hidden for wishlist
           wines — bottle counts don't apply to a wine not yet bought. */}
       {!isWishlist && (
-      <View style={styles.statsGrid}>
+      <View style={[styles.statsGrid, { paddingTop: 0 }]}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
           <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
