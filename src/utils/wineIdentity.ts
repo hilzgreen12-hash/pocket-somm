@@ -27,6 +27,26 @@ export function foldAccents(s: string | null | undefined): string {
   return (s ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 }
 
+// Canonical search string for the Wine-Searcher API and any external lookup —
+// the SAME producer/name identity the header displays, collapsed to one query
+// string. Producer + wine name, but never repeating the producer when the name
+// already leads with it (or equals it), so "Penfolds" + "Penfolds Grange" →
+// "Penfolds Grange", not "Penfolds Penfolds Grange". Keeps display, lookup and
+// stored record documenting the wine the same way.
+export function wineQueryName(
+  producer: string | null | undefined,
+  wineName: string | null | undefined,
+): string {
+  const p = (producer ?? '').trim();
+  const n = (wineName ?? '').trim();
+  if (!p) return n;
+  if (!n) return p;
+  const pl = p.toLowerCase();
+  const nl = n.toLowerCase();
+  if (nl === pl || nl.startsWith(pl + ' ')) return n;
+  return `${p} ${n}`;
+}
+
 // Order- and field-placement-independent identity key. A label scan and a list
 // scan of the same wine often split producer vs name differently (or repeat the
 // producer inside the name), so we match on the SET of significant words across

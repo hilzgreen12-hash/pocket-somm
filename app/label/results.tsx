@@ -4,6 +4,7 @@ import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyb
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
+import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -793,10 +794,16 @@ export default function LabelResultsScreen() {
               cuvée/wine name is deliberately left OUT here (it's what's being
               confirmed below), so we never assert an uncertain bottling. */}
           <View style={styles.headerText}>
-            <Text style={styles.producer}>{wine.producer || wine.wineName}</Text>
-            {[wine.grape, wine.region, wine.vintage].filter(Boolean).length ? (
-              <Text style={styles.detail}>{[wine.grape, wine.region, wine.vintage].filter(Boolean).join(' · ')}</Text>
-            ) : null}
+            {/* Wine name deliberately omitted — it's what's being confirmed below.
+                Line 1 is Producer · Vintage (white); Region + Grape in gold. */}
+            <WineIdentityHeader
+              producer={wine.producer || wine.wineName}
+              vintage={wine.vintage}
+              region={wine.region}
+              grape={wine.grape}
+              align="left"
+              size="md"
+            />
           </View>
         </View>
 
@@ -1567,17 +1574,18 @@ export default function LabelResultsScreen() {
             </TouchableOpacity>
           ) : null}
           <View style={styles.headerText}>
-            {/* Full wine name — always written in full, wrapping to up to three
-                lines rather than truncating. */}
-            <Text style={styles.producer} numberOfLines={3}>
-              {(() => {
-                const sameName = wine.wineName?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-                const parts = sameName ? [wine.producer, wine.vintage] : [wine.producer, wine.wineName, wine.vintage];
-                return parts.filter(Boolean).join(' ');
-              })()}
-            </Text>
-            {wine.region ? <Text style={styles.detail}>{wine.region}</Text> : null}
-            {intel.grapeVariety ? <Text style={styles.grape}>{intel.grapeVariety}</Text> : null}
+            {/* Full wine identity — Producer · Name · Vintage (white), Region +
+                Grape (gold) — the app-wide format, wrapping rather than truncating. */}
+            <WineIdentityHeader
+              producer={wine.producer}
+              wineName={wine.wineName}
+              vintage={wine.vintage}
+              region={wine.region}
+              grape={intel.grapeVariety ?? wine.grape}
+              align="left"
+              size="md"
+              numberOfLinesName={3}
+            />
           </View>
         </View>
 

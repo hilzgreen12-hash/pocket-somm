@@ -1,5 +1,6 @@
 import { fetchWinePrice } from '../api/wine-searcher';
 import { getWineIntelligence } from '../api/label';
+import { wineQueryName } from '../utils/wineIdentity';
 import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
 export async function fetchPricing(
@@ -60,7 +61,7 @@ export async function valueWine(
   currency: string = 'GBP',
 ): Promise<WineValuation> {
   // Build the Wine-Searcher query from producer + wine name for the best match.
-  const queryName = [wine.producer, wine.wineName].filter(Boolean).join(' ').trim() || (wine.wineName ?? '');
+  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
@@ -111,7 +112,7 @@ export async function generateWineIntel(
   wine: WineDetailsComplete,
   currency: string = 'GBP',
 ): Promise<WineIntelligence> {
-  const queryName = [wine.producer, wine.wineName].filter(Boolean).join(' ').trim() || (wine.wineName ?? '');
+  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);

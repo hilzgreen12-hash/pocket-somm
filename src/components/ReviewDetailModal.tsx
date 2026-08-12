@@ -2,6 +2,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'rea
 import { showAlert } from './AppAlert';
 import { LabelThumb } from './LabelThumb';
 import { AddPhotoThumb } from './AddPhotoThumb';
+import { WineIdentityHeader } from './WineIdentityHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { UnifiedReview } from '../utils/reviewModel';
@@ -79,7 +80,17 @@ export function ReviewDetailModal({
             ) : (
               <AddPhotoThumb style={styles.headerThumb} radius={5} onPress={() => onAddPhoto?.()} />
             )}
-            <Text style={styles.wineName} numberOfLines={3}>{review.title}</Text>
+            <WineIdentityHeader
+              producer={review.producer}
+              wineName={review.wineName}
+              vintage={review.vintage}
+              region={review.region}
+              grape={review.grape}
+              align="left"
+              size="md"
+              numberOfLinesName={3}
+              containerStyle={styles.headerIdentity}
+            />
           </View>
 
           {/* Yellow stats band, framed by separator rules. First line: review
@@ -182,7 +193,7 @@ const styles = StyleSheet.create({
 
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   headerThumb: { width: 54, height: 72 },
-  wineName: { flex: 1, fontFamily: fonts.bodySemibold, fontSize: 19, color: colors.text, lineHeight: 25 },
+  headerIdentity: { flex: 1 },
 
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.borderLight },
   statsBand: { paddingVertical: spacing.sm, gap: 3 },

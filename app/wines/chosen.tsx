@@ -1513,6 +1513,9 @@ export default function ChosenWinesScreen() {
                         </View>
                       </View>
                       {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
+                      {((w as any).grape ?? (w as any).grape_variety) ? (
+                        <Text style={styles.regionText} numberOfLines={1}>{(w as any).grape ?? (w as any).grape_variety}</Text>
+                      ) : null}
                       <View style={styles.cardCompactMetaRow}>
                         <Text style={styles.metaText}>{formatDate(item.date)}</Text>
                         {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
@@ -1674,7 +1677,7 @@ const styles = StyleSheet.create({
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
   wineNameCompact: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
-  regionText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 2 },
+  regionText: { fontSize: 14, fontFamily: fonts.headingItalic, fontStyle: 'italic', color: colors.gold, marginTop: 2 },
   // The user's own review score — white, matching the wine cards (critic scores
   // are gold; the user's score is white).
   scoreCompact: { fontSize: 18, fontFamily: fonts.bodyBold, color: '#FFFFFF' },

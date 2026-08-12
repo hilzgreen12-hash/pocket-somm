@@ -14,6 +14,7 @@ import { useCellar, useArchive, useWishList } from '../../src/hooks/useCellar';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
+import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { COMMUNITY_ENABLED } from '../../src/constants/features';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -1395,16 +1396,15 @@ export default function CellarWineDetail() {
             onPress={() => router.push(`/cellar/edit-wine/${wine.id}` as any)}
             activeOpacity={0.7}
           >
-            <Text style={styles.headerLine}>
-              {(() => {
-                const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-                const parts = sameName
-                  ? [wine.producer, wine.region, wine.vintage]
-                  : [wine.producer, wine.wine_name, wine.region, wine.vintage];
-                return parts.filter(Boolean).join(' · ');
-              })()}
-            </Text>
-            {wine.grape_variety ? <Text style={styles.grape}>{wine.grape_variety}</Text> : null}
+            <WineIdentityHeader
+              producer={wine.producer}
+              wineName={wine.wine_name}
+              vintage={wine.vintage}
+              region={wine.region}
+              grape={wine.grape_variety}
+              align="left"
+              size="lg"
+            />
             {/* Bottle format shown only when non-standard (750ml is the default
                 and mentioning it everywhere is noise) — e.g. a magnum reads
                 "150cl" so the format is recorded on the card, not just the list. */}

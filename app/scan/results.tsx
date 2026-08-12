@@ -23,6 +23,7 @@ import { recommendWines } from '../../src/services/recommender';
 import { fetchPricing } from '../../src/services/pricing';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
+import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
@@ -883,19 +884,9 @@ export default function ResultsScreen() {
           // legacy topPickReasons until standoutNote ships.
           const standoutText = wine.standoutNote
             ?? (wine.topPickReasons?.length ? wine.topPickReasons.join(' · ') : null);
-          // Title reads "Producer, Wine Name, Vintage"; the line below reads
-          // "Regional Placement · Grape". Producer is dropped from the title
-          // when it's identical to the wine name (e.g. a grower whose estate
-          // name IS the wine) so it isn't printed twice.
-          const producerSameAsName = !!wine.producer && !!wine.name
-            && wine.producer.trim().toLowerCase() === wine.name.trim().toLowerCase();
-          const wineTitle = [
-            wine.producer,
-            producerSameAsName ? null : wine.name,
-            wine.vintage ? String(wine.vintage) : null,
-          ].filter(Boolean).join(', ');
+          // Identity header: Producer · Wine Name · Vintage (white), then Region
+          // (gold) and Grape (gold) on their own lines — the app-wide format.
           const regionalPlacement = joinPlace(wine.appellation, effRegion);
-          const wineSubline = [regionalPlacement, effGrape].filter(Boolean).join(' · ');
           return (
             <View key={wine.name + i} style={styles.card}>
               <View style={styles.cardInner}>
@@ -933,10 +924,16 @@ export default function ResultsScreen() {
                   </TouchableOpacity>
                 )}
 
-                <Text style={styles.wineName}>{wineTitle}</Text>
-                {wineSubline ? (
-                  <Text style={styles.wineProducer}>{wineSubline}</Text>
-                ) : null}
+                <WineIdentityHeader
+                  producer={wine.producer}
+                  wineName={wine.name}
+                  vintage={wine.vintage}
+                  region={regionalPlacement}
+                  grape={effGrape}
+                  align="center"
+                  size="md"
+                />
+
 
                 {/* Price + score share one line beneath the name. Either
                     field can be missing (some lists omit the price, some

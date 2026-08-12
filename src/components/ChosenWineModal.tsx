@@ -7,6 +7,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
 import { CityAutocomplete } from './CityAutocomplete';
+import { WineIdentityHeader } from './WineIdentityHeader';
 import { router } from 'expo-router';
 import * as Location from 'expo-location';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -223,8 +224,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
   if (!wine) return null;
 
-  const wineName = wine.vintage ? `${wine.vintage} ${wine.name}` : wine.name;
-
   // Match the symbol on the recommendation card so the "List Price" the
   // user sees aligns with the menu currency captured at scan time.
   const currencySymbol = (() => {
@@ -267,8 +266,15 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
-            <Text style={styles.heading}>{wineName}</Text>
-            <Text style={styles.wineProducer}>{wine.producer}{wine.region ? ` · ${wine.region}` : ''}</Text>
+            <WineIdentityHeader
+              producer={wine.producer}
+              wineName={wine.name}
+              vintage={wine.vintage}
+              region={wine.region}
+              grape={(wine as any).grape}
+              align="center"
+              size="lg"
+            />
 
             <View style={styles.divider} />
 

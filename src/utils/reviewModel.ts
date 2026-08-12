@@ -22,6 +22,13 @@ export interface UnifiedEntry {
 export interface UnifiedReview {
   source: 'restaurant' | 'other' | 'cellar';
   title: string;
+  // Structured identity so the review header can render the app-wide format
+  // (Producer · Name · Vintage / Region / Grape) instead of the flat `title`.
+  producer: string | null;
+  wineName: string | null;
+  vintage: string | number | null;
+  region: string | null;
+  grape: string | null;
   entries: UnifiedEntry[]; // newest first
   count: number;
   averageScore: number | null; // mean across entries that carry a score
@@ -56,6 +63,11 @@ export function fromChosenGroup(rows: ChosenWine[]): UnifiedReview {
   return {
     source: head.source === 'other' ? 'other' : 'restaurant',
     title: titleOf(head.producer, head.wine_name, head.vintage),
+    producer: head.producer ?? null,
+    wineName: head.wine_name ?? null,
+    vintage: head.vintage ?? null,
+    region: head.region ?? null,
+    grape: head.grape ?? null,
     entries,
     count: entries.length,
     averageScore: average(entries),
@@ -80,6 +92,11 @@ export function fromCellar(wine: CellarWine): UnifiedReview {
   return {
     source: 'cellar',
     title: titleOf(wine.producer, wine.wine_name, wine.vintage),
+    producer: wine.producer ?? null,
+    wineName: wine.wine_name ?? null,
+    vintage: wine.vintage ?? null,
+    region: wine.region ?? null,
+    grape: wine.grape_variety ?? null,
     entries,
     count: entries.length,
     averageScore: average(entries),

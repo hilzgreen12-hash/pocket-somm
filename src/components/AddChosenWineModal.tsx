@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { LabelThumb } from './LabelThumb';
+import { WineIdentityHeader } from './WineIdentityHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -283,10 +284,14 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     <LabelThumb path={labelImagePath} fallbackText={wineName} style={styles.headerThumb} radius={5} frame={0} />
                   ) : null}
                   <View style={(editImageUri || labelImagePath) ? styles.headerTextCol : undefined}>
-                    <Text style={[styles.headerLine, (editImageUri || labelImagePath) ? styles.headerLineLeft : null]}>
-                      {[producer, wineName, vintage].filter(Boolean).join(' · ') || wineName || 'This wine'}
-                    </Text>
-                    {region ? <Text style={[styles.headerRegion, (editImageUri || labelImagePath) ? styles.headerLineLeft : null]}>{region}</Text> : null}
+                    <WineIdentityHeader
+                      producer={producer}
+                      wineName={wineName}
+                      vintage={vintage}
+                      region={region}
+                      align={(editImageUri || labelImagePath) ? 'left' : 'center'}
+                      size="lg"
+                    />
                     {(() => {
                       const loc = [locName.trim(), locCity.trim()].filter(Boolean).join(', ');
                       const dateStr = reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';

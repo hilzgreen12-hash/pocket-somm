@@ -22,6 +22,7 @@ import { buildEntry, entriesOf, latestEntry, flatMirror } from '../utils/cellarR
 import { missingReviewFields } from '../utils/reviewDedup';
 import { MicButton } from './MicButton';
 import { WineReviewFields } from './WineReviewFields';
+import { WineIdentityHeader } from './WineIdentityHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { CellarWine } from '../types/wine';
@@ -286,13 +287,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
 
   if (!wine) return null;
 
-  const headerLine = (() => {
-    const sameName = wine.wine_name?.trim().toLowerCase() === wine.producer?.trim().toLowerCase();
-    return sameName
-      ? [wine.producer, wine.vintage].filter(Boolean).join(' ')
-      : [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
-  })();
-
   const parsedScore = score.trim() ? Math.round(Number(score.trim())) : null;
 
   return (
@@ -323,10 +317,15 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
                 <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
               ) : null}
               <View style={wine.label_image_path ? styles.headerTextCol : undefined}>
-                <Text style={[styles.headerLine, wine.label_image_path ? styles.headerLineLeft : null]}>{headerLine}</Text>
-                {(wine.region || wine.grape_variety) ? (
-                  <Text style={[styles.region, wine.label_image_path ? styles.regionLeft : null]}>{[wine.region, wine.grape_variety].filter(Boolean).join(' · ')}</Text>
-                ) : null}
+                <WineIdentityHeader
+                  producer={wine.producer}
+                  wineName={wine.wine_name}
+                  vintage={wine.vintage}
+                  region={wine.region}
+                  grape={wine.grape_variety}
+                  align={wine.label_image_path ? 'left' : 'center'}
+                  size="lg"
+                />
                 {/* Editable date · location stamp, in gold. Both are always
                     editable here (no "Edit" step) — a cellar wine is already
                     confirmed, so the only things to capture on a review are when

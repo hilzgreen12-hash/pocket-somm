@@ -9,6 +9,7 @@ import { useCellar, useWishList } from '../../../src/hooks/useCellar';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { getWineKnowledge } from '../../../src/api/label';
 import { WineKnowledgeShareCard } from '../../../src/components/WineKnowledgeShareCard';
+import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../../src/constants/share';
 import { showAlert } from '../../../src/components/AppAlert';
 import type { WineKnowledgeData } from '../../../src/types/wine';
@@ -163,10 +164,17 @@ export default function WineKnowledgeScreen() {
             <View style={styles.rule} />
           </View>
 
-          {/* The wine's identity, shown once below the rule: producer · name ·
-              region · vintage, with grape varieties in gold beneath. */}
-          <Text style={styles.cardHeaderLine}>{headerLine}</Text>
-          {info.grape ? <Text style={styles.cardGrape}>{info.grape}</Text> : null}
+          {/* The wine's identity, shown once below the rule — the app-wide
+              format: Producer · Name · Vintage (white), Region + Grape (gold). */}
+          <WineIdentityHeader
+            producer={info.producer}
+            wineName={info.wineName}
+            vintage={info.vintage}
+            region={info.region}
+            grape={info.grape}
+            align="center"
+            size="lg"
+          />
 
           <View style={styles.shortDivider} />
 
