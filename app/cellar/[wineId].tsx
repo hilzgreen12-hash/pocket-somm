@@ -1947,6 +1947,27 @@ export default function CellarWineDetail() {
         </TouchableOpacity>
       )}
 
+      {/* Regenerate the wine card's intel from scratch — refreshes value, score,
+          tasting notes, drinking window AND fills The Inside Line for wines whose
+          intel predates that feature. Same handler as the value-refresh action. */}
+      {!isArchived && (
+        <TouchableOpacity
+          style={[styles.chefBtn, { marginTop: spacing.md }]}
+          onPress={() => handleRefreshEstimate()}
+          disabled={refreshingValue}
+          activeOpacity={refreshingValue ? 1 : 0.7}
+        >
+          {refreshingValue ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#FFFFFF" />
+              <Text style={[styles.chefBtnText, { marginLeft: spacing.xs }]}>Regenerating…</Text>
+            </View>
+          ) : (
+            <Text style={styles.chefBtnText}>Regenerate Wine Card Intel</Text>
+          )}
+        </TouchableOpacity>
+      )}
+
       {!isArchived && !isWishlist && (
         <TouchableOpacity style={styles.archiveAccessBtn} onPress={() => setArchiveModalOpen(true)}>
           <Text style={styles.archiveAccessBtnText}>Archive or Delete Wine</Text>
