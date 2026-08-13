@@ -777,7 +777,7 @@ export default function LabelResultsScreen() {
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity
           style={styles.backRow}
-          onPress={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
+          onPress={() => router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
         >
           <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
@@ -1530,7 +1530,7 @@ export default function LabelResultsScreen() {
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
         style={styles.backRow}
-        onPress={() => router.replace(
+        onPress={() => router.dismissTo(
           backTo ? (decodeURIComponent(backTo) as any)
           : isWishlistFlow ? '/cellar/wishlist'
           : isReviewsFlow ? '/wines/chosen'
@@ -1608,7 +1608,7 @@ export default function LabelResultsScreen() {
       <NoIntelPrompt
         visible={isIntelOnlyFlow && intelligence != null && intel.criticScore == null && intel.estimatedValue == null && !noIntelDismissed && !candidatesOpen && candidates.length === 0}
         onDismiss={() => setNoIntelDismissed(true)}
-        onEdit={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
+        onEdit={() => router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
         editLabel="Check details"
       />
 
@@ -1885,7 +1885,7 @@ export default function LabelResultsScreen() {
         // Cellar tab "Generate Wine Intel" — view-only. No Add to Cellar action
         // (deliberately removed when the add-a-wine routes were simplified);
         // this flow exists purely to surface the intel card.
-        <TouchableOpacity style={styles.discardButton} onPress={() => router.replace(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}>
+        <TouchableOpacity style={styles.discardButton} onPress={() => router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}>
           <Text style={styles.discardText}>Discard</Text>
         </TouchableOpacity>
       ) : (

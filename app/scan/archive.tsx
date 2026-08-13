@@ -101,7 +101,7 @@ function ExpandedLabelModal({ label, onClose }: { label: LibraryLabel; onClose: 
 export default function MyLabelsScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
-  const { labels, isLoading, remove, setFavourite, create } = useLabels();
+  const { labels, isLoading, remove, setFavourite, create, setLocation } = useLabels();
   const { wines: cellarWines, addWine } = useCellar();
   const { chosenWines } = useChosenWines();
   const { preferences } = usePreferences();
@@ -112,6 +112,10 @@ export default function MyLabelsScreen() {
   const [cityFilter, setCityFilter] = useState<string>('All');
   const [dateFilter, setDateFilter] = useState<string>('All');
   const [search, setSearch] = useState('');
+  // Tappable location editor — GPS sometimes stamps the wrong town.
+  const [editingLoc, setEditingLoc] = useState<LibraryLabel | null>(null);
+  const [locCityDraft, setLocCityDraft] = useState('');
+  const [locPlaceDraft, setLocPlaceDraft] = useState('');
   const [expandedLabel, setExpandedLabel] = useState<LibraryLabel | null>(null);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -246,6 +250,23 @@ export default function MyLabelsScreen() {
       await setFavourite.mutateAsync({ id: label.id, value: !label.is_favourite });
     } catch (err) {
       showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  function openLocationEditor(label: LibraryLabel) {
+    setEditingLoc(label);
+    setLocPlaceDraft((label.captured_place ?? '').trim());
+    setLocCityDraft((label.captured_city ?? '').trim());
+  }
+
+  async function saveLocation() {
+    if (!editingLoc) return;
+    const label = editingLoc;
+    setEditingLoc(null);
+    try {
+      await setLocation.mutateAsync({ id: label.id, place: locPlaceDraft, city: locCityDraft });
+    } catch (err) {
+      showAlert({ title: 'Could not update location', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -526,7 +547,10 @@ export default function MyLabelsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        {/* dismissTo the scan tab (not router.back) so any residual stack —
+            e.g. duplicate library entries from older sessions — collapses in a
+            single press rather than needing several. */}
+        <TouchableOpacity onPress={() => router.dismissTo('/(tabs)/scan')}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Label Scan Library</Text>
@@ -640,10 +664,15 @@ export default function MyLabelsScreen() {
                       {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                     </Text>
                     {/* Location captured at scan time — venue · city, or just the
-                        city. Gold, matching the scanned-date line below it. */}
+                        city. Gold, matching the scanned-date line below it.
+                        Tap to correct it (GPS can guess the wrong town). */}
                     {(() => {
                       const loc = [label.captured_place, label.captured_city].map((s) => (s ?? '').trim()).filter(Boolean).join(' · ');
-                      return loc ? <Text style={styles.rowLocation} numberOfLines={1}>{loc}</Text> : null;
+                      return (
+                        <TouchableOpacity onPress={() => openLocationEditor(label)} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }} activeOpacity={0.7}>
+                          <Text style={loc ? styles.rowLocation : styles.rowLocationAdd} numberOfLines={1}>{loc || '+ Add location'}</Text>
+                        </TouchableOpacity>
+                      );
                     })()}
                     <Text style={styles.rowScanned}>Scanned: {new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
                     {/* Dated links to where this wine also lives — most recent
@@ -788,6 +817,40 @@ export default function MyLabelsScreen() {
         <ExpandedLabelModal label={expandedLabel} onClose={() => setExpandedLabel(null)} />
       ) : null}
 
+      {/* Edit the captured location — GPS can stamp the wrong town. */}
+      <Modal visible={!!editingLoc} transparent animationType="fade" onRequestClose={() => setEditingLoc(null)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditingLoc(null)}>
+          <TouchableOpacity activeOpacity={1} style={styles.locEditSheet} onPress={() => {}}>
+            <Text style={styles.locEditTitle}>Edit location</Text>
+            <Text style={styles.locEditLabel}>Restaurant or venue (optional)</Text>
+            <TextInput
+              style={styles.locEditInput}
+              value={locPlaceDraft}
+              onChangeText={setLocPlaceDraft}
+              placeholder="e.g. The Clove Club"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="next"
+            />
+            <Text style={styles.locEditLabel}>City</Text>
+            <TextInput
+              style={styles.locEditInput}
+              value={locCityDraft}
+              onChangeText={setLocCityDraft}
+              placeholder="e.g. London"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="done"
+              onSubmitEditing={() => { void saveLocation(); }}
+            />
+            <TouchableOpacity style={styles.locEditSave} onPress={() => { void saveLocation(); }} activeOpacity={0.85}>
+              <Text style={styles.locEditSaveText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setEditingLoc(null)} style={styles.locEditCancel} activeOpacity={0.7}>
+              <Text style={styles.locEditCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Off-screen branded card, mounted only while a share is in flight. */}
       {sharing && shareLabel ? (
         <View style={styles.shareCardWrap} pointerEvents="none">
@@ -841,6 +904,7 @@ const styles = StyleSheet.create({
   rowBody: { flex: 1 },
   rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 21 },
   rowLocation: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
+  rowLocationAdd: { fontSize: 12.5, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 4, textDecorationLine: 'underline' },
   rowScanned: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
   rowLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', marginTop: 4 },
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
@@ -860,6 +924,14 @@ const styles = StyleSheet.create({
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  locEditSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
+  locEditTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
+  locEditLabel: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 4, marginTop: spacing.sm },
+  locEditInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  locEditSave: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
+  locEditSaveText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.background },
+  locEditCancel: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  locEditCancelText: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   cellarSheet: { maxHeight: '80%' },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },

@@ -146,16 +146,26 @@ export function useScanHistory() {
           status = req.status;
         }
         if (status === 'granted') {
-          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-          latitude = pos.coords.latitude;
-          longitude = pos.coords.longitude;
-          const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-          if (geo) {
-            const rawCity = geo.city ?? geo.subregion ?? geo.region ?? null;
-            city = rawCity ? normaliseCity(rawCity) : null;
-            // Use the establishment name if the geocoder returns one (e.g. "The Clove Club")
-            // Falls back to null — user can fill it in on the results screen
-            restaurantName = (geo.name && geo.name !== geo.street && geo.name !== geo.streetNumber) ? geo.name : null;
+          // High accuracy + reject a coarse/stale fix. A low-accuracy network
+          // fix (or a cached one from an earlier location, e.g. the airport) can
+          // reverse-geocode to a town kilometres away — the cause of two wines
+          // from the same lunch landing under different cities (Ferno vs
+          // Novello). When the fix isn't precise and recent, we leave the city
+          // blank rather than stamp a wrong one; it's editable in the library.
+          const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+          const accuracyM = pos.coords.accuracy ?? Number.POSITIVE_INFINITY;
+          const ageMs = Date.now() - (pos.timestamp ?? Date.now());
+          if (accuracyM <= 2000 && ageMs <= 120000) {
+            latitude = pos.coords.latitude;
+            longitude = pos.coords.longitude;
+            const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+            if (geo) {
+              const rawCity = geo.city ?? geo.subregion ?? geo.region ?? null;
+              city = rawCity ? normaliseCity(rawCity) : null;
+              // Use the establishment name if the geocoder returns one (e.g. "The Clove Club")
+              // Falls back to null — user can fill it in on the results screen
+              restaurantName = (geo.name && geo.name !== geo.street && geo.name !== geo.streetNumber) ? geo.name : null;
+            }
           }
         }
       } catch { /* location unavailable */ }

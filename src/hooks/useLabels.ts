@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from './useAuth';
-import { fetchLabels, createLabel, deleteLabel, setLabelFavourite, type CreateLabelInput } from '../api/labels';
+import { fetchLabels, createLabel, deleteLabel, setLabelFavourite, updateLabelLocation, type CreateLabelInput } from '../api/labels';
 
 // Your Label Library — the `labels` table (migration 066).
 export function useLabels() {
@@ -31,5 +31,10 @@ export function useLabels() {
     onSuccess: invalidate,
   });
 
-  return { labels, isLoading, create, remove, setFavourite };
+  const setLocation = useMutation({
+    mutationFn: ({ id, city, place }: { id: string; city?: string | null; place?: string | null }) => updateLabelLocation(id, { city, place }),
+    onSuccess: invalidate,
+  });
+
+  return { labels, isLoading, create, remove, setFavourite, setLocation };
 }

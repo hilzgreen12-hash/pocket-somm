@@ -764,7 +764,7 @@ export default function LabelConfirmScreen() {
           <Text style={styles.uploadAgainText}>{scanning ? 'Reading…' : 'Upload Again'}</Text>
         </TouchableOpacity>
       ) : isManual ? (
-        <TouchableOpacity style={styles.backButton} onPress={() => (router.canGoBack() ? router.back() : router.replace((backTo as string) || '/(tabs)/scan'))}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.dismissTo(((backTo as string) || '/(tabs)/scan') as any)}>
           <Text style={styles.backText}>Cancel</Text>
         </TouchableOpacity>
       ) : (

@@ -84,3 +84,13 @@ export async function setLabelFavourite(id: string, value: boolean): Promise<voi
   const { error } = await supabase.from('labels').update({ is_favourite: value }).eq('id', id);
   if (error) throw new Error(error.message);
 }
+
+// Correct the captured location on a library label (GPS can guess the wrong
+// town). Empty strings clear the field.
+export async function updateLabelLocation(id: string, input: { city?: string | null; place?: string | null }): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  if (input.city !== undefined) patch.captured_city = (input.city ?? '').trim() || null;
+  if (input.place !== undefined) patch.captured_place = (input.place ?? '').trim() || null;
+  const { error } = await supabase.from('labels').update(patch).eq('id', id);
+  if (error) throw new Error(error.message);
+}
