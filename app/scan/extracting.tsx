@@ -101,6 +101,28 @@ function colourMatches(colour: string | null | undefined, wineTypes: string[]): 
   return wineTypes.some((t) => c.includes(t.toLowerCase()));
 }
 
+// Human-readable colour names for the "no {colour} wines on this list" message.
+const COLOUR_LABEL: Record<string, string> = { red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling' };
+function describeColours(types: string[]): string {
+  const names = types.map((t) => COLOUR_LABEL[t.toLowerCase()] ?? t.toLowerCase());
+  if (names.length <= 1) return names[0] ?? 'matching';
+  if (names.length === 2) return `${names[0]} or ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
+}
+
+// True when the user filtered by colour and the list CLEARLY has none of that
+// colour: zero wines positively match, AND OCR actually classified a colour for
+// the majority of the list (so a few unreadable lines can't yield a false "no
+// red wines"). When colour data is sparse we return false and let the normal
+// recommend path run — it may still find nothing and show the generic message.
+function confidentNoColourMatch(wines: ExtractedWine[], types: string[]): boolean {
+  if (!types.length || !wines.length) return false;
+  const positive = wines.some((w) => w.colour && colourMatches(w.colour, types));
+  if (positive) return false;
+  const classified = wines.filter((w) => !!w.colour).length;
+  return classified >= Math.ceil(wines.length * 0.6);
+}
+
 // Enforce the SCAN's own colour + budget deterministically before recommending,
 // so a colour/budget filter no longer depends on Claude inferring colour from a
 // colourless list (which returned an empty set → "please try again"). Colour
@@ -186,6 +208,19 @@ export default function ExtractingScreen() {
       }
 
       setExtractedWines(wines);
+
+      // If the user filtered by colour and the list clearly contains no wines of
+      // that colour, say so plainly rather than silently recommending off-colour
+      // wines (or failing with the generic message). Only fires when OCR
+      // classified the colour of most of the list.
+      const requestedColours = preferences?.wineTypes ?? [];
+      if (requestedColours.length && confidentNoColourMatch(wines, requestedColours)) {
+        setErrorDetail(
+          `There appear to be no ${describeColours(requestedColours)} wines on this list. Please double check the wine list or reset your request and try again. Cheers!`,
+        );
+        setStage('error');
+        return;
+      }
 
       // Step 2: Local-currency detection. If we can geolocate the user to a
       // country whose currency differs from their profile currency, ask
