@@ -951,7 +951,7 @@ export default function ResultsScreen() {
                       <Text style={styles.priceScoreText}>
                         {headlineScore} pts
                         {headlineIsVinster ? (
-                          <Text style={styles.vinsterScoreTag}>{i === 0 ? ' Vinster Score' : ' (VS)'}</Text>
+                          <Text style={styles.vinsterScoreTag}>{i === 0 ? ' (Vinster Score)' : ' (VS)'}</Text>
                         ) : null}
                       </Text>
                     )}
