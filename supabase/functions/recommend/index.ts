@@ -264,26 +264,17 @@ ${dislikedGrapesLine}
 - You MAY re-recommend AT MOST ONE already-seen wine, and ONLY when it is genuinely OUTSTANDING and materially better for this diner than every remaining fresh alternative (an exceptional critic score, value, vintage or preference fit that nothing else here matches). The other TWO picks MUST be wines not in the already-seen set. NEVER return two or three already-seen wines.
 - If — and ONLY if — you re-recommend an already-seen wine, you MUST populate its "repeatNote" (see the field spec above), opening with exactly "Vinster is recommending this wine again because of its outstanding " and giving the specific reason. Set repeatNote ONLY on a wine that exactly matches an already-seen entry — never on a fresh pick, even a similar one from the same region or grape. Leave repeatNote null for every wine you are not deliberately repeating.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`;
 
-    // Call Claude with up to two attempts. Anthropic returns
-    // non-deterministic content so a malformed-JSON failure on the
-    // first try is often clean on the second. Distinct retry causes:
-    //  - response.content has no text block (rare; mostly when an
-    //    extended-thinking or tool_use block precedes)
-    //  - the {…} regex matches nothing (response was empty / cut off)
-    //  - JSON.parse throws on truncated output
-    // Previously any of these surfaced as a 500 and the client saw
-    // "Something went wrong" — the cause of the ~1-in-5 scan failures.
-    async function attemptClaudeCall(attempt: number): Promise<any> {
-      // Stream the model output instead of buffering it. A 12000-max_tokens
-      // Sonnet generation on a long wine list runs ~60s+, and a single
-      // non-streaming request held open that long is exactly what an
-      // intermediary severs (~64s — the "times out at 92%" failure the user
-      // hit on big lists but not small ones). Streaming from Claude keeps bytes
-      // flowing on the edge→Anthropic leg; the SSE wrapper below does the same
-      // on the client leg.
+    // ONE streamed Claude call. Streaming keeps bytes flowing on the
+    // edge→Anthropic leg for a long generation, and 8192 max_tokens (matching
+    // generate-pairings; plenty for 3 picks) keeps it fast and well inside the
+    // function's wall-clock. We deliberately do NOT retry on a parse failure:
+    // re-running the whole generation just burns the clock (the same trap the
+    // OCR "times out at 91%" fix removed). A failure surfaces via the outer
+    // catch as a friendly "try again", and a manual retry usually lands clean.
+    async function attemptClaudeCall(): Promise<any> {
       const claudeStream = await client.messages.create({
         model: 'claude-sonnet-4-6',
-        max_tokens: 12000,
+        max_tokens: 8192,
         system: [
           {
             type: 'text',
@@ -302,29 +293,15 @@ ${dislikedGrapesLine}
       }
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) {
-        const snippet = text ? text.slice(0, 200) : `(no text block; content types: ${response.content.map((b) => b.type).join(', ')})`;
-        if (attempt < 2) {
-          console.warn(`[recommend] no JSON in Claude response (attempt ${attempt}), retrying. Snippet: ${snippet}`);
-          return attemptClaudeCall(attempt + 1);
-        }
-        throw new Error(`Claude returned no JSON after ${attempt} attempts. Snippet: ${snippet}`);
+        throw new Error(`Claude returned no JSON. Snippet: ${text ? text.slice(0, 200) : '(empty)'}`);
       }
-      try {
-        return JSON.parse(match[0]);
-      } catch (parseErr) {
-        if (attempt < 2) {
-          console.warn(`[recommend] JSON parse failed (attempt ${attempt}), retrying. Detail:`, parseErr);
-          return attemptClaudeCall(attempt + 1);
-        }
-        const detail = parseErr instanceof Error ? parseErr.message : String(parseErr);
-        throw new Error(`Claude returned malformed JSON after ${attempt} attempts: ${detail}`);
-      }
+      return JSON.parse(match[0]); // throws on malformed → caught by the outer handler
     }
 
     // Buffered path (stream !== true): unchanged single-JSON response. Kept as a
     // fallback for clients that can't read a streamed body.
     if (stream !== true) {
-      const parsed = await attemptClaudeCall(1);
+      const parsed = await attemptClaudeCall();
       return new Response(JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode }), {
         headers: { 'Content-Type': 'application/json' },
       });
@@ -346,7 +323,7 @@ ${dislikedGrapesLine}
         send(': open\n\n');
         const heartbeat = setInterval(() => send(': ping\n\n'), 8000);
         try {
-          const parsed = await attemptClaudeCall(1);
+          const parsed = await attemptClaudeCall();
           send(`data: ${JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode })}\n\n`);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
