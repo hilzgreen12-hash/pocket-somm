@@ -55,12 +55,15 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
       <View style={{ width: size, height: Math.round(size * 0.78) }}>
         {url ? <Image source={{ uri: url }} style={{ width: size, height: Math.round(size * 0.78), borderRadius: 5 }} resizeMode="cover" />
              : <ActivityIndicator color={colors.gold} />}
-        <TouchableOpacity style={styles.favStar} onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={[styles.favStarText, item.is_favourite && styles.favStarActive]}>{item.is_favourite ? '★' : '☆'}</Text>
-        </TouchableOpacity>
       </View>
       <View style={styles.rowBody}>
-        <Text style={styles.rowStamp}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
+        {/* Date · location stamp on the left, favourite star at the far right. */}
+        <View style={styles.rowStampRow}>
+          <Text style={[styles.rowStamp, { flex: 1 }]} numberOfLines={1}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
+          <TouchableOpacity onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={[styles.favStarText, item.is_favourite && styles.favStarActive]}>{item.is_favourite ? '★' : '☆'}</Text>
+          </TouchableOpacity>
+        </View>
         {item.venue ? <Text style={styles.rowVenue} numberOfLines={1}>{item.venue}</Text> : null}
         {item.note ? <Text style={styles.rowNote} numberOfLines={2}>{item.note}</Text> : null}
       </View>
@@ -589,6 +592,7 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   rowBody: { flex: 1 },
+  rowStampRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   rowStamp: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   rowVenue: { fontSize: 13.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3 },
   rowCount: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },

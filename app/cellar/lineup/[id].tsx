@@ -348,15 +348,25 @@ export default function LineupDetailScreen() {
             returnKeyType="done"
           />
         </View>
-        {/* Match this lineup to a restaurant review — the header shows
-            "Matched to <name>" once linked. */}
-        <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          {matchedRestaurant ? (
-            <Text style={styles.matchedText} numberOfLines={1}>Matched to {matchedRestaurant.restaurantName?.trim() || 'a restaurant'}</Text>
-          ) : (
+        {/* Once linked, the row becomes a link straight to the matched
+            restaurant review card (long-press to re-match); otherwise it opens
+            the picker to match this lineup to a review. */}
+        {matchedRestaurant ? (
+          <TouchableOpacity
+            style={styles.matchRow}
+            onPress={() => router.push(`/restaurants/reviews?openSession=${matchedRestaurant.id}` as any)}
+            onLongPress={() => setRestaurantPickerOpen(true)}
+            delayLongPress={400}
+            activeOpacity={0.7}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <Text style={styles.matchLink} numberOfLines={1}>View Your Matched Restaurant Review</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
             <Text style={styles.matchLink} numberOfLines={2}>Match this lineup to a review in Your Restaurants</Text>
-          )}
-        </TouchableOpacity>
+          </TouchableOpacity>
+        )}
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
