@@ -226,13 +226,16 @@ export default function ResultsScreen() {
     (async () => {
       try {
         const cutoff = new Date(Date.now() - STILL_HERE_WINDOW_MS).toISOString();
+        // scan_sessions timestamps live in `captured_at` — there is no
+        // `created_at` column, so querying it 400s and the prompt silently
+        // never fired. Filter/order on captured_at.
         const { data } = await supabase
           .from('scan_sessions')
-          .select('id, restaurant_name, created_at')
+          .select('id, restaurant_name, captured_at')
           .eq('user_id', session.user.id)
           .not('restaurant_name', 'is', null)
-          .gte('created_at', cutoff)
-          .order('created_at', { ascending: false })
+          .gte('captured_at', cutoff)
+          .order('captured_at', { ascending: false })
           .limit(1);
         const prev = data?.[0];
         const name = prev?.restaurant_name?.trim();
