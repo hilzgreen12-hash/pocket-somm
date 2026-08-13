@@ -57,11 +57,17 @@ export function SearchProgress({ title, subtitle, body, durationMs = 50000 }: Pr
     return () => progress.removeListener(id);
   }, []);
 
-  // Once the bar reaches the cap, rotate the reassuring "still working" lines so
-  // the screen never looks frozen. Deliberately NO pulsing — a throbbing bar
-  // reads as the search failing.
+  // Once the bar reaches the cap, keep it CREEPING slowly toward 99% (never
+  // 100% — the real result navigates away first) so it never looks stalled at
+  // 92%, which reads as a failure. Also rotate the reassuring "still working"
+  // lines. Deliberately NO pulsing — a throbbing bar also reads as failing.
   useEffect(() => {
     if (!pastCap) return;
+    Animated.timing(progress, {
+      toValue: 99,
+      duration: 90000, // very slow: ~1% every ~13s, so it always inches forward
+      useNativeDriver: false,
+    }).start();
     const rotate = setInterval(() => {
       setPastCapIdx((i) => (i + 1) % PAST_CAP_LINES.length);
     }, PAST_CAP_INTERVAL);
