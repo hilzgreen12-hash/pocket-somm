@@ -1712,85 +1712,50 @@ export default function CellarWineDetail() {
           dividers. The Chef button now sits lower, above Archive/Delete. */}
       <View style={styles.cardDivider} />
 
-      {/* Your Review (left) beside Personal Notes (right); Vinster's Review
-          sits full-width beneath. Wishlist wines have no Personal Notes, so
-          Your Review takes the row. */}
+      {/* Your Review (left) beside Cellar Note (right); each header stays in its
+          column, but its expanded body lays out FULL WIDTH below the row. */}
       <View style={styles.reviewRow}>
         <View style={styles.reviewCol}>
-          {/* Your Review — the chevron drills through to the full review page.
-              Score + Drinking Window stay on the card below. */}
+          {/* Your Review — the chevron expands the review list (full-width below). */}
           <View style={styles.vinsterHeaderRow}>
             <TouchableOpacity onPress={() => setReviewExpanded((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
               <Text style={styles.vinsterReviewTitle}>Your Review</Text>
               <Ionicons name={reviewExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
             </TouchableOpacity>
           </View>
-
-          {reviewExpanded ? (
-            <View>
-              {/* Expanded list: every review's score and the date it was entered,
-                  both in gold as DD/MM/YYYY. No location, no note body (the full
-                  text lives on the review card, reached via "View Full Review"). */}
-              {entriesOf(wine).length === 0 ? (
-                <Text style={styles.reviewEmptyText}>No reviews yet.</Text>
-              ) : byRecency(entriesOf(wine)).map((e) => (
-                <Text key={e.id} style={styles.reviewScoreLine} numberOfLines={1}>
-                  {e.score != null ? <Text style={styles.reviewScoreValue}>{e.score}/100</Text> : null}
-                  {e.score != null && e.date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
-                  {e.date ? <Text style={styles.reviewScoreValue}>{new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB')}</Text> : null}
-                </Text>
-              ))}
+          {/* Collapsed summary stays under the header; the expanded list moves
+              full-width below the row (see below). */}
+          {!reviewExpanded ? (
+            (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
+              <Text style={styles.reviewScoreLine} numberOfLines={1}>
+                {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
+                {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+                {wine.review_date ? (
+                  <Text style={styles.reviewScoreDate}>
+                    {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </Text>
+                ) : null}
+              </Text>
+            ) : (
               <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
                 <Text style={styles.addReviewLink}>+ Add Review</Text>
               </TouchableOpacity>
-              {entriesOf(wine).length > 0 ? (
-                <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}` as any)} activeOpacity={0.7}>
-                  <Text style={styles.viewFullReviewLink}>View Full Review{entriesOf(wine).length === 1 ? '' : 's'}</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-          ) : (wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
-            // Collapsed summary: just the score (gold) and the review date,
-            // separated by a dash. No "Score" label, no drinking window.
-            <Text style={styles.reviewScoreLine} numberOfLines={1}>
-              {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
-              {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
-              {wine.review_date ? (
-                <Text style={styles.reviewScoreDate}>
-                  {new Date(wine.review_date + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </Text>
-              ) : null}
-            </Text>
-          ) : (
-            <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
-              <Text style={styles.addReviewLink}>+ Add Review</Text>
-            </TouchableOpacity>
-          )}
+            )
+          ) : null}
         </View>
 
         {!isWishlist && (
         <View style={styles.reviewCol}>
           {/* Cellar Note — a short private note, card-only. Same chevron header
-              as Your Review (so the two align); expand to see the note. Editing
-              opens a small dictate/type popup; never links to the review card. */}
+              as Your Review (so the two align); expand for the note (full-width
+              below). Editing opens a small dictate/type popup. */}
           <View style={styles.vinsterHeaderRow}>
             <TouchableOpacity onPress={() => setCellarNoteExpanded((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
               <Text style={styles.vinsterReviewTitle}>Cellar Note</Text>
               <Ionicons name={cellarNoteExpanded ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
             </TouchableOpacity>
           </View>
-          {cellarNoteExpanded ? (
-            wine.cellar_note ? (
-              <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
-                <Text style={styles.noteText}>{wine.cellar_note}</Text>
-                <Text style={styles.editReviewLink}>Edit Cellar Note</Text>
-              </TouchableOpacity>
-            ) : (
-              <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
-                <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
-              </TouchableOpacity>
-            )
-          ) : !wine.cellar_note ? (
+          {!cellarNoteExpanded && !wine.cellar_note ? (
             <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
               <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
             </TouchableOpacity>
@@ -1798,6 +1763,43 @@ export default function CellarWineDetail() {
         </View>
         )}
       </View>
+      {reviewExpanded ? (
+        <View style={styles.reviewExpandedFull}>
+          {/* Every review's score and the date entered (DD/MM/YYYY, gold). No
+              location, no note body (the full text lives on the review card). */}
+          {entriesOf(wine).length === 0 ? (
+            <Text style={styles.reviewEmptyText}>No reviews yet.</Text>
+          ) : byRecency(entriesOf(wine)).map((e) => (
+            <Text key={e.id} style={styles.reviewScoreLine} numberOfLines={1}>
+              {e.score != null ? <Text style={styles.reviewScoreValue}>{e.score}/100</Text> : null}
+              {e.score != null && e.date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
+              {e.date ? <Text style={styles.reviewScoreValue}>{new Date(e.date + 'T00:00:00').toLocaleDateString('en-GB')}</Text> : null}
+            </Text>
+          ))}
+          <TouchableOpacity onPress={openAddReview} activeOpacity={0.7}>
+            <Text style={styles.addReviewLink}>+ Add Review</Text>
+          </TouchableOpacity>
+          {entriesOf(wine).length > 0 ? (
+            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}` as any)} activeOpacity={0.7}>
+              <Text style={styles.viewFullReviewLink}>View Full Review{entriesOf(wine).length === 1 ? '' : 's'}</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+      ) : null}
+      {cellarNoteExpanded && !isWishlist ? (
+        <View style={styles.reviewExpandedFull}>
+          {wine.cellar_note ? (
+            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+              <Text style={styles.noteText}>{wine.cellar_note}</Text>
+              <Text style={styles.editReviewLink}>Edit Cellar Note</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+              <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      ) : null}
 
       {/* Vinster's Review — Vinster's AI tasting note, collapsed behind a
           chevron toggle. Sits last of the three review blocks (after Your
@@ -1806,8 +1808,9 @@ export default function CellarWineDetail() {
           the user's own, and Vinster's AI review only exists in the cellar. */}
       {!isWishlist ? (
         <>
-        {/* Vinster's Review (left) beside Vinster's Map (right) — mirrors the
-            Your Review | Cellar Note row above; each expands within its column. */}
+        {/* Vinster's Review (left) beside Vinster's Map (right) — the two headers
+            stay side by side; whichever is expanded lays its body out FULL WIDTH
+            below the row (not squeezed into its half-width column). */}
         <View style={styles.reviewRow}>
           <View style={styles.reviewCol}>
             <View style={styles.vinsterHeaderRow}>
@@ -1816,26 +1819,7 @@ export default function CellarWineDetail() {
                 <Ionicons name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
               </TouchableOpacity>
             </View>
-            {vinstersNoteOpen ? (
-              wine.tasting_notes ? (
-                <>
-                  <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
-                  {/* The former "(what's this)" explainer, now shown inline. */}
-                  <Text style={styles.vinsterExplainer}>
-                    Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
-                  </Text>
-                </>
-              ) : refreshingValue ? (
-                <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
-              ) : (
-                <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
-                  <Text style={styles.generateNoteBtnText}>Generate</Text>
-                </TouchableOpacity>
-              )
-            ) : null}
           </View>
-
-          {/* Vinster's Map — placeholder, same as the scan intel card. */}
           <View style={styles.reviewCol}>
             <View style={styles.vinsterHeaderRow}>
               <TouchableOpacity onPress={() => setVinstersMapOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
@@ -1843,13 +1827,34 @@ export default function CellarWineDetail() {
                 <Ionicons name={vinstersMapOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
               </TouchableOpacity>
             </View>
-            {vinstersMapOpen ? (
-              <Text style={styles.tastingNotes}>
-                Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
-              </Text>
-            ) : null}
           </View>
         </View>
+        {vinstersNoteOpen ? (
+          <View style={styles.reviewExpandedFull}>
+            {wine.tasting_notes ? (
+              <>
+                <Text style={styles.tastingNotes}>{wine.tasting_notes}</Text>
+                {/* The former "(what's this)" explainer, now shown inline. */}
+                <Text style={styles.vinsterExplainer}>
+                  Vinster digs deeply into the online world for critic scores and reviews, vintage information, market values, and overall producer quality to generate information on this wine and use it for the basis of its wine note, which covers the classics — fruit, acidity, tannin, body, and finish. Your own thoughts can be recorded in "Your Review" and "Personal Notes" on the wine card.
+                </Text>
+              </>
+            ) : refreshingValue ? (
+              <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
+            ) : (
+              <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
+                <Text style={styles.generateNoteBtnText}>Generate</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        ) : null}
+        {vinstersMapOpen ? (
+          <View style={styles.reviewExpandedFull}>
+            <Text style={styles.tastingNotes}>
+              Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
+            </Text>
+          </View>
+        ) : null}
 
         {/* The Inside Line — Vinster's sommelier-best-friend verdict, shown just
             as on the scan Wine Intel card. Filled once the wine's intel runs. */}
@@ -2338,6 +2343,9 @@ const styles = StyleSheet.create({
   // The row carries the horizontal padding; each column just flexes.
   reviewRow: { flexDirection: 'row', paddingHorizontal: spacing.xl, gap: spacing.lg, alignItems: 'flex-start' },
   reviewCol: { flex: 1, paddingTop: spacing.sm },
+  // An expanded Your Review / Cellar Note / Vinster's Review / Vinster's Map
+  // body laid out across the full card width, below the two-column header row.
+  reviewExpandedFull: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.sm },
   reviewSubTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   // Vinster's Review is gold (title + chevron); "what's this" sits close beside.
   vinsterHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
