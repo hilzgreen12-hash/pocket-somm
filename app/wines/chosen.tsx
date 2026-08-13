@@ -686,15 +686,6 @@ export default function ChosenWinesScreen() {
   const cellarByIdentity = new Map(
     cellarWines.map((w) => [wineIdentityKey(w.producer, w.wine_name, w.vintage), w] as const),
   );
-  function addedNote(item: ReviewItem): { kind: 'cellar'; date: string } | null {
-    if (item.source === 'cellar') {
-      return { kind: 'cellar', date: item.wine.date_received ?? item.wine.created_at };
-    }
-    const key = wineIdentityKey(item.wine.producer, item.wine.wine_name, item.wine.vintage);
-    const cellarMatch = cellarByIdentity.get(key);
-    if (cellarMatch) return { kind: 'cellar', date: cellarMatch.date_received ?? cellarMatch.created_at };
-    return null;
-  }
 
   // Label photo for a review card, shown like a cellar wine card. Cellar
   // reviews carry it directly; chosen reviews use their own captured photo
@@ -1474,7 +1465,6 @@ export default function ChosenWinesScreen() {
               const locText = isChosen
                 ? locationLine(item.wine as ChosenWine)
                 : (item.wine as CellarWine).review_location ?? '';
-              const note = addedNote(item);
               const thumbPath = labelPathFor(item);
               return (
                 <TouchableOpacity
@@ -1542,16 +1532,9 @@ export default function ChosenWinesScreen() {
                           ? 'Awaiting Review'
                           : `${uni.count} ${uni.count === 1 ? 'Review' : 'Reviews'}${uni.averageScore != null ? ` · ${uni.averageScore} Average Score` : ''}`}
                       </Text>
-                      {/* Contextual line mirroring the cellar note: restaurant /
-                          other wines say where you had the wine; cellar wines say
-                          when you added it. */}
-                      {isChosen
-                        ? (locText ? (
-                            <Text style={styles.addedNote}>You had this wine at {locText}</Text>
-                          ) : null)
-                        : (note ? (
-                            <Text style={styles.addedNote}>You added this to your {note.kind} on {formatDate(note.date)}</Text>
-                          ) : null)}
+                      {/* The "You had this at…" / "You added this to your cellar
+                          on…" line was removed — it duplicated the date &
+                          location stamp already shown above the stats. */}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -1693,7 +1676,6 @@ const styles = StyleSheet.create({
   scoreLine: { flexDirection: 'row', alignItems: 'baseline', gap: 6 },
   favouriteStar: { fontSize: 18, color: colors.gold },
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  addedNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.xs },
   emptyFilter: { paddingHorizontal: spacing.xl, paddingTop: spacing.xl },
   // Summary + filter carousel — copied from Full Cellar List
   // (app/cellar/list.tsx) so the two screens look identical above the
