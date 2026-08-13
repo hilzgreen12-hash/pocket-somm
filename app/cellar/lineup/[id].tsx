@@ -476,8 +476,8 @@ export default function LineupDetailScreen() {
                       {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                     </Text>
                     <View style={styles.tagRow}>
-                      {/* One status stamp: Yours (in the cellar) or Off cellar. */}
-                      <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Yours' : 'Off cellar'}</Text>
+                      {/* One status stamp: Your Cellar (matched) or Off Cellar. */}
+                      <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Your Cellar' : 'Off Cellar'}</Text>
                       {/* Add/View Review — the wine's review in Your Wine Reviews;
                           Back returns to this lineup. */}
                       <TouchableOpacity
