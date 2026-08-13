@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
@@ -136,10 +135,8 @@ export default function WineKnowledgeScreen() {
           <TouchableOpacity
             onPress={handleShare}
             disabled={sharing}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-            style={styles.shareBtn}
+            hitSlop={{ top: 10, bottom: 6, left: 12, right: 12 }}
           >
-            <Ionicons name="share-outline" size={20} color={sharing ? colors.textMuted : colors.gold} />
             <Text style={[styles.shareText, sharing && { color: colors.textMuted }]}>{sharing ? 'Preparing…' : 'Share'}</Text>
           </TouchableOpacity>
         ) : (
@@ -265,8 +262,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
-  shareBtn: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  shareText: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.gold },
+  shareText: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.gold },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   content: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: 80 },
 
