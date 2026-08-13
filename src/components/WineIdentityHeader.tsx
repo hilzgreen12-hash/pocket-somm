@@ -88,11 +88,12 @@ const styles = StyleSheet.create({
     color: colors.text,
   },
   // Region, then grape — gold italic subtitle, same face for both so they read
-  // as one identity block beneath the name.
+  // as one identity block beneath the name. The font FILE is already italic, so
+  // we must NOT also set fontStyle:'italic' — on Android that stacks a synthetic
+  // slant on top of the real italic and the text renders distorted.
   sub: {
     fontFamily: fonts.headingItalic,
     color: colors.gold,
-    fontStyle: 'italic',
     marginTop: 3,
   },
 });
