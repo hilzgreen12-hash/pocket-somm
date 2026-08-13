@@ -13,6 +13,10 @@ interface Props {
   uri?: string | null;
   fallbackText?: string | null;
   onClose: () => void;
+  // Label photos are portrait and fill their frame (cover). A general photo
+  // (e.g. a restaurant "photo of the night") can be any aspect ratio, so it
+  // shows the WHOLE image inside a square frame (contain) rather than cropping.
+  contain?: boolean;
 }
 
 // Full-screen, framed, phone-photo-style viewer for a wine label. Pinch or
@@ -20,7 +24,7 @@ interface Props {
 // handler on the JS thread (no Reanimated worklet plugin in this project). A
 // <Modal> renders in its own native hierarchy, so it gets its OWN
 // GestureHandlerRootView or the gestures are dead.
-export function LabelPhotoViewer({ visible, path, uri, fallbackText, onClose }: Props) {
+export function LabelPhotoViewer({ visible, path, uri, fallbackText, onClose, contain = false }: Props) {
   const { width } = useWindowDimensions();
   const resolved = useLabelImageUrl(path);
   const url = uri ?? resolved;
@@ -75,7 +79,9 @@ export function LabelPhotoViewer({ visible, path, uri, fallbackText, onClose }: 
   }, []);
 
   const frameW = width - 48;
-  const frameH = frameW * 1.3;
+  // Square frame for arbitrary photos (contain shows the whole image either
+  // orientation); portrait frame for labels (cover fills it).
+  const frameH = contain ? frameW : frameW * 1.3;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
@@ -86,7 +92,7 @@ export function LabelPhotoViewer({ visible, path, uri, fallbackText, onClose }: 
               <Animated.View style={{ transform: [{ translateX: tx }, { translateY: ty }, { scale }] }}>
                 <View style={[styles.frame, { width: frameW, height: frameH }]}>
                   {url ? (
-                    <Image source={{ uri: url }} style={styles.img} resizeMode="cover" />
+                    <Image source={{ uri: url }} style={styles.img} resizeMode={contain ? 'contain' : 'cover'} />
                   ) : loading ? (
                     <View style={styles.fallback} />
                   ) : (

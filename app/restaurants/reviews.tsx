@@ -12,6 +12,7 @@ import { createManualRestaurantSession } from '../../src/api/restaurantSessions'
 import { useAttachRestaurantPhoto } from '../../src/hooks/useAttachRestaurantPhoto';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
+import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { generateWineIntel } from '../../src/services/pricing';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -199,6 +200,8 @@ export default function RestaurantReviewsScreen() {
   const attachRestaurantPhoto = useAttachRestaurantPhoto();
   const { session } = useAuth();
   const [editing, setEditing] = useState<ScanArchiveItem | null>(null);
+  // The restaurant "photo of the night" opened full-screen (zoomable viewer).
+  const [viewerPhoto, setViewerPhoto] = useState<{ path: string; name: string } | null>(null);
   // True when the review form was auto-opened via the ?openSession deep link
   // (i.e. from the List results page) — closing then returns the user there.
   const [editingFromLink, setEditingFromLink] = useState(false);
@@ -679,11 +682,14 @@ export default function RestaurantReviewsScreen() {
                 <View key={item.id} style={styles.cardCompact}>
                   {/* Photo of the night on the left, then the restaurant header
                       (tap to edit the review; wines are managed in the edit
-                      modal). The thumbnail has its own tap → add/change photo. */}
+                      modal). Tap the photo to view it full-screen (zoomable);
+                      long-press to change or remove it. */}
                   <View style={styles.headerWithThumb}>
                     {item.restaurantPhotoPath ? (
                       <TouchableOpacity
-                        onPress={() => attachRestaurantPhoto.present({ sessionId: item.id, restaurant: item.restaurantName, city: item.city, hasPhoto: true })}
+                        onPress={() => setViewerPhoto({ path: item.restaurantPhotoPath!, name: item.restaurantName || 'Photo of the night' })}
+                        onLongPress={() => attachRestaurantPhoto.present({ sessionId: item.id, restaurant: item.restaurantName, city: item.city, hasPhoto: true })}
+                        delayLongPress={400}
                         activeOpacity={0.8}
                       >
                         <LabelThumb path={item.restaurantPhotoPath} fallbackText={item.restaurantName} style={styles.restaurantThumb} radius={5} frame={3} />
@@ -952,6 +958,16 @@ export default function RestaurantReviewsScreen() {
           />
         </View>
       )}
+
+      {/* Full-screen, zoomable "photo of the night" viewer — pinch/double-tap to
+          zoom, drag to pan, ✕ (top-right) to close. */}
+      <LabelPhotoViewer
+        visible={!!viewerPhoto}
+        path={viewerPhoto?.path}
+        fallbackText={viewerPhoto?.name}
+        onClose={() => setViewerPhoto(null)}
+        contain
+      />
     </View>
   );
 }
