@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share } from 'react-native';
+import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
@@ -297,6 +297,18 @@ export default function LabelResultsScreen() {
   // Manual correction: open the confirm/search step over an existing card, for
   // when the read looks confident but is simply the wrong wine (e.g. OCR swapped
   // in a different real producer, which verifies and never auto-prompts).
+  // Android hardware/gesture back: when the "Not this wine?" search is open over
+  // an existing intel card, close the search (return to the card) rather than
+  // popping the whole screen back to wherever we came from.
+  useEffect(() => {
+    if (!(awaitingConfirm && intelligence)) return;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      setAwaitingConfirm(false);
+      return true; // handled — don't pop the route
+    });
+    return () => sub.remove();
+  }, [awaitingConfirm, intelligence]);
+
   function openManualConfirm() {
     confirmTriedRef.current = false;
     setConfirmOptions([]);
@@ -777,7 +789,13 @@ export default function LabelResultsScreen() {
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity
           style={styles.backRow}
-          onPress={() => router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan')}
+          onPress={() => {
+            // Reached here via "Not this wine?" FROM an existing intel card →
+            // return to that card (close the search), don't exit the whole flow.
+            // Only leave to backTo on the initial confirm (no card yet).
+            if (intelligence) setAwaitingConfirm(false);
+            else router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan');
+          }}
         >
           <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
