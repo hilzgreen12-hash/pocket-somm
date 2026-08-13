@@ -92,17 +92,40 @@ function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | 
   return [...favourited, ...others].slice(0, 80);
 }
 
-// Does a wine's OCR-classified colour match one of the selected colour filters?
-// wineTypes ids are 'red' | 'white' | 'rose' | 'sparkling'; the OCR colour is a
-// free string like 'red'/'white'/'rosé'/'sparkling' (accent-folded to compare).
+// Map each colour/type FILTER (WineType id) to the OCR colour token(s) that
+// positively identify it. OCR classifies red/white/rose/sparkling/orange/
+// fortified only — so 'natural' (a production method that can be ANY colour) is
+// NOT detectable from OCR and maps to no token; we must never assert "no natural
+// wines" from a colour read. 'sweet-fortified' maps to OCR's "fortified".
+const COLOUR_TOKENS: Record<string, string[]> = {
+  red: ['red'],
+  white: ['white'],
+  rose: ['rose'],
+  sparkling: ['sparkling'],
+  'sweet-fortified': ['fortified'],
+  natural: [],
+};
+
+// Does a wine's OCR-classified colour positively match one of the selected
+// filters? Matches against the mapped OCR tokens, not the raw filter id, so
+// 'sweet-fortified' resolves to "fortified" (and 'natural' matches nothing).
 function colourMatches(colour: string | null | undefined, wineTypes: string[]): boolean {
   if (!colour) return false;
   const c = foldAccents(colour);
-  return wineTypes.some((t) => c.includes(t.toLowerCase()));
+  return wineTypes.some((t) => (COLOUR_TOKENS[t] ?? []).some((tok) => c.includes(tok)));
 }
 
-// Human-readable colour names for the "no {colour} wines on this list" message.
-const COLOUR_LABEL: Record<string, string> = { red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling' };
+// A requested filter is deterministically detectable from OCR only if it maps
+// to at least one OCR colour token.
+function detectableColour(t: string): boolean {
+  return (COLOUR_TOKENS[t] ?? []).length > 0;
+}
+
+// Human-readable names for the "no {…} wines on this list" message — covers
+// every OCR-detectable filter (red / white / rosé / sparkling / sweet-fortified).
+const COLOUR_LABEL: Record<string, string> = {
+  red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling', 'sweet-fortified': 'sweet or fortified',
+};
 function describeColours(types: string[]): string {
   const names = types.map((t) => COLOUR_LABEL[t.toLowerCase()] ?? t.toLowerCase());
   if (names.length <= 1) return names[0] ?? 'matching';
@@ -110,13 +133,15 @@ function describeColours(types: string[]): string {
   return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
 }
 
-// True when the user filtered by colour and the list CLEARLY has none of that
-// colour: zero wines positively match, AND OCR actually classified a colour for
-// the majority of the list (so a few unreadable lines can't yield a false "no
-// red wines"). When colour data is sparse we return false and let the normal
+// True when the user filtered by colour and the list CLEARLY has none of it:
+// EVERY requested filter is OCR-detectable, zero wines positively match, AND OCR
+// classified a colour for the majority of the list (so a few unreadable lines
+// can't yield a false "no red wines"). If any requested filter isn't detectable
+// (e.g. 'natural'), or colour data is sparse, we return false and let the normal
 // recommend path run — it may still find nothing and show the generic message.
 function confidentNoColourMatch(wines: ExtractedWine[], types: string[]): boolean {
   if (!types.length || !wines.length) return false;
+  if (!types.every(detectableColour)) return false;
   const positive = wines.some((w) => w.colour && colourMatches(w.colour, types));
   if (positive) return false;
   const classified = wines.filter((w) => !!w.colour).length;
