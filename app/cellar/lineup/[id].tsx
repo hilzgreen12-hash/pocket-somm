@@ -25,6 +25,7 @@ import { generateWineIntel } from '../../../src/services/pricing';
 import { useLabelStore } from '../../../src/stores/labelStore';
 import { useLastIntelStore } from '../../../src/stores/lastIntelStore';
 import { usePreferences } from '../../../src/hooks/usePreferences';
+import { SearchProgress } from '../../../src/components/SearchProgress';
 import { Modal } from 'react-native';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -357,6 +358,16 @@ export default function LineupDetailScreen() {
   }
 
   if (isLoading) return <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>;
+  // Reading the lineup photo is a multi-second vision call — show the branded
+  // percentage counter (not a dark spinner) so the wait reads as progress.
+  if (identifying) return (
+    <SearchProgress
+      title="Reading your lineup…"
+      subtitle="Vinster needs a few seconds"
+      body="Vinster is reading each label in your photo. A clear, well-lit shot with the fronts facing forward gives the best results."
+      durationMs={30000}
+    />
+  );
   if (!lineup) return (
     <View style={styles.center}>
       <Text style={styles.muted}>This lineup no longer exists.</Text>
@@ -623,7 +634,7 @@ export default function LineupDetailScreen() {
                   >
                     <Text style={[styles.confirmCheck, on && styles.confirmCheckOn]}>{on ? '☑' : '☐'}</Text>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styles.confirmWineName, !on && styles.confirmWineOff]} numberOfLines={2}>
+                      <Text style={[styles.confirmWineName, !on && styles.confirmWineOff]}>
                         {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                       </Text>
                       {w.cellar_wine_id ? <Text style={styles.confirmCellarTag}>In your cellar</Text> : null}
