@@ -565,45 +565,28 @@ export default function ImportCellarScreen() {
       </View>
 
       {stage === 'capture' ? (
-        csv ? (
-          <ScrollView contentContainerStyle={styles.content}>
-            <Text style={styles.lead}>{csv.lead}</Text>
-            <Text style={styles.hint}>{csv.hint}</Text>
-            {csv.steps ? (
-              <TouchableOpacity onPress={showCsvSteps} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.howToLink}>How to import from {csv.name}</Text>
+        // Import is still being built — for now every source lands on a
+        // "coming soon" view: the buttons are shown faded/disabled so users
+        // see what's on the way, but nothing is wired up yet.
+        <ScrollView contentContainerStyle={styles.content}>
+          <Text style={styles.lead}>Import features are coming next, stay tuned.</Text>
+          <View pointerEvents="none" style={{ opacity: 0.35, alignSelf: 'stretch' }}>
+            {csv ? (
+              <TouchableOpacity style={styles.primaryBtn} disabled activeOpacity={1}>
+                <Text style={styles.primaryBtnText}>{csv.name === 'File' ? 'Choose a file' : `Choose ${csv.name} export file`}</Text>
               </TouchableOpacity>
-            ) : null}
-            <TouchableOpacity style={styles.primaryBtn} onPress={pickCsvFile} activeOpacity={0.85}>
-              <Text style={styles.primaryBtnText}>{csv.name === 'File' ? 'Choose a file' : `Choose ${csv.name} export file`}</Text>
-            </TouchableOpacity>
-            {source === 'vivino' ? (
+            ) : (
               <>
-                <TouchableOpacity style={styles.secondaryBtn} onPress={pickReviewsFile} activeOpacity={0.85}>
-                  <Text style={styles.secondaryBtnText}>Import my ratings & reviews</Text>
+                <TouchableOpacity style={styles.primaryBtn} disabled activeOpacity={1}>
+                  <Text style={styles.primaryBtnText}>Upload Screenshot</Text>
                 </TouchableOpacity>
-                <Text style={styles.footnote}>Your Vivino ratings and tasting notes come across too — use "Import my ratings & reviews" and choose your full wine list. Reviews are matched to your cellar wines; the rest are kept as Other reviews.</Text>
+                <TouchableOpacity style={styles.secondaryBtn} disabled activeOpacity={1}>
+                  <Text style={styles.secondaryBtnText}>Take Photo</Text>
+                </TouchableOpacity>
               </>
-            ) : null}
-            {!csv.hasLabelImages ? (
-              <Text style={styles.footnote}>As {csv.name === 'File' ? 'spreadsheets do' : `${csv.name} does`} not save label images you will have to update your labels in Vinster later.</Text>
-            ) : null}
-          </ScrollView>
-        ) : (
-          <ScrollView contentContainerStyle={styles.content}>
-            <Text style={styles.lead}>
-              Vinster can upload cellar lists from invoices, storage certificates, or wine apps, as
-              long as they are clear screenshots or photos.
-            </Text>
-            <Text style={styles.hint}>Pick several screenshots at once if your list spans more than one screen.</Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => pick('library')} activeOpacity={0.85}>
-              <Text style={styles.primaryBtnText}>Upload Screenshot</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => pick('camera')} activeOpacity={0.85}>
-              <Text style={styles.secondaryBtnText}>Take Photo</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        )
+            )}
+          </View>
+        </ScrollView>
       ) : stage === 'sheets' ? (
         <ScrollView contentContainerStyle={styles.content}>
           <Text style={styles.sectionLabel}>This file has {sheets.length} lists — choose which to import</Text>

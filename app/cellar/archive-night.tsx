@@ -647,7 +647,7 @@ export default function ArchiveNightScreen() {
                           <Text style={[styles.checkboxText, ticked && styles.checkboxTextOn]}>{ticked ? '☑' : '☐'}</Text>
                         </TouchableOpacity>
                         <View style={styles.rowText}>
-                          <Text style={styles.rowName} numberOfLines={2}>{label}, {n}x{bottleSizeCl(m.wine.bottle_size_ml ?? 750)}cl</Text>
+                          <Text style={styles.rowName}>{label}, {n}x{bottleSizeCl(m.wine.bottle_size_ml ?? 750)}cl</Text>
                           <View style={styles.stepperInline}>
                             <TouchableOpacity style={styles.stepBtn} onPress={() => adjust(m.wine.id, -1, m.wine.quantity)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                               <Text style={styles.stepBtnText}>−</Text>
@@ -680,7 +680,7 @@ export default function ArchiveNightScreen() {
                           <Text style={[styles.checkboxText, ticked && styles.checkboxTextOn]}>{ticked ? '☑' : '☐'}</Text>
                         </TouchableOpacity>
                         <View style={styles.rowText}>
-                          <Text style={styles.rowName} numberOfLines={2}>{label}, {b.quantity ?? 1}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
+                          <Text style={styles.rowName}>{label}, {b.quantity ?? 1}x{bottleSizeCl(b.bottleSizeMl ?? 750)}cl</Text>
                         </View>
                         <TouchableOpacity onPress={() => openEditWine({ kind: 'unmatched', index: i })} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Text style={styles.editLink}>Edit</Text>
@@ -1129,7 +1129,7 @@ const styles = StyleSheet.create({
   checkbox: { paddingRight: 2 },
   checkboxText: { fontSize: 22, color: colors.textMuted, lineHeight: 24 },
   checkboxTextOn: { color: colors.gold },
-  editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   editFieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6, marginTop: spacing.md, marginBottom: 4 },
   editInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface },
   unmatchedLine: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, lineHeight: 20 },
