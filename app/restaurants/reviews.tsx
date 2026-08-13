@@ -14,6 +14,7 @@ import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { generateWineIntel } from '../../src/services/pricing';
+import { labelSignedUrl } from '../../src/api/labelPhotos';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -336,6 +337,11 @@ export default function RestaurantReviewsScreen() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const intel = await generateWineIntel(details as any, currency);
       const ls = useLabelStore.getState();
+      // Show THIS wine's own label (if it was added by scan) — NOT whatever
+      // label was last left in the store by an earlier, unrelated scan. A
+      // manual restaurant pick has no image, so clear it to null.
+      try { ls.setImageUri(cw.label_image_path ? await labelSignedUrl(cw.label_image_path) : null); }
+      catch { ls.setImageUri(null); }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       ls.setWineDetailsConfirmed(details as any);
       ls.setIntelligence(intel);
