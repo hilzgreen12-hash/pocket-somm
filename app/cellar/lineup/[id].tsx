@@ -480,20 +480,18 @@ export default function LineupDetailScreen() {
                     <View style={styles.tagRow}>
                       {/* One status stamp: Your Cellar (matched) or Off Cellar. */}
                       <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Your Cellar' : 'Off Cellar'}</Text>
-                      {/* Add/View Review — the wine's review in Your Wine Reviews;
-                          Back returns to this lineup. */}
+                      {/* Add/View Review · View Wine Intel — no underlines, a
+                          middle-dot separator like the stats bars. Editing a
+                          wine now happens in the Confirm Wines popup, not here. */}
                       <TouchableOpacity
                         onPress={() => goToWineReview(w, conn)}
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
                         <Text style={styles.viewLink}>Add/View Review</Text>
                       </TouchableOpacity>
+                      <Text style={styles.tagDot}>·</Text>
                       <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>View Wine Intel</Text>
-                      </TouchableOpacity>
-                      {/* Edit this bottle's identity (replaces whole-photo re-identify). */}
-                      <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>Edit</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -729,7 +727,8 @@ const styles = StyleSheet.create({
   intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
   stampTag: { fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
-  viewLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
+  viewLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold },
+  tagDot: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   muted: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, lineHeight: 20 },
   offscreen: { position: 'absolute', left: -9999, top: -9999 },
 });
