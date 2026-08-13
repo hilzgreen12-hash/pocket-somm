@@ -38,6 +38,21 @@ export function ReviewDetailModal({
   if (!review) return null;
   const { entries } = review; // newest first
 
+  // Where this wine came from, shown under each entry's date · location stamp.
+  // Restaurant list picks were purchased off the list; everything else was
+  // brought — and if it matches your cellar/archive holdings (live bottle counts
+  // for this wine), say so, otherwise it's a wine you brought that you don't own.
+  const originLine = (() => {
+    if (review.source === 'restaurant') return 'You purchased this from the wine list';
+    const fromCellar = review.source === 'cellar' || cellarBottles > 0 || archiveBottles > 0;
+    if (fromCellar) {
+      if (archiveBottles > 0) return 'You brought this from your cellar, it is in your archive';
+      if (cellarBottles > 0) return 'You brought this from your cellar, it is still in your cellar';
+      return 'You brought this from your cellar';
+    }
+    return 'You brought this wine';
+  })();
+
   function confirmDelete(entryId: string) {
     showAlert({
       title: 'Delete this review?',
@@ -124,6 +139,7 @@ export function ReviewDetailModal({
                     </TouchableOpacity>
                   ) : null}
                 </View>
+                <Text style={styles.originLine}>{originLine}</Text>
 
                 {(e.favourite || e.score != null || drink) ? (
                   <View style={styles.scoreRow}>
@@ -202,7 +218,8 @@ const styles = StyleSheet.create({
 
   entry: { paddingTop: spacing.md },
   metaRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  meta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, flex: 1 },
+  meta: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, flex: 1 },
+  originLine: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginTop: 3 },
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
 
   scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 6, marginBottom: spacing.sm },
