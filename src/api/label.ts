@@ -30,6 +30,7 @@ export interface WineSearchResult {
   wineName: string | null;
   region: string | null;
   style: string | null;
+  grape: string | null;
 }
 
 // Predictive wine typeahead for manual entry — returns real wines matching the

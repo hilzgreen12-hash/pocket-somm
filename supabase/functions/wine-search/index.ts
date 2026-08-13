@@ -16,6 +16,7 @@ interface Result {
   wineName: string | null;
   region: string | null;
   style: string | null;
+  grape: string | null;
 }
 
 Deno.serve(async (req) => {
@@ -47,7 +48,8 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
 - "producer": the winery / estate / producer that actually makes the wine (e.g. "Penfolds", "Casanova di Neri") — NEVER a cuvée or vineyard name
 - "wineName": the specific cuvée / bottling name (e.g. "Grange", "Bin 707 Cabernet Sauvignon", "Brunello di Montalcino Tenuta Nuova"), or null if the wine is sold simply under the producer name
 - "region": the wine's region / appellation (e.g. "Barossa Valley, South Australia"), or null
-- "style": one of "Red", "White", "Rosé", "Sparkling", "Fortified", or null`;
+- "style": one of "Red", "White", "Rosé", "Sparkling", "Fortified", or null
+- "grape": the grape variety or blend the wine is made from (e.g. "Shiraz", "Cabernet Sauvignon", "Nebbiolo", "Chardonnay", "Cabernet Sauvignon/Merlot"). Give the real varietal even when it's not printed on the label but is well established for that wine (e.g. Penfolds St Henri → "Shiraz", Sassicaia → "Cabernet Sauvignon/Cabernet Franc", red Burgundy → "Pinot Noir"). Use null only for wines with no single/named varietal identity where naming one would be misleading.`;
 
     const resp = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
@@ -69,6 +71,7 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
         wineName: typeof r?.wineName === 'string' && r.wineName.trim() ? r.wineName.trim() : null,
         region: typeof r?.region === 'string' && r.region.trim() ? r.region.trim() : null,
         style: typeof r?.style === 'string' && r.style.trim() ? r.style.trim() : null,
+        grape: typeof r?.grape === 'string' && r.grape.trim() ? r.grape.trim() : null,
       }))
       .filter((r) => r.producer)
       .slice(0, 8);

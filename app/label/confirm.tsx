@@ -650,6 +650,7 @@ export default function LabelConfirmScreen() {
             setWineName(r.wineName ?? '');
             setRegion(r.region ?? '');
             setStyle(r.style ?? '');
+            setGrape(r.grape ?? '');
             if (!vintage.trim()) setHighlightVintage(true);
             // A search-bar pick IS the confirmation — skip the match popup.
             setPickedFromSearch(true);
