@@ -412,6 +412,10 @@ export default function ChosenWinesScreen() {
   // arrived to open/create a specific review rather than for a plain visit.
   const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; sd?: string; backTo?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
+  // Broader "arrived via a deep link to a specific wine's review" flag — also
+  // covers the cellar-review links (used by the Lineup wine list). Any of these
+  // should return to `backTo` (or the Label Library) when the review closes.
+  const cameViaLink = cameViaLabelLink || !!params.openCellarReview || !!params.openCellarReviewInput;
   // Return to wherever the user arrived from — an explicit backTo (e.g. a
   // restaurant card via ?openSession) when provided, else the Label Library.
   // dismissTo pops back to the EXISTING screen in the stack (don't router.replace
@@ -936,7 +940,7 @@ export default function ChosenWinesScreen() {
         archiveBottles={detailBottleCounts.archive}
         visible={!!detailItem}
         onShare={() => { if (detailItem) void handleShareReview(detailItem); }}
-        onClose={() => { setDetailItem(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onClose={() => { setDetailItem(null); if (cameViaLink) returnToLibrary(); }}
         onAddReview={() => {
           const it = detailItem; if (!it) return;
           setDetailItem(null);
@@ -991,8 +995,8 @@ export default function ChosenWinesScreen() {
         wine={editingCellarWine}
         visible={!!editingCellarWine}
         editLatest={editingCellarLatest}
-        onClose={() => setEditingCellarWine(null)}
-        onSaved={() => setEditingCellarWine(null)}
+        onClose={() => { setEditingCellarWine(null); if (cameViaLink) returnToLibrary(); }}
+        onSaved={() => { setEditingCellarWine(null); if (cameViaLink) returnToLibrary(); }}
       />
 
       <AddChosenWineModal

@@ -475,7 +475,10 @@ export default function ArchiveNightScreen() {
       if (imageUri) {
         try {
           const lineupWines: LineupWine[] = [
-            ...matches.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: m.wine.id, archived: flowMode === 'review' && !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0, count: m.count })),
+            // An UN-ticked (excluded) match means "I own this but didn't bring
+            // this bottle" — drop the cellar link so it stamps as Off Cellar,
+            // not Yours.
+            ...matches.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: excluded.has(m.wine.id) ? null : m.wine.id, archived: flowMode === 'review' && !excluded.has(m.wine.id) && (counts[m.wine.id] ?? 0) > 0, count: m.count })),
             ...unmatched.map((b) => ({ producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 })),
           ];
           const row = await saveLineupArchive(session.user.id, imageUri, archivedCount, { wines: lineupWines, city: c });

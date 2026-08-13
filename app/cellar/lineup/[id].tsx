@@ -21,6 +21,10 @@ import { useCellar } from '../../../src/hooks/useCellar';
 import { useChosenWines } from '../../../src/hooks/useChosenWines';
 import { useLabels } from '../../../src/hooks/useLabels';
 import { findWineConnections } from '../../../src/utils/wineConnections';
+import { generateWineIntel } from '../../../src/services/pricing';
+import { useLabelStore } from '../../../src/stores/labelStore';
+import { useLastIntelStore } from '../../../src/stores/lastIntelStore';
+import { usePreferences } from '../../../src/hooks/usePreferences';
 import { Modal } from 'react-native';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -35,6 +39,12 @@ export default function LineupDetailScreen() {
     queryFn: () => getLineupArchive(id!),
     enabled: !!id,
   });
+
+  const { preferences } = usePreferences();
+  const currency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
+  const [genIntel, setGenIntel] = useState(false);
+  // Where this lineup review/intel flow should return to on Back.
+  const backToLineup = `&backTo=${encodeURIComponent(`/cellar/lineup/${id}`)}`;
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [note, setNote] = useState('');
@@ -159,6 +169,48 @@ export default function LineupDetailScreen() {
     setEditProducer(w.producer ?? '');
     setEditName(w.wine_name ?? '');
     setEditVintage(w.vintage != null ? String(w.vintage) : '');
+  }
+
+  // Add/View Review → the wine's review in Your Wine Reviews (one canonical
+  // place), with Back returning to THIS lineup. Cellar bottles open their cellar
+  // review; off-cellar wines open the existing chosen review or a seeded new one.
+  function goToWineReview(w: LineupWine, conn: ReturnType<typeof findWineConnections>) {
+    const hasReview = conn.reviewCount > 0;
+    if (w.cellar_wine_id) {
+      const param = hasReview ? 'openCellarReview' : 'openCellarReviewInput';
+      router.push(`/wines/chosen?${param}=${w.cellar_wine_id}${backToLineup}` as any);
+      return;
+    }
+    const chosen = [...conn.reviewedChosen].sort(
+      (a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime(),
+    )[0];
+    if (chosen) { router.push(`/wines/chosen?openReview=${chosen.id}${backToLineup}` as any); return; }
+    router.push(`/wines/chosen?seedAdd=1&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}${backToLineup}` as any);
+  }
+
+  // View Wine Intel → generate on demand and open the intel card. Lineup wines
+  // have no label photo, so clear the shared image (avoids showing a stale one).
+  async function viewLineupWineIntel(w: LineupWine) {
+    const details = {
+      producer: w.producer ?? '',
+      region: '',
+      wineName: w.wine_name || null,
+      vintage: w.vintage != null ? String(w.vintage) : 'NV',
+    };
+    setGenIntel(true);
+    try {
+      const intel = await generateWineIntel(details as any, currency);
+      const ls = useLabelStore.getState();
+      ls.setImageUri(null);
+      ls.setWineDetailsConfirmed(details as any);
+      ls.setIntelligence(intel);
+      useLastIntelStore.getState().setLast(details as any, intel);
+      router.push(`/label/results?context=intel${backToLineup}` as any);
+    } catch (err) {
+      showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setGenIntel(false);
+    }
   }
 
   async function saveWineEdit() {
@@ -426,25 +478,16 @@ export default function LineupDetailScreen() {
                     <View style={styles.tagRow}>
                       {/* One status stamp: Yours (in the cellar) or Off cellar. */}
                       <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Yours' : 'Off cellar'}</Text>
-                      {/* Review — goes straight to the review INPUT (not the wine
-                          card). Once a review exists it reads "Visit Review" and
-                          opens the existing review instead. */}
+                      {/* Add/View Review — the wine's review in Your Wine Reviews;
+                          Back returns to this lineup. */}
                       <TouchableOpacity
-                        onPress={() => {
-                          const hasReview = conn.reviewCount > 0;
-                          if (w.cellar_wine_id) {
-                            // Cellar bottle: open its review card if reviewed, else its review input.
-                            const param = hasReview ? 'openCellarReview' : 'openCellarReviewInput';
-                            router.push(`/wines/chosen?${param}=${w.cellar_wine_id}` as any);
-                            return;
-                          }
-                          // Off-cellar: the existing review list if reviewed, else a seeded new review.
-                          if (hasReview) { router.push('/wines/chosen'); return; }
-                          router.push(`/wines/chosen?seedAdd=1&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}` as any);
-                        }}
+                        onPress={() => goToWineReview(w, conn)}
                         hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
                       >
-                        <Text style={styles.viewLink}>{conn.reviewCount > 0 ? 'Visit Review' : 'Review'}</Text>
+                        <Text style={styles.viewLink}>Add/View Review</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.viewLink}>View Wine Intel</Text>
                       </TouchableOpacity>
                       {/* Edit this bottle's identity (replaces whole-photo re-identify). */}
                       <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
@@ -605,6 +648,13 @@ export default function LineupDetailScreen() {
           <LineupShareCard ref={shareCardRef} imageUrl={shareData.url} date={shareData.date} location={lineup.city} note={shareData.note} onImageReady={captureAndShare} />
         </View>
       ) : null}
+
+      {genIntel ? (
+        <View style={styles.intelOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.intelOverlayText}>Loading wine intel…</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -672,7 +722,9 @@ const styles = StyleSheet.create({
   wineList: { paddingHorizontal: spacing.xl },
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
-  tagRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: 4 },
+  tagRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
+  intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.85)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
   stampTag: { fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
   viewLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline' },
