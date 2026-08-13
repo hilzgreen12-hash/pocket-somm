@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
-import { mostRepresentedRegions } from '../../src/utils/wineRegionGroup';
+import { mostRepresentedRegions, baseRegionGroup } from '../../src/utils/wineRegionGroup';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import { CoteDorMap } from '../../src/components/CoteDorMap';
 import coteDorData from '../../assets/maps/cote-dor.data.json';
@@ -84,6 +84,9 @@ export default function CellarRegionsMapScreen() {
             top3.map(([region, count]) => {
               const open = expanded === region;
               const hasMap = isBurgundy(region) && coteDorWineCount > 0;
+              // Distinct wines (cellar rows) from this region — the map is about
+              // producers/wines, so this counts wines, not bottles.
+              const regionWineCount = wines.filter((w) => baseRegionGroup(w.region) === region).length;
               return (
                 <View key={region} style={styles.regionBlock}>
                   <TouchableOpacity style={styles.regionTop} onPress={() => setExpanded(open ? null : region)} activeOpacity={0.7}>
@@ -102,11 +105,11 @@ export default function CellarRegionsMapScreen() {
                         </>
                       ) : (
                         <View style={styles.mapPlaceholder}>
-                          <Text style={styles.mapPlaceholderTitle}>{region} map</Text>
+                          <Text style={styles.mapPlaceholderTitle}>
+                            You have {regionWineCount} {regionWineCount === 1 ? 'wine' : 'wines'} from {region} in your cellar
+                          </Text>
                           <Text style={styles.mapPlaceholderBody}>
-                            {isBurgundy(region)
-                              ? "Add wines from a Côte d'Or (Burgundy) village and they'll plot onto the map here."
-                              : `A visual ${region} map is on the way. You hold ${count} ${count === 1 ? 'bottle' : 'bottles'} from ${region}.`}
+                            Soon, Vinster will offer a map of this region and will plot the location of the producers in your cellar on it, helping you understand the wines better through the lens of their geographical positions.
                           </Text>
                         </View>
                       )}
@@ -133,7 +136,7 @@ const styles = StyleSheet.create({
   summaryLine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   mapCaption: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   mapPlaceholder: { padding: spacing.lg, borderRadius: 14, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface, alignItems: 'center', gap: spacing.xs },
-  mapPlaceholderTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  mapPlaceholderTitle: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, textAlign: 'center' },
   mapPlaceholderBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
   section: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },
   sectionTitle: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1, marginBottom: spacing.md },
