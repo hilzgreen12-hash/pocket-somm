@@ -546,8 +546,9 @@ export function RestaurantReviewModal({
   function openWinePopup(w: WineLine & { _idx: number }) {
     const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
     const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
-    if (onReviewWine) buttons.push({ text: w.reviewed ? 'View / Edit Review' : 'Add Review', onPress: () => onReviewWine(w._idx) });
-    if (onEditWine) buttons.push({ text: 'Edit Wine', onPress: () => onEditWine(w._idx) });
+    if (onReviewWine) buttons.push({ text: 'Add/View Review', onPress: () => onReviewWine(w._idx) });
+    // "Edit Wine" intentionally removed — a wine added in Your Restaurants isn't
+    // editable here; corrections happen on its review in Wine Reviews.
     if (onViewIntel) buttons.push({ text: 'View Wine Intel', onPress: () => onViewIntel(w._idx) });
     if (onDeleteWine) buttons.push({ text: 'Delete Wine', style: 'destructive', onPress: () => onDeleteWine(w._idx) });
     buttons.push({ text: 'Cancel', style: 'cancel' });

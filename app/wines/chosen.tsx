@@ -410,13 +410,14 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; sd?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; sd?: string; backTo?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
-  // Return to the Label Library when the user arrived from it. dismissTo pops
-  // back to the EXISTING archive in the stack (don't router.replace — that
-  // pushes a SECOND archive on top of the one we came from, which is why Back
-  // then needed several presses to reach the scan page).
-  const returnToLibrary = () => router.dismissTo('/scan/archive');
+  // Return to wherever the user arrived from — an explicit backTo (e.g. a
+  // restaurant card via ?openSession) when provided, else the Label Library.
+  // dismissTo pops back to the EXISTING screen in the stack (don't router.replace
+  // — that pushes a duplicate on top, which is why Back then needed several
+  // presses to escape).
+  const returnToLibrary = () => router.dismissTo((params.backTo ? decodeURIComponent(params.backTo) : '/scan/archive') as any);
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
     // Don't nudge when arriving from the Label Library to view/create a review —
