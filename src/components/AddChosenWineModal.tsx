@@ -123,12 +123,14 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     if (!session) { showAlert({ title: 'Sign in required', body: 'Sign in to save a review.' }); return; }
     if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name before saving.' }); return; }
     Keyboard.dismiss();
-    // Pre-save nudge: list anything empty except the optional Personal Notes.
+    // Pre-save nudge: a review is complete with a date + location stamp, a
+    // score, and at least one word in EITHER Your Review or Personal Notes. A
+    // list price is NOT required to save. Only nudge when one of those is empty.
     const missing = missingReviewFields([
-      { label: 'Your Review', filled: !!tastingNote.trim() },
-      { label: 'Your Score', filled: userScore != null },
-      { label: 'List Price', filled: !!listPrice.trim() },
+      { label: 'a Date', filled: !!reviewDate.trim() },
       { label: 'a Location', filled: !!(locName.trim() || locCity.trim()) },
+      { label: 'Your Score', filled: userScore != null },
+      { label: 'a Note (Your Review or Personal Notes)', filled: !!(tastingNote.trim() || otherObservations.trim()) },
     ]);
     if (missing.length) {
       showAlert({
@@ -257,9 +259,14 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
             <Text accessibilityLabel="Back" style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.favouriteBtn} onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-            <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
-          </TouchableOpacity>
+          {/* Header favourite star — hidden on the review-card layout, where the
+              star is stacked BELOW the top-right "Edit" (with a gap) so the two
+              never overlap. Shown here for manual entry and add-to-review. */}
+          {!(confirmedIdentity && !addToGroupId) ? (
+            <TouchableOpacity style={styles.favouriteBtn} onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+              <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
+            </TouchableOpacity>
+          ) : null}
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
             {confirmedIdentity ? (
@@ -274,6 +281,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   <View style={styles.cardTopRow}>
                     <TouchableOpacity onPress={() => setIdentityEditOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
                       <Text style={styles.topEditText}>Edit</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
+                      <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
                     </TouchableOpacity>
                   </View>
                 )}
@@ -482,7 +492,9 @@ const styles = StyleSheet.create({
   headerRegion: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: 2 },
   editIdentityRow: { alignItems: 'center', paddingVertical: spacing.xs, marginBottom: spacing.xs },
   editIdentityLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
-  cardTopRow: { flexDirection: 'row', justifyContent: 'flex-end', marginBottom: spacing.xs },
+  // Edit (top) and the favourite star stacked at the top-right, right-aligned,
+  // with a gap between them so the star never overlays the Edit link.
+  cardTopRow: { alignItems: 'flex-end', marginBottom: spacing.xs, gap: spacing.sm },
   topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
