@@ -982,9 +982,10 @@ export default function ResultsScreen() {
                   </View>
                 ) : null}
 
-                {/* Top pick only — one gold synthesis line (no bullet),
-                    sitting directly above the four parameter notes. */}
-                {i === 0 && standoutText ? (
+                {/* One gold synthesis line per wine (no bullet) — the "why this
+                    one" hook (pairing + how it compares on this list), above the
+                    four parameter notes. Shown for all three picks. */}
+                {standoutText ? (
                   <Text style={styles.standoutStatement}>{standoutText}</Text>
                 ) : null}
 
