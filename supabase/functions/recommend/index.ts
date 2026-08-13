@@ -197,6 +197,7 @@ Deno.serve(async (req) => {
       profileWineTypes,
       profileStyleProfiles,
       currency,
+      stream,
     } = await req.json();
 
     const cur = (currency ?? 'GBP').toString().toUpperCase();
@@ -273,7 +274,14 @@ ${dislikedGrapesLine}
     // Previously any of these surfaced as a 500 and the client saw
     // "Something went wrong" — the cause of the ~1-in-5 scan failures.
     async function attemptClaudeCall(attempt: number): Promise<any> {
-      const response = await client.messages.create({
+      // Stream the model output instead of buffering it. A 12000-max_tokens
+      // Sonnet generation on a long wine list runs ~60s+, and a single
+      // non-streaming request held open that long is exactly what an
+      // intermediary severs (~64s — the "times out at 92%" failure the user
+      // hit on big lists but not small ones). Streaming from Claude keeps bytes
+      // flowing on the edge→Anthropic leg; the SSE wrapper below does the same
+      // on the client leg.
+      const claudeStream = await client.messages.create({
         model: 'claude-sonnet-4-6',
         max_tokens: 12000,
         system: [
@@ -284,9 +292,14 @@ ${dislikedGrapesLine}
           },
         ],
         messages: [{ role: 'user', content: userPrompt }],
+        stream: true,
       });
-      const textBlock = response.content.find((b) => b.type === 'text');
-      const text = textBlock?.type === 'text' ? textBlock.text : '';
+      let text = '';
+      for await (const event of claudeStream) {
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          text += event.delta.text;
+        }
+      }
       const match = text.match(/\{[\s\S]*\}/);
       if (!match) {
         const snippet = text ? text.slice(0, 200) : `(no text block; content types: ${response.content.map((b) => b.type).join(', ')})`;
@@ -308,10 +321,53 @@ ${dislikedGrapesLine}
       }
     }
 
-    const parsed = await attemptClaudeCall(1);
+    // Buffered path (stream !== true): unchanged single-JSON response. Kept as a
+    // fallback for clients that can't read a streamed body.
+    if (stream !== true) {
+      const parsed = await attemptClaudeCall(1);
+      return new Response(JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode }), {
-      headers: { 'Content-Type': 'application/json' },
+    // Streamed path: keep the client connection alive with an SSE heartbeat
+    // every few seconds while the ~60s+ generation runs, then emit one final
+    // `data:` frame with the validated recommendation (or an error). Mirrors
+    // generate-pairings — this is the fix for the recommend timeout on long
+    // wine lists.
+    const encoder = new TextEncoder();
+    const body = new ReadableStream({
+      async start(controller) {
+        const send = (s: string) => {
+          try { controller.enqueue(encoder.encode(s)); } catch { /* closed */ }
+        };
+        // First bytes immediately, before time-to-first-token, so the client's
+        // idle timer starts ticking against real traffic.
+        send(': open\n\n');
+        const heartbeat = setInterval(() => send(': ping\n\n'), 8000);
+        try {
+          const parsed = await attemptClaudeCall(1);
+          send(`data: ${JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode })}\n\n`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('Recommend stream error:', message);
+          // Generic user-facing copy; full detail stays in the log above.
+          send(`data: ${JSON.stringify({
+            error: 'recommend_failed',
+            message: "Vinster had trouble reading the wine list this time. Please try again — usually a second attempt works.",
+          })}\n\n`);
+        } finally {
+          clearInterval(heartbeat);
+          controller.close();
+        }
+      },
+    });
+    return new Response(body, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
