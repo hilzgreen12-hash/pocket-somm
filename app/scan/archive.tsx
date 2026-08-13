@@ -27,6 +27,7 @@ import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { cityKey } from '../../src/utils/city';
+import { foldAccents } from '../../src/utils/wineIdentity';
 import type { CellarWine, LibraryLabel, WineDetailsComplete, WineIntelligence } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -110,6 +111,7 @@ export default function MyLabelsScreen() {
   const [favFilter, setFavFilter] = useState<'all' | 'fav'>('all');
   const [cityFilter, setCityFilter] = useState<string>('All');
   const [dateFilter, setDateFilter] = useState<string>('All');
+  const [search, setSearch] = useState('');
   const [expandedLabel, setExpandedLabel] = useState<LibraryLabel | null>(null);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -167,8 +169,16 @@ export default function MyLabelsScreen() {
       const ids = new Set(f?.itemIds ?? []);
       base = base.filter((l) => ids.has(l.id));
     }
+    // Free-text search narrows whatever the chips already filter — matches
+    // producer, wine, vintage, region and the captured venue / city.
+    const q = foldAccents(search.trim());
+    if (q) {
+      base = base.filter((l) =>
+        foldAccents([l.producer, l.wine_name, l.vintage != null ? String(l.vintage) : '', l.region, l.captured_place, l.captured_city].filter(Boolean).join(' ')).includes(q),
+      );
+    }
     return [...base].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [labels, favFilter, cityFilter, dateFilter, activeCustomId, customFilters]);
+  }, [labels, favFilter, cityFilter, dateFilter, activeCustomId, customFilters, search]);
 
   // Bespoke-filter management — mirrors the Lineup Library.
   function applyCustom(id: string) {
@@ -575,6 +585,25 @@ export default function MyLabelsScreen() {
             </TouchableOpacity>
           </ScrollView>
 
+          {/* Search sits below the chips and narrows whatever they filter —
+              same pattern as the Wine Reviews page. */}
+          <View style={styles.searchRow}>
+            <TextInput
+              style={styles.searchInput}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search producer, wine, region, venue…"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="search"
+              clearButtonMode="while-editing"
+            />
+            {search.length > 0 && (
+              <TouchableOpacity onPress={() => setSearch('')} style={styles.searchClear} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <Text style={styles.searchClearText}>✕</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {shown.length === 0 ? (
             <View style={styles.empty}>
               <Text style={styles.emptyTitle}>No labels match</Text>
@@ -610,6 +639,12 @@ export default function MyLabelsScreen() {
                     <Text style={styles.rowName} numberOfLines={3}>
                       {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                     </Text>
+                    {/* Location captured at scan time — venue · city, or just the
+                        city. Gold, matching the scanned-date line below it. */}
+                    {(() => {
+                      const loc = [label.captured_place, label.captured_city].map((s) => (s ?? '').trim()).filter(Boolean).join(' · ');
+                      return loc ? <Text style={styles.rowLocation} numberOfLines={1}>{loc}</Text> : null;
+                    })()}
                     <Text style={styles.rowScanned}>Scanned: {new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
                     {/* Dated links to where this wine also lives — most recent
                         review date only; styled as links, not buttons. */}
@@ -805,8 +840,13 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowBody: { flex: 1 },
   rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 21 },
+  rowLocation: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
   rowScanned: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
   rowLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', marginTop: 4 },
+  searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
+  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  searchClear: { paddingHorizontal: spacing.sm, paddingVertical: 4 },
+  searchClearText: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   expandOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.92)', justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
   expandImage: { width: '100%', height: '78%' },
   expandCaptionWrap: { position: 'absolute', bottom: 48, left: spacing.xl, right: spacing.xl, alignItems: 'center' },

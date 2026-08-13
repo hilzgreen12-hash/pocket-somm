@@ -412,6 +412,13 @@ export default function ChosenWinesScreen() {
   // arrived to open/create a specific review rather than for a plain visit.
   const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; sd?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
+  // Return to the Label Library when the user arrived from it. Pop the stack
+  // (don't router.replace — that pushes a SECOND archive on top of the one we
+  // came from, which is why Back then needed two presses to reach the scan page).
+  const returnToLibrary = () => {
+    if (router.canGoBack()) router.back();
+    else router.replace('/scan/archive');
+  };
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
     // Don't nudge when arriving from the Label Library to view/create a review —
@@ -925,8 +932,8 @@ export default function ChosenWinesScreen() {
         // inside the modal shows immediately — the snapshot never refreshes.
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
-        onClose={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
-        onSaved={() => { setEditingWine(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
+        onClose={() => { setEditingWine(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onSaved={() => { setEditingWine(null); if (cameViaLabelLink) returnToLibrary(); }}
       />
 
       <ReviewDetailModal
@@ -939,7 +946,7 @@ export default function ChosenWinesScreen() {
         archiveBottles={detailBottleCounts.archive}
         visible={!!detailItem}
         onShare={() => { if (detailItem) void handleShareReview(detailItem); }}
-        onClose={() => setDetailItem(null)}
+        onClose={() => { setDetailItem(null); if (cameViaLabelLink) returnToLibrary(); }}
         onAddReview={() => {
           const it = detailItem; if (!it) return;
           setDetailItem(null);
@@ -1006,8 +1013,8 @@ export default function ChosenWinesScreen() {
         labelImagePath={addLabelPath}
         addToGroupId={addToGroupId}
         source={addSource}
-        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
-        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) router.replace('/scan/archive'); }}
+        onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) returnToLibrary(); }}
       />
 
       {/* "+ Add" step 1 — "Add a Wine Review": pick the collection. Restaurant
