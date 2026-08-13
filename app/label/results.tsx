@@ -1750,14 +1750,17 @@ export default function LabelResultsScreen() {
               The Inside Line). "(what's this)" is replaced by the explainer shown
               in gold italics below the note when it's open. */}
           <View style={styles.noteMapSection}>
-            <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} hideExplainerLink />
+            {/* Vinster's Note (left) and Vinster's Map (right) share ONE centred
+                line with an indent between them; each expands its body below. */}
+            <View style={styles.noteMapHeadingRow}>
+              <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} hideExplainerLink />
+              <TouchableOpacity style={styles.mapHeadingRow} onPress={() => setMapExpanded((v) => !v)} activeOpacity={0.7}>
+                <Text style={styles.mapTitle}>Vinster's Map</Text>
+                <Text style={styles.mapChevron}>{mapExpanded ? '⌃' : '⌄'}</Text>
+              </TouchableOpacity>
+            </View>
             {noteExpanded ? <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text> : null}
             {noteExpanded ? <Text style={styles.noteExplainer}>{VINSTERS_NOTE_EXPLAINER}</Text> : null}
-
-            <TouchableOpacity style={[styles.mapHeadingRow, styles.mapHeadingTight]} onPress={() => setMapExpanded((v) => !v)} activeOpacity={0.7}>
-              <Text style={styles.mapTitle}>Vinster's Map</Text>
-              <Text style={styles.mapChevron}>{mapExpanded ? '⌃' : '⌄'}</Text>
-            </TouchableOpacity>
             {mapExpanded ? (
               <Text style={styles.mapBody}>
                 Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
@@ -2386,6 +2389,9 @@ const styles = StyleSheet.create({
   // single bottom border (the separator before The Inside Line) and no divider
   // between the note and the map.
   noteMapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Vinster's Note beside Vinster's Map — centred as a pair with an indent
+  // between them; text baselines aligned so both titles sit on one line.
+  noteMapHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', gap: spacing.xl, flexWrap: 'wrap' },
   // Pulls the Map heading up close beneath the note (squeezed together).
   mapHeadingTight: { marginTop: spacing.sm },
   // The "(what's this)" explainer, now shown inline in gold italics below the
