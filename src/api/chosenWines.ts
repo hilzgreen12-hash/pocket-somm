@@ -136,6 +136,12 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     // to the price Vinster pulled off the menu for the scan.
     menu_price: listPrice ?? wine.menuPrice,
     currency: wine.currency,
+    // "Price paid" — auto-inserted by Vinster from the confirmed/menu price so a
+    // review saved straight from a wine-list scan already carries the price paid
+    // without the user re-entering it (at a restaurant the menu price IS the
+    // price paid). Still fully editable on the review afterwards.
+    purchase_price: listPrice ?? wine.menuPrice ?? null,
+    purchase_price_currency: (listPrice ?? wine.menuPrice) != null ? (wine.currency ?? null) : null,
     critic_score: wine.criticScore,
     rationale: wine.rationale,
     vintage_assessment: wine.vintageAssessment,
