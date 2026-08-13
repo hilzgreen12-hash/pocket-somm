@@ -6,7 +6,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
+import { fetchCellarLocations, removeWineFromFilter } from '../../src/api/customFilters';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { detectLineup, prepareImageBase64, type DetectedBottle } from '../../src/api/label';
@@ -44,9 +45,21 @@ export default function ArchiveNightScreen() {
   const [matches, setMatches] = useState<NightMatch[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [unmatched, setUnmatched] = useState<DetectedBottle[]>([]);
-  // Matched wine ids the user has UN-ticked (excluded from the archive). Default
-  // empty = every matched wine is included.
+  // Matched wine ids the user has UN-ticked (excluded from the archive). A
+  // detected cellar wine now starts EXCLUDED — removing a bottle is opt-in via
+  // an explicit "Archive this wine from your cellar?" confirmation.
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  // When a confirmed wine is filed under more than one location folder, the user
+  // picks which one the bottle came from — remembered here so the removal also
+  // untags that location (mirrors the wine card's "Remove from which location?").
+  const [archiveLocationByWine, setArchiveLocationByWine] = useState<Record<string, string>>({});
+  // Location folders (cellar_wines can be filed under several) — used to ask
+  // "which location?" when a confirmed wine spans more than one.
+  const { data: cellarLocations = [] } = useQuery({
+    queryKey: ['cellar-locations', session?.user.id],
+    queryFn: () => fetchCellarLocations(session!.user.id),
+    enabled: !!session?.user.id,
+  });
   // Cosmetic ticks on off-cellar rows (they have no cellar bottles to archive).
   const [offCellarTicked, setOffCellarTicked] = useState<Set<number>>(new Set());
   // Per-wine identity edit → re-match against the cellar to move it between the
@@ -186,6 +199,10 @@ export default function ArchiveNightScreen() {
       const initial: Record<string, number> = {};
       result.matched.forEach((m) => { initial[m.wine.id] = Math.min(m.count, m.wine.quantity); });
       setCounts(initial);
+      // Every matched cellar wine starts UN-ticked — the user must explicitly
+      // confirm "archive this from your cellar" before any bottle is removed.
+      setExcluded(new Set(result.matched.map((m) => m.wine.id)));
+      setArchiveLocationByWine({});
       if (mode === 'later') {
         // Skip the confirm-bottles review step — go straight to the shared form
         // over the photo. Wines are captured (matched + unmatched) but nothing is
@@ -279,6 +296,47 @@ export default function ArchiveNightScreen() {
       const next = new Set(prev);
       if (next.has(wineId)) next.delete(wineId); else next.add(wineId);
       return next;
+    });
+  }
+
+  // Tapping a matched cellar wine's checkbox. UN-ticking is immediate. TICKING
+  // means "archive this from my cellar", so it asks first — and, when the wine
+  // is filed under more than one location, asks which location the bottle came
+  // from (that untag is applied when the bottles are actually archived).
+  function onToggleMatched(wineId: string) {
+    if (!excluded.has(wineId)) {
+      // Currently ticked → un-tick, and forget any chosen location.
+      setExcluded((prev) => { const n = new Set(prev); n.add(wineId); return n; });
+      setArchiveLocationByWine((prev) => { const { [wineId]: _drop, ...rest } = prev; return rest; });
+      return;
+    }
+    const include = (locId?: string) => {
+      if (locId) setArchiveLocationByWine((prev) => ({ ...prev, [wineId]: locId }));
+      setExcluded((prev) => { const n = new Set(prev); n.delete(wineId); return n; });
+    };
+    const inLocs = cellarLocations.filter((l) => l.wineIds.includes(wineId));
+    const proceed = () => {
+      if (inLocs.length > 1) {
+        showAlert({
+          title: 'Remove from which location?',
+          body: 'This wine is filed under more than one location — choose where this bottle came from.',
+          buttons: [
+            ...inLocs.map((l) => ({ text: l.name, onPress: () => include(l.id) })),
+            { text: 'Cancel', style: 'cancel' as const },
+          ],
+        });
+      } else {
+        include(inLocs[0]?.id);
+      }
+    };
+    const n = counts[wineId] ?? 1;
+    showAlert({
+      title: 'Archive this wine from your cellar?',
+      body: `This removes ${n === 1 ? 'one bottle' : `${n} bottles`} from your cellar and adds ${n === 1 ? 'it' : 'them'} to your archive.`,
+      buttons: [
+        { text: 'Yes, archive it', onPress: proceed },
+        { text: 'No', style: 'cancel' as const },
+      ],
     });
   }
   function toggleOffCellar(i: number) {
@@ -415,10 +473,15 @@ export default function ArchiveNightScreen() {
     setArchivingBottles(true);
     const day = todayStr();
     try {
+      let untagged = false;
       for (const m of matches) {
         if (excluded.has(m.wine.id)) continue;
         const n = counts[m.wine.id] ?? 0;
         if (n > 0) await archiveBottles(m.wine, n, day);
+        // If the user said this bottle came from a specific location folder,
+        // untag the wine from it — matches the wine card's location-scoped remove.
+        const locId = archiveLocationByWine[m.wine.id];
+        if (n > 0 && locId) { await removeWineFromFilter(locId, m.wine.id); untagged = true; }
       }
       setArchivedCount(totalToArchive);
       setArchivedDone(true);
@@ -426,6 +489,7 @@ export default function ArchiveNightScreen() {
       qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      if (untagged) qc.invalidateQueries({ queryKey: ['cellar-locations', session.user.id] });
       return true;
     } catch (err) {
       showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -623,7 +687,7 @@ export default function ArchiveNightScreen() {
           ) : (
             <>
               <Text style={styles.confirmBlurb}>
-                Wines from your cellar will be archived and the lineup photo will be saved in Your Lineup Library.
+                Tick a wine from your cellar to archive it — Vinster removes that bottle from your cellar. The lineup photo is saved to Your Lineup Library either way.
               </Text>
               {/* Yellow stats bar below the header, then the lineup photo. */}
               <View style={styles.statsBar}>
@@ -643,7 +707,7 @@ export default function ArchiveNightScreen() {
                     const label = [m.wine.vintage, m.wine.producer, m.wine.wine_name].filter(Boolean).join(' ') || m.wine.wine_name;
                     return (
                       <View key={m.wine.id} style={[styles.row, !ticked && styles.rowMuted]}>
-                        <TouchableOpacity style={styles.checkbox} onPress={() => toggleExcluded(m.wine.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <TouchableOpacity style={styles.checkbox} onPress={() => onToggleMatched(m.wine.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Text style={[styles.checkboxText, ticked && styles.checkboxTextOn]}>{ticked ? '☑' : '☐'}</Text>
                         </TouchableOpacity>
                         <View style={styles.rowText}>
