@@ -1,4 +1,5 @@
 import * as ImageManipulator from 'expo-image-manipulator';
+import { File, Paths } from 'expo-file-system';
 import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
@@ -151,6 +152,23 @@ export async function searchLabelImages(input: { producer?: string | null; wineN
     wineName: input.wineName ?? '',
   }) as { images?: LabelImageCandidate[] };
   return data.images ?? [];
+}
+
+// Auto-fetch a web label for a wine that has no photo of its own — the best
+// match, no picker — and download it to a local file, returning its uri (or
+// null on any failure). Best-effort: used to give imageless wines a thumbnail on
+// the Wine Intel card, mirroring the Confirm-Wine-Details auto-fetch. This is a
+// TRANSIENT image for display; it is not persisted.
+export async function fetchAutoLabelUri(producer?: string | null, wineName?: string | null): Promise<string | null> {
+  if (!producer?.trim()) return null;
+  try {
+    const cands = await searchLabelImages({ producer, wineName });
+    if (!cands.length) return null;
+    const dest = new File(Paths.cache, `autolabel-${producer}-${wineName ?? ''}`.replace(/[^a-z0-9]+/gi, '-').slice(0, 80) + '.img');
+    try { if (dest.exists) dest.delete(); } catch { /* ignore */ }
+    const file = await File.downloadFileAsync(cands[0].url, dest);
+    return file.uri;
+  } catch { return null; }
 }
 
 // Reuses the same Serper image-search edge function, but passes a full free-text

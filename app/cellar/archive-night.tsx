@@ -196,7 +196,15 @@ export default function ArchiveNightScreen() {
         setStage('review');
       }
     } catch (err) {
-      showAlert({ title: 'Could not read the photo', body: err instanceof Error ? err.message : 'Please try again.' });
+      // Show a clear, actionable blurb — not the raw edge-function error. Keep a
+      // genuine rate-limit message ("try again in a few minutes") intact.
+      const msg = err instanceof Error ? err.message : '';
+      showAlert({
+        title: 'Could not identify the wines',
+        body: /minute|too many|rate limit/i.test(msg)
+          ? msg
+          : 'Please double check the photo is clear and the front labels are facing forward, and use no more than 8 bottles per lineup.',
+      });
       setStage('capture');
     }
   }

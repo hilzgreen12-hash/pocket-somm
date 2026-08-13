@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, updateLineupStamp, setLineupWines, setLineupRestaurant, type LineupWine } from '../../../src/api/lineups';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
-import { detectLineup, prepareImageBase64 } from '../../../src/api/label';
+import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
 import { matchLineupToCellar } from '../../../src/services/archiveNight';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
@@ -201,7 +201,9 @@ export default function LineupDetailScreen() {
     try {
       const intel = await generateWineIntel(details as any, currency);
       const ls = useLabelStore.getState();
-      ls.setImageUri(null);
+      // Lineup wines have no photo of their own — auto-fetch a web label so the
+      // intel card still gets a thumbnail (best-effort).
+      ls.setImageUri(await fetchAutoLabelUri(w.producer, w.wine_name));
       ls.setWineDetailsConfirmed(details as any);
       ls.setIntelligence(intel);
       useLastIntelStore.getState().setLast(details as any, intel);
