@@ -400,11 +400,11 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   errorBody: {
-    fontSize: 14,
+    fontSize: 20,
     fontFamily: fonts.bodyRegular,
     color: colors.textMuted,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 28,
     marginBottom: spacing.xl,
   },
   retryButton: {
