@@ -560,7 +560,10 @@ export default function ResultsScreen() {
       }
 
       await saveChosen.mutateAsync({
-        wine,
+        // Carry a Vinster's Note already generated on this screen (chevron
+        // expanded) onto the saved pick, so the review card reuses it instead of
+        // regenerating. Falls back to whatever rationale the recommend call sent.
+        wine: { ...wine, rationale: wine.rationale ?? reviewByIndex[i] ?? null },
         scanSessionId: sid,
         restaurantName: currentRestaurant,
         city: cityValue,

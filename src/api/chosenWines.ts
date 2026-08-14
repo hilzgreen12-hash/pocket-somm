@@ -337,6 +337,7 @@ export async function patchChosenWine(
     ws_wine_name: string | null;
     critic_score: number | null;
     critic_score_note: string | null;
+    rationale: string | null;      // Vinster's Note, persisted on first generation
     wine_name: string;
     producer: string | null;
     region: string | null;

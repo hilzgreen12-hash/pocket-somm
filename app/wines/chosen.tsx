@@ -8,7 +8,7 @@ import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { clearChosenReview } from '../../src/api/chosenWines';
+import { clearChosenReview, patchChosenWine } from '../../src/api/chosenWines';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
@@ -945,6 +945,15 @@ export default function ChosenWinesScreen() {
         archiveBottles={detailBottleCounts.archive}
         visible={!!detailItem}
         onShare={() => { if (detailItem) void handleShareReview(detailItem); }}
+        onNoteGenerated={(note) => {
+          // Persist a card-generated Vinster's Note so it never regenerates.
+          // Restaurant/other reviews have a rationale column (the head row);
+          // cellar reviews don't, so they regenerate on demand each time.
+          const it = detailItem; if (!it || it.source === 'cellar') return;
+          void patchChosenWine(it.wine.id, { rationale: note })
+            .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] }))
+            .catch(() => { /* best-effort persistence */ });
+        }}
         onClose={() => { setDetailItem(null); if (cameViaLink) returnToLibrary(); }}
         onAddReview={() => {
           const it = detailItem; if (!it) return;

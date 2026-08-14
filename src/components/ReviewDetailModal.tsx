@@ -23,7 +23,7 @@ function fmtDate(iso: string | null): string {
 
 export function ReviewDetailModal({
   review, visible, onClose, onAddReview, onEditLatest, thumbPath, onAddPhoto,
-  cellarBottles = 0, archiveBottles = 0, onShare,
+  cellarBottles = 0, archiveBottles = 0, onShare, onNoteGenerated,
 }: {
   review: UnifiedReview | null;
   visible: boolean;
@@ -36,6 +36,9 @@ export function ReviewDetailModal({
   cellarBottles?: number;
   archiveBottles?: number;
   onShare?: () => void;
+  // Called once when Vinster's Note is generated on demand, so the caller can
+  // persist it to the row and never regenerate it.
+  onNoteGenerated?: (note: string) => void;
 }) {
   // "View Vinster's Note" is collapsed by default; the sommelier note is fetched
   // on demand (like the results card) when it wasn't saved on the wine.
@@ -67,6 +70,8 @@ export function ReviewDetailModal({
         vintage: review!.vintage,
       });
       setFetchedNote(note ?? '');
+      // Persist it so re-opening the card is instant and never regenerates.
+      if (note) onNoteGenerated?.(note);
     } finally {
       setNoteLoading(false);
     }
