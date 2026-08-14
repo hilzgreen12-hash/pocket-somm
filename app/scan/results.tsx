@@ -490,10 +490,8 @@ export default function ResultsScreen() {
   async function handleQuickSelect(wine: WineRecommendation, i: number, overrides?: { restaurant?: string; city?: string }) {
     if (!session || chosenIndexes.has(i) || pendingIdxRef.current.has(i)) return;
     pendingIdxRef.current.add(i);
-    // Optimistic: flip the chip to "Added" instantly so the tap has immediate
-    // feedback and doesn't wait on the save round-trip — this is what removes the
-    // reason to tap repeatedly (which is what created the duplicates).
-    setChosenIndexes((prev) => new Set([...prev, i]));
+    // Instant tactile feedback so the tap registers before anything paints.
+    void Haptics.selectionAsync();
 
     const currentRestaurant = overrides?.restaurant ?? restaurantName ?? '';
     // findExistingReview is a LOCAL check (no network), so we know instantly
@@ -504,8 +502,10 @@ export default function ResultsScreen() {
       vintage: wine.vintage,
     });
 
-    // Fresh pick → confirm the selection IMMEDIATELY (no network wait); the save
-    // runs in the background below. This is what removes the pop-up delay.
+    // Fresh pick → confirm the selection IMMEDIATELY. showAlert only re-renders
+    // the lightweight alert host, so firing it BEFORE the optimistic chip flip
+    // (below) lets the popup paint without waiting on the 3 heavy wine cards
+    // re-rendering in the same commit — that shared commit was the delay.
     if (!existing) {
       showAlert({
         title: 'Wine Selected',
@@ -517,6 +517,11 @@ export default function ResultsScreen() {
         ],
       });
     }
+
+    // Optimistic chip flip, deferred a tick so its heavy re-render lands in a
+    // separate commit from the alert. pendingIdxRef already blocks a double-tap
+    // synchronously, so nothing depends on the chip updating this instant.
+    setTimeout(() => setChosenIndexes((prev) => new Set([...prev, i])), 0);
 
     try {
       const cityValue = overrides?.city
