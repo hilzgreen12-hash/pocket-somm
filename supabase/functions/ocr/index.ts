@@ -86,7 +86,7 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json();
-    const { imageBase64 } = body;
+    const { imageBase64, stream } = body;
 
     if (!imageBase64) {
       return new Response(JSON.stringify({ error: 'imageBase64 required' }), { status: 400 });
@@ -149,10 +149,50 @@ Deno.serve(async (req) => {
       }
     }
 
-    const parsed = await attemptOCR(1);
+    // Buffered path (stream !== true): unchanged single-JSON response. Kept for
+    // the current app build, which invokes OCR through the non-streaming path.
+    if (stream !== true) {
+      const parsed = await attemptOCR(1);
+      return new Response(JSON.stringify(parsed), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
 
-    return new Response(JSON.stringify(parsed), {
-      headers: { 'Content-Type': 'application/json' },
+    // Streamed path: reading a long wine list takes Sonnet ~45s+, and a single
+    // buffered connection held open that long risks an intermediary severing it
+    // (and, on the client, the 90s timeout → full-call retry death spiral). Keep
+    // the connection alive with an SSE heartbeat every few seconds, then emit one
+    // final `data:` frame with the parsed wines (or an error). Mirrors recommend.
+    const encoder = new TextEncoder();
+    const streamBody = new ReadableStream({
+      async start(controller) {
+        const send = (s: string) => {
+          try { controller.enqueue(encoder.encode(s)); } catch { /* closed */ }
+        };
+        send(': open\n\n');
+        const heartbeat = setInterval(() => send(': ping\n\n'), 8000);
+        try {
+          const parsed = await attemptOCR(1);
+          send(`data: ${JSON.stringify(parsed)}\n\n`);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          console.error('OCR stream error:', message);
+          send(`data: ${JSON.stringify({
+            error: 'ocr_failed',
+            message: "Vinster had trouble reading this photo. Try a clearer, well-lit shot with the wine list fully in frame.",
+          })}\n\n`);
+        } finally {
+          clearInterval(heartbeat);
+          controller.close();
+        }
+      },
+    });
+    return new Response(streamBody, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);

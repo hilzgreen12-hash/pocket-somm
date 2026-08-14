@@ -1,5 +1,6 @@
 import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamRecommend } from './recommendStream';
+import { streamOCR } from './ocrStream';
 
 // Thin alias kept so the call sites below read unchanged. The timeout, retry
 // and friendly-error handling now live in invokeResilient (shared with the
@@ -11,9 +12,21 @@ async function invokeFunction(name: string, body: unknown): Promise<unknown> {
 
 export async function callOCR(imageBase64: string): Promise<unknown> {
   console.log('[API] Invoking OCR Edge Function...');
-  const data = await invokeFunction('ocr', { imageBase64 });
-  console.log('[API] OCR success');
-  return data;
+  // Prefer the streamed path: reading a long wine list takes Sonnet ~45s+, and a
+  // heartbeat-kept SSE connection survives it where a single buffered request
+  // risks a mid-flight severance (and then a full-call retry). Fall back to the
+  // buffered invoke if streaming drops after its own retries or isn't supported;
+  // a real application error (not a transport drop) propagates without falling back.
+  try {
+    const data = await streamOCR(imageBase64);
+    console.log('[API] OCR success (streamed)');
+    return data;
+  } catch (err) {
+    if (!isNetworkError(err)) throw err;
+    const data = await invokeFunction('ocr', { imageBase64 });
+    console.log('[API] OCR success (buffered fallback)');
+    return data;
+  }
 }
 
 export async function callRecommend(payload: unknown): Promise<unknown> {
