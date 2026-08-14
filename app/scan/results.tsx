@@ -248,7 +248,7 @@ export default function ResultsScreen() {
         if (!name || restaurantName.trim()) return; // nothing recent, or user already set one
         showAlert({
           title: `Are you still at ${name}?`,
-          body: 'This list will be added to the same visit in Your Restaurants.',
+          body: 'Any wine selection from this list will be added to the same visit in Your Restaurants.',
           buttons: [
             {
               text: 'Yes',
@@ -1510,15 +1510,16 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     paddingVertical: spacing.sm,
-    marginTop: -2,
+    marginTop: 2,
     marginBottom: spacing.sm,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.borderLight,
-    backgroundColor: 'rgba(224,184,74,0.06)',
+    // Bubble: our deep-brown outline, faded-terracotta fill.
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.surfaceElevated,
+    backgroundColor: 'rgba(127,79,76,0.30)',
   },
   selectBarDone: {
-    backgroundColor: 'rgba(224,184,74,0.16)',
+    backgroundColor: 'rgba(127,79,76,0.48)',
   },
   selectBarText: {
     fontFamily: fonts.bodySemibold,

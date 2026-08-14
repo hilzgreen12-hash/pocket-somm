@@ -331,10 +331,10 @@ export default function ArchiveNightScreen() {
     };
     const n = counts[wineId] ?? 1;
     showAlert({
-      title: 'Archive this wine from your cellar?',
+      title: n === 1 ? 'Move this bottle from your cellar to your archive?' : 'Move these bottles from your cellar to your archive?',
       body: `This removes ${n === 1 ? 'one bottle' : `${n} bottles`} from your cellar and adds ${n === 1 ? 'it' : 'them'} to your archive.`,
       buttons: [
-        { text: 'Yes, archive it', onPress: proceed },
+        { text: 'Yes, move to archive', onPress: proceed },
         { text: 'No', style: 'cancel' as const },
       ],
     });
