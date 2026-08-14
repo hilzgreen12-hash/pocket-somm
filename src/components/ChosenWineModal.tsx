@@ -369,7 +369,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <Text style={styles.sectionLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, styles.priceInput]}
               value={listPrice}
               onChangeText={(text) => {
                 // Allow digits and a single decimal point only; the menu
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     color: colors.gold,
   },
   favouriteStar: {
-    fontSize: 30,
+    fontSize: 22,
     color: colors.textMuted,
   },
   favouriteStarActive: {
@@ -516,8 +516,15 @@ const styles = StyleSheet.create({
     minHeight: 80,
     marginBottom: spacing.md,
   },
+  // Score is 1–3 digits — keep the field short, and leave a clear gap before
+  // the "Your Review" field below it.
   scoreInput: {
-    marginBottom: 4,
+    width: 100,
+    marginBottom: spacing.lg,
+  },
+  // Price is a handful of digits — no need to span the page.
+  priceInput: {
+    width: 150,
   },
   scoreHint: {
     // Score hint — Inter italic
