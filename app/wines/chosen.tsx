@@ -163,8 +163,10 @@ export default function ChosenWinesScreen() {
   // Every review (restaurant / cellar / other) opens the same unified detail view.
   const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
   // The detail card that spawned an Edit — so closing the editor returns to the
-  // card, not out to the list. Cleared once the card is restored.
-  const [returnToDetail, setReturnToDetail] = useState<ReviewItem | null>(null);
+  // card, not out to the list. A REF (not state) so that a delete, which fires
+  // onSaved() then onClose() synchronously, clears it in onSaved before onClose
+  // reads it — otherwise a stale closure would restore the just-deleted card.
+  const returnToDetailRef = useRef<ReviewItem | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
   // True when the cellar review modal was opened to EDIT the latest entry (from
   // the review card's Edit) rather than to add a fresh one.
@@ -929,8 +931,8 @@ export default function ChosenWinesScreen() {
         // inside the modal shows immediately — the snapshot never refreshes.
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
-        onClose={() => { setEditingWine(null); if (returnToDetail) { setDetailItem(returnToDetail); setReturnToDetail(null); } else if (cameViaLabelLink) returnToLibrary(); }}
-        onSaved={() => { setEditingWine(null); setReturnToDetail(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onClose={() => { setEditingWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLabelLink) returnToLibrary(); }}
+        onSaved={() => { setEditingWine(null); returnToDetailRef.current = null; if (cameViaLabelLink) returnToLibrary(); }}
       />
 
       <ReviewDetailModal
@@ -965,7 +967,7 @@ export default function ChosenWinesScreen() {
         }}
         onEditLatest={() => {
           const it = detailItem; if (!it) return;
-          setReturnToDetail(it); // restore this card when the editor closes
+          returnToDetailRef.current = it; // restore this card when the editor closes
           setDetailItem(null);
           if (it.source === 'cellar') { setEditingCellarLatest(true); setEditingCellarWine(it.wine as CellarWine); }
           else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
@@ -999,8 +1001,8 @@ export default function ChosenWinesScreen() {
         wine={editingCellarWine}
         visible={!!editingCellarWine}
         editLatest={editingCellarLatest}
-        onClose={() => { setEditingCellarWine(null); if (returnToDetail) { setDetailItem(returnToDetail); setReturnToDetail(null); } else if (cameViaLink) returnToLibrary(); }}
-        onSaved={() => { setEditingCellarWine(null); setReturnToDetail(null); if (cameViaLink) returnToLibrary(); }}
+        onClose={() => { setEditingCellarWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLink) returnToLibrary(); }}
+        onSaved={() => { setEditingCellarWine(null); returnToDetailRef.current = null; if (cameViaLink) returnToLibrary(); }}
       />
 
       <AddChosenWineModal
