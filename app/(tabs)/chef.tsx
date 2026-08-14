@@ -28,6 +28,8 @@ export default function ChefTab() {
   const { sessions: labelSessions } = useChefLabelHistory();
   const { sessions: pairingSessions } = useChefPairingHistory();
   const [message, setMessage] = useState<AppMessage | null>(null);
+  // "Wine & Recipe Pairing" opens a chooser popup that routes to the two flows.
+  const [pairingChooser, setPairingChooser] = useState(false);
 
   function handleViewLastPairing() {
     if (generalResult || cellarResult) {
@@ -99,30 +101,12 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Pairing generators — Wine → Recipe and Recipe → Wine. Both in one
-          section so they sit with the same gap as the buttons below. Tap to
-          start; press-and-hold to revisit your last result. */}
+      {/* Wine & Recipe Pairing (opens a chooser popup for the two flows) sits
+          above Your Cookbook in one section. */}
       <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.buttonFull}
-          onPress={() => router.push('/chef/review-requirements')}
-          onLongPress={handleViewLastLabelSearch}
-        >
-          <Text style={styles.buttonText}>I've got a wine, find me a recipe</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => setPairingChooser(true)}>
+          <Text style={styles.buttonText}>Wine &amp; Recipe Pairing</Text>
         </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.buttonFull}
-          onPress={() => router.push('/chef/find-pairing')}
-          onLongPress={handleViewLastPairing}
-        >
-          <Text style={styles.buttonText}>I know what I'm cooking, find me a wine</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Your Cookbook — its own separated section. */}
-      <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
           <Text style={styles.buttonText}>Your Cookbook</Text>
         </TouchableOpacity>
@@ -140,6 +124,33 @@ export default function ChefTab() {
           <Text style={styles.buttonText}>Your Wine Reviews</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Wine & Recipe Pairing chooser — the two original flows. Press-and-hold
+          either to revisit your last result, as the tab buttons used to. */}
+      <Modal visible={pairingChooser} transparent animationType="fade" onRequestClose={() => setPairingChooser(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setPairingChooser(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Wine &amp; Recipe Pairing</Text>
+            <TouchableOpacity
+              style={styles.modalChoiceBtn}
+              onPress={() => { setPairingChooser(false); router.push('/chef/review-requirements'); }}
+              onLongPress={() => { setPairingChooser(false); handleViewLastLabelSearch(); }}
+            >
+              <Text style={styles.modalChoiceText}>I've got a wine, find me a recipe</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.modalChoiceBtn}
+              onPress={() => { setPairingChooser(false); router.push('/chef/find-pairing'); }}
+              onLongPress={() => { setPairingChooser(false); handleViewLastPairing(); }}
+            >
+              <Text style={styles.modalChoiceText}>I know what I'm cooking, find me a wine</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setPairingChooser(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
@@ -188,4 +199,9 @@ const styles = StyleSheet.create({
   modalButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   // Pop-up button — Cormorant.
   modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: '#FFFFFF' },
+  // Pairing-chooser action buttons — one per flow, stacked.
+  modalChoiceBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
+  modalChoiceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
+  modalCancel: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  modalCancelText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
 });
