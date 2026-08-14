@@ -287,6 +287,16 @@ export default function ResultsScreen() {
     });
   }, [session, recommendation, chosenWines, effectiveSessionId]);
 
+  // Fetch Vinster's Review for whichever pick is currently expanded. The first
+  // wine is open by DEFAULT on mount (openIndex starts at 0), and the fetch used
+  // to be tap-only — so wine #1 showed the "couldn't write" state without ever
+  // calling the generator. Driving it off openIndex covers the default-open wine
+  // and every tapped one. (ensureReview is hoisted + self-guards duplicates.)
+  useEffect(() => {
+    if (recommendation && openIndex != null) void ensureReview(openIndex);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recommendation, openIndex]);
+
   // Progressively enrich the rendered picks with real Wine-Searcher data
   // (critic score, market price + value verdict, region/grape gap-fill). Runs
   // AFTER the cards render — in parallel, in each wine's own menu currency so
@@ -696,9 +706,9 @@ export default function ResultsScreen() {
 
   function toggleWine(i: number) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    const willOpen = openIndex !== i;
-    setOpenIndex(willOpen ? i : null);
-    if (willOpen) void ensureReview(i);
+    // The fetch is driven by the openIndex effect above, which covers both the
+    // default-open wine and any tapped one.
+    setOpenIndex(openIndex === i ? null : i);
   }
 
   // Fetch Vinster's Review for wine i on first expand. No-ops if it's already
@@ -1087,15 +1097,15 @@ export default function ResultsScreen() {
                   </TouchableOpacity>
                 </View>
                 {sommOpen && (
-                  reviewLoading.has(i) ? (
+                  (wine.rationale || reviewByIndex[i]) ? (
+                    <Text style={styles.sommNoteText}>{wine.rationale || reviewByIndex[i]}</Text>
+                  ) : (
+                    // Still generating (or a rare miss the user can retry by
+                    // collapsing + reopening) — no scary error, just the pour.
                     <View style={styles.sommLoadingRow}>
                       <ActivityIndicator color={colors.gold} />
                       <Text style={styles.sommLoadingText}>Pouring Vinster's Review…</Text>
                     </View>
-                  ) : (wine.rationale || reviewByIndex[i]) ? (
-                    <Text style={styles.sommNoteText}>{wine.rationale || reviewByIndex[i]}</Text>
-                  ) : (
-                    <Text style={styles.sommRetryText}>Vinster couldn't write this review just now — tap Vinster's Review again to retry.</Text>
                   )
                 )}
 
