@@ -211,9 +211,10 @@ export default function ScanTab() {
         </TouchableOpacity>
       </View>
 
-      {/* Gold divider separating the Wine List flow from the Wine Label flow
-          (Wine Label + its Label Scan Library). */}
-      <View style={styles.goldDivider} />
+      {/* Divider separating the Wine List flow from the Wine Label flow
+          (Wine Label + its Label Scan Library) — matched to the faded divider
+          above rather than the brighter gold one. */}
+      <View style={styles.divider} />
 
       {/* Wine Label → Generate Wine Intel. Tap to scan; press-and-hold to
           revisit your last result (account-gated). */}
