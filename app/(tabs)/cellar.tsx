@@ -53,17 +53,15 @@ export default function CellarTab() {
     });
   }
 
-  // Top-right "+ Import" → the three import streams. "Import Cellar Document"
-  // opens its own Scan / Screenshot / File chooser (openImportChooser).
+  // Top-right "+ Import" — import is still being built, so the entry point now
+  // just tells the user it's on the way (the working Document / Vivino /
+  // CellarTracker flows behind openImportChooser are held until it ships).
   function openImportMenu() {
     showAlert({
       title: 'Import a Cellar',
-      body: 'Bring in an existing cellar from another app or a file.',
+      body: 'Import features are coming next, stay tuned.',
       buttons: [
-        { text: 'Import Cellar Document', onPress: openImportChooser },
-        { text: 'Import Vivino', onPress: () => router.push('/cellar/import-cellar?source=vivino' as any) },
-        { text: 'Import CellarTracker', onPress: () => router.push('/cellar/import-cellar?source=cellartracker' as any) },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Close', style: 'cancel' },
       ],
     });
   }
