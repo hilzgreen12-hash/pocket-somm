@@ -1,7 +1,26 @@
 import Anthropic from 'npm:@anthropic-ai/sdk';
 import { createClient } from 'npm:@supabase/supabase-js';
 
-const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+// maxRetries covers transient request-setup failures (429/5xx/529 overloaded,
+// connection resets) with the SDK's own exponential backoff. Bumped above the
+// default 2 because these calls run at restaurant-dinner peak hours when the
+// Anthropic API is most likely to be briefly overloaded.
+const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')!, maxRetries: 4 });
+
+// Transient = worth retrying (the previous attempt produced nothing usable and
+// the condition is temporary): API 408/429/5xx incl. 529 "overloaded", and
+// network/connection drops. A parse failure is NOT transient — the model
+// already generated a full (if malformed) response, so re-running just burns
+// ~60s of wall-clock for the same likely result.
+function isTransientError(err: unknown): boolean {
+  const e = err as { status?: number; name?: string; message?: string } | null;
+  const status = e?.status;
+  if (typeof status === 'number' && (status === 408 || status === 429 || status >= 500)) return true;
+  const name = e?.name ?? '';
+  if (/APIConnection|Timeout|Overloaded|RateLimit|InternalServer|ServiceUnavailable/i.test(name)) return true;
+  const msg = (e?.message ?? '').toLowerCase();
+  return /overloaded|rate.?limit|timeout|econnreset|socket hang up|network|temporarily|529|503|502|500/.test(msg);
+}
 
 // Per-user rate limits — slightly higher than OCR since a single scan can
 // trigger multiple recommend calls if the user re-rolls their picks.
@@ -264,13 +283,12 @@ ${dislikedGrapesLine}
 - You MAY re-recommend AT MOST ONE already-seen wine, and ONLY when it is genuinely OUTSTANDING and materially better for this diner than every remaining fresh alternative (an exceptional critic score, value, vintage or preference fit that nothing else here matches). The other TWO picks MUST be wines not in the already-seen set. NEVER return two or three already-seen wines.
 - If — and ONLY if — you re-recommend an already-seen wine, you MUST populate its "repeatNote" (see the field spec above), opening with exactly "Vinster is recommending this wine again because of its outstanding " and giving the specific reason. Set repeatNote ONLY on a wine that exactly matches an already-seen entry — never on a fresh pick, even a similar one from the same region or grape. Leave repeatNote null for every wine you are not deliberately repeating.\n\n` : ''}${topScoringMode ? 'TOP SCORING MODE: Return the 3 wines with the highest estimated critic scores on this list.' : 'Recommend exactly 3 wines. Where quality allows, prefer different grape varieties and regions for variety.'} Rank by: critic score → vintage quality → value for money → preference fit.`;
 
-    // ONE streamed Claude call. Streaming keeps bytes flowing on the
+    // ONE streamed Claude call per attempt. Streaming keeps bytes flowing on the
     // edge→Anthropic leg for a long generation, and 8192 max_tokens (matching
-    // generate-pairings; plenty for 3 picks) keeps it fast and well inside the
-    // function's wall-clock. We deliberately do NOT retry on a parse failure:
-    // re-running the whole generation just burns the clock (the same trap the
-    // OCR "times out at 91%" fix removed). A failure surfaces via the outer
-    // catch as a friendly "try again", and a manual retry usually lands clean.
+    // generate-pairings; plenty for 3 picks) keeps it well inside the function's
+    // wall-clock. A parse failure is NOT retried here (that only burns the clock
+    // re-running a slow generation — the trap the OCR "times out at 91%" fix
+    // removed); only TRANSIENT API/transport errors are retried, in callWithRetry.
     async function attemptClaudeCall(): Promise<any> {
       const claudeStream = await client.messages.create({
         model: 'claude-sonnet-4-6',
@@ -298,10 +316,32 @@ ${dislikedGrapesLine}
       return JSON.parse(match[0]); // throws on malformed → caught by the outer handler
     }
 
+    // Retry ONLY transient API/transport failures — this is what was missing
+    // last night: a single attempt against a peak-hours-overloaded API turned
+    // every 529/connection blip into a user-facing failure. A mid-stream drop
+    // throws out of attemptClaudeCall and lands here; a parse failure is
+    // rethrown immediately (not transient) so we don't re-run the slow gen.
+    async function callWithRetry(): Promise<any> {
+      const MAX_ATTEMPTS = 3;
+      let lastErr: unknown;
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        try {
+          return await attemptClaudeCall();
+        } catch (err) {
+          lastErr = err;
+          if (attempt >= MAX_ATTEMPTS || !isTransientError(err)) throw err;
+          const backoffMs = 600 * Math.pow(2, attempt - 1); // 600ms, 1200ms
+          console.warn(`[recommend] transient error on attempt ${attempt}/${MAX_ATTEMPTS}, retrying in ${backoffMs}ms:`, err instanceof Error ? err.message : String(err));
+          await new Promise((r) => setTimeout(r, backoffMs));
+        }
+      }
+      throw lastErr;
+    }
+
     // Buffered path (stream !== true): unchanged single-JSON response. Kept as a
     // fallback for clients that can't read a streamed body.
     if (stream !== true) {
-      const parsed = await attemptClaudeCall();
+      const parsed = await callWithRetry();
       return new Response(JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode }), {
         headers: { 'Content-Type': 'application/json' },
       });
@@ -323,7 +363,7 @@ ${dislikedGrapesLine}
         send(': open\n\n');
         const heartbeat = setInterval(() => send(': ping\n\n'), 8000);
         try {
-          const parsed = await attemptClaudeCall();
+          const parsed = await callWithRetry();
           send(`data: ${JSON.stringify({ ...parsed, topScoringMode: !!topScoringMode })}\n\n`);
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
