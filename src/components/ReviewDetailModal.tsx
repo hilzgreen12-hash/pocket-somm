@@ -1,18 +1,20 @@
-import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
-import { showAlert } from './AppAlert';
+import { useEffect, useState } from 'react';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LabelThumb } from './LabelThumb';
 import { AddPhotoThumb } from './AddPhotoThumb';
 import { WineIdentityHeader } from './WineIdentityHeader';
+import { fetchVinsterReview } from '../api/label';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 import type { UnifiedReview } from '../utils/reviewModel';
 
 // The single, source-agnostic review detail view. Restaurant, cellar and other
-// reviews all open THIS screen. Styled to mirror the Your Wine Reviews landing
-// cards: label thumbnail + wine name up top, a yellow "N Reviews · X Average
-// Score" band framed by separator rules, then each saved entry (newest first)
-// divided by rules — date · location, score with an inline "Drink:" window, and
-// the review body. A chevron beside "Your Review" removes that entry.
+// reviews all open THIS card. Layout: thumbnail + wine name, a rule, the stats
+// band, then "View Vinster's Note" (collapsed — Vinster's own take, kept out of
+// the user's OWN review), a rule, then each saved entry (newest first) — a large
+// date · location stamp, a concise origin line, score + drink window, and the
+// review body. Delete lives in Edit, not here; the latest entry is editable.
 function fmtDate(iso: string | null): string {
   if (!iso) return '';
   try { return new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }); }
@@ -20,7 +22,7 @@ function fmtDate(iso: string | null): string {
 }
 
 export function ReviewDetailModal({
-  review, visible, onClose, onAddReview, onEditLatest, onDeleteEntry, thumbPath, onAddPhoto,
+  review, visible, onClose, onAddReview, onEditLatest, thumbPath, onAddPhoto,
   cellarBottles = 0, archiveBottles = 0, onShare,
 }: {
   review: UnifiedReview | null;
@@ -28,49 +30,54 @@ export function ReviewDetailModal({
   onClose: () => void;
   onAddReview: () => void;
   onEditLatest: () => void;
-  onDeleteEntry: (entryId: string) => Promise<void> | void;
+  onDeleteEntry?: (entryId: string) => Promise<void> | void;
   thumbPath?: string | null;
   onAddPhoto?: () => void;
   cellarBottles?: number;
   archiveBottles?: number;
   onShare?: () => void;
 }) {
+  // "View Vinster's Note" is collapsed by default; the sommelier note is fetched
+  // on demand (like the results card) when it wasn't saved on the wine.
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [fetchedNote, setFetchedNote] = useState<string | null>(null);
+  const [noteLoading, setNoteLoading] = useState(false);
+
+  // A new review opened → reset the collapsible + its fetched note.
+  const reviewKey = review ? `${review.title}|${review.entries[0]?.id ?? ''}` : null;
+  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteLoading(false); }, [reviewKey]);
+
   if (!review) return null;
   const { entries } = review; // newest first
+  const intel = review.vinsterIntel;
+  const savedNote = (intel.rationale ?? '').trim() || null;
+  const displayNote = savedNote || fetchedNote;
 
-  // Where this wine came from, shown under each entry's date · location stamp.
-  // Restaurant list picks were purchased off the list; everything else was
-  // brought — and if it matches your cellar/archive holdings (live bottle counts
-  // for this wine), say so, otherwise it's a wine you brought that you don't own.
-  const originLine = (() => {
-    if (review.source === 'restaurant') return 'You purchased this from the wine list';
-    const fromCellar = review.source === 'cellar' || cellarBottles > 0 || archiveBottles > 0;
-    if (fromCellar) {
-      if (archiveBottles > 0) return 'You brought this from your cellar, it is in your archive';
-      if (cellarBottles > 0) return 'You brought this from your cellar, it is still in your cellar';
-      return 'You brought this from your cellar';
+  async function toggleNote() {
+    const willOpen = !noteOpen;
+    setNoteOpen(willOpen);
+    if (!willOpen || savedNote || (fetchedNote && fetchedNote.length > 0) || noteLoading) return;
+    setNoteLoading(true);
+    try {
+      const note = await fetchVinsterReview({
+        producer: review!.producer,
+        wineName: review!.wineName,
+        region: review!.region,
+        grape: review!.grape,
+        vintage: review!.vintage,
+      });
+      setFetchedNote(note ?? '');
+    } finally {
+      setNoteLoading(false);
     }
-    return 'You brought this wine';
-  })();
-
-  function confirmDelete(entryId: string) {
-    showAlert({
-      title: 'Delete this review?',
-      body: 'This review will be permanently removed.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await onDeleteEntry(entryId);
-            // Deleting the last remaining entry empties the review — close out.
-            if (review!.count <= 1) onClose();
-          },
-        },
-      ],
-    });
   }
+
+  // Where this wine came from — one concise line, no "still in your cellar" tail.
+  const originLine = review.source === 'restaurant'
+    ? 'You purchased this from the wine list'
+    : (review.source === 'cellar' || cellarBottles > 0 || archiveBottles > 0)
+      ? 'You brought this from your cellar'
+      : 'This wine was brought';
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -88,7 +95,8 @@ export function ReviewDetailModal({
         ) : null}
 
         <ScrollView contentContainerStyle={styles.content}>
-          {/* Header — mirrors the landing card: thumbnail left, wine name right. */}
+          {/* Header — thumbnail left, wine name right. Sits well clear of the
+              back / Share controls above it. */}
           <View style={styles.headerRow}>
             {thumbPath ? (
               <LabelThumb path={thumbPath} fallbackText={review.title} style={styles.headerThumb} radius={5} frame={0} />
@@ -108,8 +116,6 @@ export function ReviewDetailModal({
             />
           </View>
 
-          {/* Yellow stats band, framed by separator rules. First line: review
-              tally + average. Second line: live bottle holdings for this wine. */}
           <View style={styles.rule} />
           <View style={styles.statsBand}>
             <Text style={styles.stats}>
@@ -122,6 +128,37 @@ export function ReviewDetailModal({
               {archiveBottles} {archiveBottles === 1 ? 'Bottle' : 'Bottles'} in Your Archive
             </Text>
           </View>
+
+          {/* Vinster's own take — collapsed, off by default, separate from the
+              diner's OWN review below. Sommelier note fetched on demand. */}
+          <TouchableOpacity style={styles.vinsterToggleRow} onPress={toggleNote} activeOpacity={0.7}>
+            <Text style={styles.vinsterToggleText}>View Vinster's Note</Text>
+            <Ionicons name={noteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+          </TouchableOpacity>
+          {noteOpen ? (
+            <View style={styles.vinsterBlock}>
+              {intel.criticScore != null ? (
+                <Text style={styles.vinsterField}><Text style={styles.vinsterLabel}>Critic Score · </Text>{intel.criticScore} pts</Text>
+              ) : null}
+              {intel.vintageAssessment ? (
+                <Text style={styles.vinsterField}><Text style={styles.vinsterLabel}>Vintage · </Text>{intel.vintageAssessment.label}. {intel.vintageAssessment.notes}</Text>
+              ) : null}
+              {intel.rarityAssessment ? (
+                <Text style={styles.vinsterField}><Text style={styles.vinsterLabel}>Rarity · </Text>{intel.rarityAssessment.label}. {intel.rarityAssessment.notes}</Text>
+              ) : null}
+              {noteLoading ? (
+                <View style={styles.noteLoadingRow}>
+                  <ActivityIndicator color={colors.gold} />
+                  <Text style={styles.noteLoadingText}>Pouring Vinster's Note…</Text>
+                </View>
+              ) : displayNote ? (
+                <Text style={styles.vinsterField}><Text style={styles.vinsterLabel}>Sommelier's Note · </Text>{displayNote}</Text>
+              ) : (
+                <Text style={styles.noteRetry}>Vinster couldn't write this note just now — tap "View Vinster's Note" again to retry.</Text>
+              )}
+            </View>
+          ) : null}
+
           <View style={styles.rule} />
 
           {entries.map((e, i) => {
@@ -132,7 +169,7 @@ export function ReviewDetailModal({
             return (
               <View key={e.id} style={styles.entry}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.meta}>{meta || 'Latest entry'}</Text>
+                  <Text style={styles.stamp}>{meta || 'Latest entry'}</Text>
                   {editable ? (
                     <TouchableOpacity onPress={onEditLatest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Text style={styles.editLink}>Edit</Text>
@@ -150,32 +187,8 @@ export function ReviewDetailModal({
                 ) : null}
 
                 {(e.note ?? '').trim() ? (
-                  <>
-                    <View style={styles.reviewHeadRow}>
-                      <Text style={styles.sectionLabel}>Your Review</Text>
-                      <TouchableOpacity
-                        onPress={() => confirmDelete(e.id)}
-                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                        accessibilityLabel="Delete this review"
-                      >
-                        <Text style={styles.chevron}>›</Text>
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={styles.sectionBody}>{e.note}</Text>
-                  </>
-                ) : (
-                  // No written note — still offer the delete chevron on its own row.
-                  <View style={styles.reviewHeadRow}>
-                    <Text style={styles.sectionLabelMuted}>No written review</Text>
-                    <TouchableOpacity
-                      onPress={() => confirmDelete(e.id)}
-                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                      accessibilityLabel="Delete this review"
-                    >
-                      <Text style={styles.chevron}>›</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                  <Text style={styles.sectionBody}>{e.note}</Text>
+                ) : null}
 
                 {/* Cellar reviews keep their private note as the card-only
                     "Cellar Note", so it never appears here. */}
@@ -205,7 +218,8 @@ const styles = StyleSheet.create({
   // Share sits directly below "+ Add Review".
   shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
   shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
-  content: { padding: spacing.xl, paddingTop: 96, paddingBottom: 60 },
+  // Extra top padding drops the header clear of the back / Share controls.
+  content: { padding: spacing.xl, paddingTop: 128, paddingBottom: 60 },
 
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
   headerThumb: { width: 54, height: 72 },
@@ -216,21 +230,29 @@ const styles = StyleSheet.create({
   stats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   statsSub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
 
+  // View Vinster's Note — collapsible, sits between the stats band and the rule.
+  vinsterToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  vinsterToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
+  vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)', marginBottom: spacing.sm },
+  vinsterLabel: { fontFamily: fonts.bodyBold, color: colors.gold },
+  vinsterField: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 21 },
+  noteLoadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  noteLoadingText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted },
+  noteRetry: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, lineHeight: 20 },
+
   entry: { paddingTop: spacing.md },
   metaRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  meta: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, flex: 1 },
-  originLine: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginTop: 3 },
+  // Larger date · location stamp; concise origin line beneath it in white, smaller.
+  stamp: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.text, flex: 1 },
+  originLine: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.text, marginTop: 3 },
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
 
-  scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 6, marginBottom: spacing.sm },
+  scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8, marginBottom: spacing.sm },
   star: { fontSize: 18, color: colors.gold },
   score: { fontFamily: fonts.bodyBold, fontSize: 18, color: '#FFFFFF' },
   drink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
 
-  reviewHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  sectionLabelMuted: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted },
-  chevron: { fontFamily: fonts.bodyRegular, fontSize: 22, color: colors.gold, lineHeight: 22 },
   sectionBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },
   subSection: { marginTop: spacing.sm, marginBottom: spacing.xs },
 });

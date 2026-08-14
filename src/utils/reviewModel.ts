@@ -1,5 +1,4 @@
-import type { ChosenWine, CellarWine } from '../types/wine';
-import { isReviewEditable } from './reviewDedup';
+import type { ChosenWine, CellarWine, VintageAssessment, RarityAssessment } from '../types/wine';
 import { byRecency, entriesOf } from './cellarReview';
 
 // One normalized review, so restaurant / cellar / other reviews all render
@@ -19,6 +18,17 @@ export interface UnifiedEntry {
   drinkingWindow: string | null;
 }
 
+// Vinster's own take on the wine, shown collapsed under "View Vinster's Note" on
+// the review card (kept out of the user's OWN review area). The sommelier note
+// (rationale) is fetched on demand when saved-empty; the rest is whatever was
+// captured on the wine at save time.
+export interface VinsterIntel {
+  criticScore: number | null;
+  vintageAssessment: VintageAssessment | null;
+  rarityAssessment: RarityAssessment | null;
+  rationale: string | null;
+}
+
 export interface UnifiedReview {
   source: 'restaurant' | 'other' | 'cellar';
   title: string;
@@ -32,7 +42,8 @@ export interface UnifiedReview {
   entries: UnifiedEntry[]; // newest first
   count: number;
   averageScore: number | null; // mean across entries that carry a score
-  latestEditable: boolean; // the newest entry is still within its 24h window
+  latestEditable: boolean; // the newest entry is editable (the time lock is gone)
+  vinsterIntel: VinsterIntel;
 }
 
 function average(entries: UnifiedEntry[]): number | null {
@@ -71,7 +82,15 @@ export function fromChosenGroup(rows: ChosenWine[]): UnifiedReview {
     entries,
     count: entries.length,
     averageScore: average(entries),
-    latestEditable: isReviewEditable(head.reviewed_at),
+    // The 24h lock is gone — the latest entry is always editable (older appended
+    // entries stay read-only reflections, gated in the UI by index).
+    latestEditable: true,
+    vinsterIntel: {
+      criticScore: head.critic_score ?? null,
+      vintageAssessment: head.vintage_assessment ?? null,
+      rarityAssessment: head.rarity_assessment ?? null,
+      rationale: head.rationale ?? null,
+    },
   };
 }
 
@@ -100,6 +119,12 @@ export function fromCellar(wine: CellarWine): UnifiedReview {
     entries,
     count: entries.length,
     averageScore: average(entries),
-    latestEditable: entries.length ? isReviewEditable(entries[0].savedAt) : true,
+    latestEditable: true,
+    vinsterIntel: {
+      criticScore: wine.critic_score ?? null,
+      vintageAssessment: null,
+      rarityAssessment: null,
+      rationale: null,
+    },
   };
 }
