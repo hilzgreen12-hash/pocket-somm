@@ -194,6 +194,12 @@ export interface WineIntelligence {
   // WS's average across all vintages. Null when the value is a Vinster estimate
   // or absent. Drives the "no {vintage}-specific price" label on the intel card.
   priceScope?: 'vintage' | 'all-vintage' | null;
+  // "Where this wine sits in the producer's range" — a separate generation that
+  // is folded into this snapshot so it's saved with the label and reused on
+  // re-view instead of regenerating every time. Optional / absent on labels
+  // saved before this was persisted (they generate + persist it on first view).
+  // Type-only import (erased at compile) so there is no runtime import cycle.
+  producerRange?: import('../api/label').ProducerRange | null;
 }
 
 export interface Recipe {

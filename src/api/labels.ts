@@ -87,6 +87,14 @@ export async function setLabelFavourite(id: string, value: boolean): Promise<voi
 
 // Correct the captured location on a library label (GPS can guess the wrong
 // town). Empty strings clear the field.
+// Persist the intel snapshot back onto a label — used to fold the producer
+// range (and any regenerated core intel) into the saved `intel` JSON on first
+// view, so re-viewing reuses it instead of regenerating. Best-effort at callers.
+export async function updateLabelIntel(id: string, intel: WineIntelligence): Promise<void> {
+  const { error } = await supabase.from('labels').update({ intel }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 export async function updateLabelLocation(id: string, input: { city?: string | null; place?: string | null }): Promise<void> {
   const patch: Record<string, unknown> = {};
   if (input.city !== undefined) patch.captured_city = (input.city ?? '').trim() || null;

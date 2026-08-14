@@ -29,6 +29,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
+import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import * as ImagePicker from 'expo-image-picker';
@@ -88,7 +89,7 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh, backTo, via, confirm } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string }>();
+  const { context, fresh, backTo, via, confirm, labelId } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string }>();
   const isUploadFlow = via === 'upload';
   const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
@@ -422,8 +423,20 @@ export default function LabelResultsScreen() {
   // Intel card (the producer is the reliable anchor). Silent on failure. Held
   // off during the confirm step so it runs for the CONFIRMED producer, not a
   // misread one.
+  // Restore a producer range that was folded into the saved intel snapshot on a
+  // previous view — no re-generation. Marks the fetch as done so it won't fire.
+  useEffect(() => {
+    const saved = intelligence?.producerRange;
+    if (saved && saved.wines?.length && !producerRangeTriedRef.current) {
+      producerRangeTriedRef.current = true;
+      setProducerRange(saved);
+    }
+  }, [intelligence]);
+
   useEffect(() => {
     if (producerRangeTriedRef.current) return;
+    // Already saved on the snapshot → the restore effect handles it; don't fetch.
+    if (intelligence?.producerRange?.wines?.length) return;
     if (!isIntelOnlyFlow || awaitingConfirm || !wineDetailsConfirmed?.producer?.trim()) return;
     producerRangeTriedRef.current = true;
     setProducerRangeLoading(true);
@@ -435,7 +448,18 @@ export default function LabelResultsScreen() {
           wineName: wineDetailsConfirmed.wineName,
           vintage: wineDetailsConfirmed.vintage,
         });
-        if (r.wines.length > 0) setProducerRange(r);
+        if (r.wines.length > 0) {
+          setProducerRange(r);
+          // Fold the range into the intel snapshot so it's saved with the label
+          // and reused next time instead of regenerating. Persist to the label
+          // row if we know which one this is (library view passes labelId; a
+          // fresh scan sets savedLabelIdRef after createLabel).
+          const cur = useLabelStore.getState().intelligence;
+          const merged = { ...(cur ?? {} as any), producerRange: r };
+          setIntelligence(merged);
+          const id = labelId ?? savedLabelIdRef.current;
+          if (id) { try { await updateLabelIntel(id, merged); } catch { /* best-effort */ } }
+        }
       } catch { /* silent — the section simply doesn't render */ }
       finally { setProducerRangeLoading(false); }
     })();

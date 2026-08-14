@@ -427,7 +427,7 @@ export default function MyLabelsScreen() {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(label.intel);
       useLastIntelStore.getState().setLast(details, label.intel);
-      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/scan/archive')}`);
+      router.push(`/label/results?context=intel&labelId=${label.id}&backTo=${encodeURIComponent('/scan/archive')}`);
       return;
     }
     // No snapshot (review / older label) — regenerate on demand.
@@ -437,7 +437,7 @@ export default function MyLabelsScreen() {
       ls.setWineDetailsConfirmed(details);
       ls.setIntelligence(intel);
       useLastIntelStore.getState().setLast(details, intel);
-      router.push(`/label/results?context=intel&backTo=${encodeURIComponent('/scan/archive')}`);
+      router.push(`/label/results?context=intel&labelId=${label.id}&backTo=${encodeURIComponent('/scan/archive')}`);
     } catch (err) {
       showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -675,6 +675,13 @@ export default function MyLabelsScreen() {
                       );
                     })()}
                     <Text style={styles.rowScanned}>Scanned: {new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
+                    {/* Plain info line (not a link) — review status for this wine,
+                        same colour/font as the Scanned line above. */}
+                    <Text style={styles.rowScanned}>
+                      {conn && conn.reviewCount > 0
+                        ? `${conn.reviewCount} Review${conn.reviewCount === 1 ? '' : 's'}`
+                        : 'Awaiting review'}
+                    </Text>
                     {/* Dated links to where this wine also lives — most recent
                         review date only; styled as links, not buttons. */}
                     {conn?.lastReviewedIso ? (
