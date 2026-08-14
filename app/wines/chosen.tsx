@@ -162,6 +162,9 @@ export default function ChosenWinesScreen() {
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   // Every review (restaurant / cellar / other) opens the same unified detail view.
   const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
+  // The detail card that spawned an Edit — so closing the editor returns to the
+  // card, not out to the list. Cleared once the card is restored.
+  const [returnToDetail, setReturnToDetail] = useState<ReviewItem | null>(null);
   const [editingCellarWine, setEditingCellarWine] = useState<CellarWine | null>(null);
   // True when the cellar review modal was opened to EDIT the latest entry (from
   // the review card's Edit) rather than to add a fresh one.
@@ -926,8 +929,8 @@ export default function ChosenWinesScreen() {
         // inside the modal shows immediately — the snapshot never refreshes.
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
-        onClose={() => { setEditingWine(null); if (cameViaLabelLink) returnToLibrary(); }}
-        onSaved={() => { setEditingWine(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onClose={() => { setEditingWine(null); if (returnToDetail) { setDetailItem(returnToDetail); setReturnToDetail(null); } else if (cameViaLabelLink) returnToLibrary(); }}
+        onSaved={() => { setEditingWine(null); setReturnToDetail(null); if (cameViaLabelLink) returnToLibrary(); }}
       />
 
       <ReviewDetailModal
@@ -962,6 +965,7 @@ export default function ChosenWinesScreen() {
         }}
         onEditLatest={() => {
           const it = detailItem; if (!it) return;
+          setReturnToDetail(it); // restore this card when the editor closes
           setDetailItem(null);
           if (it.source === 'cellar') { setEditingCellarLatest(true); setEditingCellarWine(it.wine as CellarWine); }
           else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
@@ -995,8 +999,8 @@ export default function ChosenWinesScreen() {
         wine={editingCellarWine}
         visible={!!editingCellarWine}
         editLatest={editingCellarLatest}
-        onClose={() => { setEditingCellarWine(null); if (cameViaLink) returnToLibrary(); }}
-        onSaved={() => { setEditingCellarWine(null); if (cameViaLink) returnToLibrary(); }}
+        onClose={() => { setEditingCellarWine(null); if (returnToDetail) { setDetailItem(returnToDetail); setReturnToDetail(null); } else if (cameViaLink) returnToLibrary(); }}
+        onSaved={() => { setEditingCellarWine(null); setReturnToDetail(null); if (cameViaLink) returnToLibrary(); }}
       />
 
       <AddChosenWineModal
