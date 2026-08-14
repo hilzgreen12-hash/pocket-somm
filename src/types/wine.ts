@@ -38,7 +38,9 @@ export interface WineRecommendation {
   vintage: number | null;
   menuPrice: number | null;
   currency: string;
-  rationale: string;
+  // "Vinster's Review" — fetched on demand (chevron), so absent on fresh scans
+  // until requested; still present on older cached scans.
+  rationale?: string | null;
   criticScore: number;
   // Vinster's holistic 0–100 ranking score (critic score + value + drinkability
   // + rarity + preference fit). The headline number on the results card, distinct

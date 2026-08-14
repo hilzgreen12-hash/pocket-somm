@@ -47,7 +47,11 @@ const WineRecommendationSchema = z.object({
   // not accept a model-supplied price — the list price is real data, set from
   // the scanned menu (OCR) in recommendWines() below. Any price the model
   // returns is ignored here.
-  rationale: z.string(),
+  // rationale ("Vinster's Review") is no longer generated up front — it's
+  // fetched on demand when the diner expands the chevron (see vinster-review
+  // edge fn), so the main 3-wine call stays light. Optional for back-compat
+  // with older cached scans that still carry it.
+  rationale: z.string().nullish(),
   criticScore: z.number().min(0).max(100),
   vintageAssessment: VintageAssessmentSchema,
   drinkingWindow: DrinkingWindowSchema,

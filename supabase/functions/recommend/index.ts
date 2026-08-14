@@ -84,7 +84,7 @@ SCORING PRIORITY — after applying the hard rules above, rank by:
    - Rosé wines
    - Light aromatic whites (Pinot Gris, Gewurztraminer, Viognier, Albariño, etc.)
 
-   When recommending a viable older wine, explicitly call out in the rationale that encountering a well-aged bottle of this age on a restaurant list is uncommon, and that the diner should seize the opportunity. Do not second-guess the drinking window for viable older styles — a pre-2015 red, Champagne, fortified wine, or Riesling on a list has passed a sommelier's own judgement and should be treated as ready.
+   When recommending a viable older wine, explicitly call out in the standoutNote that encountering a well-aged bottle of this age on a restaurant list is uncommon, and that the diner should seize the opportunity. Do not second-guess the drinking window for viable older styles — a pre-2015 red, Champagne, fortified wine, or Riesling on a list has passed a sommelier's own judgement and should be treated as ready.
 
 5. VALUE FOR MONEY (apply fifth)
    Compare the real menu price (given for each wine on the list) against the wine's known average market retail price.
@@ -101,7 +101,7 @@ SCORING PRIORITY — after applying the hard rules above, rank by:
 VINTAGE ASSESSMENT RULES:
 - Always assess vintage relative to the specific appellation, not the country or broad region.
 - E.g. 2011 was poor in Burgundy (both red and white) but fine in parts of Italy.
-- Include the vintage context clearly in your rationale.
+- Include the vintage context clearly in the vintageAssessment notes.
 
 PRICING — READ-ONLY, NEVER OUTPUT:
 Each wine in the provided list includes its real menu price, read from the diner's actual menu. Use those real prices to apply the budget rule and to reason about value for money. You must NOT output, restate, alter, or invent any price or currency. Vinster shows the diner the real menu price taken from the list itself, and compares it against live market data — the price is real data and is never authored by you. Your job is to select and analyse the real wines exactly as they exist on the list.
@@ -113,7 +113,6 @@ For each recommended wine return:
 - appellation: specific appellation if known (string, optional)
 - grape: grape variety (string, optional)
 - vintage: year as integer or null (number | null)
-- rationale: a short sommelier TASTING / CHARACTER note (2–3 sentences) on what this wine is actually like in the glass — its style and personality, aromatics, texture, structure and overall impression, with a little colour. This is a TASTING note (Vinster's Review), NOT a place for food PAIRING, occasion, or comparison with the other wines on the list — all of that belongs in standoutNote. The labelled param notes (criticScoreNote, valueNote, vintage, producer) are shown separately, so do NOT restate them, and do NOT restate the menu price. (string)
 - flavourProfile: ONE brief sentence (max ~18 words) describing what the wine actually tastes like — fruit, acidity, tannin, body, finish, aromatics. This is a tasting note, NOT a sales pitch. Strict exclusions: no producer name, no vintage information, no critic scores, no rarity / availability comments, no price / value language, no recommendation language ("worth trying", "ideal with", "perfect for"). Pure sensory: think how a sommelier would describe the glass in front of them to a guest who asked "what's this like?". Examples of the right register: "Bright black cherry and graphite, firm fine tannins, savoury herb finish." / "Lifted lemon zest and wet stone, taut acidity, lean and saline." / "Crushed strawberry, gentle spice, soft tannins, easy and fragrant." (string)
 - criticScore: estimated average critic score 0–100 (number)
 - vinsterScore: integer 0–100 — Vinster's OWN holistic score for this wine as a PICK FROM THIS LIST FOR THIS DINER, blending critic score, value for money, drinkability / vintage readiness, rarity / exceptionality and preference fit. This is the score that JUSTIFIES the ranking, and it is deliberately DISTINCT from criticScore: a wine can have a LOWER critic score yet a HIGHER vinsterScore because it drinks better now, offers better value, or fits the diner better. HARD RULE: the #1 (top-ranked) wine MUST have the highest vinsterScore of the three, and vinsterScore MUST be non-increasing with rank (#1 ≥ #2 ≥ #3). Keep scores in a believable, well-spread band (recommended wines typically 88–97). (number)
@@ -247,7 +246,7 @@ Deno.serve(async (req) => {
 
     const topScoringOverride = topScoringMode ? `
 TOP SCORING MODE — ACTIVE:
-The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, criticScoreNote, valueNote, standoutNote, etc.) accurately. The rationale should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
+The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, criticScoreNote, valueNote, standoutNote, etc.) accurately. The standoutNote should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
 
 SUMMARY FIELD — TOP SCORING MODE (MANDATORY OPENING):
 The top-level "summary" MUST open by explicitly acknowledging that the diner asked for the highest-scoring wines on the list. This acknowledgement is the VERY FIRST thing in the summary — before any discussion of individual wines, regions, value, or anything else. Address the diner directly in the second person. Open with a sentence along the lines of "You've requested the three top-scoring wines from this list…" — you may vary the wording (e.g. "You asked for the three highest-scoring bottles on this list, so that's what I've sorted for…", "As requested, here are the three top-scoring wines on the list…") but it MUST state up front, in the first sentence, that the selection criterion was top critic score. Only AFTER that opening acknowledgement may you go on to discuss the three picks and their attributes (1–2 further sentences). A summary that opens by describing a wine instead of acknowledging the top-scoring request is a failure.

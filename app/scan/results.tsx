@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal } from 'react-native';
+import { View, Text, TouchableOpacity, TextInput, StyleSheet, LayoutAnimation, Platform, UIManager, Share, Modal, ActivityIndicator } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -21,6 +21,7 @@ import { normaliseCity } from '../../src/utils/city';
 import { currencySymbol } from '../../src/constants/currency';
 import { recommendWines } from '../../src/services/recommender';
 import { fetchPricing } from '../../src/services/pricing';
+import { fetchVinsterReview } from '../../src/api/label';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
@@ -99,6 +100,11 @@ export default function ResultsScreen() {
   const { session } = useAuth();
   const { preferences: userPrefs } = usePreferences();
   const [openIndex, setOpenIndex] = useState<number | null>(0);
+  // "Vinster's Review" is fetched on demand when the chevron opens (keeps the
+  // main recommend call light). reviewByIndex caches the fetched note per wine;
+  // an empty-string value means the last fetch failed and a re-open retries.
+  const [reviewByIndex, setReviewByIndex] = useState<Record<number, string>>({});
+  const [reviewLoading, setReviewLoading] = useState<Set<number>>(new Set());
   const [isGenerating, setIsGenerating] = useState(false);
   // Tracks the in-flight autoSave promise so concurrent callers
   // (onBlur of the input + the Review CTA tap) join the same save
@@ -687,7 +693,32 @@ export default function ResultsScreen() {
 
   function toggleWine(i: number) {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setOpenIndex(openIndex === i ? null : i);
+    const willOpen = openIndex !== i;
+    setOpenIndex(willOpen ? i : null);
+    if (willOpen) void ensureReview(i);
+  }
+
+  // Fetch Vinster's Review for wine i on first expand. No-ops if it's already
+  // present (older cached scans still carry rationale), already cached, or in
+  // flight. A prior failure stored '' — that is retryable, so we re-fetch.
+  async function ensureReview(i: number) {
+    const wine = recommendation?.wines?.[i];
+    if (!wine) return;
+    if (wine.rationale || (reviewByIndex[i] && reviewByIndex[i].length > 0) || reviewLoading.has(i)) return;
+    setReviewLoading((prev) => new Set(prev).add(i));
+    try {
+      const review = await fetchVinsterReview({
+        producer: wine.producer,
+        wineName: wine.name,
+        region: wine.region,
+        appellation: wine.appellation,
+        grape: wine.grape,
+        vintage: wine.vintage,
+      });
+      setReviewByIndex((prev) => ({ ...prev, [i]: review ?? '' }));
+    } finally {
+      setReviewLoading((prev) => { const n = new Set(prev); n.delete(i); return n; });
+    }
   }
 
   async function handleShare() {
@@ -1053,7 +1084,16 @@ export default function ResultsScreen() {
                   </TouchableOpacity>
                 </View>
                 {sommOpen && (
-                  <Text style={styles.sommNoteText}>{wine.rationale}</Text>
+                  reviewLoading.has(i) ? (
+                    <View style={styles.sommLoadingRow}>
+                      <ActivityIndicator color={colors.gold} />
+                      <Text style={styles.sommLoadingText}>Pouring Vinster's Review…</Text>
+                    </View>
+                  ) : (wine.rationale || reviewByIndex[i]) ? (
+                    <Text style={styles.sommNoteText}>{wine.rationale || reviewByIndex[i]}</Text>
+                  ) : (
+                    <Text style={styles.sommRetryText}>Vinster couldn't write this review just now — tap Vinster's Review again to retry.</Text>
+                  )
                 )}
 
               </View>
@@ -1545,6 +1585,26 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     lineHeight: 23,
+    paddingHorizontal: spacing.xs,
+  },
+  sommLoadingRow: {
+    marginTop: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xs,
+  },
+  sommLoadingText: {
+    fontFamily: fonts.bodyItalic,
+    fontSize: 14,
+    color: colors.textMuted,
+  },
+  sommRetryText: {
+    marginTop: 4,
+    fontFamily: fonts.bodyItalic,
+    fontSize: 14,
+    color: colors.textMuted,
+    lineHeight: 20,
     paddingHorizontal: spacing.xs,
   },
   outsideNotice: {

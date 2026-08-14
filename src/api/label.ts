@@ -171,6 +171,32 @@ export async function fetchAutoLabelUri(producer?: string | null, wineName?: str
   } catch { return null; }
 }
 
+// On-demand "Vinster's Review" (the sommelier tasting note). The recommend call
+// no longer generates this up front — the results card fetches it here when the
+// diner expands the chevron, keeping the main 3-wine generation light and fast.
+// Returns null on any failure so the caller can show a graceful retry.
+export async function fetchVinsterReview(input: {
+  producer?: string | null;
+  wineName?: string | null;
+  region?: string | null;
+  appellation?: string | null;
+  grape?: string | null;
+  vintage?: number | string | null;
+}): Promise<string | null> {
+  if (!input.producer?.trim() && !input.wineName?.trim()) return null;
+  try {
+    const data = await invokeResilient('vinster-review', {
+      producer: input.producer ?? null,
+      wineName: input.wineName ?? null,
+      region: input.region ?? null,
+      appellation: input.appellation ?? null,
+      grape: input.grape ?? null,
+      vintage: input.vintage ?? null,
+    }, { timeoutMs: 30000, retries: 1 }) as { review?: string };
+    return data?.review?.trim() || null;
+  } catch { return null; }
+}
+
 // Reuses the same Serper image-search edge function, but passes a full free-text
 // `query` (which the function searches as-is — no "wine bottle" suffix) so we get
 // photos of the restaurant itself rather than bottles.

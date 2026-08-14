@@ -64,7 +64,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
   const [wishlist, setWishlist] = useState(false);
-  const [vinsterNotesOpen, setVinsterNotesOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -106,7 +105,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       setEstimatedValue(wine.estimated_value ?? null);
       setEstimatedValueAt(wine.estimated_value_at ?? null);
       setWishlist(!!wine.wishlist);
-      setVinsterNotesOpen(false);
       setRemoveWishlistOpen(false);
       // "Edit Wine" entry point opens straight onto the identity sheet.
       if (initialIdentityEdit) openIdentityEdit();
@@ -278,22 +276,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   // Open the Vinster Wine Knowledge (Dive Deeper) page for this reviewed wine.
   // The review may not be in the cellar, so pass the wine fields as params —
   // the Wine Knowledge screen falls back to them when there's no cellar row.
-  function handleDiveDeeper() {
-    if (!wine) return;
-    onClose();
-    router.push({
-      pathname: '/cellar/wine-knowledge/[wineId]',
-      params: {
-        wineId: wine.id,
-        producer: wine.producer ?? '',
-        region: wine.region ?? '',
-        wineName: wine.wine_name ?? '',
-        vintage: wine.vintage != null ? String(wine.vintage) : '',
-        grape: wine.grape ?? '',
-      },
-    } as any);
-  }
-
   // ---- Sharing ------------------------------------------------------------
   async function handleShareToCommunity() {
     if (!wine || posting) return;
@@ -460,7 +442,6 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   })();
   const drinkingRange = wine.drinking_window?.from && wine.drinking_window?.to ? `${wine.drinking_window.from}–${wine.drinking_window.to}` : null;
   const drinkingStatus = wine.drinking_window?.status ?? null;
-  const hasVinsterNotes = wine.critic_score != null || !!wine.rationale || !!wine.vintage_assessment || !!wine.drinking_window || !!wine.rarity_assessment;
 
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
@@ -511,39 +492,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
 
             <View style={styles.divider} />
 
-            {/* Vinster's Review — collapsed reference, above the input. */}
-            {hasVinsterNotes ? (
-              <View style={styles.vinsterWrap}>
-                <View style={styles.vinsterHeader}>
-                  <TouchableOpacity onPress={() => setVinsterNotesOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterToggle}>
-                    <Text style={styles.vinsterToggleText}>Vinster's Review {vinsterNotesOpen ? '▴' : '▾'}</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => showAlert({ title: "Vinster's Review", body: "Vinster's notes aren't lifted from any single review — hundreds of sources are sifted, distilled, and curated into one clear insight." })} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                    <Text style={styles.whatsThisLink}>(what's this)</Text>
-                  </TouchableOpacity>
-                </View>
-                {vinsterNotesOpen ? (
-                  <View style={styles.vinsterBlock}>
-                    {wine.critic_score != null ? (
-                      <Text style={styles.vinsterFieldBody}><Text style={styles.vinsterLabel}>Critic Score · </Text>{wine.critic_score} pts</Text>
-                    ) : null}
-                    {wine.vintage_assessment ? (
-                      <Text style={styles.vinsterFieldBody}><Text style={styles.vinsterLabel}>Vintage · </Text>{wine.vintage_assessment.label}. {wine.vintage_assessment.notes}</Text>
-                    ) : null}
-                    {wine.rarity_assessment ? (
-                      <Text style={styles.vinsterFieldBody}><Text style={styles.vinsterLabel}>Rarity · </Text>{wine.rarity_assessment.label}. {wine.rarity_assessment.notes}</Text>
-                    ) : null}
-                    {wine.rationale ? (
-                      <Text style={styles.vinsterFieldBody}><Text style={styles.vinsterLabel}>Sommelier's Note · </Text>{wine.rationale}</Text>
-                    ) : null}
-                    {/* Learn more — sits at the foot of Vinster's Review note. */}
-                    <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7} style={styles.diveDeeperLink}>
-                      <Text style={styles.diveDeeperLinkText}>Dive Deeper into this wine</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : null}
-              </View>
-            ) : null}
+            {/* Vinster's Review intentionally lives on the wine card / intel, NOT
+                in Your Wine Reviews — this screen is the diner's OWN review. */}
 
             <WineReviewFields
               score={userScore}
