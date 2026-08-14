@@ -284,9 +284,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
                 rebuilding the inputs every time. */}
             <View style={styles.discoveredRow}>
               <Text style={styles.discoveredLabel}>Discovered At</Text>
-              <TouchableOpacity onPress={() => setEditingLocation((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Text style={styles.editLink}>{editingLocation ? '(done)' : '(edit)'}</Text>
-              </TouchableOpacity>
             </View>
             <Text style={styles.discoveredSummary}>{formatDiscoveredSummary(restaurant, city, reviewDate)}</Text>
 
@@ -324,6 +321,22 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
 
             <View style={styles.divider} />
 
+            {/* Your Score — top of the input fields. */}
+            <Text style={styles.sectionLabel}>Your Score</Text>
+            <TextInput
+              style={[styles.input, styles.scoreInput]}
+              value={userScore != null ? String(userScore) : ''}
+              onChangeText={(text) => {
+                if (text === '') { setUserScore(null); return; }
+                const n = parseInt(text, 10);
+                if (!isNaN(n)) setUserScore(Math.min(100, Math.max(1, n)));
+              }}
+              placeholder="e.g. 88"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numeric"
+              maxLength={3}
+            />
+
             <View style={styles.dictateRow}>
               <Text style={styles.sectionLabel}>Your Review</Text>
               <MicButton value={tastingNote} onChangeText={setTastingNote} onClear={() => setTastingNote('')} />
@@ -353,22 +366,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
               numberOfLines={3}
               textAlignVertical="top"
             />
-
-            <Text style={styles.sectionLabel}>Your score</Text>
-            <TextInput
-              style={[styles.input, styles.scoreInput]}
-              value={userScore != null ? String(userScore) : ''}
-              onChangeText={(text) => {
-                if (text === '') { setUserScore(null); return; }
-                const n = parseInt(text, 10);
-                if (!isNaN(n)) setUserScore(Math.min(100, Math.max(1, n)));
-              }}
-              placeholder="e.g. 88"
-              placeholderTextColor={colors.textMuted}
-              keyboardType="numeric"
-              maxLength={3}
-            />
-            <Text style={styles.scoreHint}>out of 100</Text>
 
             <Text style={styles.sectionLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
             <TextInput
@@ -460,7 +457,8 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: spacing.xl,
-    paddingTop: 64,
+    // Clear of the back arrow + favourite star (top: 56, ~30px tall).
+    paddingTop: 104,
     paddingBottom: 60,
   },
   heading: {
