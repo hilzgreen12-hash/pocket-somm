@@ -642,21 +642,19 @@ export default function MyLabelsScreen() {
                 <TouchableOpacity
                   key={label.id}
                   style={styles.row}
-                  onPress={() => setExpandedLabel(label)}
-                  onLongPress={() => onTapLabel(label)}
-                  delayLongPress={300}
+                  onPress={() => onTapLabel(label)}
                   activeOpacity={0.7}
                 >
                   <View style={{ width: thumbW, height: thumbH }}>
                     <LabelThumb path={label.label_image_path} fallbackText={label.wine_name} style={{ width: thumbW, height: thumbH }} radius={5} />
-                    {/* Favourite star — top-right of the thumbnail. */}
+                    {/* "+" — top-right of the thumbnail; expands the photo. */}
                     <TouchableOpacity
                       style={styles.favStar}
-                      onPress={() => toggleFav(label)}
+                      onPress={() => setExpandedLabel(label)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.favStarText, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
+                      <Text style={styles.expandPlus}>+</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.rowBody}>
@@ -682,6 +680,16 @@ export default function MyLabelsScreen() {
                         ? `${conn.reviewCount} Review${conn.reviewCount === 1 ? '' : 's'}`
                         : 'Awaiting review'}
                     </Text>
+                    {/* Favourite star — moved off the thumbnail to here, under the
+                        review-status line. */}
+                    <TouchableOpacity
+                      style={styles.bodyFav}
+                      onPress={() => toggleFav(label)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.bodyFavStar, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
+                    </TouchableOpacity>
                     {/* Dated links to where this wine also lives — most recent
                         review date only; styled as links, not buttons. */}
                     {conn?.lastReviewedIso ? (
@@ -926,6 +934,11 @@ const styles = StyleSheet.create({
   favStar: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
   favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
   favStarActive: { color: colors.gold },
+  // "+" expand affordance on the thumbnail (replaces the old star position).
+  expandPlus: { fontSize: 24, color: '#FFFFFF', lineHeight: 26, fontWeight: '600' },
+  // Favourite star relocated into the row body, under the review-status line.
+  bodyFav: { alignSelf: 'flex-start', paddingTop: 4 },
+  bodyFavStar: { fontSize: 22, color: colors.textMuted, lineHeight: 24 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
