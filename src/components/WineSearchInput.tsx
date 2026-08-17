@@ -71,21 +71,32 @@ export function WineSearchInput({ onSelect }: Props) {
         />
         {loading ? <ActivityIndicator color={colors.gold} style={styles.spinner} /> : null}
       </View>
-      {open && (loading || results.length > 0) ? (
+      {open && (loading || results.length > 0 || query.trim().length >= 3) ? (
         <View style={styles.dropdown}>
           {results.length === 0 && loading ? (
             <Text style={styles.searchingText}>Searching…</Text>
           ) : (
-            results.map((r, i) => (
-              <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
-                <Text style={styles.optionName} numberOfLines={2}>
-                  {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}
-                </Text>
-                {r.style ? (
-                  <Text style={styles.optionMeta} numberOfLines={1}>{r.style}</Text>
-                ) : null}
-              </TouchableOpacity>
-            ))
+            <>
+              {results.map((r, i) => (
+                <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
+                  <Text style={styles.optionName} numberOfLines={2}>
+                    {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}
+                  </Text>
+                  {r.style ? (
+                    <Text style={styles.optionMeta} numberOfLines={1}>{r.style}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+              {/* Always-present escape hatch: rare bottles Vinster doesn't know
+                  (or mis-guesses) are never a dead end — enter them as typed and
+                  edit the fields below. */}
+              {!loading && query.trim().length >= 3 ? (
+                <TouchableOpacity style={styles.option} onPress={() => choose({ producer: query.trim(), wineName: null, region: null, style: null, grape: null })} activeOpacity={0.7}>
+                  <Text style={styles.optionName} numberOfLines={2}>Use “{query.trim()}”</Text>
+                  <Text style={styles.optionMeta}>{results.length ? "Not listed? Add it as typed and edit below." : "No matches — add it as typed and edit the details below."}</Text>
+                </TouchableOpacity>
+              ) : null}
+            </>
           )}
         </View>
       ) : null}

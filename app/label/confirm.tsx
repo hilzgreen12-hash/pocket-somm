@@ -782,8 +782,8 @@ export default function LabelConfirmScreen() {
       <Modal visible={matchOpen} transparent animationType="fade" onRequestClose={() => { if (!matchLoading) setMatchOpen(false); }}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
-            <Text style={styles.candTitle}>Confirm the wine</Text>
-            <Text style={styles.candBody}>Select the approved match for your entry so Vinster builds the card for the right wine.</Text>
+            <Text style={styles.candTitle}>Is this your wine?</Text>
+            <Text style={styles.candBody}>Vinster found these possible matches — tap one only if it's genuinely your wine. Rare or unusual bottles it may not know, so if none look right, keep your own entry.</Text>
             {matchLoading ? (
               <View style={styles.candLoading}><ActivityIndicator color={colors.gold} /><Text style={styles.candLoadingText}>Finding the match…</Text></View>
             ) : (
@@ -798,8 +798,8 @@ export default function LabelConfirmScreen() {
                     </TouchableOpacity>
                   ))}
                 </ScrollView>
-                <TouchableOpacity style={styles.candCancel} onPress={() => { const b = pendingConfirmRef.current; setMatchOpen(false); if (b) void proceedIntel(b); }} activeOpacity={0.7}>
-                  <Text style={styles.candCancelText}>Use what I typed</Text>
+                <TouchableOpacity style={styles.candKeepBtn} onPress={() => { const b = pendingConfirmRef.current; setMatchOpen(false); if (b) void proceedIntel(b); }} activeOpacity={0.85}>
+                  <Text style={styles.candKeepText}>{matchOptions.length ? 'None of these — use what I typed' : 'Use what I typed'}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -977,6 +977,10 @@ const styles = StyleSheet.create({
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // "Use what I typed" — a real, prominent action (not a muted link), since for
+  // obscure wines it's the RIGHT choice, not a fallback.
+  candKeepBtn: { marginTop: spacing.md, alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
+  candKeepText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   placeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', padding: spacing.xl },
   placeSheet: { backgroundColor: colors.background, borderRadius: 18, padding: spacing.xl },
   placeTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
