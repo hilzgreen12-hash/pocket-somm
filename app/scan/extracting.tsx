@@ -5,17 +5,15 @@ import * as Location from 'expo-location';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
-import { useScanStore, type ScanPreferences } from '../../src/stores/scanStore';
+import { useScanStore } from '../../src/stores/scanStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
-import { extractWineList } from '../../src/services/ocr';
-import { recommendWines } from '../../src/services/recommender';
+import { prepareScanImageBase64 } from '../../src/services/ocr';
+import { finalizeRecommendation } from '../../src/services/recommender';
+import { startScanJob, pollScanJob } from '../../src/api/scanJob';
 import { isNetworkError } from '../../src/api/invokeResilient';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { COUNTRY_TO_CURRENCY } from '../../src/constants/currency';
-import type { ExtractedWine } from '../../src/types/wine';
-import type { UserPreferences } from '../../src/types/preferences';
-import { foldAccents } from '../../src/utils/wineIdentity';
 
 async function detectLocalCurrency(): Promise<{ currency: string; country: string | null } | null> {
   try {
@@ -48,129 +46,6 @@ function askUseLocalCurrency(local: string, profile: string, country: string | n
   });
 }
 
-function preFilterWines(wines: ExtractedWine[], prefs: UserPreferences | null | undefined): ExtractedWine[] {
-  if (!prefs) return wines.slice(0, 80);
-
-  let filtered = wines;
-
-  // Hard filter: remove disliked regions
-  if (prefs.dislikedRegions?.length) {
-    filtered = filtered.filter((w) =>
-      !prefs.dislikedRegions.some((r) =>
-        w.region?.toLowerCase().includes(r.toLowerCase()) ||
-        (w.appellation ?? '').toLowerCase().includes(r.toLowerCase())
-      )
-    );
-  }
-
-  // Hard filter: remove disliked grapes
-  if (prefs.dislikedGrapes?.length) {
-    filtered = filtered.filter((w) =>
-      !prefs.dislikedGrapes.some((g) =>
-        (w.grape ?? '').toLowerCase().includes(g.toLowerCase())
-      )
-    );
-  }
-
-  // Hard filter: remove wines above budget
-  // Hoisted to a local so TypeScript narrows it inside the closure. The
-  // original guarded correctly at runtime, but TS can't narrow a property
-  // access captured by an arrow function, so it flagged a false positive.
-  const budget = prefs.defaultBudget;
-  if (budget) {
-    filtered = filtered.filter((w) => w.menuPrice === null || w.menuPrice <= budget);
-  }
-
-  // Soft sort: favourites first
-  const isFavourite = (w: ExtractedWine) =>
-    prefs.favouriteRegions?.some((r) => w.region?.toLowerCase().includes(r.toLowerCase())) ||
-    prefs.favouriteGrapes?.some((g) => (w.grape ?? '').toLowerCase().includes(g.toLowerCase()));
-
-  const favourited = filtered.filter(isFavourite);
-  const others = filtered.filter((w) => !isFavourite(w));
-
-  return [...favourited, ...others].slice(0, 80);
-}
-
-// Map each colour/type FILTER (WineType id) to the OCR colour token(s) that
-// positively identify it. OCR classifies red/white/rose/sparkling/orange/
-// fortified only — so 'natural' (a production method that can be ANY colour) is
-// NOT detectable from OCR and maps to no token; we must never assert "no natural
-// wines" from a colour read. 'sweet-fortified' maps to OCR's "fortified".
-const COLOUR_TOKENS: Record<string, string[]> = {
-  red: ['red'],
-  white: ['white'],
-  rose: ['rose'],
-  sparkling: ['sparkling'],
-  'sweet-fortified': ['fortified'],
-  natural: [],
-};
-
-// Does a wine's OCR-classified colour positively match one of the selected
-// filters? Matches against the mapped OCR tokens, not the raw filter id, so
-// 'sweet-fortified' resolves to "fortified" (and 'natural' matches nothing).
-function colourMatches(colour: string | null | undefined, wineTypes: string[]): boolean {
-  if (!colour) return false;
-  const c = foldAccents(colour);
-  return wineTypes.some((t) => (COLOUR_TOKENS[t] ?? []).some((tok) => c.includes(tok)));
-}
-
-// A requested filter is deterministically detectable from OCR only if it maps
-// to at least one OCR colour token.
-function detectableColour(t: string): boolean {
-  return (COLOUR_TOKENS[t] ?? []).length > 0;
-}
-
-// Human-readable names for the "no {…} wines on this list" message — covers
-// every OCR-detectable filter (red / white / rosé / sparkling / sweet-fortified).
-const COLOUR_LABEL: Record<string, string> = {
-  red: 'red', white: 'white', rose: 'rosé', sparkling: 'sparkling', 'sweet-fortified': 'sweet or fortified',
-};
-function describeColours(types: string[]): string {
-  const names = types.map((t) => COLOUR_LABEL[t.toLowerCase()] ?? t.toLowerCase());
-  if (names.length <= 1) return names[0] ?? 'matching';
-  if (names.length === 2) return `${names[0]} or ${names[1]}`;
-  return `${names.slice(0, -1).join(', ')} or ${names[names.length - 1]}`;
-}
-
-// True when the user filtered by colour and the list CLEARLY has none of it:
-// EVERY requested filter is OCR-detectable, zero wines positively match, AND OCR
-// classified a colour for the majority of the list (so a few unreadable lines
-// can't yield a false "no red wines"). If any requested filter isn't detectable
-// (e.g. 'natural'), or colour data is sparse, we return false and let the normal
-// recommend path run — it may still find nothing and show the generic message.
-function confidentNoColourMatch(wines: ExtractedWine[], types: string[]): boolean {
-  if (!types.length || !wines.length) return false;
-  if (!types.every(detectableColour)) return false;
-  const positive = wines.some((w) => w.colour && colourMatches(w.colour, types));
-  if (positive) return false;
-  const classified = wines.filter((w) => !!w.colour).length;
-  return classified >= Math.ceil(wines.length * 0.6);
-}
-
-// Enforce the SCAN's own colour + budget deterministically before recommending,
-// so a colour/budget filter no longer depends on Claude inferring colour from a
-// colourless list (which returned an empty set → "please try again"). Colour
-// filtering keeps clear matches AND wines whose colour is unknown, so an
-// occasional OCR miss isn't silently dropped; if that still leaves nothing
-// (e.g. no colour data at all), it falls back to no colour filter so Claude can
-// decide rather than us shipping an empty list.
-function applyScanFilters(wines: ExtractedWine[], preferences: ScanPreferences | null | undefined): ExtractedWine[] {
-  if (!preferences) return wines;
-  let out = wines;
-
-  const budget = preferences.budget;
-  if (budget) out = out.filter((w) => w.menuPrice == null || w.menuPrice <= budget);
-
-  const types = preferences.wineTypes ?? [];
-  if (types.length) {
-    const byColour = out.filter((w) => !w.colour || colourMatches(w.colour, types));
-    if (byColour.length) out = byColour;
-  }
-
-  return out;
-}
-
 type Stage = 'reading' | 'recommending' | 'error';
 
 export default function ExtractingScreen() {
@@ -192,65 +67,26 @@ export default function ExtractingScreen() {
 
   async function run(token: { active: boolean }) {
     try {
-      // Step 1: OCR
+      // Step 1: prepare the image(s) locally (resize/compress to base64). Only
+      // the prep is client-side now; the OCR itself runs server-side in the job.
       setStage('reading');
-      let wines: ExtractedWine[];
-      if (imageUris) {
-        // Multiple screenshots — run OCR in parallel and merge. Use
-        // allSettled so one bad image (timeout, parse failure on a
-        // dense page) doesn't sink the whole batch; we surface a
-        // generic error only when every image failed.
-        const results = await Promise.allSettled(imageUris.map((u) => extractWineList(u, { source: imageSource })));
-        const fulfilled: ExtractedWine[] = [];
-        const failures: string[] = [];
-        for (const r of results) {
-          if (r.status === 'fulfilled') fulfilled.push(...r.value);
-          else failures.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
-        }
-        if (fulfilled.length === 0) {
-          throw new Error(
-            failures[0] ??
-            'No wines could be extracted from the uploaded images. Try fewer, clearer shots.'
-          );
-        }
-        const seen = new Set<string>();
-        wines = fulfilled.filter((w) => {
-          const key = `${w.name}__${w.producer}`.toLowerCase();
-          if (seen.has(key)) return false;
-          seen.add(key);
-          return true;
-        });
-      } else {
-        wines = await extractWineList(imageUri!, { source: imageSource });
+      const uris = imageUris ?? (imageUri ? [imageUri] : []);
+      const images: string[] = [];
+      for (const u of uris) {
+        try { images.push(await prepareScanImageBase64(u, imageSource)); }
+        catch { /* skip an unreadable image; the batch continues */ }
       }
-
       if (!token.active) return;
-
-      if (!wines.length) {
-        setErrorDetail('No wines were detected. Try a clearer shot with better lighting, and make sure the full list is in frame.');
+      if (!images.length) {
+        setErrorDetail('Could not read the photo. Please try a clearer, well-lit shot with the full list in frame.');
         setStage('error');
         return;
       }
 
-      setExtractedWines(wines);
-
-      // If the user filtered by colour and the list clearly contains no wines of
-      // that colour, say so plainly rather than silently recommending off-colour
-      // wines (or failing with the generic message). Only fires when OCR
-      // classified the colour of most of the list.
-      const requestedColours = preferences?.wineTypes ?? [];
-      if (requestedColours.length && confidentNoColourMatch(wines, requestedColours)) {
-        setErrorDetail(
-          `There appear to be no ${describeColours(requestedColours)} wines on this list. Please double check the wine list or reset your request and try again. Cheers!`,
-        );
-        setStage('error');
-        return;
-      }
-
-      // Step 2: Local-currency detection. If we can geolocate the user to a
-      // country whose currency differs from their profile currency, ask
-      // whether they want to apply local currency for this search. Skips
-      // silently when permission is denied or country can't be resolved.
+      // Step 2: local-currency detection (client-side — GPS). Only PROMPTS when
+      // the detected country's currency differs from the diner's home currency,
+      // so home users are never asked. Done up front so the background job runs
+      // uninterrupted.
       const profileCurrency = (userProfile?.defaultCurrency ?? 'GBP').toUpperCase();
       let scanCurrency = profileCurrency;
       const detected = await detectLocalCurrency();
@@ -260,38 +96,45 @@ export default function ExtractingScreen() {
         if (!token.active) return;
       }
 
-      // Step 3: Pre-filter by user profile then recommend
-      setStage('recommending');
-      const winesForRecommend = applyScanFilters(preFilterWines(wines, userProfile), preferences);
-      const recommendation = await recommendWines({
-        wines: winesForRecommend,
-        wineTypes: preferences.wineTypes,
-        styleProfiles: preferences.styleProfiles,
-        budget: preferences.budget,
-        foodPairing: preferences.foodPairing,
-        favouriteRegions: preferences.favouriteRegions,
-        favouriteGrapes: preferences.favouriteGrapes,
-        dislikedRegions: preferences.dislikedRegions,
-        dislikedGrapes: preferences.dislikedGrapes,
-        profileWineTypes: preferences.profileWineTypes,
-        profileStyleProfiles: preferences.profileStyleProfiles,
-        currency: scanCurrency,
-      });
+      // Step 3: start the async job (returns in <1s), then poll for the result.
+      // The colour "no {colour} wines" check and the preference pre-filters now
+      // run server-side inside the job — the app never holds the ~90s connection.
+      const profile = userProfile ? {
+        dislikedRegions: userProfile.dislikedRegions,
+        dislikedGrapes: userProfile.dislikedGrapes,
+        defaultBudget: userProfile.defaultBudget,
+        favouriteRegions: userProfile.favouriteRegions,
+        favouriteGrapes: userProfile.favouriteGrapes,
+      } : null;
 
+      const jobId = await startScanJob(images, { scanPreferences: preferences, profile, currency: scanCurrency });
       if (!token.active) return;
 
-      // Mirrors the OCR guard above. The recommender schema accepts an empty
-      // wines array as valid, so without this the user lands on a results
-      // screen with a summary and no cards — and results.tsx then caches that
-      // empty scan into their history.
-      if (!recommendation.wines.length) {
-        setErrorDetail(
-          "No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.",
-        );
+      const outcome = await pollScanJob(jobId, {
+        isCancelled: () => !token.active,
+        onStatus: (s) => { if (s === 'recommending') setStage('recommending'); },
+      });
+      if (!token.active) return;
+
+      if (outcome.status === 'error' || !outcome.recommendation) {
+        setErrorDetail(outcome.error ?? 'Vinster was unable to generate recommendations from this input — make sure the list is clear and well lit, with all the information in focus.');
         setStage('error');
         return;
       }
 
+      // Apply the same post-processing as the inline path — crucially, inject the
+      // real menu price into each pick from the OCR-read list.
+      const recommendation = finalizeRecommendation(outcome.recommendation, {
+        wines: outcome.wines ?? [],
+        currency: scanCurrency,
+      });
+      if (!recommendation.wines.length) {
+        setErrorDetail('No wines on this list matched your preferences. Try widening your budget or clearing a filter, then scan again.');
+        setStage('error');
+        return;
+      }
+
+      if (outcome.wines) setExtractedWines(outcome.wines);
       setRecommendation(recommendation);
       // Land results DIRECTLY on the Wine List form: dismiss the transient
       // camera/preview/extracting screens first, then push results. Otherwise
@@ -302,11 +145,8 @@ export default function ExtractingScreen() {
       router.push('/scan/results');
     } catch (err) {
       if (!token.active) return;
+      if (err instanceof Error && err.message === 'cancelled') return;
       const message = err instanceof Error ? err.message : String(err);
-      // Show clear, actionable guidance for the common "couldn't read the
-      // list / couldn't generate" failures. Preserve genuinely specific
-      // messages (e.g. the rate-limit "try again in a few minutes") so the
-      // generic guidance doesn't mask them.
       const isRateLimit = /minute|too many|rate limit/i.test(message);
       const friendly = isNetworkError(err)
         ? "Vinster couldn't reach the internet — you may be offline or on a weak signal. Find better reception and tap Try Again."

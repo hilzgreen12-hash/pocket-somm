@@ -105,6 +105,17 @@ function matchExtracted(rec: { producer: string; name: string; vintage: number |
 
 export async function recommendWines(input: RecommendInput): Promise<RecommendationResponse> {
   const raw = await callRecommend(input);
+  return finalizeRecommendation(raw, { wines: input.wines, currency: input.currency, excludeWines: input.excludeWines });
+}
+
+// Validate + post-process a raw recommend response. Extracted so the async scan
+// path (scan_jobs, where recommend runs server-side) applies the SAME mapping as
+// the inline path — most importantly injecting the real menu price from the OCR
+// list, since the model never outputs prices.
+export function finalizeRecommendation(
+  raw: unknown,
+  input: { wines: ExtractedWine[]; currency?: string; excludeWines?: string[] },
+): RecommendationResponse {
   const parsed = RecommendationResponseSchema.safeParse(raw);
   if (!parsed.success) {
     throw new Error('Could not parse recommendation response.');

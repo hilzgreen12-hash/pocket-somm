@@ -19,6 +19,12 @@ const OCRResponseSchema = z.object({
   wines: z.array(ExtractedWineSchema),
 });
 
+// Exported for the async scan path (scanJob): the client prepares the base64
+// here, then hands it to scan-start, which does the OCR server-side.
+export async function prepareScanImageBase64(uri: string, source: 'camera' | 'upload' = 'camera'): Promise<string> {
+  return prepareImage(uri, source);
+}
+
 async function prepareImage(uri: string, source: 'camera' | 'upload' = 'camera'): Promise<string> {
   console.log('[OCR] Preparing image:', uri, 'source:', source);
   // Camera photos are huge (multi-MB) and often taken on cellular, so we keep
