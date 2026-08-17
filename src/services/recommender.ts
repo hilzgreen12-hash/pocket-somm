@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { callRecommend } from '../api/claude';
+import { wineNameKey } from '../utils/wineIdentity';
 import type { ExtractedWine, RecommendationResponse, WineRecommendation } from '../types/wine';
 
 interface RecommendInput {
@@ -87,18 +88,26 @@ const RecommendationResponseSchema = z.object({
 const norm = (s: string | null | undefined) => (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
 // Find the extracted (OCR'd) wine that a recommendation corresponds to, so we can
-// read its real menu price. Claude echoes producer/name closely, so match on
-// producer+name+vintage, loosening progressively.
+// read its real menu price. Uses the app's tolerant `wineNameKey` (accent-,
+// article- and word-order-insensitive, strips embedded vintages) so an accented
+// French name the model echoes as "Château" still matches OCR's "Chateau" — the
+// old exact-`norm` compare turned "château" into "ch teau" and lost the price on
+// 2 of 3 picks. Progressive tiers, unambiguous-only so we never attach a wrong
+// price: full identity + vintage → full identity → name + vintage → name.
 function matchExtracted(rec: { producer: string; name: string; vintage: number | null }, list: ExtractedWine[]): ExtractedWine | null {
-  const rp = norm(rec.producer), rn = norm(rec.name), rv = rec.vintage;
-  const cands = [
-    (e: ExtractedWine) => norm(e.producer) === rp && norm(e.name) === rn && e.vintage === rv,
-    (e: ExtractedWine) => norm(e.producer) === rp && norm(e.name) === rn,
-    (e: ExtractedWine) => norm(e.name) === rn && e.vintage === rv,
+  const rKey = wineNameKey(rec.producer, rec.name);
+  const rNameKey = wineNameKey(null, rec.name);
+  const rv = rec.vintage;
+  if (!rKey) return null;
+  const cands: Array<(e: ExtractedWine) => boolean> = [
+    (e) => wineNameKey(e.producer, e.name) === rKey && e.vintage === rv,
+    (e) => wineNameKey(e.producer, e.name) === rKey,
+    (e) => !!rNameKey && wineNameKey(null, e.name) === rNameKey && e.vintage === rv,
+    (e) => !!rNameKey && wineNameKey(null, e.name) === rNameKey,
   ];
   for (const pred of cands) {
     const hits = list.filter(pred);
-    if (hits.length === 1) return hits[0]; // unambiguous only
+    if (hits.length === 1) return hits[0]; // unambiguous only — never guess a price
   }
   return null;
 }
