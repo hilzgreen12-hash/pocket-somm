@@ -17,7 +17,7 @@ export function useChosenWines() {
 
   const save = useMutation({
     mutationFn: async (input: SaveChosenWineInput) => {
-      await saveChosenWine(userId!, input);
+      const saved = await saveChosenWine(userId!, input);
       await syncReviewToCellar(
         userId!,
         { producer: input.wine.producer, wineName: input.wine.name, vintage: input.wine.vintage },
@@ -26,6 +26,7 @@ export function useChosenWines() {
       );
       // Community sharing is opt-in only — it happens when the user taps
       // "Share to Community" on a review, never automatically on save.
+      return saved; // the created row, so callers can track this session's pick
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });

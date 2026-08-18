@@ -117,6 +117,12 @@ export default function ResultsScreen() {
   // second/third restaurant (autoSave.data lags a render behind). Fixes the
   // "same restaurant appears multiple times in Your Restaurants" bug.
   const savedSessionIdRef = useRef<string | null>(null);
+  // wine index → the chosen_wine id we created for it on THIS results screen.
+  // Authoritative record of what's selected right now, independent of the
+  // chosen-wines cache / scan-session matching — so unselect always deletes the
+  // right row and resets cleanly (fixes the "Noted: added to existing review"
+  // popup appearing when trying to unselect after opening then discarding a review).
+  const sessionPickIdRef = useRef<Map<number, string>>(new Map());
   // Wines whose select/unselect is currently in flight — a per-index guard so a
   // rapid second tap on the same wine can't fire a duplicate insert before the
   // first save lands. Fixes the "one wine appears N times" bug.
@@ -577,7 +583,7 @@ export default function ResultsScreen() {
         return;
       }
 
-      await saveChosen.mutateAsync({
+      const created = await saveChosen.mutateAsync({
         // Carry a Vinster's Note already generated on this screen (chevron
         // expanded) onto the saved pick, so the review card reuses it instead of
         // regenerating. Falls back to whatever rationale the recommend call sent.
@@ -591,6 +597,8 @@ export default function ResultsScreen() {
         listPrice: null,
         isFavourite: false,
       });
+      // Track this session's pick so unselect can delete exactly it.
+      if (created?.id) sessionPickIdRef.current.set(i, created.id);
       // "Wine Selected" confirmation was already shown optimistically above.
     } catch (err) {
       // Roll back the optimistic selection so the chip reflects reality.
@@ -607,31 +615,46 @@ export default function ResultsScreen() {
   async function unselectBottle(wine: WineRecommendation, i: number) {
     if (pendingIdxRef.current.has(i)) return;
     pendingIdxRef.current.add(i);
-    // Optimistic: clear the chip immediately so the revert reads instantly.
+    // Optimistic: clear the chip + the tracked pick immediately so the chip
+    // flips to "Select This Wine" instantly (isSelectedNow reads both).
+    const trackedId = sessionPickIdRef.current.get(i);
     setChosenIndexes((prev) => { const n = new Set(prev); n.delete(i); return n; });
+    sessionPickIdRef.current.delete(i);
     const sid = isFromHistory ? (sessionId ?? null) : (savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null);
     const identity = { producer: wine.producer, wineName: wine.name, vintage: wine.vintage };
     try {
-      let existing = findExistingReview(chosenWines, identity);
-      // The pick may have been saved a moment ago and not yet be in the cached
-      // list — pull a fresh copy and retry so the removal is reliable.
-      if (!existing) {
-        await qc.refetchQueries({ queryKey: ['chosen-wines', session?.user.id] });
-        const fresh = (qc.getQueryData(['chosen-wines', session?.user.id]) as typeof chosenWines) ?? [];
-        existing = findExistingReview(fresh, identity);
-      }
-      // Only remove a pick made on THIS visit — never a prior review from another
-      // occasion, which stays in the user's records intact.
-      if (existing && sid && existing.scan_session_id === sid) {
-        await removeChosen.mutateAsync(existing.id);
+      if (trackedId) {
+        // We created this pick on this screen — delete exactly it, no guessing.
+        await removeChosen.mutateAsync(trackedId);
+      } else {
+        // Fallback (e.g. a pick reconciled from a prior visit-in-progress): find
+        // it, refetching once if the cache lags, and only remove a THIS-session
+        // pick — never a prior occasion's review.
+        let existing = findExistingReview(chosenWines, identity);
+        if (!existing) {
+          await qc.refetchQueries({ queryKey: ['chosen-wines', session?.user.id] });
+          const fresh = (qc.getQueryData(['chosen-wines', session?.user.id]) as typeof chosenWines) ?? [];
+          existing = findExistingReview(fresh, identity);
+        }
+        if (existing && sid && existing.scan_session_id === sid) {
+          await removeChosen.mutateAsync(existing.id);
+        }
       }
     } catch (err) {
       setChosenIndexes((prev) => new Set([...prev, i])); // rollback
+      if (trackedId) sessionPickIdRef.current.set(i, trackedId);
       showAlert({ title: 'Could not remove', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       pendingIdxRef.current.delete(i);
     }
   }
+
+  // A wine is selected if the chip flags it OR we created a pick for it on this
+  // screen. The ref survives a chosen-wines cache / scan-session desync, so the
+  // chip label and the tap routing stay correct even after opening then
+  // discarding the review card (which previously left the chip reading
+  // "unselected" → a re-tap wrongly re-selected instead of removing).
+  const isSelectedNow = (i: number) => chosenIndexes.has(i) || sessionPickIdRef.current.has(i);
 
   // Restaurant-first prompt: capture name (+ location), persist it, then add
   // the pending bottle with those details threaded in (state isn't updated yet
@@ -952,11 +975,11 @@ export default function ResultsScreen() {
                     tap again to remove. */}
                 {session && (
                   <TouchableOpacity
-                    style={[styles.selectBar, chosenIndexes.has(i) && styles.selectBarDone]}
+                    style={[styles.selectBar, isSelectedNow(i) && styles.selectBarDone]}
                     onPress={() => {
                       if (pendingIdxRef.current.has(i)) return;
                       void Haptics.selectionAsync().catch(() => {});
-                      if (chosenIndexes.has(i)) { unselectBottle(wine, i); return; }
+                      if (isSelectedNow(i)) { unselectBottle(wine, i); return; }
                       // Can't record a pick in Your Restaurants without a
                       // restaurant name — collect it (and location) first.
                       if (!restaurantName.trim()) {
@@ -970,10 +993,10 @@ export default function ResultsScreen() {
                     }}
                     activeOpacity={0.7}
                   >
-                    <Text style={[styles.selectBarText, chosenIndexes.has(i) && styles.selectBarTextDone]}>
-                      {chosenIndexes.has(i) ? 'Selected · Tap to Remove' : 'Select This Wine'}
+                    <Text style={[styles.selectBarText, isSelectedNow(i) && styles.selectBarTextDone]}>
+                      {isSelectedNow(i) ? 'Selected · Tap to Remove' : 'Select This Wine'}
                     </Text>
-                    {!chosenIndexes.has(i) && (
+                    {!isSelectedNow(i) && (
                       <Text style={styles.selectBarSub}>Add to Your Restaurants &amp; Your Wine Reviews</Text>
                     )}
                   </TouchableOpacity>
