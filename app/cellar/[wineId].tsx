@@ -1814,7 +1814,7 @@ export default function CellarWineDetail() {
         <View style={styles.reviewRow}>
           <View style={styles.reviewCol}>
             <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={() => setVinstersNoteOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <TouchableOpacity onPress={() => { setVinstersMapOpen(false); setVinstersNoteOpen((v) => !v); }} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
                 <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
                 <Ionicons name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
               </TouchableOpacity>
@@ -1822,7 +1822,7 @@ export default function CellarWineDetail() {
           </View>
           <View style={styles.reviewCol}>
             <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={() => setVinstersMapOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <TouchableOpacity onPress={() => { setVinstersNoteOpen(false); setVinstersMapOpen((v) => !v); }} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
                 <Text style={styles.vinsterReviewTitle}>Vinster's Map</Text>
                 <Ionicons name={vinstersMapOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
               </TouchableOpacity>

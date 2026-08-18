@@ -1795,8 +1795,8 @@ export default function LabelResultsScreen() {
             {/* Vinster's Note (left) and Vinster's Map (right) share ONE centred
                 line with an indent between them; each expands its body below. */}
             <View style={styles.noteMapHeadingRow}>
-              <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} hideExplainerLink />
-              <TouchableOpacity style={styles.mapHeadingRow} onPress={() => setMapExpanded((v) => !v)} activeOpacity={0.7}>
+              <VinstersNoteHeading expanded={noteExpanded} onToggle={() => { setMapExpanded(false); setNoteExpanded((v) => !v); }} hideExplainerLink />
+              <TouchableOpacity style={styles.mapHeadingRow} onPress={() => { setNoteExpanded(false); setMapExpanded((v) => !v); }} activeOpacity={0.7}>
                 <Text style={styles.mapTitle}>Vinster's Map</Text>
                 <Text style={styles.mapChevron}>{mapExpanded ? '⌃' : '⌄'}</Text>
               </TouchableOpacity>
