@@ -409,7 +409,10 @@ export default function ChosenWinesScreen() {
     persistAssign(map);
     if (tagFilter === tag) setTagFilter('all');
   }
-  const [reviewPrompt, setReviewPrompt] = useState<ChosenWine | null>(null);
+  // The full list of wines awaiting review, snapshotted when the on-open prompt
+  // fires. More than one (e.g. two wines from the same restaurant visit) → the
+  // prompt lists them all, each a link into its review input card.
+  const [reviewPrompt, setReviewPrompt] = useState<ChosenWine[] | null>(null);
   const [dontShowPrompt, setDontShowPrompt] = useState(false);
   const promptShownRef = useRef(false);
   // Deep-link params from Your Label Library's click-into-a-label popup (see
@@ -433,17 +436,17 @@ export default function ChosenWinesScreen() {
     // that prompt is only for a plain visit to Your Wine Reviews.
     if (cameViaLabelLink) { promptShownRef.current = true; return; }
     promptShownRef.current = true;
-    const first = awaitingReview[0];
+    const list = [...awaitingReview];
     AsyncStorage.getItem(promptKey)
-      .then((dismissed) => { if (!dismissed) setReviewPrompt(first); })
+      .then((dismissed) => { if (!dismissed) setReviewPrompt(list); })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoading, awaitingReview.length]);
 
-  async function resolvePrompt(review: boolean) {
-    const wine = reviewPrompt;
+  // Tap a wine in the awaiting-review prompt → open its review input card.
+  function openAwaitingReview(w: ChosenWine) {
     setReviewPrompt(null);
-    if (review && wine) setEditingWine(wine);
+    setEditingWine(w);
   }
 
   // Deep-link params (declared above) from Your Label Library's click-into-a-
@@ -1253,12 +1256,17 @@ export default function ChosenWinesScreen() {
         <View style={styles.promptOverlay}>
           <View style={styles.promptSheet}>
             <Text style={styles.promptTitle}>Wines you drank recently are awaiting your review</Text>
-            {reviewPrompt ? (
-              <Text style={styles.promptWineList}>{wineHeaderLine(reviewPrompt.producer, reviewPrompt.wine_name, reviewPrompt.vintage)}</Text>
-            ) : null}
-            <TouchableOpacity style={styles.promptReviewBtnFull} onPress={() => resolvePrompt(true)} activeOpacity={0.85}>
-              <Text style={styles.promptReviewText}>Review Wine</Text>
-            </TouchableOpacity>
+            <Text style={styles.promptSubheader}>Select a wine to review it</Text>
+            <ScrollView style={{ maxHeight: 320 }} alwaysBounceVertical={false}>
+              {(reviewPrompt ?? []).map((w) => (
+                <TouchableOpacity key={w.id} style={styles.promptWineRow} onPress={() => openAwaitingReview(w)} activeOpacity={0.7}>
+                  <Text style={styles.promptWineLink} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || 'Wine'}</Text>
+                  {(w.restaurant_name || w.city) ? (
+                    <Text style={styles.promptWineMeta} numberOfLines={1}>{[w.restaurant_name, w.city].filter(Boolean).join(' · ')}</Text>
+                  ) : null}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
             <TouchableOpacity style={styles.promptDontShow} onPress={dontShowPromptForever} activeOpacity={0.7}>
               <Text style={styles.promptDontShowText}>Don't show me this again</Text>
             </TouchableOpacity>
@@ -1641,6 +1649,11 @@ const styles = StyleSheet.create({
   // "Don't show me this again" link (no tick box).
   promptWineList: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.lg, lineHeight: 22 },
   promptReviewBtnFull: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  // Sub-header + tappable wine rows for the awaiting-review prompt list.
+  promptSubheader: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
+  promptWineRow: { paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.borderLight },
+  promptWineLink: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, lineHeight: 22 },
+  promptWineMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   promptDontShow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 2 },
   promptDontShowText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   // Bottle Picks Awaiting Review section.
