@@ -524,9 +524,12 @@ export default function ResultsScreen() {
     setTimeout(() => setChosenIndexes((prev) => new Set([...prev, i])), 0);
 
     try {
+      // Save the SAME city the diner saw on the stamp — include liveCity (the GPS
+      // reading shown on the stamp) so the saved review's Discovered At matches
+      // what was on screen, not a blank/stale autoSave value.
       const cityValue = overrides?.city
         ?? cityOverride
-        ?? (isFromHistory ? (historyCity ?? '') : (autoSave.data?.[0]?.city ?? ''));
+        ?? (isFromHistory ? (historyCity ?? '') : (autoSave.data?.[0]?.city ?? liveCity ?? ''));
       // Guarantee the scan_session_id FK: resolve (or create, joining any
       // in-flight save) the session BEFORE writing the pick, so the bottle is
       // never orphaned with a null link because the background autoSave hadn't
@@ -1138,7 +1141,7 @@ export default function ResultsScreen() {
         visible={chosenModalWine !== null}
         scanSessionId={isFromHistory ? (sessionId ?? null) : (autoSave.data?.[0]?.sessionId ?? null)}
         initialRestaurantName={isFromHistory ? (historyRestaurant ?? null) : (restaurantName || null)}
-        initialCity={isFromHistory ? (historyCity ?? null) : (autoSave.data?.[0]?.city ?? null)}
+        initialCity={isFromHistory ? (historyCity ?? null) : (cityOverride ?? autoSave.data?.[0]?.city ?? liveCity ?? null)}
         onClose={() => setChosenModalWine(null)}
         onSaved={() => {
           const idx = recommendation!.wines.indexOf(chosenModalWine!);
