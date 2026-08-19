@@ -196,24 +196,19 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Wine List → recommendations, with the "View Last Result" link (or
-          press-and-hold) to revisit the last result (account-gated). */}
+      {/* Your reviews — top of the tab. */}
       <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.buttonFull}
-          onPress={() => router.push('/scan/wine-list')}
-          onLongPress={() => requireAccount(handleViewLastListResult)}
-        >
-          <Text style={styles.buttonText}>Read a Wine List</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
+          <Text style={styles.buttonText}>Your Wine Reviews</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
-          <Text style={styles.lastResultLink}>View Last Result</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/restaurants/reviews'))}>
+          <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
         </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
 
-      {/* Wine Label → intel, and its Label Scan Library. */}
+      {/* Wine Label → intel, and its Label Library. */}
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
@@ -229,13 +224,18 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Your reviews — moved here from the Pair tab. */}
+      {/* Wine List → recommendations, with the "View Last Result" link (or
+          press-and-hold) to revisit the last result (account-gated). */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
-          <Text style={styles.buttonText}>Your Wine Reviews</Text>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => router.push('/scan/wine-list')}
+          onLongPress={() => requireAccount(handleViewLastListResult)}
+        >
+          <Text style={styles.buttonText}>Read a Wine List</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/restaurants/reviews'))}>
-          <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
+        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
+          <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
       </View>
 
