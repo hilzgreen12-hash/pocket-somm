@@ -196,9 +196,8 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Scanning + their histories: wine list (+ List Scan History), wine label
-          (+ Label Scan Library). Press-and-hold a scan button also revisits the
-          last result (account-gated). */}
+      {/* Wine List → recommendations, with the "View Last Result" link (or
+          press-and-hold) to revisit the last result (account-gated). */}
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
@@ -207,9 +206,15 @@ export default function ScanTab() {
         >
           <Text style={styles.buttonText}>Scan A Winelist</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(handleViewLastListResult)}>
-          <Text style={styles.buttonText}>List Scan History</Text>
+        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
+          <Text style={styles.lastResultLink}>View Last Result</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Wine Label → intel, and its Label Scan Library. */}
+      <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
           onPress={() => requireAuth(() => setAddWineOpen(true))}
