@@ -196,44 +196,41 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Wine List → restaurant-list recommendations. Tap to scan; the "View Last
-          Result" link (or press-and-hold) revisits your last result (account-gated). */}
+      {/* Scanning + their histories: wine list (+ List Scan History), wine label
+          (+ Label Scan Library). Press-and-hold a scan button also revisits the
+          last result (account-gated). */}
       <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
           onPress={() => router.push('/scan/wine-list')}
           onLongPress={() => requireAccount(handleViewLastListResult)}
         >
-          <Text style={styles.buttonText}>Wine List</Text>
+          <Text style={styles.buttonText}>Scan A Winelist</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
-          <Text style={styles.lastResultLink}>View Last Result</Text>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(handleViewLastListResult)}>
+          <Text style={styles.buttonText}>List Scan History</Text>
         </TouchableOpacity>
-      </View>
-
-      {/* Divider separating the Wine List flow from the Wine Label flow
-          (Wine Label + its Label Scan Library) — matched to the faded divider
-          above rather than the brighter gold one. */}
-      <View style={styles.divider} />
-
-      {/* Wine Label → Generate Wine Intel. Tap to scan; press-and-hold to
-          revisit your last result (account-gated). */}
-      <View style={styles.section}>
         <TouchableOpacity
           style={styles.buttonFull}
           onPress={() => requireAuth(() => setAddWineOpen(true))}
           onLongPress={() => requireAccount(handleViewLastIntel)}
         >
-          <Text style={styles.buttonText}>Wine Label</Text>
+          <Text style={styles.buttonText}>Scan a Wine Label</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
+          <Text style={styles.buttonText}>Label Scan Library</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Scan Archive → every saved label scan, actionable (add to cellar /
-          review / wish list / view intel). Relocated here from You; an
-          account-only feature, so hard-gated for guests. */}
-      <View style={[styles.section, { marginTop: spacing.lg }]}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
-          <Text style={styles.buttonText}>Label Scan Library</Text>
+      <View style={styles.divider} />
+
+      {/* Your reviews — moved here from the Pair tab. */}
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
+          <Text style={styles.buttonText}>Your Wine Reviews</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/restaurants/reviews'))}>
+          <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
         </TouchableOpacity>
       </View>
 
