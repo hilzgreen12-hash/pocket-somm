@@ -137,7 +137,7 @@ export default function WineKnowledgeScreen() {
             disabled={sharing}
             hitSlop={{ top: 10, bottom: 6, left: 12, right: 12 }}
           >
-            <Text style={[styles.shareText, sharing && { color: colors.textMuted }]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+            <Text style={[styles.shareText, sharing && { color: colors.textMuted }]}>{sharing ? 'Preparing…' : 'Export'}</Text>
           </TouchableOpacity>
         ) : (
           <View style={{ width: 44 }} />

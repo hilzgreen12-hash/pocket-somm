@@ -1597,7 +1597,7 @@ export default function LabelResultsScreen() {
           activeOpacity={0.7}
           disabled={sharing}
         >
-          <Text style={styles.scanAgainText}>{sharing ? 'Sharing…' : 'Share'}</Text>
+          <Text style={styles.scanAgainText}>{sharing ? 'Exporting…' : 'Export'}</Text>
         </TouchableOpacity>
       ) : null}
 

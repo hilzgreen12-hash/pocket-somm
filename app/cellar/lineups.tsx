@@ -496,7 +496,7 @@ export default function LineupLibraryScreen() {
                 <Text style={styles.letterCancel}>Close</Text>
               </TouchableOpacity>
               <TouchableOpacity onPress={handleShareNote} disabled={sharingNote}>
-                <Text style={[styles.letterShare, sharingNote && { color: colors.textMuted }]}>{sharingNote ? 'Preparing…' : 'Share'}</Text>
+                <Text style={[styles.letterShare, sharingNote && { color: colors.textMuted }]}>{sharingNote ? 'Preparing…' : 'Export'}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.letterSaveBtn} onPress={saveNote} disabled={savingNote}>
                 <Text style={styles.letterSaveText}>{savingNote ? 'Saving…' : 'Save note'}</Text>

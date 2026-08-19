@@ -13,13 +13,13 @@ interface Slide {
 const SLIDES: Slide[] = [
   {
     badge: 'Review',
-    title: 'Wine Lists & Labels',
-    body: 'Photograph restaurant wine lists to generate bottle recommendations based on your tastes, wine labels to generate intel and keep you informed.',
+    title: 'Scan, Discover, Review',
+    body: 'Photograph restaurant wine lists for recommendations tailored to your taste, and wine labels for deep intel. Your wine and restaurant reviews live here too.',
   },
   {
     badge: 'Pair',
-    title: 'Cook, Drink, Review, Repeat',
-    body: 'Pair your favourite bottles, generate chef inspired recipes, review your restaurants and bottles.',
+    title: 'Cook, Drink, Repeat',
+    body: 'Pair your favourite bottles with chef-inspired recipes, or find the perfect wine for what you\'re cooking. Keep the ones you love in Your Cookbook.',
   },
   {
     badge: 'Cellar',

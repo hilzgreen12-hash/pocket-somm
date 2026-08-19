@@ -305,7 +305,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
                     (edit it from the wine card). Date + location are editable
                     inline in the stamp below. */}
                 <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 8, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
-                  <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Share'}</Text>
+                  <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Export'}</Text>
                 </TouchableOpacity>
               </View>
             </View>

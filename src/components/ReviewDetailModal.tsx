@@ -95,7 +95,7 @@ export function ReviewDetailModal({
         </TouchableOpacity>
         {onShare ? (
           <TouchableOpacity style={styles.shareBtn} onPress={onShare} hitSlop={{ top: 8, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-            <Text style={styles.shareText}>Share</Text>
+            <Text style={styles.shareText}>Export</Text>
           </TouchableOpacity>
         ) : null}
 

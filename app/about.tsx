@@ -18,7 +18,7 @@ interface Section {
 const SECTIONS: Section[] = [
   {
     title: 'How Review Works',
-    body: 'Point your camera at a restaurant wine list or upload a photo. Vinster reads the list using AI-powered optical character recognition, then scores every wine against your preferences — wine type, style, budget, and food pairing — before surfacing your best match. From your results screen you can also save a review of the wine you chose and a review of the restaurant you dined at — both kept in your archive for future reference.',
+    body: 'Point your camera at a restaurant wine list or upload a photo. Vinster reads the list using AI-powered optical character recognition, then scores every wine against your preferences — wine type, style, budget, and food pairing — before surfacing your best match. You can also scan a wine label for deep intel. From your results you can save a review of the wine you chose and of the restaurant you dined at — and Your Wine Reviews and Your Restaurant Reviews both live on the Review tab for you to revisit any time.',
     subsections: [
       {
         title: 'How Recommendations Are Scored',
@@ -28,7 +28,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'How Pair Works',
-    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each. Pair will apply any additional dietary needs or preferences that you have set in your profile.',
+    body: 'Two ways to pair: start with a wine and Vinster generates three chef-inspired dishes crafted to its flavour profile — each with a full recipe; or start with a recipe and Vinster finds the wine to match. Either flow applies any dietary needs or preferences set in your profile, and you can keep the recipes you love in Your Cookbook.',
   },
   {
     title: 'How Cellar Works',

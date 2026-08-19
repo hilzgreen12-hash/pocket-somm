@@ -1355,7 +1355,7 @@ export default function CellarWineDetail() {
             hitSlop={{ top: 10, bottom: 6, left: 12, right: 12 }}
           >
             <Text style={[styles.topBarShareText, sharingIntel && { color: colors.textMuted }]}>
-              {sharingIntel ? 'Preparing…' : 'Share'}
+              {sharingIntel ? 'Preparing…' : 'Export'}
             </Text>
           </TouchableOpacity>
           {!isArchived ? (

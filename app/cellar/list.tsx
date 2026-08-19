@@ -791,7 +791,7 @@ export default function FullCellarListScreen() {
             hitSlop={{ top: 6, bottom: 10, left: 8, right: 8 }}
           >
             <Text style={[styles.shareLink, (sharingList || sorted.length === 0) && { color: colors.textMuted }]}>
-              {sharingList ? 'Preparing…' : 'Share'}
+              {sharingList ? 'Preparing…' : 'Export'}
             </Text>
           </TouchableOpacity>
         </View>

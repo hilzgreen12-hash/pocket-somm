@@ -389,7 +389,7 @@ export default function LineupDetailScreen() {
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 10, left: 16, right: 10 }}>
-            <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Share'}</Text>
+            <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Export'}</Text>
           </TouchableOpacity>
         </View>
         {/* Screen title. */}
