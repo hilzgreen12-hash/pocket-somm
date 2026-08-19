@@ -81,6 +81,12 @@ export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaur
               {w.flavourProfile ? (
                 <Text style={styles.wineFlavour} numberOfLines={3}>{w.flavourProfile}</Text>
               ) : null}
+              {/* Vinster's "why this one" blurb — the pairing/comparison note
+                  shown below the price on the results card. Omitted gracefully
+                  on older recommendations that predate the field. */}
+              {w.standoutNote ? (
+                <Text style={styles.wineStandout} numberOfLines={5}>{w.standoutNote}</Text>
+              ) : null}
             </View>
           ))}
         </View>
@@ -138,6 +144,7 @@ const styles = StyleSheet.create({
   wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: '#FFFFFF', lineHeight: 52, marginBottom: 8 },
   wineDetail: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: 'rgba(255,255,255,0.85)', lineHeight: 38 },
   wineFlavour: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 28, color: colors.gold, lineHeight: 36, marginTop: 14 },
+  wineStandout: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 27, color: 'rgba(255,255,255,0.9)', lineHeight: 35, marginTop: 12 },
   footer: { alignItems: 'center', marginTop: 44 },
   footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
   footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },
