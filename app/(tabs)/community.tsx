@@ -62,13 +62,13 @@ export default function CommunityTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>Community</Text>
+        <Text style={styles.title}>Share</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
         <Text style={styles.comingSoonNotice}>Coming Soon</Text>
-        <HelpButton label="More About Community" title="How Community works" body={COMMUNITY_HELP} />
+        <HelpButton label="More About Share" title="How Share works" body={COMMUNITY_HELP} />
       </View>
 
       <View style={styles.divider} />

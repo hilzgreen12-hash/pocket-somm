@@ -84,7 +84,7 @@ export default function ChefTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.appName}>Dine</Text>
+        <Text style={styles.appName}>Pair</Text>
       </View>
 
       <View style={styles.section}>
@@ -96,7 +96,7 @@ export default function ChefTab() {
           <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You</Text>
           {' '}to guide its results.
         </Text>
-        <HelpButton label="More About Dine" title="How Dine works" body={CHEF_HELP} />
+        <HelpButton label="More About Pair" title="How Pair works" body={CHEF_HELP} />
       </View>
 
       <View style={styles.divider} />

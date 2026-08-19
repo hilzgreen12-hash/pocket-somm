@@ -17,7 +17,7 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
-    title: 'How Scan Works',
+    title: 'How Review Works',
     body: 'Point your camera at a restaurant wine list or upload a photo. Vinster reads the list using AI-powered optical character recognition, then scores every wine against your preferences — wine type, style, budget, and food pairing — before surfacing your best match. From your results screen you can also save a review of the wine you chose and a review of the restaurant you dined at — both kept in your archive for future reference.',
     subsections: [
       {
@@ -27,8 +27,8 @@ const SECTIONS: Section[] = [
     ],
   },
   {
-    title: 'How Dine Works',
-    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each. Dine will apply any additional dietary needs or preferences that you have set in your profile.',
+    title: 'How Pair Works',
+    body: 'Scan or upload a wine label and Vinster identifies the bottle. Our AI sommelier then generates three chef-inspired dishes, each crafted to complement the specific flavour profile of your wine — with a full recipe for each. Pair will apply any additional dietary needs or preferences that you have set in your profile.',
   },
   {
     title: 'How Cellar Works',
@@ -46,7 +46,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'Your Preferences',
-    body: 'The settings you save in your Profile are used as default parameters across Scan and Dine as you generate recommendations. You can override your preferences on each specific search you generate in Scan or Dine, depending on one-off requirements.',
+    body: 'The settings you save in your Profile are used as default parameters across Review and Pair as you generate recommendations. You can override your preferences on each specific search you generate in Review or Pair, depending on one-off requirements.',
   },
   {
     title: 'Privacy & Data',

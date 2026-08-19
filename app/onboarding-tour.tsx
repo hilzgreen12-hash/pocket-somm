@@ -12,12 +12,12 @@ interface Slide {
 
 const SLIDES: Slide[] = [
   {
-    badge: 'Scan',
+    badge: 'Review',
     title: 'Wine Lists & Labels',
     body: 'Photograph restaurant wine lists to generate bottle recommendations based on your tastes, wine labels to generate intel and keep you informed.',
   },
   {
-    badge: 'Dine',
+    badge: 'Pair',
     title: 'Cook, Drink, Review, Repeat',
     body: 'Pair your favourite bottles, generate chef inspired recipes, review your restaurants and bottles.',
   },
@@ -32,7 +32,7 @@ const SLIDES: Slide[] = [
     body: 'Vinster tracks how you drink and what you\'re cooking not only to improve its recommendations. The more you engage with each function Vinster is able to sketch witty personality profiles based on your likes and leanings which you can share with friends and within the Vinster community.',
   },
   {
-    badge: 'Community',
+    badge: 'Share',
     title: 'Find your people',
     body: 'Where you can share experiences with wines, restaurants, and recipes. A vibrant community of those who share your enthusiasm for matters of taste. Coming soon.',
   },

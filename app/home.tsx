@@ -92,20 +92,20 @@ const motifStyles = StyleSheet.create({
 });
 
 const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: () => React.JSX.Element }> = [
-  { label: 'Scan',      desc: 'Wine Lists & Labels',   route: '/(tabs)/scan',      Motif: ListMotif },
-  { label: 'Dine',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
+  { label: 'Review',    desc: 'Wine Lists & Labels',   route: '/(tabs)/scan',      Motif: ListMotif },
+  { label: 'Pair',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
   { label: 'Cellar',    desc: 'build your collection', route: '/(tabs)/cellar',    Motif: CellarMotif },
-  { label: 'Community', desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
+  { label: 'Share',     desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
 ];
 
 // Top-right hamburger menu — a shortcut to every destination in the app.
 const MENU_ITEMS: ReadonlyArray<{ label: string; route: string }> = [
   { label: 'Your Stuff',    route: '/(tabs)/you' },
   { label: 'About Vinster', route: '/about' },
-  { label: 'Scan',          route: '/(tabs)/scan' },
+  { label: 'Review',        route: '/(tabs)/scan' },
   { label: 'Cellar',        route: '/(tabs)/cellar' },
-  { label: 'Dine',          route: '/(tabs)/chef' },
-  { label: 'Community',     route: '/(tabs)/community' },
+  { label: 'Pair',          route: '/(tabs)/chef' },
+  { label: 'Share',         route: '/(tabs)/community' },
 ];
 
 // Three-line hamburger glyph, drawn with Views to avoid an icon dependency.

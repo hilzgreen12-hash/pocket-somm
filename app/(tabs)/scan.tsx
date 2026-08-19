@@ -184,14 +184,14 @@ export default function ScanTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.appName}>Scan</Text>
+        <Text style={styles.appName}>Review</Text>
       </View>
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
           Scan or upload a restaurant wine list for tailored recommendations, save and review bottles and restaurants. Scan or upload a wine label to generate intel and dive deeply into what's in the bottle.
         </Text>
-        <HelpButton label="More About Scan" title="How Scan works" body={SCAN_HELP} />
+        <HelpButton label="More About Review" title="How Review works" body={SCAN_HELP} />
       </View>
 
       <View style={styles.divider} />

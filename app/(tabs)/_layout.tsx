@@ -21,10 +21,10 @@ export default function TabsLayout() {
         tabBarLabelStyle: { fontFamily: fonts.bodyMedium, fontSize: 11 },
       }}
     >
-      <Tabs.Screen name="scan" options={{ title: 'Scan', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
-      <Tabs.Screen name="chef" options={{ title: 'Dine', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
+      <Tabs.Screen name="scan" options={{ title: 'Review', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
+      <Tabs.Screen name="chef" options={{ title: 'Pair', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="cellar" options={{ title: 'Cellar', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
-      <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
+      <Tabs.Screen name="community" options={{ title: 'Share', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="you" options={{ title: 'You', tabBarIcon: ({ color }) => <BottleIcon color={color} /> }} />
       <Tabs.Screen name="welcome" options={{ href: null }} />
     </Tabs>

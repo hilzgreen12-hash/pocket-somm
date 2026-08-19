@@ -684,7 +684,7 @@ export default function ImportCellarScreen() {
           <Text style={styles.doneTitle}>Reviews imported</Text>
           <Text style={styles.hint}>
             {reviewSummary
-              ? `${reviewSummary.matched} review${reviewSummary.matched === 1 ? '' : 's'} added to wines in your cellar${reviewSummary.added > 0 ? `, ${reviewSummary.added} kept as Other reviews` : ''}${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} were skipped (already reviewed in Vinster)` : ''}. Find them on each wine card and in Dine · Wine Reviews.`
+              ? `${reviewSummary.matched} review${reviewSummary.matched === 1 ? '' : 's'} added to wines in your cellar${reviewSummary.added > 0 ? `, ${reviewSummary.added} kept as Other reviews` : ''}${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} were skipped (already reviewed in Vinster)` : ''}. Find them on each wine card and in Pair · Wine Reviews.`
               : 'Your reviews have been imported.'}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>

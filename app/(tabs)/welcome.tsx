@@ -17,14 +17,14 @@ export default function WelcomeTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Scan</Text>
+        <Text style={styles.sectionTitle}>Review</Text>
         <Text style={styles.sectionDesc}>Scan or photograph a restaurant wine list and Vinster will recommend the best bottles for your taste, budget, and what you're eating.</Text>
       </View>
 
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Dine</Text>
+        <Text style={styles.sectionTitle}>Pair</Text>
         <Text style={styles.sectionDesc}>Tell Vinster what you're cooking and it will recommend a wine pairing — or scan a wine label and receive chef-inspired recipe suggestions to match the bottle.</Text>
       </View>
 
@@ -38,7 +38,7 @@ export default function WelcomeTab() {
       <View style={styles.divider} />
 
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Community</Text>
+        <Text style={styles.sectionTitle}>Share</Text>
         <Text style={styles.sectionDesc}>Share wine and recipe discoveries, rate restaurants, and connect with fellow wine lovers. Coming soon.</Text>
       </View>
 
