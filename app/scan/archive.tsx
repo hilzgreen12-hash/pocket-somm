@@ -649,7 +649,7 @@ export default function MyLabelsScreen() {
                     <LabelThumb path={label.label_image_path} fallbackText={label.wine_name} style={{ width: thumbW, height: thumbH }} radius={5} />
                     {/* "+" — top-right of the thumbnail; expands the photo. */}
                     <TouchableOpacity
-                      style={styles.favStar}
+                      style={styles.expandBtn}
                       onPress={() => setExpandedLabel(label)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       activeOpacity={0.7}
@@ -931,11 +931,11 @@ const styles = StyleSheet.create({
   expandCaptionWrap: { position: 'absolute', bottom: 48, left: spacing.xl, right: spacing.xl, alignItems: 'center' },
   expandCaption: { fontSize: 17, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center' },
   expandDate: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', marginTop: 4 },
-  favStar: { position: 'absolute', top: spacing.xs, right: spacing.xs, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center' },
-  favStarText: { fontSize: 20, color: '#FFFFFF', lineHeight: 22 },
+  // Subtle "+" expand affordance — small, faded circle in the thumbnail corner.
+  expandBtn: { position: 'absolute', top: 5, right: 5, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.28)', alignItems: 'center', justifyContent: 'center' },
   favStarActive: { color: colors.gold },
   // "+" expand affordance on the thumbnail (replaces the old star position).
-  expandPlus: { fontSize: 24, color: '#FFFFFF', lineHeight: 26, fontWeight: '600' },
+  expandPlus: { fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 17, fontWeight: '400' },
   // Favourite star relocated into the row body, under the review-status line.
   bodyFav: { alignSelf: 'flex-start', paddingTop: 4 },
   bodyFavStar: { fontSize: 22, color: colors.textMuted, lineHeight: 24 },
