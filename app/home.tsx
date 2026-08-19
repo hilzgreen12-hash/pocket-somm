@@ -92,7 +92,7 @@ const motifStyles = StyleSheet.create({
 });
 
 const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: () => React.JSX.Element }> = [
-  { label: 'Review',    desc: 'Wine Lists & Labels',   route: '/(tabs)/scan',      Motif: ListMotif },
+  { label: 'Review',    desc: 'Restaurants & Wines',   route: '/(tabs)/scan',      Motif: ListMotif },
   { label: 'Pair',      desc: 'Pairing Perfected',     route: '/(tabs)/chef',      Motif: ChefMotif },
   { label: 'Cellar',    desc: 'build your collection', route: '/(tabs)/cellar',    Motif: CellarMotif },
   { label: 'Share',     desc: 'connect and share',     route: '/(tabs)/community', Motif: CommunityMotif },
