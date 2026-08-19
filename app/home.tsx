@@ -258,7 +258,6 @@ export default function HomeScreen() {
                 <Text style={styles.tileTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{tile.label}</Text>
                 <View style={styles.tileDivider} />
                 <Text style={styles.tileDesc}>{tile.desc}</Text>
-                <Text style={styles.tileArrow}>→</Text>
               </TouchableOpacity>
             );
           })}
@@ -367,13 +366,11 @@ const styles = StyleSheet.create({
   readyDismissBtn: { alignItems: 'center', paddingVertical: spacing.sm },
   readyDismissBtnText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
 
-  // Tiles — motif at top, big gold label, short divider, italic tagline,
-  // and a subtle → in the corner to telegraph navigation.
+  // Tiles — motif at top, big gold label, short divider, italic tagline.
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
   tile: { width: '48%', aspectRatio: 0.92, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, paddingTop: spacing.lg, paddingHorizontal: spacing.md, paddingBottom: spacing.md, alignItems: 'center' },
   tileMotif: { height: 40, justifyContent: 'center', marginBottom: spacing.sm },
   tileTitle: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.gold, letterSpacing: 2, textAlign: 'center' },
   tileDivider: { width: 36, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
   tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginTop: 2, paddingHorizontal: 4, lineHeight: 18 },
-  tileArrow: { position: 'absolute', right: 10, bottom: 8, fontSize: 14, color: 'rgba(224,184,74,0.55)' },
 });
