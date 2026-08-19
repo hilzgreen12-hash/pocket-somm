@@ -6,11 +6,11 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 
-const COMMUNITY_HELP = `Community is where Vinster users will share wine reviews, restaurant finds and personality sketches with friends.
+const COMMUNITY_HELP = `Share is where Vinster users will share wine reviews, restaurant finds and personality sketches with friends and the wider community.
 
 It's not live yet. We're building it carefully so it stays warm and high-signal rather than noisy.
 
-In the meantime, anything you post — your reviews, your wine and foodie personalities — is being saved, and will surface here when Community opens up.`;
+In the meantime, anything you share — your reviews, your wine and foodie personalities — is being saved, and will surface here when it opens up.`;
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';

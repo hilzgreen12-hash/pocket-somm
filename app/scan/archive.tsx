@@ -807,8 +807,8 @@ export default function MyLabelsScreen() {
       <Modal visible={!!shareLabel && !sharing} transparent animationType="fade" onRequestClose={() => setShareLabel(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShareLabel(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Share label</Text>
-            <Text style={styles.addBody}>Share this label — with its name and date — as a Vinster card. Add a note if you like.</Text>
+            <Text style={styles.modalTitle}>Export label</Text>
+            <Text style={styles.addBody}>Export this label — with its name and date — as a Vinster card. Add a note if you like.</Text>
             <TextInput
               style={styles.noteInput}
               value={shareNote}
@@ -818,7 +818,7 @@ export default function MyLabelsScreen() {
               multiline
             />
             <TouchableOpacity style={styles.addBtn} onPress={doShareThumbnail} activeOpacity={0.85}>
-              <Text style={styles.addBtnText}>Share</Text>
+              <Text style={styles.addBtnText}>Export</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setShareLabel(null)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>

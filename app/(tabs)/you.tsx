@@ -193,8 +193,8 @@ export default function YouScreen() {
         {currentUsername || currentEmail.split('@')[0]} · Vinster since {formatJoinedShort(session?.user.created_at)}
       </Text>
 
-      {/* Restaurants & Wine Reviews moved to the Dine tab; the Lineup Library
-          moved to the Cellar tab. This tab is now identity + settings only. */}
+      {/* Restaurant & Wine Reviews live on the Review tab; the Lineup Library
+          is on the Cellar tab. This tab is now identity + settings only. */}
       <View style={styles.divider} />
 
       <View style={styles.block}>

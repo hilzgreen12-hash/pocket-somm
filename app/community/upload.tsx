@@ -180,7 +180,7 @@ export default function CommunityUploadScreen() {
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 60, paddingTop: spacing.md }}>
-          <Text style={styles.helper}>Tap "Post" to share a review with the community. Tap "Posted" to remove it. Your underlying review is unaffected.</Text>
+          <Text style={styles.helper}>Tap "Share" to share a review with the community. Tap "Shared" to remove it. Your underlying review is unaffected.</Text>
           {sourceRows.map((row) => {
             const posted = publishedBySource.has(row.sourceId);
             const busy = (publish.isPending && publish.variables?.source_id === row.sourceId)
@@ -203,7 +203,7 @@ export default function CommunityUploadScreen() {
                   disabled={busy}
                 >
                   <Text style={[styles.actionBtnText, posted && styles.actionBtnTextPosted]}>
-                    {busy ? '…' : posted ? 'Posted ✓' : 'Post'}
+                    {busy ? '…' : posted ? 'Shared ✓' : 'Share'}
                   </Text>
                 </TouchableOpacity>
               </View>

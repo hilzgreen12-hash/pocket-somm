@@ -1083,7 +1083,7 @@ export default function CellarWineDetail() {
                 displayName,
               );
               setReviewPosted(true);
-              showAlert({ title: 'Posted to community', body: 'Thanks for sharing your review — it now appears in the Vinster community feed.' });
+              showAlert({ title: 'Shared to community', body: 'Thanks for sharing your review — it now appears in the Vinster community feed.' });
             } catch (err) {
               const detail = err instanceof Error ? err.message : String(err);
               const alreadyPosted = detail.toLowerCase().includes('community_reviews_source_unique') || detail.toLowerCase().includes('duplicate');
@@ -1931,7 +1931,7 @@ export default function CellarWineDetail() {
             activeOpacity={0.7}
           >
             <Text style={styles.chefBtnText}>
-              {!COMMUNITY_ENABLED ? 'Post Review To Community (coming soon)' : reviewPosted ? '✓ Posted to Community' : postingReview ? 'Posting…' : 'Post Review To Community'}
+              {!COMMUNITY_ENABLED ? 'Share Review To Community (coming soon)' : reviewPosted ? '✓ Shared to Community' : postingReview ? 'Sharing…' : 'Share Review To Community'}
             </Text>
           </TouchableOpacity>
         ) : (
