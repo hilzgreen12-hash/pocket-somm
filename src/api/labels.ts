@@ -95,10 +95,15 @@ export async function updateLabelIntel(id: string, intel: WineIntelligence): Pro
   if (error) throw new Error(error.message);
 }
 
-export async function updateLabelLocation(id: string, input: { city?: string | null; place?: string | null }): Promise<void> {
+export async function updateLabelLocation(id: string, input: { city?: string | null; place?: string | null; date?: string | null }): Promise<void> {
   const patch: Record<string, unknown> = {};
   if (input.city !== undefined) patch.captured_city = (input.city ?? '').trim() || null;
   if (input.place !== undefined) patch.captured_place = (input.place ?? '').trim() || null;
+  // The library's "scanned date" is created_at — editable so the user can
+  // correct it. YYYY-MM-DD → noon UTC to avoid a timezone off-by-one.
+  if (input.date !== undefined && input.date && /^\d{4}-\d{2}-\d{2}$/.test(input.date)) {
+    patch.created_at = `${input.date}T12:00:00.000Z`;
+  }
   const { error } = await supabase.from('labels').update(patch).eq('id', id);
   if (error) throw new Error(error.message);
 }

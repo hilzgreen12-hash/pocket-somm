@@ -32,7 +32,7 @@ export function useLabels() {
   });
 
   const setLocation = useMutation({
-    mutationFn: ({ id, city, place }: { id: string; city?: string | null; place?: string | null }) => updateLabelLocation(id, { city, place }),
+    mutationFn: ({ id, city, place, date }: { id: string; city?: string | null; place?: string | null; date?: string | null }) => updateLabelLocation(id, { city, place, date }),
     onSuccess: invalidate,
   });
 

@@ -116,6 +116,7 @@ export default function MyLabelsScreen() {
   const [editingLoc, setEditingLoc] = useState<LibraryLabel | null>(null);
   const [locCityDraft, setLocCityDraft] = useState('');
   const [locPlaceDraft, setLocPlaceDraft] = useState('');
+  const [locDateDraft, setLocDateDraft] = useState('');
   const [expandedLabel, setExpandedLabel] = useState<LibraryLabel | null>(null);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -257,6 +258,7 @@ export default function MyLabelsScreen() {
     setEditingLoc(label);
     setLocPlaceDraft((label.captured_place ?? '').trim());
     setLocCityDraft((label.captured_city ?? '').trim());
+    setLocDateDraft(label.created_at ? label.created_at.split('T')[0] : '');
   }
 
   async function saveLocation() {
@@ -264,9 +266,9 @@ export default function MyLabelsScreen() {
     const label = editingLoc;
     setEditingLoc(null);
     try {
-      await setLocation.mutateAsync({ id: label.id, place: locPlaceDraft, city: locCityDraft });
+      await setLocation.mutateAsync({ id: label.id, place: locPlaceDraft, city: locCityDraft, date: locDateDraft.trim() || null });
     } catch (err) {
-      showAlert({ title: 'Could not update location', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -340,6 +342,7 @@ export default function MyLabelsScreen() {
       buttons: [
         { text: 'View Wine Intel', onPress: () => void handleViewIntel(label) },
         { text: 'Add/View Your Review', onPress: () => goToReview(existingId, label) },
+        { text: 'Edit Date/Location', onPress: () => openLocationEditor(label) },
         { text: 'Delete from Library', style: 'destructive', onPress: () => confirmRemove(label, existingId) },
         { text: 'Cancel', style: 'cancel' },
       ],
@@ -547,14 +550,19 @@ export default function MyLabelsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* dismissTo the scan tab (not router.back) so any residual stack —
+        {/* Back (left) + Add (right) sit on their own row above the title.
+            dismissTo the scan tab (not router.back) so any residual stack —
             e.g. duplicate library entries from older sessions — collapses in a
             single press rather than needing several. */}
-        <TouchableOpacity onPress={() => router.dismissTo('/(tabs)/scan')}>
-          <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
-        </TouchableOpacity>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity onPress={() => router.dismissTo('/(tabs)/scan')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={styles.addLink}>+ Add</Text>
+          </TouchableOpacity>
+        </View>
         <Text style={styles.title}>Label Scan Library</Text>
-        <View style={{ width: 28 }} />
       </View>
 
       {labels.length === 0 ? (
@@ -639,59 +647,40 @@ export default function MyLabelsScreen() {
                 const conn = connByLabel.get(label.id);
                 const cellar = conn && conn.cellarWines.length > 0 ? conn.cellarWines[0] : null;
                 return (
-                <TouchableOpacity
-                  key={label.id}
-                  style={styles.row}
-                  onPress={() => onTapLabel(label)}
-                  activeOpacity={0.7}
-                >
+                <View key={label.id} style={styles.row}>
                   <View style={{ width: thumbW, height: thumbH }}>
-                    <LabelThumb path={label.label_image_path} fallbackText={label.wine_name} style={{ width: thumbW, height: thumbH }} radius={5} />
-                    {/* "+" — top-right of the thumbnail; expands the photo. */}
+                    {/* Tap the photo to expand it. */}
+                    <TouchableOpacity onPress={() => setExpandedLabel(label)} activeOpacity={0.9}>
+                      <LabelThumb path={label.label_image_path} fallbackText={label.wine_name} style={{ width: thumbW, height: thumbH }} radius={5} />
+                    </TouchableOpacity>
+                    {/* Favourite star — top-right of the thumbnail. */}
                     <TouchableOpacity
-                      style={styles.expandBtn}
-                      onPress={() => setExpandedLabel(label)}
+                      style={styles.favStar}
+                      onPress={() => toggleFav(label)}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       activeOpacity={0.7}
                     >
-                      <Text style={styles.expandPlus}>+</Text>
+                      <Text style={[styles.favStarText, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
                     </TouchableOpacity>
                   </View>
-                  <View style={styles.rowBody}>
+                  {/* Tap anywhere on the details to open the options popup. */}
+                  <TouchableOpacity style={styles.rowBody} onPress={() => onTapLabel(label)} activeOpacity={0.7}>
                     <Text style={styles.rowName} numberOfLines={3}>
                       {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                     </Text>
-                    {/* Location captured at scan time — venue · city, or just the
-                        city. Gold, matching the scanned-date line below it.
-                        Tap to correct it (GPS can guess the wrong town). */}
+                    {/* Date · Location on one line (edit via the options popup). */}
                     {(() => {
                       const loc = [label.captured_place, label.captured_city].map((s) => (s ?? '').trim()).filter(Boolean).join(' · ');
-                      return (
-                        <TouchableOpacity onPress={() => openLocationEditor(label)} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }} activeOpacity={0.7}>
-                          <Text style={loc ? styles.rowLocation : styles.rowLocationAdd} numberOfLines={1}>{loc || '+ Add location'}</Text>
-                        </TouchableOpacity>
-                      );
+                      const dateStr = new Date(label.created_at).toLocaleDateString('en-GB');
+                      return <Text style={styles.rowScanned} numberOfLines={1}>{[dateStr, loc].filter(Boolean).join(' · ')}</Text>;
                     })()}
-                    <Text style={styles.rowScanned}>Scanned: {new Date(label.created_at).toLocaleDateString('en-GB')}</Text>
-                    {/* Plain info line (not a link) — review status for this wine,
-                        same colour/font as the Scanned line above. */}
+                    {/* Review status. */}
                     <Text style={styles.rowScanned}>
                       {conn && conn.reviewCount > 0
                         ? `${conn.reviewCount} Review${conn.reviewCount === 1 ? '' : 's'}`
                         : 'Awaiting review'}
                     </Text>
-                    {/* Favourite star — moved off the thumbnail to here, under the
-                        review-status line. */}
-                    <TouchableOpacity
-                      style={styles.bodyFav}
-                      onPress={() => toggleFav(label)}
-                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                      activeOpacity={0.7}
-                    >
-                      <Text style={[styles.bodyFavStar, label.is_favourite && styles.favStarActive]}>{label.is_favourite ? '★' : '☆'}</Text>
-                    </TouchableOpacity>
-                    {/* Dated links to where this wine also lives — most recent
-                        review date only; styled as links, not buttons. */}
+                    {/* Dated links to where this wine also lives. */}
                     {conn?.lastReviewedIso ? (
                       <TouchableOpacity onPress={() => openReviewedLink(conn)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                         <Text style={styles.rowLink}>Reviewed {new Date(conn.lastReviewedIso).toLocaleDateString('en-GB')}</Text>
@@ -702,8 +691,8 @@ export default function MyLabelsScreen() {
                         <Text style={styles.rowLink}>Added to Cellar: {cellar.date_received ? new Date(cellar.date_received).toLocaleDateString('en-GB') : '—'}</Text>
                       </TouchableOpacity>
                     ) : null}
-                  </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </View>
                 );
               })}
             </ScrollView>
@@ -836,7 +825,17 @@ export default function MyLabelsScreen() {
       <Modal visible={!!editingLoc} transparent animationType="fade" onRequestClose={() => setEditingLoc(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setEditingLoc(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.locEditSheet} onPress={() => {}}>
-            <Text style={styles.locEditTitle}>Edit location</Text>
+            <Text style={styles.locEditTitle}>Edit Date/Location</Text>
+            <Text style={styles.locEditLabel}>Date (YYYY-MM-DD)</Text>
+            <TextInput
+              style={styles.locEditInput}
+              value={locDateDraft}
+              onChangeText={(t) => setLocDateDraft(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+              placeholder="e.g. 2026-08-19"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="numbers-and-punctuation"
+              maxLength={10}
+            />
             <Text style={styles.locEditLabel}>Restaurant or venue (optional)</Text>
             <TextInput
               style={styles.locEditInput}
@@ -892,10 +891,11 @@ export default function MyLabelsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right', minWidth: 40 },
-  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
   // Share-note input + the off-screen (position-only, no opacity) card wrapper.
   noteInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, padding: spacing.md, minHeight: 90, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', textAlignVertical: 'top', marginBottom: spacing.md },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
@@ -932,13 +932,10 @@ const styles = StyleSheet.create({
   expandCaption: { fontSize: 17, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center' },
   expandDate: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', marginTop: 4 },
   // Subtle "+" expand affordance — small, faded circle in the thumbnail corner.
-  expandBtn: { position: 'absolute', top: 5, right: 5, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.28)', alignItems: 'center', justifyContent: 'center' },
+  // Favourite star — top-right of the thumbnail; gold when active.
+  favStar: { position: 'absolute', top: 5, right: 5, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  favStarText: { fontSize: 18, color: '#FFFFFF', lineHeight: 20 },
   favStarActive: { color: colors.gold },
-  // "+" expand affordance on the thumbnail (replaces the old star position).
-  expandPlus: { fontSize: 15, color: 'rgba(255,255,255,0.85)', lineHeight: 17, fontWeight: '400' },
-  // Favourite star relocated into the row body, under the review-status line.
-  bodyFav: { alignSelf: 'flex-start', paddingTop: 4 },
-  bodyFavStar: { fontSize: 22, color: colors.textMuted, lineHeight: 24 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
