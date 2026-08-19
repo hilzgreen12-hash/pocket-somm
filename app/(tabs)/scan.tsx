@@ -21,11 +21,9 @@ import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-const SCAN_HELP = `Scan a restaurant wine list and Vinster offers three recommendations tailored to your profile preferences and what it's learned about your tastes. Scan a wine label instead for deep intel on the bottle in your hand.
+const SCAN_HELP = `Scan a restaurant wine list for three recommendations tailored to your tastes — weighed on critic scores, region-specific vintage quality, value, and rarity — or scan a label for deep intel on the bottle in your hand.
 
-Vinster is trained by wine professionals to weigh up what it discovers online regarding average critic scores, region specific vintage quality, value for money, and rarity.
-
-Your Wine Reviews and Your Restaurant Reviews live here too — save and revisit your notes on every bottle and every place you've dined.`;
+Your Wine Reviews and Your Restaurant Reviews live here too.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
@@ -191,7 +189,7 @@ export default function ScanTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Scan or upload a restaurant wine list for tailored recommendations, save and review bottles and restaurants. Scan or upload a wine label to generate intel and dive deeply into what's in the bottle.
+          Scan or upload a restaurant wine list for tailored recommendations, or a wine label for deep intel on the bottle. Save and revisit your wine and restaurant reviews here too.
         </Text>
         <HelpButton label="More About Review" title="How Review works" body={SCAN_HELP} />
       </View>

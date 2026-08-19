@@ -12,11 +12,9 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
-const CHEF_HELP = `In finding a recipe to match your bottle, Vinster dives online to generate original, chef inspired recipes that are tailored to your search. These are shaped around your dietary needs which you can input in You - Your Recipe Requirements, or select per search in the input field.
+const CHEF_HELP = `Start with a wine and Vinster generates original, chef-inspired recipes shaped around your dietary needs (set in You, or per search). Start with a recipe and it finds a wine to match — from your cellar or in the wild, suited to your ingredients and budget.
 
-When finding a bottle to match a recipe, Vinster can search your cellar or find a wine in the wild, suited to your ingredients and budget.
-
-Keep your favourites in Your Cookbook, and share them with the Vinster community or friends beyond it.`;
+Keep your favourites in Your Cookbook, and share them with friends and the community.`;
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();
@@ -87,7 +85,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          This is your food and wine experience hub. Generate pairings & store the recipes, keep track of where you dined, what you drank, and record your thoughts along the way.
+          Start with a wine and Vinster finds chef-inspired recipes to match; start with a recipe and it finds the wine. Keep the ones you love in Your Cookbook.
         </Text>
         <Text style={styles.prefsBlurb}>
           Vinster will use your preferences in{' '}
