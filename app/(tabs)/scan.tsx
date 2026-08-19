@@ -204,7 +204,7 @@ export default function ScanTab() {
           onPress={() => router.push('/scan/wine-list')}
           onLongPress={() => requireAccount(handleViewLastListResult)}
         >
-          <Text style={styles.buttonText}>Scan A Winelist</Text>
+          <Text style={styles.buttonText}>Read a Wine List</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
           <Text style={styles.lastResultLink}>View Last Result</Text>
@@ -220,10 +220,10 @@ export default function ScanTab() {
           onPress={() => requireAuth(() => setAddWineOpen(true))}
           onLongPress={() => requireAccount(handleViewLastIntel)}
         >
-          <Text style={styles.buttonText}>Scan a Wine Label</Text>
+          <Text style={styles.buttonText}>Read a Wine Label</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
-          <Text style={styles.buttonText}>Label Scan Library</Text>
+          <Text style={styles.buttonText}>Label Library</Text>
         </TouchableOpacity>
       </View>
 
