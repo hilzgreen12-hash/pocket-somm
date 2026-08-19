@@ -997,7 +997,7 @@ export default function ResultsScreen() {
                       {isSelectedNow(i) ? 'Selected · Tap to Remove' : 'Select This Wine'}
                     </Text>
                     {!isSelectedNow(i) && (
-                      <Text style={styles.selectBarSub}>Add to Your Restaurants &amp; Your Wine Reviews</Text>
+                      <Text style={styles.selectBarSub}>Add to Your Reviews</Text>
                     )}
                   </TouchableOpacity>
                 )}
