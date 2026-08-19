@@ -897,14 +897,6 @@ export default function ResultsScreen() {
         )}
 
         <Text style={styles.heading}>Vinster Recommends</Text>
-        {recommendation.topScoringMode && (
-          <View style={styles.topScoringBanner}>
-            <Text style={styles.topScoringBannerTitle}>Top Scoring Mode</Text>
-            <Text style={styles.topScoringBannerBody}>
-              These are the three highest-rated wines on the list by critic score. Your usual preferences, budget, and style have not been applied. Some wines may not yet be in their ideal drinking window, may represent poor value, or may fall outside your usual tastes — check the details before ordering.
-            </Text>
-          </View>
-        )}
         {noVintages && (
           <Text style={styles.vintageNote}>Note: there are no vintages provided on this list</Text>
         )}
@@ -1363,33 +1355,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     textTransform: 'uppercase',
     marginBottom: spacing.md,
-    textAlign: 'center',
-  },
-  topScoringBanner: {
-    borderWidth: 1,
-    borderColor: colors.gold,
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginBottom: spacing.md,
-    backgroundColor: 'rgba(212,176,96,0.08)',
-    width: '100%',
-  },
-  topScoringBannerTitle: {
-    fontFamily: fonts.headingBold,
-    fontSize: 14,
-    color: colors.gold,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  // Italic banner explainer — body italic (not a tab tagline).
-  topScoringBannerBody: {
-    fontFamily: fonts.bodyItalic,
-    fontSize: 15,
-    color: 'rgba(212,176,96,0.80)',
-    lineHeight: 20,
     textAlign: 'center',
   },
   vintageNote: {
