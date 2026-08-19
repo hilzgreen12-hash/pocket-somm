@@ -462,7 +462,11 @@ export default function ChosenWinesScreen() {
       const match = chosenWines.find((w) => w.id === params.openReview);
       if (match) {
         handledParamRef.current = key;
-        // Open the unified READ-ONLY detail view (not the editable input card).
+        // A pick that's still AWAITING review (a bottle pick with no review
+        // content yet) opens the INPUT directly — going to the read-only detail
+        // card and making the user tap Edit is wrong for an unreviewed wine.
+        if (!chosenHasReview(match)) { setEditingWine(match); return; }
+        // Otherwise open the unified READ-ONLY detail view (not the input card).
         // Gather this review's dated entries — every row sharing its
         // review_group_id — newest first, exactly as the list does.
         const gid = match.review_group_id ?? match.id;
