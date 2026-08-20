@@ -746,7 +746,7 @@ export default function ChosenWinesScreen() {
         title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
         buttons: [
           { text: 'Add to a filter', onPress: () => setAssignForId(w.id) },
-          { text: 'Delete review', style: 'destructive', onPress: () => confirmDeleteReview(item) },
+          { text: 'Delete wine', style: 'destructive', onPress: () => confirmDeleteReview(item) },
           { text: 'Cancel', style: 'cancel' },
         ],
       });
@@ -766,36 +766,34 @@ export default function ChosenWinesScreen() {
       body: err instanceof Error ? err.message : 'Please try again.',
     });
     const isCellar = item.source === 'cellar';
-    // A restaurant bottle pick (linked to a scan session) returns to "awaiting
-    // review" — clear its review, keep the pick. A standalone review is removed.
-    const isBottlePick = !isCellar && !!(item.wine as ChosenWine).scan_session_id;
+    // Long-press delete removes the WINE from the reviews list (not just its
+    // review text). To delete the review only — keeping the wine — the user opens
+    // it and taps Edit. A cellar wine's bottle stays in the cellar either way.
     showAlert({
-      title: 'Delete review?',
+      title: 'Delete this wine?',
       body: isCellar
-        ? `${label}\n\nThis clears your review — the bottle stays in your cellar.`
-        : isBottlePick
-          ? `${label}\n\nThis clears your review — the bottle stays in Your Restaurants, awaiting review.`
-          : `${label}\n\nThis permanently removes your review.`,
+        ? `${label}\n\nThis will delete your review and remove this wine from your list of wines to review — the bottle stays in your cellar. To delete the review only, open it and tap Edit.`
+        : `${label}\n\nThis will delete your review and remove this wine from your list of wines to review. To delete the review only, open it and tap Edit.`,
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Delete review',
+          text: 'Delete',
           style: 'destructive',
           onPress: () => {
             if (isCellar) {
               updateWine.mutate(
                 {
                   id: item.wine.id,
-                  updates: { user_notes: null, review_score: null, review_location: null, review_date: null },
+                  updates: { user_notes: null, review_score: null, review_location: null, review_date: null, review_entries: [] } as any,
                 },
                 { onError },
               );
-            } else if (isBottlePick) {
-              clearChosenReview(item.wine.id)
-                .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] }))
-                .catch(onError);
             } else {
-              remove.mutate(item.wine.id, { onError });
+              // Delete every chosen_wines row in this wine's review group so the
+              // whole wine leaves the list (not just the head entry).
+              const gid = (item.wine as ChosenWine).review_group_id ?? item.wine.id;
+              const ids = chosenWines.filter((c) => (c.review_group_id ?? c.id) === gid).map((c) => c.id);
+              (ids.length ? ids : [item.wine.id]).forEach((id) => remove.mutate(id, { onError }));
             }
           },
         },
