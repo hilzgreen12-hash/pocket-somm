@@ -233,6 +233,11 @@ export default function LabelResultsScreen() {
   useEffect(() => {
     if (candidatesTriedRef.current) return;
     if (!isIntelOnlyFlow || !intelligence || !wineDetailsConfirmed) return;
+    // Only offer disambiguation on a FRESH scan (fresh=1) — the label reading may
+    // be off, so we let the user pick the right bottling. When VIEWING a saved
+    // label's intel (Label Library, restaurants, lineup — no fresh=1), the wine
+    // is already confirmed; the "Which wine is this?" prompt must not appear.
+    if (fresh !== '1' || awaitingConfirm) return;
     // Offer disambiguation whenever Wine-Searcher couldn't verify the wine — the
     // score/value are then Vinster estimates, and the label reading may be off
     // (a missed cuvée). A verified real record means no need to ask.
