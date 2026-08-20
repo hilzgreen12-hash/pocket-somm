@@ -572,7 +572,7 @@ export default function MyLabelsScreen() {
         </View>
       ) : (
         <>
-          <Text style={styles.filterHint}>Tap a label to enlarge · Hold for intel, review & options</Text>
+          <Text style={styles.filterHint}>Tap a label to enlarge · Tap the wine name for intel, review & options</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
