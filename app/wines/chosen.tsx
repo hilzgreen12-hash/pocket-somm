@@ -1291,6 +1291,9 @@ export default function ChosenWinesScreen() {
       <Modal visible={!!reviewPrompt} transparent animationType="fade" onRequestClose={() => setReviewPrompt(null)}>
         <View style={styles.promptOverlay}>
           <View style={styles.promptSheet}>
+            <TouchableOpacity style={styles.promptClose} onPress={() => setReviewPrompt(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
+              <Text style={styles.promptCloseText}>✕</Text>
+            </TouchableOpacity>
             <Text style={styles.promptTitle}>Wines you drank recently are awaiting your review</Text>
             <Text style={styles.promptSubheader}>Select a wine to review it</Text>
             <ScrollView style={{ maxHeight: 320 }} alwaysBounceVertical={false}>
@@ -1669,7 +1672,9 @@ const styles = StyleSheet.create({
   // On-open review prompt.
   promptOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   promptSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 440 },
-  promptTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  promptClose: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 10, padding: 6 },
+  promptCloseText: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted, lineHeight: 20 },
+  promptTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm, paddingHorizontal: spacing.lg },
   promptBody: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, lineHeight: 22, textAlign: 'center' },
   promptWine: { fontFamily: fonts.bodySemibold, color: colors.gold },
   promptCheckRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.lg },
