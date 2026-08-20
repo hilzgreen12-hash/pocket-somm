@@ -14,6 +14,7 @@ import { entriesOf } from './cellarReview';
 // so reviewDedup and the chosen-wines API can share it without an import
 // cycle. Re-exported so existing importers of wineNameKey here keep working.
 export { wineNameKey } from './wineIdentity';
+import { wineNameKey as _wineNameKey } from './wineIdentity';
 
 // A chosen_wines row counts as reviewed once it carries any review content
 // (mirrors the predicate in app/wines/chosen.tsx).
@@ -49,27 +50,32 @@ export function findWineConnections(
   opts?: { excludeChosenId?: string; excludeLabelId?: string; excludeCellarId?: string },
 ): WineConnections {
   const wantId = identity.wsWineId ?? null;
-  // Cross-linking is anchored SOLELY to the Wine-Searcher id — the registry-
-  // backed, authoritative identity. The old normalized-name fallback is gone: it
-  // linked (and mis-linked) on shared words and never linked reliably. A wine
-  // with no id (Wine-Searcher can't identify it) intentionally shows no
-  // connections rather than risk a wrong one. Older rows are stamped with their
-  // id by the one-off backfill (services/backfillWsIds.ts); every new scan
-  // captures it at input.
-  if (!wantId) return EMPTY_CONNECTIONS;
+  // Cross-linking prefers the Wine-Searcher id — the registry-backed, authoritative
+  // identity: when BOTH sides carry an id we trust it (equal = same wine). But
+  // OBSCURE wines Wine-Searcher can't identify have no id on either side, so an
+  // id-only match left them permanently disconnected (a reviewed label still read
+  // "awaiting review"). So when either side lacks an id, fall back to a STRICT
+  // name-identity key (accent/article/word-order tolerant, vintage stripped) — the
+  // same wineNameKey the cellar/lineup matching uses, not the old loose substring.
+  const wantKey = _wineNameKey(identity.producer, identity.wineName ?? null);
+  if (!wantId && !wantKey) return EMPTY_CONNECTIONS;
 
   const wantVintage = identity.vintage != null ? String(identity.vintage).trim() : '';
 
-  const matches = (recId: string | null | undefined) => recId != null && recId === wantId;
+  const matches = (rec: { ws_wine_id?: string | null; producer?: string | null; wine_name?: string | null }) => {
+    const rid = rec.ws_wine_id ?? null;
+    if (wantId && rid) return wantId === rid;                 // both registry-identified
+    return !!wantKey && _wineNameKey(rec.producer, rec.wine_name) === wantKey;
+  };
 
   const labels = (data.labels ?? []).filter(
-    (l) => matches(l.ws_wine_id) && l.id !== opts?.excludeLabelId,
+    (l) => matches(l) && l.id !== opts?.excludeLabelId,
   );
   const cellarWines = (data.cellarWines ?? []).filter(
-    (w) => matches(w.ws_wine_id) && w.id !== opts?.excludeCellarId,
+    (w) => matches({ ws_wine_id: w.ws_wine_id, producer: w.producer, wine_name: w.wine_name }) && w.id !== opts?.excludeCellarId,
   );
   const restaurantPicks = (data.chosenWines ?? []).filter(
-    (w) => matches(w.ws_wine_id) && w.id !== opts?.excludeChosenId,
+    (w) => matches(w) && w.id !== opts?.excludeChosenId,
   );
 
   const reviewedChosen = restaurantPicks.filter(chosenHasReview);
