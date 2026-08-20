@@ -796,6 +796,9 @@ export default function RestaurantReviewsScreen() {
           city={editing.city}
           date={formatDate(editing.capturedAt)}
           capturedAt={editing.capturedAt}
+          restaurantPhotoPath={editing.restaurantPhotoPath}
+          onViewPhoto={editing.restaurantPhotoPath ? () => setViewerPhoto({ path: editing.restaurantPhotoPath!, name: editing.restaurantName || 'Photo of the night' }) : undefined}
+          onAddPhoto={() => attachRestaurantPhoto.present({ sessionId: editing.id, restaurant: editing.restaurantName, city: editing.city, hasPhoto: !!editing.restaurantPhotoPath })}
           wines={findChosenForVisit(editing).map((cw) => ({
             producer: cw.producer,
             wineName: cw.wine_name,

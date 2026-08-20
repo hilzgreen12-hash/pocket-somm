@@ -19,6 +19,8 @@ import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
+import { LabelThumb } from './LabelThumb';
+import { AddPhotoThumb } from './AddPhotoThumb';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { COMMUNITY_ENABLED } from '../constants/features';
@@ -71,11 +73,18 @@ interface Props {
   // Reports the saved name + city back so callers (e.g. the List results
   // card) can reflect edits without refetching.
   onSaved: (details?: { name: string | null; city: string | null }) => void;
+  // The restaurant "photo of the night" shown on the Your Restaurants list —
+  // mirrored at the top of this card. Tap to view full-screen (onViewPhoto), or
+  // add one when there's none yet (onAddPhoto).
+  restaurantPhotoPath?: string | null;
+  onViewPhoto?: () => void;
+  onAddPhoto?: () => void;
 }
 
 export function RestaurantReviewModal({
   visible, sessionId, initialName, initialNote, initialRatings, initialFavourite,
   city, date, capturedAt, wines, onReviewWine, onViewIntel, onEditWine, onDeleteWine, onClose, onSaved,
+  restaurantPhotoPath, onViewPhoto, onAddPhoto,
 }: Props) {
   const qc = useQueryClient();
   const { session } = useAuth();
@@ -589,6 +598,17 @@ export function RestaurantReviewModal({
           </View>
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
+            {/* Photo of the night — same thumbnail shown on the Your Restaurants
+                list. Tap to view full-screen, or add one when there's none. */}
+            <View style={styles.photoRow}>
+              {restaurantPhotoPath ? (
+                <TouchableOpacity onPress={() => onViewPhoto?.()} activeOpacity={0.85}>
+                  <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoThumb} radius={8} frame={3} />
+                </TouchableOpacity>
+              ) : (
+                <AddPhotoThumb style={styles.photoThumb} radius={8} onPress={() => onAddPhoto?.()} />
+              )}
+            </View>
             {/* Restaurant + location read as headers at the top, date below —
                 all prefilled from the scan, editable here. */}
             <TextInput
@@ -877,6 +897,8 @@ const styles = StyleSheet.create({
   favouriteStarActive: { color: colors.gold },
   content: { padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
   // Restaurant + location read as headers; date beneath.
+  photoRow: { alignItems: 'center', marginBottom: spacing.md },
+  photoThumb: { width: 96, height: 128 },
   restaurantHeaderInput: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, letterSpacing: 0.3, paddingVertical: 2 },
   locationHeaderInput: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, paddingVertical: 2, marginTop: 2 },
   dateHeader: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
