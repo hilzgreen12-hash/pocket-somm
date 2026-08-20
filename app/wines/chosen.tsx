@@ -430,6 +430,27 @@ export default function ChosenWinesScreen() {
   // — that pushes a duplicate on top, which is why Back then needed several
   // presses to escape).
   const returnToLibrary = () => router.dismissTo((params.backTo ? decodeURIComponent(params.backTo) : '/scan/archive') as any);
+
+  // After saving a review that arrived via a Label-Library link, land on THIS
+  // wine's review detail card (showing the entry just made) instead of bouncing
+  // back to the library. Refetches so the new entry is present, then opens the
+  // unified detail view; Back from there returns to the library (cameViaLink).
+  async function openSavedReviewDetail(target: { id?: string | null; producer?: string | null; wineName?: string | null; vintage?: string | number | null }) {
+    try { await qc.refetchQueries({ queryKey: ['chosen-wines', session?.user.id] }); } catch { /* fall back to cache */ }
+    const fresh = (qc.getQueryData(['chosen-wines', session?.user.id]) as ChosenWine[] | undefined) ?? chosenWines;
+    const wantKey = idKey({ producer: target.producer, wine_name: target.wineName, vintage: target.vintage });
+    let match = target.id ? fresh.find((w) => w.id === target.id) : undefined;
+    if (!match) match = fresh.find((w) => idKey(w) === wantKey && chosenHasReview(w));
+    if (!match) match = fresh.find((w) => idKey(w) === wantKey);
+    if (!match) { returnToLibrary(); return; }
+    const gid = match.review_group_id ?? match.id;
+    const entries = fresh
+      .filter((w) => (w.review_group_id ?? w.id) === gid)
+      .sort((a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime());
+    const source: 'restaurant' | 'other' = match.source === 'other' ? 'other' : 'restaurant';
+    setDetailItem({ source, date: entries[0]?.chosen_at ?? '', score: entries[0]?.user_score ?? null, wine: entries[0] ?? match, entries: entries.length ? entries : [match] });
+  }
+
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
     // Don't nudge when arriving from the Label Library to view/create a review —
@@ -939,7 +960,13 @@ export default function ChosenWinesScreen() {
         wine={editingWine ? (chosenWines.find((w) => w.id === editingWine.id) ?? editingWine) : null}
         visible={!!editingWine}
         onClose={() => { setEditingWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLabelLink) returnToLibrary(); }}
-        onSaved={() => { setEditingWine(null); returnToDetailRef.current = null; if (cameViaLabelLink) returnToLibrary(); }}
+        onSaved={() => {
+          const w = editingWine;
+          setEditingWine(null);
+          if (returnToDetailRef.current) { returnToDetailRef.current = null; return; }
+          // Came via a Label-Library link → show this wine's review detail card.
+          if (cameViaLabelLink && w) { void openSavedReviewDetail({ id: w.id, producer: w.producer, wineName: w.wine_name, vintage: w.vintage }); }
+        }}
       />
 
       <ReviewDetailModal
@@ -1030,7 +1057,12 @@ export default function ChosenWinesScreen() {
         addToGroupId={addToGroupId}
         source={addSource}
         onClose={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) returnToLibrary(); }}
-        onSaved={() => { setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null); if (cameViaLabelLink) returnToLibrary(); }}
+        onSaved={() => {
+          const init = addInitial;
+          setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null);
+          // Came via a Label-Library link → show this wine's review detail card.
+          if (cameViaLabelLink) { void openSavedReviewDetail({ producer: init?.producer, wineName: init?.wineName, vintage: init?.vintage }); }
+        }}
       />
 
       {/* "+ Add" step 1 — "Add a Wine Review": pick the collection. Restaurant
