@@ -42,6 +42,7 @@ import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModa
 import { PackagingPrompt } from '../../src/components/PackagingPrompt';
 import { MicButton } from '../../src/components/MicButton';
 import { SearchProgress } from '../../src/components/SearchProgress';
+import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
@@ -354,6 +355,7 @@ export default function CellarWineDetail() {
   const [producerRange, setProducerRange] = useState<ProducerRange | null>(null);
   const [producerRangeLoading, setProducerRangeLoading] = useState(false);
   const producerRangeTriedRef = useRef<string | null>(null);
+  const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
   useEffect(() => {
     if (!wine || isWishlist || isArchived) return;
     const hasIntel = wine.critic_score != null || wine.estimated_value != null;
@@ -1869,10 +1871,13 @@ export default function CellarWineDetail() {
         {producerRangeLoading || (producerRange && producerRange.wines.length > 0) ? (
           <View style={styles.rangeSection}>
             <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
+            {producerRange && producerRange.wines.length > 0 ? (
+              <Text style={styles.rangeHint}>Tap a wine for its inside line</Text>
+            ) : null}
             {producerRange ? (
               <>
                 {producerRange.wines.map((rw, i) => (
-                  <View key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]}>
+                  <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={0.7}>
                     <View style={styles.rangeRowMain}>
                       <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
                       <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
@@ -1881,7 +1886,7 @@ export default function CellarWineDetail() {
                       <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(preferences?.defaultCurrency ?? wine.estimated_value_currency ?? 'GBP').repeat(rw.band)}</Text>
                       {rw.tier ? <Text style={styles.rangeTier}>{rw.tier}</Text> : null}
                     </View>
-                  </View>
+                  </TouchableOpacity>
                 ))}
                 {producerRange.summary ? <Text style={styles.rangeSummary}>{producerRange.summary}</Text> : null}
               </>
@@ -1893,6 +1898,15 @@ export default function CellarWineDetail() {
             )}
           </View>
         ) : null}
+
+        {/* Inside-line note for a tapped range wine. */}
+        <RangeWineNoteSheet
+          producer={wine.producer}
+          wineName={rangeNoteWine}
+          region={wine.region}
+          visible={!!rangeNoteWine}
+          onClose={() => setRangeNoteWine(null)}
+        />
         </>
       ) : null}
 
@@ -2325,6 +2339,7 @@ const styles = StyleSheet.create({
   insiderBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 23 },
   rangeSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  rangeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
   rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },

@@ -197,6 +197,29 @@ export async function fetchVinsterReview(input: {
   } catch { return null; }
 }
 
+export interface RangeWineNote {
+  grape: string | null;
+  region: string | null;
+  style: string | null;
+  note: string;
+}
+
+// On-demand "inside line" for one wine tapped in a producer's range — technical
+// details (grape/region/style) plus a short in-the-know note. Returns null on
+// any failure so the caller can show a graceful retry.
+export async function fetchRangeWineNote(input: { producer?: string | null; wineName?: string | null; region?: string | null }): Promise<RangeWineNote | null> {
+  if (!input.producer?.trim() && !input.wineName?.trim()) return null;
+  try {
+    const data = await invokeResilient('range-wine-note', {
+      producer: input.producer ?? null,
+      wineName: input.wineName ?? null,
+      region: input.region ?? null,
+    }, { timeoutMs: 30000, retries: 1 }) as Partial<RangeWineNote> & { error?: string };
+    if (data?.error || !data?.note?.trim()) return null;
+    return { grape: data.grape ?? null, region: data.region ?? null, style: data.style ?? null, note: data.note.trim() };
+  } catch { return null; }
+}
+
 // Reuses the same Serper image-search edge function, but passes a full free-text
 // `query` (which the function searches as-is — no "wine bottle" suffix) so we get
 // photos of the restaurant itself rather than bottles.

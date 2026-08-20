@@ -5,6 +5,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
+import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -152,6 +153,8 @@ export default function LabelResultsScreen() {
   const [producerRange, setProducerRange] = useState<ProducerRange | null>(null);
   const [producerRangeLoading, setProducerRangeLoading] = useState(false);
   const producerRangeTriedRef = useRef(false);
+  // The range wine the user tapped for its "inside line" note.
+  const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   // Confirm-first: when the scan couldn't be verified against Wine-Searcher,
   // camera.tsx routes here with confirm=1 and no intel yet. We show typo/OCR-
@@ -1825,10 +1828,13 @@ export default function LabelResultsScreen() {
           {isIntelOnlyFlow && (producerRangeLoading || (producerRange && producerRange.wines.length > 0)) ? (
             <View style={styles.section}>
               <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
+              {producerRange && producerRange.wines.length > 0 ? (
+                <Text style={styles.rangeHint}>Tap a wine for its inside line</Text>
+              ) : null}
               {producerRange ? (
                 <>
                   {producerRange.wines.map((rw, i) => (
-                    <View key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]}>
+                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={0.7}>
                       <View style={styles.rangeRowMain}>
                         <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
                         <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
@@ -1837,7 +1843,7 @@ export default function LabelResultsScreen() {
                         <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(userCurrency).repeat(rw.band)}</Text>
                         {rw.tier ? <Text style={styles.rangeTier}>{rw.tier}</Text> : null}
                       </View>
-                    </View>
+                    </TouchableOpacity>
                   ))}
                   {producerRange.summary ? <Text style={styles.rangeSummary}>{producerRange.summary}</Text> : null}
                 </>
@@ -1849,6 +1855,15 @@ export default function LabelResultsScreen() {
               )}
             </View>
           ) : null}
+
+          {/* Inside-line note for a tapped range wine. */}
+          <RangeWineNoteSheet
+            producer={wine.producer}
+            wineName={rangeNoteWine}
+            region={wine.region}
+            visible={!!rangeNoteWine}
+            onClose={() => setRangeNoteWine(null)}
+          />
         </>
       )}
 
@@ -2457,6 +2472,7 @@ const styles = StyleSheet.create({
   // Producer range ladder — entry → flagship, this wine highlighted. Header gold
   // to match The Inside Line above it.
   rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
+  rangeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
   rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
