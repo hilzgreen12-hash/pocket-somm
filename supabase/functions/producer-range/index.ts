@@ -11,8 +11,16 @@
 // currency symbol without N live market lookups.
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+
+// Cache the generated lineup by (producer + wine) so the SAME wine's intel card
+// returns the identical range every time (the LLM is non-deterministic, which
+// made the range change on each re-open). Service-role client bypasses RLS.
+const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
+const cacheKeyOf = (producer: string, wineName: string) =>
+  `${producer}|${wineName}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
 
 interface RangeWine {
   wineName: string;
@@ -27,6 +35,13 @@ Deno.serve(async (req) => {
     if (!producer || !String(producer).trim()) {
       return json({ wines: [], summary: null }, 200);
     }
+
+    // Cache hit → return the exact same range as last time (deterministic).
+    const cacheKey = cacheKeyOf(String(producer), String(wineName ?? ''));
+    try {
+      const { data: cached } = await admin.from('producer_range_cache').select('response').eq('cache_key', cacheKey).maybeSingle();
+      if (cached?.response) return json(cached.response, 200);
+    } catch (e) { console.warn('[producer-range] cache read failed (continuing):', e); }
 
     const prompt = `A wine label was scanned and identified as:
 - Producer: "${producer ?? ''}"
@@ -103,7 +118,14 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
       ? parsed.summary.trim()
       : null;
 
-    return json({ wines, summary }, 200);
+    const result = { wines, summary };
+    // Cache it so this wine's range is stable on every future open. Only cache a
+    // non-empty result — an empty/failed generation should be retried next time.
+    if (wines.length > 0) {
+      try { await admin.from('producer_range_cache').upsert({ cache_key: cacheKey, response: result }); }
+      catch (e) { console.warn('[producer-range] cache write failed:', e); }
+    }
+    return json(result, 200);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error('producer-range error:', message);
