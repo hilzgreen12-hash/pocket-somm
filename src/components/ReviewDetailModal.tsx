@@ -3,6 +3,7 @@ import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIn
 import { Ionicons } from '@expo/vector-icons';
 import { LabelThumb } from './LabelThumb';
 import { AddPhotoThumb } from './AddPhotoThumb';
+import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { fetchVinsterReview } from '../api/label';
 import { colors, spacing } from '../constants/theme';
@@ -45,6 +46,7 @@ export function ReviewDetailModal({
   const [noteOpen, setNoteOpen] = useState(false);
   const [fetchedNote, setFetchedNote] = useState<string | null>(null);
   const [noteLoading, setNoteLoading] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   // A new review opened → reset the collapsible + its fetched note.
   const reviewKey = review ? `${review.title}|${review.entries[0]?.id ?? ''}` : null;
@@ -104,7 +106,9 @@ export function ReviewDetailModal({
               back / Share controls above it. */}
           <View style={styles.headerRow}>
             {thumbPath ? (
-              <LabelThumb path={thumbPath} fallbackText={review.title} style={styles.headerThumb} radius={5} frame={0} />
+              <TouchableOpacity onPress={() => setViewerOpen(true)} activeOpacity={0.85}>
+                <LabelThumb path={thumbPath} fallbackText={review.title} style={styles.headerThumb} radius={5} frame={0} />
+              </TouchableOpacity>
             ) : (
               <AddPhotoThumb style={styles.headerThumb} radius={5} onPress={() => onAddPhoto?.()} />
             )}
@@ -209,6 +213,13 @@ export function ReviewDetailModal({
             );
           })}
         </ScrollView>
+        {/* Full-screen zoomable viewer for the header thumbnail. */}
+        <LabelPhotoViewer
+          visible={viewerOpen}
+          path={thumbPath}
+          fallbackText={review.title}
+          onClose={() => setViewerOpen(false)}
+        />
       </View>
     </Modal>
   );

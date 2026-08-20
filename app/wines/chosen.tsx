@@ -25,6 +25,7 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
+import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -162,6 +163,8 @@ export default function ChosenWinesScreen() {
   const [editingWine, setEditingWine] = useState<ChosenWine | null>(null);
   // Every review (restaurant / cellar / other) opens the same unified detail view.
   const [detailItem, setDetailItem] = useState<ReviewItem | null>(null);
+  // A label thumbnail tapped (in the list) to view full-screen.
+  const [expandedThumb, setExpandedThumb] = useState<{ path: string; name?: string | null } | null>(null);
   // The detail card that spawned an Edit — so closing the editor returns to the
   // card, not out to the list. A REF (not state) so that a delete, which fires
   // onSaved() then onClose() synchronously, clears it in onSaved before onClose
@@ -1311,6 +1314,14 @@ export default function ChosenWinesScreen() {
         </View>
       </Modal>
 
+      {/* Full-screen zoomable viewer for a tapped label thumbnail. */}
+      <LabelPhotoViewer
+        visible={!!expandedThumb}
+        path={expandedThumb?.path}
+        fallbackText={expandedThumb?.name ?? undefined}
+        onClose={() => setExpandedThumb(null)}
+      />
+
 {/* Fullscreen overlay while the chosen photo is being read. Sits
           above the screen so the user can't tap "+ Add" again mid-scan. */}
       {uploading ? (
@@ -1541,7 +1552,9 @@ export default function ChosenWinesScreen() {
                 >
                   <View style={styles.cardCompactOuter}>
                     {thumbPath ? (
-                      <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
+                      <TouchableOpacity onPress={() => setExpandedThumb({ path: thumbPath, name: w.wine_name })} activeOpacity={0.85}>
+                        <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
+                      </TouchableOpacity>
                     ) : (
                       // No label shot (e.g. a wine picked from a scanned list) —
                       // offer to add one right from the review card.
