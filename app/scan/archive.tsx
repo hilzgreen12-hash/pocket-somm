@@ -680,12 +680,9 @@ export default function MyLabelsScreen() {
                         ? `${conn.reviewCount} Review${conn.reviewCount === 1 ? '' : 's'}`
                         : 'Awaiting review'}
                     </Text>
-                    {/* Dated links to where this wine also lives. */}
-                    {conn?.lastReviewedIso ? (
-                      <TouchableOpacity onPress={() => openReviewedLink(conn)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                        <Text style={styles.rowLink}>Reviewed {new Date(conn.lastReviewedIso).toLocaleDateString('en-GB')}</Text>
-                      </TouchableOpacity>
-                    ) : null}
+                    {/* The review status line above is enough — the "Reviewed
+                        {date}" link is removed; the wine name opens the options
+                        (incl. View Your Review). */}
                     {cellar ? (
                       <TouchableOpacity onPress={() => router.push(`/cellar/${cellar.id}` as any)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                         <Text style={styles.rowLink}>Added to Cellar: {cellar.date_received ? new Date(cellar.date_received).toLocaleDateString('en-GB') : '—'}</Text>
