@@ -8,6 +8,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
@@ -139,9 +140,10 @@ function PairingCardSaved({
 // Build a short "You requested…" line from the recipe filters so the user
 // sees, on the results card, what they asked Vinster for. (A future
 // iteration can swap this for an AI-written summary from the edge function.)
-// Just the preferences the user actually set — dietary, allergens, regional /
-// nutritional leanings and any free-text concerns. No "you requested a recipe"
-// preamble (obvious) and no user identity; the label reads simply "Brief:".
+// Every parameter the user actually set — dietary, allergens, regional /
+// nutritional leanings, course, party size, difficulty, time, and any
+// free-text concerns. No "you requested a recipe" preamble and no user
+// identity; the section is headed "Your Brief".
 function buildBriefSummary(filters: Record<string, any> | null | undefined): string | null {
   if (!filters) return null;
   const prefs: string[] = [];
@@ -149,6 +151,10 @@ function buildBriefSummary(filters: Record<string, any> | null | undefined): str
   if (Array.isArray(filters.allergens)) prefs.push(...filters.allergens.map((a: any) => String(a)));
   if (Array.isArray(filters.regionalPreferences)) prefs.push(...filters.regionalPreferences.map((a: any) => String(a)));
   if (Array.isArray(filters.nutritionalPreferences)) prefs.push(...filters.nutritionalPreferences.map((a: any) => String(a)));
+  if (filters.course) prefs.push(String(filters.course));
+  if (filters.servings) prefs.push(`${filters.servings} ${Number(filters.servings) === 1 ? 'person' : 'people'}`);
+  if (filters.difficulty) prefs.push(`${String(filters.difficulty)} difficulty`);
+  if (filters.timeConsideration) prefs.push(String(filters.timeConsideration));
   const list = prefs.map((p) => p.trim()).filter(Boolean).join(', ');
   const concerns = typeof filters.specificConcerns === 'string' ? filters.specificConcerns.trim() : '';
   const combined = [list, concerns].filter(Boolean).join(' — ');
@@ -464,24 +470,23 @@ export default function ChefResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
+      <Text style={styles.pageTitle}>Pairing to a Wine</Text>
+
+      {/* Your Brief — the wine and the preferences behind these recipes.
+          Hidden for cookbook entries (the saved-recipe card carries its own
+          recipe-name-first layout with the wine as subhead). */}
+      {!isFromHistory && (
+        <View style={styles.freshHeader}>
+          <Text style={styles.briefLabel}>Your Brief</Text>
+          <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${regionWithCountry(wine.region)}` : ''}</Text>
+          {briefSummary ? <Text style={styles.briefSummary}>{briefSummary}</Text> : null}
+        </View>
+      )}
+
       {(stampDate || stampLocation) && (
         <View style={styles.stampRow}>
           {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
           {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
-        </View>
-      )}
-
-      {/* Wine header is hidden for cookbook entries — the saved-recipe
-          card carries its own recipe-name-first layout with the wine
-          as subhead. Fresh-result flow keeps the wine header at top. */}
-      {!isFromHistory && (
-        <View style={styles.freshHeader}>
-          <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${wine.region}` : ''}</Text>
-          {briefSummary ? (
-            <Text style={styles.briefSummary}>
-              <Text style={styles.briefSummaryLabel}>Brief: </Text>{briefSummary}
-            </Text>
-          ) : null}
         </View>
       )}
 
@@ -640,6 +645,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   backRow: { paddingHorizontal: spacing.xl, paddingTop: 56, paddingBottom: spacing.sm },
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // Page title — matches "Pairing to a Recipe" on the sibling results page.
+  pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
   stampRow: { alignItems: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, gap: 2 },
   stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
@@ -652,9 +659,10 @@ const styles = StyleSheet.create({
   // Fresh-result header — wine line centred in gold beneath the date, with
   // a "Brief Summary" of the requested requirements below it.
   freshHeader: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md, alignItems: 'center' },
-  freshWineLine: { fontSize: 20, fontFamily: fonts.headingBold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, lineHeight: 26 },
-  briefSummary: { fontSize: 14, fontFamily: fonts.bodyRegular, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 20, marginTop: spacing.sm },
-  briefSummaryLabel: { fontFamily: fonts.bodySemibold, color: '#FFFFFF' },
+  // "Your Brief" label — matches the sibling page's headerLine.
+  briefLabel: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing.xs },
+  freshWineLine: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, lineHeight: 28 },
+  briefSummary: { fontSize: 13, fontFamily: fonts.bodyRegular, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 19, marginTop: spacing.sm },
   section: { padding: spacing.xl },
   sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },

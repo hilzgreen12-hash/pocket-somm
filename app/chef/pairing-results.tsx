@@ -291,12 +291,7 @@ export default function PairingResultsScreen() {
       </TouchableOpacity>
 
       <View ref={shareRef} collapsable={false} style={styles.shareArea}>
-        {(stampDate || stampLocation) && (
-          <View style={styles.stampRow}>
-            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
-            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
-          </View>
-        )}
+        <Text style={styles.pageTitle}>Pairing to a Recipe</Text>
 
         <View style={styles.header}>
           <Text style={styles.headerLine}>Your Brief</Text>
@@ -307,6 +302,13 @@ export default function PairingResultsScreen() {
             </TouchableOpacity>
           )}
         </View>
+
+        {(stampDate || stampLocation) && (
+          <View style={styles.stampRow}>
+            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
+            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+          </View>
+        )}
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{mode === 'cellar' ? 'From Your Cellar' : 'Style Recommendations'}</Text>
@@ -404,14 +406,16 @@ const styles = StyleSheet.create({
   stampRow: { alignItems: 'center', gap: 2, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
-  header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Page title — matches "Pairing to a Wine" on the sibling results page.
+  pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, paddingTop: spacing.xs, marginBottom: spacing.md },
+  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: 'center' },
   headerLine: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
   // The dish text is the user's free-form brief — promote it from a
   // 15pt subline to the visual headline of the page (was previously
   // dominated by "Your Pairing" at 20pt bold). Now reads as a proper
   // headline so the user can quickly see what they asked for.
-  dish: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, marginTop: spacing.xs, lineHeight: 28 },
-  cellarPromptLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textDecorationLine: 'underline', marginTop: spacing.md },
+  dish: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, marginTop: spacing.xs, lineHeight: 28, textAlign: 'center' },
+  cellarPromptLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textDecorationLine: 'underline', marginTop: spacing.md, textAlign: 'center' },
   successTick: { fontFamily: fonts.headingBold, fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   successCount: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
   section: { padding: spacing.xl },
