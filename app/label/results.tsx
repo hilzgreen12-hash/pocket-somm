@@ -13,8 +13,6 @@ import { useLabelStore } from '../../src/stores/labelStore';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { useLabels } from '../../src/hooks/useLabels';
 import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
-import { findWineConnections, EMPTY_CONNECTIONS } from '../../src/utils/wineConnections';
-import { WineConnectionsPanel } from '../../src/components/WineConnectionsPanel';
 import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
@@ -123,18 +121,6 @@ export default function LabelResultsScreen() {
   const { preferences } = usePreferences();
   const qc = useQueryClient();
   const userCurrency = preferences?.defaultCurrency ?? 'GBP';
-
-  // "You've had this before" — cross-link the scanned wine to the user's own
-  // reviews, restaurant picks and cellar (vintage-agnostic identity match).
-  const connections = useMemo(
-    () => (isIntelOnlyFlow && wineDetailsConfirmed
-      ? findWineConnections(
-          { producer: wineDetailsConfirmed.producer, wineName: wineDetailsConfirmed.wineName, vintage: wineDetailsConfirmed.vintage, wsWineId: intelligence?.wsWineId },
-          { labels, chosenWines, cellarWines: wines },
-        )
-      : EMPTY_CONNECTIONS),
-    [isIntelOnlyFlow, wineDetailsConfirmed, intelligence, labels, chosenWines, wines],
-  );
 
   // When Generate Wine Intel comes back empty (no score, no value) it's almost
   // always a misspelt / wrongly-ordered name — prompt the user to check it.
@@ -1871,15 +1857,6 @@ export default function LabelResultsScreen() {
           />
         </>
       )}
-
-      {isIntelOnlyFlow ? (
-        <WineConnectionsPanel
-          connections={connections}
-          onOpenReviews={() => router.push('/wines/chosen')}
-          onOpenRestaurant={() => router.push('/wines/chosen')}
-          onOpenCellar={(id) => router.push(`/cellar/${id}` as any)}
-        />
-      ) : null}
 
       {/* Generate Wine Intel (view-only) gets the two deep-dive actions beneath
           Vinster's note. Estimated value now lives in the compact grid above,
