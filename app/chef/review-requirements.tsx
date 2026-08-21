@@ -62,6 +62,8 @@ export default function ReviewRequirementsScreen() {
   // Holds the picked screenshot while it's being read (Mode B upload).
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
+  // "Choose Your Wine" chooser — Scan / Upload / Cellar / Manual.
+  const [wineChooserOpen, setWineChooserOpen] = useState(false);
 
   const timeBlock = TIME_OPTIONS.find((t) => t.value === timeChoice) ?? TIME_OPTIONS[0];
   const timeDisplay = timeBlock.sub ? `${timeBlock.label} · ${timeBlock.sub}` : timeBlock.label;
@@ -156,6 +158,15 @@ export default function ReviewRequirementsScreen() {
     } finally {
       setUploadingImage(null);
     }
+  }
+
+  // Mode B alternative — type the wine in by hand. Stash the requirements,
+  // clear any stale scan, and open the confirm form with blank fields; the
+  // user fills them and Confirm generates the pairings.
+  function handleManual() {
+    setFilters(buildFilters() as unknown as Record<string, unknown>);
+    setWineDetails({ producer: '', region: '', wineName: null, vintage: '', style: null } as any);
+    router.push('/chef/confirm');
   }
 
   // Mode B alternative — pick a wine already in the cellar, skip scanning,
@@ -337,19 +348,9 @@ export default function ReviewRequirementsScreen() {
           <Text style={styles.continueButtonText}>{loading ? 'Crafting pairings…' : 'Get Pairings'}</Text>
         </TouchableOpacity>
       ) : (
-        <>
-          <View style={styles.scanRow}>
-            <TouchableOpacity style={[styles.continueButton, styles.halfButton]} onPress={handleScan}>
-              <Text style={styles.continueButtonText}>Scan a Wine Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.continueButton, styles.halfButton]} onPress={handleUpload}>
-              <Text style={styles.continueButtonText}>Upload Wine Label</Text>
-            </TouchableOpacity>
-          </View>
-          <TouchableOpacity style={[styles.continueButton, { marginTop: spacing.sm }]} onPress={() => setCellarPickerOpen(true)}>
-            <Text style={styles.continueButtonText}>Select From Your Cellar</Text>
-          </TouchableOpacity>
-        </>
+        <TouchableOpacity style={styles.chooseWineButton} onPress={() => setWineChooserOpen(true)}>
+          <Text style={styles.chooseWineButtonText}>Choose Your Wine</Text>
+        </TouchableOpacity>
       )}
 
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
@@ -404,6 +405,30 @@ export default function ReviewRequirementsScreen() {
         </View>
       </Modal>
 
+      {/* "Choose Your Wine" — the four ways to hand Vinster the bottle. */}
+      <Modal visible={wineChooserOpen} transparent animationType="fade" onRequestClose={() => setWineChooserOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setWineChooserOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Choose Your Wine</Text>
+            <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); handleScan(); }} activeOpacity={0.8}>
+              <Text style={styles.chooserOptionText}>Scan a Wine Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); handleUpload(); }} activeOpacity={0.8}>
+              <Text style={styles.chooserOptionText}>Upload Wine Label</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); setCellarPickerOpen(true); }} activeOpacity={0.8}>
+              <Text style={styles.chooserOptionText}>Select From Your Cellar</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.chooserOption} onPress={() => { setWineChooserOpen(false); handleManual(); }} activeOpacity={0.8}>
+              <Text style={styles.chooserOptionText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={() => setWineChooserOpen(false)}>
+              <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
       {/* Select a wine from the cellar — picks a known bottle and generates
           pairings straight away, no scanning. */}
       <Modal visible={cellarPickerOpen} transparent animationType="fade" onRequestClose={() => setCellarPickerOpen(false)}>
@@ -434,31 +459,35 @@ export default function ReviewRequirementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 64, paddingHorizontal: spacing.xl, paddingBottom: 60 },
-  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
+  content: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 48 },
+  headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
+  divider: { height: 1, backgroundColor: colors.border, marginTop: spacing.xs, marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
   subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.sm },
-  label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: spacing.xs, letterSpacing: 0.3 },
+  label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: 2, letterSpacing: 0.3 },
   // Lower-case parenthetical beside the Dietary/Allergies labels.
   labelHint: { textTransform: 'none', fontFamily: fonts.bodyItalic, fontSize: 11, letterSpacing: 0, color: colors.textMuted },
-  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 72, textAlignVertical: 'top', marginBottom: spacing.lg },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, minHeight: 56, textAlignVertical: 'top', marginBottom: spacing.md },
   // Free-text box shown when "Other" is picked in the Dietary/Allergies dropdowns.
-  customInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginTop: -spacing.sm, marginBottom: spacing.lg },
-  select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginBottom: spacing.lg },
+  customInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginTop: -spacing.xs, marginBottom: spacing.md },
+  select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: 10, backgroundColor: colors.surface, marginBottom: spacing.md },
   selectValue: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flex: 1 },
   selectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
-  continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center' },
+  continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
   buttonDisabled: { opacity: 0.6 },
   continueButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
+  // "Choose Your Wine" — the single white primary button (Mode B).
+  chooseWineButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  chooseWineButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16, letterSpacing: 0.3 },
+  // Rows inside the "Choose Your Wine" chooser popup.
+  chooserOption: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
+  chooserOptionText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   back: { alignItems: 'center', paddingVertical: spacing.lg },
   backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   // Top-left Back, matching the rest of the app.
   backTop: { alignSelf: 'flex-start', marginBottom: spacing.md },
   backTopText: { color: colors.gold, fontFamily: fonts.bodyRegular, fontSize: 16 },
-  scanRow: { flexDirection: 'row', gap: spacing.sm },
-  halfButton: { flex: 1 },
   pickerEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 21, paddingVertical: spacing.md },
   pickerRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickerWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },

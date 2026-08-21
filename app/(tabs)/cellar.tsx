@@ -91,11 +91,11 @@ export default function CellarTab() {
 
       <View style={styles.divider} />
 
-      {/* Your Wine Cellar (the full list), Your Wines at Home (racks/fridges),
+      {/* Your Cellar List (the full list), Your Wines at Home (racks/fridges),
           and Your Cellar Statistics — grouped, in that order. */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
-          <Text style={styles.buttonText}>Your Wine Cellar</Text>
+          <Text style={styles.buttonText}>Your Cellar List</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
           <Text style={styles.buttonText}>Your Wines at Home</Text>
