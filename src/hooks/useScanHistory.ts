@@ -259,6 +259,20 @@ export function useScanHistory() {
       const { error } = await supabase.from('scan_sessions').delete().eq('id', id);
       if (error) throw error;
     },
+    // Optimistically drop the row from the archive list so a long-press delete
+    // removes it instantly instead of lagging on the network round-trip.
+    onMutate: async (id: string) => {
+      const key = ['scan-archive', session?.user.id];
+      await qc.cancelQueries({ queryKey: key });
+      const previous = qc.getQueryData(key);
+      qc.setQueryData(key, (old: any) =>
+        Array.isArray(old) ? old.filter((it: any) => it.id !== id) : old,
+      );
+      return { previous, key };
+    },
+    onError: (_err, _id, ctx) => {
+      if (ctx?.key) qc.setQueryData(ctx.key, ctx.previous);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scan-archive'] });
       qc.invalidateQueries({ queryKey: ['scan-sessions'] });

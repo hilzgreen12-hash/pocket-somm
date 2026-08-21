@@ -28,6 +28,9 @@ import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
+import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
+import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity, cityKey } from '../../src/utils/city';
@@ -215,6 +218,12 @@ export default function ChosenWinesScreen() {
   const [awaitingOnly, setAwaitingOnly] = useState(false);
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [search, setSearch] = useState('');
+  // Bespoke user-created filters (the "+ Add" chip), same as the Label Library.
+  const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('wine-review');
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
   // "+ Add" is a two-step chooser: first the collection (Restaurant / Cellar /
   // Other), then — for restaurant/other — Scan / Upload / Manual. Cellar routes
   // to a picker over the live cellar (a cellar review must attach to a real
@@ -644,6 +653,10 @@ export default function ChosenWinesScreen() {
     if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
     if (locationFilter !== 'All' && cityKey(cityFor(it)) !== cityKey(locationFilter)) return false;
     if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
+    if (activeCustomId) {
+      const f = customFilters.find((cf) => cf.id === activeCustomId);
+      if (!(f?.itemIds ?? []).includes(it.wine.id)) return false;
+    }
     if (q) {
       const w = it.wine as { producer?: string | null; wine_name?: string | null; region?: string | null; grape_variety?: string | null; vintage?: string | number | null };
       const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage != null ? String(w.vintage) : null]
@@ -671,6 +684,62 @@ export default function ChosenWinesScreen() {
     }
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
+
+  // Bespoke-filter management — mirrors the Label Library.
+  function applyCustom(id: string) {
+    setActiveCustomId((prev) => (prev === id ? null : id));
+  }
+  function openCreateFilter() {
+    setEditingFilter(null);
+    setFilterModalOpen(true);
+  }
+  function openFilterOptions(f: LibraryFilter) {
+    showAlert({
+      title: f.name,
+      body: 'Edit this filter’s name and wines, or delete it. Your reviews stay in the list either way.',
+      buttons: [
+        { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
+        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); removeFilter.mutate(f.id); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  async function saveFilter(name: string, ids: string[]) {
+    setSavingFilter(true);
+    try {
+      if (editingFilter) {
+        await renameFilter.mutateAsync({ filterId: editingFilter.id, name });
+        await setFilterItems.mutateAsync({ filterId: editingFilter.id, itemIds: ids });
+      } else {
+        await createFilter.mutateAsync({ name, itemIds: ids });
+      }
+      setFilterModalOpen(false);
+      setEditingFilter(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
+    }
+  }
+  // Items offered in the create/edit sheet — every reviewed/awaiting wine, by
+  // name + review date. Deduped by wine id (one entry per review group).
+  const filterItems = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { id: string; label: string; sublabel?: string }[] = [];
+    for (const it of items) {
+      if (!isShownReview(it)) continue;
+      if (seen.has(it.wine.id)) continue;
+      seen.add(it.wine.id);
+      const w = it.wine as ChosenWine;
+      out.push({
+        id: it.wine.id,
+        label: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name || w.producer || 'Wine',
+        sublabel: it.date ? new Date(it.date).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : undefined,
+      });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
 
   // Labels surfaced inside each chip's value line.
   const SORT_OPTIONS: { value: SortMode; label: string }[] = [
@@ -784,20 +853,50 @@ export default function ChosenWinesScreen() {
           text: 'Delete',
           style: 'destructive',
           onPress: () => {
+            const uid = session?.user.id;
             if (isCellar) {
+              // Optimistically clear the review fields on the cellar row so the
+              // wine leaves the reviews list instantly; the mutation reconciles.
+              qc.setQueryData(['cellar', uid], (old: any) =>
+                Array.isArray(old)
+                  ? old.map((c: any) =>
+                      c.id === item.wine.id
+                        ? { ...c, user_notes: null, review_score: null, review_location: null, review_date: null, review_entries: [] }
+                        : c,
+                    )
+                  : old,
+              );
               updateWine.mutate(
                 {
                   id: item.wine.id,
                   updates: { user_notes: null, review_score: null, review_location: null, review_date: null, review_entries: [] } as any,
                 },
-                { onError },
+                {
+                  onError: (err) => {
+                    qc.invalidateQueries({ queryKey: ['cellar', uid] });
+                    onError(err);
+                  },
+                },
               );
             } else {
               // Delete every chosen_wines row in this wine's review group so the
               // whole wine leaves the list (not just the head entry).
               const gid = (item.wine as ChosenWine).review_group_id ?? item.wine.id;
               const ids = chosenWines.filter((c) => (c.review_group_id ?? c.id) === gid).map((c) => c.id);
-              (ids.length ? ids : [item.wine.id]).forEach((id) => remove.mutate(id, { onError }));
+              const targets = ids.length ? ids : [item.wine.id];
+              const drop = new Set(targets);
+              // Optimistically remove the rows from the list so it updates instantly.
+              qc.setQueryData(['chosen-wines', uid], (old: any) =>
+                Array.isArray(old) ? old.filter((c: any) => !drop.has(c.id)) : old,
+              );
+              targets.forEach((id) =>
+                remove.mutate(id, {
+                  onError: (err) => {
+                    qc.invalidateQueries({ queryKey: ['chosen-wines', uid] });
+                    onError(err);
+                  },
+                }),
+              );
             }
           },
         },
@@ -1065,6 +1164,18 @@ export default function ChosenWinesScreen() {
           // Came via a Label-Library link → show this wine's review detail card.
           if (cameViaLabelLink) { void openSavedReviewDetail({ producer: init?.producer, wineName: init?.wineName, vintage: init?.vintage }); }
         }}
+      />
+
+      <LibraryFilterModal
+        visible={filterModalOpen}
+        title={editingFilter ? 'Edit filter' : 'New filter'}
+        itemNoun="wines"
+        items={filterItems}
+        initialName={editingFilter?.name}
+        initialSelected={editingFilter?.itemIds}
+        saving={savingFilter}
+        onSave={saveFilter}
+        onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
       />
 
       {/* "+ Add" step 1 — "Add a Wine Review": pick the collection. Restaurant
@@ -1458,6 +1569,21 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
             </TouchableOpacity>
+            {customFilters.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
+                onPress={() => applyCustom(f.id)}
+                onLongPress={() => openFilterOptions(f)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+              <Text style={styles.customChipAddText}>+ Add</Text>
+            </TouchableOpacity>
           </ScrollView>
 
           {/* Search sits below the chips and narrows whatever the chips
@@ -1731,6 +1857,13 @@ const styles = StyleSheet.create({
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   filterChipSort: { borderColor: colors.gold },
+  // Bespoke user-created filter chips (the "+ Add" row) — same look as the
+  // Label Library, with the trailing margin the built-in chips use.
+  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 160 },
+  customChipActive: { borderColor: colors.gold },
+  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
+  customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipValue: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
   // Heading row inside a filter chip — label + a small up/down chevron

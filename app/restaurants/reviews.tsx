@@ -25,6 +25,9 @@ import { ShareIcon } from '../../src/components/ShareIcon';
 import { RestaurantReviewShareCard } from '../../src/components/RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { showAlert } from '../../src/components/AppAlert';
+import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
+import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
+import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { normaliseCity, cityKey } from '../../src/utils/city';
 import { foldAccents } from '../../src/utils/wineIdentity';
@@ -219,6 +222,12 @@ export default function RestaurantReviewsScreen() {
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [bottlePicksOpen, setBottlePicksOpen] = useState(false);
   const [awaitingOpen, setAwaitingOpen] = useState(false);
+  // Bespoke user-created filters (the "+ Add" chip), same as the Label Library.
+  const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('restaurant-review');
+  const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
+  const [filterModalOpen, setFilterModalOpen] = useState(false);
+  const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
+  const [savingFilter, setSavingFilter] = useState(false);
 
   // Deep-link from the List results page (?openSession=<id>) — auto-open
   // that visit's review form once the archive has loaded, so the user lands
@@ -510,9 +519,13 @@ export default function RestaurantReviewsScreen() {
         if (ratingFilter === '4plus' && r < 4) return false;
         if (ratingFilter === '3plus' && r < 3) return false;
       }
+      if (activeCustomId) {
+        const f = customFilters.find((cf) => cf.id === activeCustomId);
+        if (!(f?.itemIds ?? []).includes(item.id)) return false;
+      }
       return true;
     });
-  }, [reviewed, search, chosenWines, dateFilter, favouriteFilter, locationFilter, ratingFilter]);
+  }, [reviewed, search, chosenWines, dateFilter, favouriteFilter, locationFilter, ratingFilter, activeCustomId, customFilters]);
 
   // Restaurants awaiting review — a name captured from a List scan with no
   // ratings or note yet. Drives the summary link + its modal.
@@ -525,6 +538,50 @@ export default function RestaurantReviewsScreen() {
       new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
     );
   }, [filtered]);
+
+  // Bespoke-filter management — mirrors the Label Library.
+  function applyCustom(id: string) {
+    setActiveCustomId((prev) => (prev === id ? null : id));
+  }
+  function openCreateFilter() {
+    setEditingFilter(null);
+    setFilterModalOpen(true);
+  }
+  function openFilterOptions(f: LibraryFilter) {
+    showAlert({
+      title: f.name,
+      body: 'Edit this filter’s name and restaurants, or delete it. Your reviews stay in the list either way.',
+      buttons: [
+        { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
+        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); removeFilter.mutate(f.id); } },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  async function saveFilter(name: string, ids: string[]) {
+    setSavingFilter(true);
+    try {
+      if (editingFilter) {
+        await renameFilter.mutateAsync({ filterId: editingFilter.id, name });
+        await setFilterItems.mutateAsync({ filterId: editingFilter.id, itemIds: ids });
+      } else {
+        await createFilter.mutateAsync({ name, itemIds: ids });
+      }
+      setFilterModalOpen(false);
+      setEditingFilter(null);
+    } catch (err) {
+      showAlert({ title: 'Could not save filter', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingFilter(false);
+    }
+  }
+  // Items offered in the create/edit sheet — every reviewed restaurant visit,
+  // by name + date.
+  const filterItems = useMemo(() => reviewed.map((item) => ({
+    id: item.id,
+    label: item.restaurantName?.trim() || 'Restaurant',
+    sublabel: [formatDate(item.capturedAt), item.city].filter(Boolean).join(' · ') || undefined,
+  })), [reviewed]);
 
   // Every bottle pick the user has added (restaurant-context chosen_wines —
   // not the "review without adding" path), newest first.
@@ -661,6 +718,21 @@ export default function RestaurantReviewsScreen() {
                 <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationChipLabel}</Text>
+            </TouchableOpacity>
+            {customFilters.map((f) => (
+              <TouchableOpacity
+                key={f.id}
+                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
+                onPress={() => applyCustom(f.id)}
+                onLongPress={() => openFilterOptions(f)}
+                delayLongPress={400}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
+              <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
           </ScrollView>
 
@@ -875,6 +947,18 @@ export default function RestaurantReviewsScreen() {
         onSaved={() => { setEditingWine(null); setEditWineIdentity(false); }}
       />
 
+      <LibraryFilterModal
+        visible={filterModalOpen}
+        title={editingFilter ? 'Edit filter' : 'New filter'}
+        itemNoun="restaurants"
+        items={filterItems}
+        initialName={editingFilter?.name}
+        initialSelected={editingFilter?.itemIds}
+        saving={savingFilter}
+        onSave={saveFilter}
+        onClose={() => { setFilterModalOpen(false); setEditingFilter(null); }}
+      />
+
       {/* Filter dropdown — single sheet driven by openDropdown, matching the
           Full Cellar List / Your Wine Reviews interaction. */}
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
@@ -1013,6 +1097,13 @@ const styles = StyleSheet.create({
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterChipRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
+  // Bespoke user-created filter chips (the "+ Add" row) — same look as the
+  // Label Library.
+  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, maxWidth: 160 },
+  customChipActive: { borderColor: colors.gold },
+  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md },
+  customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterChipChevron: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, marginLeft: 4 },

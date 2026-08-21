@@ -1,6 +1,6 @@
 import { supabase } from './supabase';
 
-export type LibraryScope = 'label' | 'lineup';
+export type LibraryScope = 'label' | 'lineup' | 'wine-review' | 'restaurant-review';
 
 export interface LibraryFilter {
   id: string;
