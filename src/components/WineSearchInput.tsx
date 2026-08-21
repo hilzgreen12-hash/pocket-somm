@@ -8,14 +8,17 @@ import { fonts } from '../constants/fonts';
 interface Props {
   // Called when the user taps a suggestion — fills the identity fields.
   onSelect: (result: WineSearchResult) => void;
+  // Optional starting text — used when the user typed a wine in the Review
+  // tab's "Search A Wine" bar and we carry it straight into this box.
+  initialQuery?: string;
 }
 
 // Predictive "search your wine" box for manual entry. As the user types
 // (debounced, from 3 characters) it lists real matching wines; picking one fills
 // the producer / name / region / style fields below. The user can still edit
 // those fields afterwards — this is a shortcut, not a lock-in.
-export function WineSearchInput({ onSelect }: Props) {
-  const [query, setQuery] = useState('');
+export function WineSearchInput({ onSelect, initialQuery }: Props) {
+  const [query, setQuery] = useState(initialQuery ?? '');
   const [results, setResults] = useState<WineSearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);

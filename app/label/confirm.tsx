@@ -60,7 +60,7 @@ function computeFreeSlots(
 
 export default function LabelConfirmScreen() {
   useKeepAwake();
-  const { context, manual, backTo, via } = useLocalSearchParams<{ context?: string; manual?: string; backTo?: string; via?: string }>();
+  const { context, manual, backTo, via, seed } = useLocalSearchParams<{ context?: string; manual?: string; backTo?: string; via?: string; seed?: string }>();
   // Reached by uploading a photo (not the camera): the bottom link is "Cancel"
   // and returns to the Scan screen — "Scan Again" (reopen camera) only belongs
   // to the camera flow.
@@ -645,7 +645,7 @@ export default function LabelConfirmScreen() {
           Montalcino") and doesn't become a near-duplicate. */}
       {isManual ? (
         <>
-          <WineSearchInput onSelect={(r) => {
+          <WineSearchInput initialQuery={seed} onSelect={(r) => {
             setProducer(r.producer);
             setWineName(r.wineName ?? '');
             setRegion(r.region ?? '');

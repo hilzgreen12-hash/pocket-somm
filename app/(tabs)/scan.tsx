@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Modal, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Modal, ActivityIndicator, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -34,6 +34,7 @@ export default function ScanTab() {
   const { preferences } = usePreferences();
 
   const [addWineOpen, setAddWineOpen] = useState(false);
+  const [wineSearch, setWineSearch] = useState('');
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [hardGate, setHardGate] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
@@ -116,6 +117,19 @@ export default function ScanTab() {
     router.push('/label/results?context=intel');
   }
 
+  // "Search A Wine" — the manual-input entry point. Carries the typed text
+  // into the manual Confirm flow, where the predictive wine search picks up
+  // the query and offers real bottlings to generate intel from.
+  function submitWineSearch() {
+    const q = wineSearch.trim();
+    if (!q) return;
+    requireAuth(() => {
+      resetLabelStore();
+      setWineSearch('');
+      router.push(`/label/confirm?manual=1&context=intel&seed=${encodeURIComponent(q)}&backTo=${encodeURIComponent('/(tabs)/scan')}`);
+    });
+  }
+
   async function handleUploadLabel() {
     if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
@@ -196,7 +210,40 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Your reviews — top of the tab. */}
+      {/* Scan actions — top of the tab. Wine Label → intel; Wine List →
+          recommendations. A manual "Search A Wine" bar sits beneath them. */}
+      <View style={styles.section}>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => requireAuth(() => setAddWineOpen(true))}
+          onLongPress={() => requireAccount(handleViewLastIntel)}
+        >
+          <Text style={styles.buttonText}>Scan a Wine Label</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.buttonFull}
+          onPress={() => router.push('/scan/wine-list')}
+          onLongPress={() => requireAccount(handleViewLastListResult)}
+        >
+          <Text style={styles.buttonText}>Scan a Wine List</Text>
+        </TouchableOpacity>
+        {/* Manual-input search — type a wine to generate intel by hand. */}
+        <View style={styles.searchRow}>
+          <TextInput
+            style={styles.searchInput}
+            value={wineSearch}
+            onChangeText={setWineSearch}
+            placeholder="Search A Wine"
+            placeholderTextColor={colors.textMuted}
+            returnKeyType="search"
+            onSubmitEditing={submitWineSearch}
+          />
+        </View>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Your reviews + Label Library. */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
           <Text style={styles.buttonText}>Your Wine Reviews</Text>
@@ -204,38 +251,8 @@ export default function ScanTab() {
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/restaurants/reviews'))}>
           <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
         </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Wine Label → intel, and its Label Library. */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.buttonFull}
-          onPress={() => requireAuth(() => setAddWineOpen(true))}
-          onLongPress={() => requireAccount(handleViewLastIntel)}
-        >
-          <Text style={styles.buttonText}>Read a Wine Label</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
-          <Text style={styles.buttonText}>Label Library</Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.divider} />
-
-      {/* Wine List → recommendations, with the "View Last Result" link (or
-          press-and-hold) to revisit the last result (account-gated). */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.buttonFull}
-          onPress={() => router.push('/scan/wine-list')}
-          onLongPress={() => requireAccount(handleViewLastListResult)}
-        >
-          <Text style={styles.buttonText}>Read a Wine List</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.7}>
-          <Text style={styles.lastResultLink}>View Last Result</Text>
+          <Text style={styles.buttonText}>Your Label Library</Text>
         </TouchableOpacity>
       </View>
 
@@ -261,18 +278,6 @@ export default function ScanTab() {
               onPress={() => { setAddWineOpen(false); setTimeout(handleUploadLabel, 350); }}
             >
               <Text style={styles.modalButtonText}>Upload A Wine Label</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.modalButton, { marginTop: spacing.sm }]}
-              onPress={() => {
-                setAddWineOpen(false);
-                // Clear any prior scan so Confirm Wine Details opens blank
-                // for the user to fill in by hand.
-                resetLabelStore();
-                router.push(`/label/confirm?manual=1&context=intel&backTo=${encodeURIComponent('/(tabs)/scan')}`);
-              }}
-            >
-              <Text style={styles.modalButtonText}>Manual Input</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
@@ -320,9 +325,11 @@ const styles = StyleSheet.create({
   // Gold "More About Scan" placeholder link beneath the blurb.
   moreAboutLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   // "View last result" link — matches the other tab pages.
-  lastResultLink: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center', marginBottom: spacing.sm },
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  // "Search A Wine" manual-input bar sitting under the two scan buttons.
+  searchRow: { marginTop: spacing.xs },
+  searchInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center' },
   scanningOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.75)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   scanningSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.md, width: '100%' },
   scanningTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
