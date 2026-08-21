@@ -1,7 +1,5 @@
 import { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
-import { showAlert } from '../../src/components/AppAlert';
-import * as Location from 'expo-location';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useKeepAwake } from 'expo-keep-awake';
 import { router } from 'expo-router';
@@ -13,38 +11,7 @@ import { startScanJob, pollScanJob } from '../../src/api/scanJob';
 import { isNetworkError } from '../../src/api/invokeResilient';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
-import { COUNTRY_TO_CURRENCY } from '../../src/constants/currency';
-
-async function detectLocalCurrency(): Promise<{ currency: string; country: string | null } | null> {
-  try {
-    const { status } = await Location.getForegroundPermissionsAsync();
-    if (status !== 'granted') return null;
-    const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Lowest });
-    const [geo] = await Location.reverseGeocodeAsync({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-    const iso = geo?.isoCountryCode?.toUpperCase();
-    if (!iso) return null;
-    const currency = COUNTRY_TO_CURRENCY[iso];
-    if (!currency) return null;
-    return { currency, country: geo?.country ?? null };
-  } catch {
-    return null;
-  }
-}
-
-function askUseLocalCurrency(local: string, profile: string, country: string | null): Promise<string> {
-  const where = country ? `in ${country}` : `somewhere using ${local}`;
-  return new Promise((resolve) => {
-    showAlert({
-      title: 'Local currency detected',
-      body: `You appear to be ${where}. Use local currency (${local}) for budget and value guidance on this list?`,
-      dismissable: false,
-      buttons: [
-        { text: `Use ${local}`, onPress: () => resolve(local) },
-        { text: `Keep ${profile}`, style: 'cancel', onPress: () => resolve(profile) },
-      ],
-    });
-  });
-}
+import { detectLocalCurrency, askUseLocalCurrency } from '../../src/utils/localCurrency';
 
 type Stage = 'reading' | 'recommending' | 'error';
 

@@ -22,6 +22,7 @@ import { getBinCell } from '../../src/api/bins';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { BottleSizePicker } from '../../src/components/BottleSizePicker';
 import { WineSearchInput } from '../../src/components/WineSearchInput';
+import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { StartAlignedInput } from '../../src/components/StartAlignedInput';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
@@ -308,8 +309,13 @@ export default function LabelConfirmScreen() {
       // WS-anchored critic score, converted to the user's currency), falling
       // back to the Claude estimate on a no-match. In parallel, auto-fetch a
       // label so a manual entry still shows a thumbnail on the intel card.
+      // Only the value-intel flow (Search A Wine / Scan Label) offers to switch
+      // to the local currency abroad; cellar/wishlist adds keep the home default.
+      const intelCurrency = context === 'intel'
+        ? await resolveIntelCurrency(preferences?.defaultCurrency)
+        : (preferences?.defaultCurrency ?? 'GBP');
       const [intel] = await Promise.all([
-        generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP'),
+        generateWineIntel(confirmed, intelCurrency),
         ensureAutoLabel(confirmed.producer, confirmed.wineName),
       ]);
       setIntelligence(intel);

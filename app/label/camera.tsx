@@ -11,6 +11,7 @@ import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { prepareImageBase64 } from '../../src/api/label';
 import { scanLabel } from '../../src/api/label';
 import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
+import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { colors, spacing } from '../../src/constants/theme';
@@ -134,7 +135,7 @@ export default function LabelCameraScreen() {
     setWineDetailsConfirmed(confirmed);
     setStatus('Finding this wine…');
     try {
-      const currency = preferences?.defaultCurrency ?? 'GBP';
+      const currency = await resolveIntelCurrency(preferences?.defaultCurrency);
       // Verify the read against Wine-Searcher (cheap, no AI) BEFORE committing to
       // a card. A confident match goes straight to the intel card; an unconfirmed
       // read (often a misspelt producer or a missed cuvée) routes to the confirm

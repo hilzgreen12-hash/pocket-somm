@@ -27,6 +27,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
+import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
@@ -120,7 +121,11 @@ export default function LabelResultsScreen() {
   const { racks } = useRacks();
   const { preferences } = usePreferences();
   const qc = useQueryClient();
-  const userCurrency = preferences?.defaultCurrency ?? 'GBP';
+  // In the intel/search flow the currency may have been switched to a local one
+  // abroad (asked once per session upstream) — display in that same currency so
+  // the value labels match how the intel was priced. Other flows use the home
+  // default.
+  const userCurrency = (isIntelOnlyFlow ? peekIntelCurrency(preferences?.defaultCurrency) : null) ?? (preferences?.defaultCurrency ?? 'GBP');
 
   // When Generate Wine Intel comes back empty (no score, no value) it's almost
   // always a misspelt / wrongly-ordered name — prompt the user to check it.

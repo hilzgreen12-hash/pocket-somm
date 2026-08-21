@@ -18,6 +18,7 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useAuth } from '../../src/hooks/useAuth';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
+import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -161,7 +162,7 @@ export default function ScanTab() {
       // a card — same confirm-first guard as the camera scan. Confident matches
       // go straight to the card; an unconfirmed read (misspelt producer, missed
       // cuvée) routes to the confirm step first so the user fixes the identity.
-      const currency = preferences?.defaultCurrency ?? 'GBP';
+      const currency = await resolveIntelCurrency(preferences?.defaultCurrency);
       const queryName = [confirmed.producer, confirmed.wineName].filter(Boolean).join(' ').trim() || (confirmed.wineName ?? '');
       const vintageNum = confirmed.vintage && confirmed.vintage !== 'NV' ? Number(confirmed.vintage) : null;
       let verified = false;
