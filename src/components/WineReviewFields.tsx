@@ -37,6 +37,10 @@ interface Props {
   // used where the location is fixed elsewhere (a restaurant visit) or edited
   // via the card's Edit popup rather than typed inline.
   showLocation?: boolean;
+  // Optional editable review date (YYYY-MM-DD). Rendered above Location when
+  // both are provided; used where the review's date should be correctable inline.
+  date?: string;
+  onDate?: (s: string) => void;
   drinkingWindow: string;
   onDrinkingWindow: (s: string) => void;
   // Optional Wish List + Add to Cellar (hidden on cellar reviews).
@@ -67,7 +71,7 @@ export function WineReviewFields({
   score, onScore, pricePaid, onPricePaid, currency,
   estimatedValue, estimatedValueAt, estimating, onEstimate,
   review, onReview, personalNotes, onPersonalNotes, showPersonalNotes = true,
-  city, onCity, locationName, onLocationName, showLocation = true, drinkingWindow, onDrinkingWindow,
+  city, onCity, locationName, onLocationName, showLocation = true, date, onDate, drinkingWindow, onDrinkingWindow,
   wishlistActive, onWishlist, onAddToCellar,
   saving, saved, onSave, saveLabel, savedLabel, goldSave, onDelete, deleteLabel,
 }: Props) {
@@ -115,6 +119,21 @@ export function WineReviewFields({
       {/* Location — a pin, the (GPS-prefilled) editable city, and a place name.
           Sits below the score, above the review. Hidden where the location is
           fixed by the visit or edited via the card's Edit popup. */}
+      {date != null && onDate ? (
+        <>
+          <Text style={styles.fieldLabel}>Date</Text>
+          <TextInput
+            style={[styles.locInput, styles.dateInput]}
+            value={date}
+            onChangeText={(t) => onDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+            placeholder="YYYY-MM-DD"
+            placeholderTextColor={colors.textMuted}
+            keyboardType="numbers-and-punctuation"
+            maxLength={10}
+          />
+        </>
+      ) : null}
+
       {showLocation ? (
         <>
           <Text style={styles.fieldLabel}>Location</Text>
@@ -281,6 +300,7 @@ const styles = StyleSheet.create({
   locFields: { flex: 1, gap: spacing.sm },
   locInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
   locInputSecond: {},
+  dateInput: { width: 160, marginBottom: spacing.md },
   scoreInput: { width: 96 },
   noteInput: { minHeight: 90 },
   pairRow: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.xs },

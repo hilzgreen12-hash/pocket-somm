@@ -58,6 +58,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [purchasePrice, setPurchasePrice] = useState('');
   const [locCity, setLocCity] = useState('');
   const [locName, setLocName] = useState('');
+  const [reviewDate, setReviewDate] = useState('');
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
@@ -98,6 +99,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       );
       setLocCity(wine.city ?? '');
       setLocName(wine.restaurant_name ?? '');
+      setReviewDate(isoToYmd(wine.chosen_at));
       // Prefill the city from GPS when the review has none yet.
       if (!wine.city) captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
       setDrinkingWindow(wine.user_drinking_window ?? '');
@@ -174,8 +176,13 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         vintage: wine.vintage,
       },
     });
-    // user_drinking_window isn't part of the structured update input.
-    await patchChosenWine(wine.id, { user_drinking_window: drinkingWindow.trim() || null });
+    // user_drinking_window + the review date aren't part of the structured update
+    // input, so patch them directly. Only write chosen_at when it actually changed.
+    const newIso = reviewDate.trim() && reviewDate !== isoToYmd(wine.chosen_at) ? ymdToIso(reviewDate) : null;
+    await patchChosenWine(wine.id, {
+      user_drinking_window: drinkingWindow.trim() || null,
+      ...(newIso ? { chosen_at: newIso } : {}),
+    });
   }
 
   async function handleSave() {
@@ -507,7 +514,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               onCity={setLocCity}
               locationName={locName}
               onLocationName={setLocName}
-              showLocation={false}
+              showLocation={true}
+              date={reviewDate}
+              onDate={setReviewDate}
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={setDrinkingWindow}
               wishlistActive={wishlist}
