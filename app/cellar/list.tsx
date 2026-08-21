@@ -775,7 +775,6 @@ export default function FullCellarListScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
         <View style={styles.headerActions}>
           {!isArchiveView ? (
             <TouchableOpacity
@@ -796,6 +795,10 @@ export default function FullCellarListScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Title sits on its own line, brought down below the back / Add / Export
+          row so it doesn't crowd the top of the screen. */}
+      <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
 
       {/* Transient "added" toast — auto-fades, no action to dismiss. */}
       {showAddedToast && (
@@ -1264,7 +1267,7 @@ export default function FullCellarListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   // Inter — back/nav link (gold, to match the rest of the app)
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
   // Add + Share stacked at the top-right of the header.
@@ -1284,7 +1287,7 @@ const styles = StyleSheet.create({
   // Inter — body (processing status)
   scanningText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   // Cormorant — page header
-  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
+  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — summary read-out
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
