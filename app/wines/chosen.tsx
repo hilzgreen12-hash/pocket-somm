@@ -26,6 +26,7 @@ import { prepareImageBase64, scanLabel } from '../../src/api/label';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
+import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { useAttachLabelPhoto } from '../../src/hooks/useAttachLabelPhoto';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
@@ -1512,56 +1513,44 @@ export default function ChosenWinesScreen() {
                   activeOpacity={0.7}
                 >
                   <View style={styles.cardCompactOuter}>
-                    {thumbPath ? (
-                      <TouchableOpacity onPress={() => setExpandedThumb({ path: thumbPath, name: w.wine_name })} activeOpacity={0.85}>
-                        <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={4} frame={3} />
-                      </TouchableOpacity>
-                    ) : (
-                      // No label shot (e.g. a wine picked from a scanned list) —
-                      // offer to add one right from the review card.
-                      <AddPhotoThumb
-                        style={styles.reviewThumb}
-                        radius={4}
-                        onPress={() => attachPhoto.present({
-                          kind: isChosen ? 'chosen' : 'cellar',
-                          wineId: w.id,
-                          producer: w.producer,
-                          wineName: w.wine_name,
-                        })}
-                      />
-                    )}
-                    <View style={styles.cardCompactBody}>
-                      <View style={styles.cardCompactRow}>
-                        <Text style={styles.wineNameCompact} numberOfLines={2}>
-                          {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
-                        </Text>
-                        <View style={styles.scoreCluster}>
-                          <View style={styles.scoreLine}>
-                            {isChosen && (item.wine as ChosenWine).is_favourite ? (
-                              <Text style={styles.favouriteStar}>★</Text>
-                            ) : null}
-                            {item.score != null && (
-                              <Text style={styles.scoreCompact}>{item.score}</Text>
-                            )}
-                          </View>
+                    <View style={styles.reviewThumbWrap}>
+                      {thumbPath ? (
+                        <TouchableOpacity onPress={() => setExpandedThumb({ path: thumbPath, name: w.wine_name })} activeOpacity={0.85}>
+                          <LabelThumb path={thumbPath} fallbackText={w.wine_name} style={styles.reviewThumb} radius={5} frame={3} />
+                        </TouchableOpacity>
+                      ) : (
+                        // No label shot (e.g. a wine picked from a scanned list) —
+                        // offer to add one right from the review card.
+                        <AddPhotoThumb
+                          style={styles.reviewThumb}
+                          radius={5}
+                          onPress={() => attachPhoto.present({
+                            kind: isChosen ? 'chosen' : 'cellar',
+                            wineId: w.id,
+                            producer: w.producer,
+                            wineName: w.wine_name,
+                          })}
+                        />
+                      )}
+                      {/* Favourite star — top-right of the thumbnail, as in the
+                          Label Library. */}
+                      {isChosen && (item.wine as ChosenWine).is_favourite ? (
+                        <View style={styles.reviewFavStar}>
+                          <Text style={styles.reviewFavStarText}>★</Text>
                         </View>
-                      </View>
-                      {w.region ? <Text style={styles.regionText} numberOfLines={1}>{w.region}</Text> : null}
-                      {((w as any).grape ?? (w as any).grape_variety) ? (
-                        <Text style={styles.regionText} numberOfLines={1}>{(w as any).grape ?? (w as any).grape_variety}</Text>
                       ) : null}
+                    </View>
+                    <View style={styles.cardCompactBody}>
+                      {/* Producer · Name · Vintage (white). No score here. */}
+                      <Text style={styles.wineNameCompact} numberOfLines={2}>
+                        {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
+                      </Text>
+                      {/* Region, Country (yellow). No grape. */}
+                      {w.region ? <Text style={styles.regionText} numberOfLines={1}>{regionWithCountry(w.region)}</Text> : null}
+                      {/* Review date · location stamp (white). No price. */}
                       <View style={styles.cardCompactMetaRow}>
                         <Text style={styles.metaText}>{formatDate(item.date)}</Text>
                         {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
-                        {isChosen && formatListPrice(item.wine as ChosenWine) ? (
-                          <Text style={styles.metaText}> · {formatListPrice(item.wine as ChosenWine)}</Text>
-                        ) : null}
-                        {/* No visible "Restaurant" / "Cellar" suffix here —
-                            the user found it redundant. Internally each
-                            review still carries item.source which drives
-                            the filter chips, sort logic, share routing
-                            and the long-press delete prompt, so this
-                            cosmetic removal doesn't disturb behaviour. */}
                       </View>
                       {/* Yellow stats line — "Awaiting Review" for a pick not yet
                           reviewed, otherwise the entry count + average score. */}
@@ -1570,9 +1559,6 @@ export default function ChosenWinesScreen() {
                           ? 'Awaiting Review'
                           : `${uni.count} ${uni.count === 1 ? 'Review' : 'Reviews'}${uni.averageScore != null ? ` · ${uni.averageScore} Average Score` : ''}`}
                       </Text>
-                      {/* The "You had this at…" / "You added this to your cellar
-                          on…" line was removed — it duplicated the date &
-                          location stamp already shown above the stats. */}
                     </View>
                   </View>
                 </TouchableOpacity>
@@ -1706,7 +1692,11 @@ const styles = StyleSheet.create({
   // left of the text (like a cellar wine card); text-only otherwise.
   cardCompactOuter: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   cardCompactBody: { flex: 1 },
-  reviewThumb: { width: 46, height: 60 },
+  // Larger thumbnail, matching the Label Library, with a top-right favourite star.
+  reviewThumb: { width: 100, height: 130 },
+  reviewThumbWrap: { width: 100, height: 130 },
+  reviewFavStar: { position: 'absolute', top: 5, right: 5, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
+  reviewFavStarText: { fontSize: 18, color: colors.gold, lineHeight: 20 },
   cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
