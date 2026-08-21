@@ -23,6 +23,7 @@ import { LabelShareCard } from '../../src/components/LabelShareCard';
 import { labelSignedUrl } from '../../src/api/labelPhotos';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
+import { regionWithCountry } from '../../src/utils/wineOrigin';
 import { useLibraryFilters } from '../../src/hooks/useLibraryFilters';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
 import type { LibraryFilter } from '../../src/api/libraryFilters';
@@ -405,6 +406,19 @@ export default function MyLabelsScreen() {
     router.push('/wines/chosen');
   }
 
+  // Tap the review-status line: 'X Reviews' → that wine's review card; 'Awaiting
+  // review' → a fresh review INPUT (saved as an 'Other' review, per seedAdd).
+  function openReviewFromStatus(label: LibraryLabel, conn: WineConnections | undefined) {
+    if (conn && conn.reviewCount > 0) {
+      const chosen = conn.reviewedChosen[0];
+      if (chosen) { router.push(`/wines/chosen?openReview=${chosen.id}`); return; }
+      const cellarRev = conn.reviewedCellar[0];
+      if (cellarRev) { router.push(`/wines/chosen?openCellarReview=${cellarRev.id}`); return; }
+      router.push('/wines/chosen'); return;
+    }
+    goToReview(null, label); // no review yet → Other review input
+  }
+
   function goToReview(existingId: string | null, label: LibraryLabel) {
     if (existingId) { router.push(`/wines/chosen?openReview=${existingId}`); return; }
     const q = [
@@ -562,7 +576,7 @@ export default function MyLabelsScreen() {
             <Text style={styles.addLink}>+ Add</Text>
           </TouchableOpacity>
         </View>
-        <Text style={styles.title}>Label Scan Library</Text>
+        <Text style={styles.title}>Label Library</Text>
       </View>
 
       {labels.length === 0 ? (
@@ -668,21 +682,23 @@ export default function MyLabelsScreen() {
                     <Text style={styles.rowName} numberOfLines={3}>
                       {wineHeaderLine(label.producer, label.wine_name, label.vintage) || label.wine_name || label.producer || 'Wine label'}
                     </Text>
-                    {/* Date · Location on one line (edit via the options popup). */}
+                    {/* Region, Country (yellow) — as on Your Wine Reviews. */}
+                    {label.region ? <Text style={styles.rowRegion} numberOfLines={1}>{regionWithCountry(label.region)}</Text> : null}
+                    {/* Date · Location on one line, white (edit via the options popup). */}
                     {(() => {
                       const loc = [label.captured_place, label.captured_city].map((s) => (s ?? '').trim()).filter(Boolean).join(' · ');
                       const dateStr = new Date(label.created_at).toLocaleDateString('en-GB');
-                      return <Text style={styles.rowScanned} numberOfLines={1}>{[dateStr, loc].filter(Boolean).join(' · ')}</Text>;
+                      return <Text style={styles.rowStampWhite} numberOfLines={1}>{[dateStr, loc].filter(Boolean).join(' · ')}</Text>;
                     })()}
-                    {/* Review status. */}
-                    <Text style={styles.rowScanned}>
-                      {conn && conn.reviewCount > 0
-                        ? `${conn.reviewCount} Review${conn.reviewCount === 1 ? '' : 's'}`
-                        : 'Awaiting review'}
-                    </Text>
-                    {/* The review status line above is enough — the "Reviewed
-                        {date}" link is removed; the wine name opens the options
-                        (incl. View Your Review). */}
+                    {/* Review-status LINK (yellow): X Reviews → review card;
+                        Awaiting review → a fresh Other review input. */}
+                    <TouchableOpacity onPress={() => openReviewFromStatus(label, conn)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                      <Text style={styles.rowLink}>
+                        {conn && conn.reviewCount > 0
+                          ? `${conn.reviewCount} Review${conn.reviewCount === 1 ? '' : 's'}`
+                          : 'Awaiting review'}
+                      </Text>
+                    </TouchableOpacity>
                     {cellar ? (
                       <TouchableOpacity onPress={() => router.push(`/cellar/${cellar.id}` as any)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                         <Text style={styles.rowLink}>Added to Cellar: {cellar.date_received ? new Date(cellar.date_received).toLocaleDateString('en-GB') : '—'}</Text>
@@ -915,6 +931,8 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowBody: { flex: 1 },
   rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 21 },
+  rowRegion: { fontSize: 14, fontFamily: fonts.headingItalic, color: colors.gold, marginTop: 2 },
+  rowStampWhite: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 4 },
   rowLocation: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
   rowLocationAdd: { fontSize: 12.5, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 4, textDecorationLine: 'underline' },
   rowScanned: { fontSize: 12.5, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4 },
