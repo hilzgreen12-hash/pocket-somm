@@ -139,17 +139,20 @@ function PairingCardSaved({
 // Build a short "You requested…" line from the recipe filters so the user
 // sees, on the results card, what they asked Vinster for. (A future
 // iteration can swap this for an AI-written summary from the edge function.)
+// Just the preferences the user actually set — dietary, allergens, regional /
+// nutritional leanings and any free-text concerns. No "you requested a recipe"
+// preamble (obvious) and no user identity; the label reads simply "Brief:".
 function buildBriefSummary(filters: Record<string, any> | null | undefined): string | null {
   if (!filters) return null;
-  const reqs: string[] = [];
-  if (filters.dietary) reqs.push(String(filters.dietary));
-  if (Array.isArray(filters.allergens)) reqs.push(...filters.allergens.map((a: any) => String(a)));
-  const reqStr = reqs.filter(Boolean).join(', ').trim();
+  const prefs: string[] = [];
+  if (filters.dietary) prefs.push(String(filters.dietary));
+  if (Array.isArray(filters.allergens)) prefs.push(...filters.allergens.map((a: any) => String(a)));
+  if (Array.isArray(filters.regionalPreferences)) prefs.push(...filters.regionalPreferences.map((a: any) => String(a)));
+  if (Array.isArray(filters.nutritionalPreferences)) prefs.push(...filters.nutritionalPreferences.map((a: any) => String(a)));
+  const list = prefs.map((p) => p.trim()).filter(Boolean).join(', ');
   const concerns = typeof filters.specificConcerns === 'string' ? filters.specificConcerns.trim() : '';
-  if (!reqStr && !concerns) return null;
-  let s = reqStr ? `You requested a ${reqStr.toLowerCase()} recipe` : 'You requested a recipe';
-  if (concerns) s += ` — ${concerns}`;
-  return s.endsWith('.') ? s : `${s}.`;
+  const combined = [list, concerns].filter(Boolean).join(' — ');
+  return combined || null;
 }
 
 export default function ChefResultsScreen() {
@@ -476,7 +479,7 @@ export default function ChefResultsScreen() {
           <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${wine.region}` : ''}</Text>
           {briefSummary ? (
             <Text style={styles.briefSummary}>
-              <Text style={styles.briefSummaryLabel}>Brief Summary: </Text>{briefSummary}
+              <Text style={styles.briefSummaryLabel}>Brief: </Text>{briefSummary}
             </Text>
           ) : null}
         </View>
@@ -655,7 +658,7 @@ const styles = StyleSheet.create({
   section: { padding: spacing.xl },
   sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
-  dishName: { fontSize: 16, fontFamily: fonts.headingBold, color: colors.text },
+  dishName: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   // Header row hosting dishName + the quick "+ SHARE" link in the corner.
   cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   cardShareLink: { paddingHorizontal: spacing.xs, paddingVertical: 2 },
