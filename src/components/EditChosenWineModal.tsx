@@ -113,7 +113,11 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       // Auto-fill the estimated value once (no "Generate" button) — mirrors
       // the cellar flow where every wine carries an estimate. Only fires
       // when we don't already have one.
-      if (wine.estimated_value == null) void fetchEstimate(wine, false);
+      // Auto-estimate ONCE per wine — gate on the timestamp (have we tried?), not
+      // the value. Wines Wine-Searcher can't price return a null value; keying on
+      // the value re-ran the estimate on every open. The saved valuation (with its
+      // date stamp) is reused; the "update" link re-fetches on demand.
+      if (wine.estimated_value_at == null) void fetchEstimate(wine, false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, wine?.id]);
@@ -135,7 +139,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       await patchChosenWine(w.id, {
         estimated_value: intel.estimatedValue ?? null,
         estimated_value_currency: currency,
-        estimated_value_at: intel.estimatedValue != null ? at : null,
+        // Always stamp the attempt (even when no value was found) so we don't
+        // re-estimate on every open — the "update" link re-fetches on demand.
+        estimated_value_at: at,
         // generateWineIntel is Wine-Searcher-first, so intel.criticScore is the
         // real WS aggregated score when WS has one. Persist it too — otherwise
         // the review's critic score stays null even though we just fetched a
