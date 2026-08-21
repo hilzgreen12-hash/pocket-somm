@@ -1422,45 +1422,6 @@ export default function ChosenWinesScreen() {
           {/* Bespoke Other filters — create named tags (e.g. "BBR Tasting") and
               file Other reviews under them (long-press a review → "Add to a
               filter"). Only shown while the Other collection is selected. */}
-          {typeFilter === 'other' ? (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.tagScroll}
-              contentContainerStyle={styles.tagRow}
-            >
-              <TouchableOpacity
-                style={[styles.tagChip, tagFilter === 'all' && styles.tagChipActive]}
-                onPress={() => setTagFilter('all')}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.tagChipText, tagFilter === 'all' && styles.tagChipTextActive]}>All</Text>
-              </TouchableOpacity>
-              {otherTags.map((t) => (
-                <TouchableOpacity
-                  key={t}
-                  style={[styles.tagChip, tagFilter === t && styles.tagChipActive]}
-                  onPress={() => setTagFilter(t)}
-                  onLongPress={() => showAlert({
-                    title: t,
-                    body: 'Remove this filter? Your reviews stay — only the filter is deleted.',
-                    buttons: [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete filter', style: 'destructive', onPress: () => deleteTag(t) },
-                    ],
-                  })}
-                  delayLongPress={400}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.tagChipText, tagFilter === t && styles.tagChipTextActive]}>{t}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity style={styles.tagChipNew} onPress={() => { pendingAssignRef.current = null; setNewTagName(''); setNewTagOpen(true); }} activeOpacity={0.7}>
-                <Text style={styles.tagChipNewText}>＋ New filter</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          ) : null}
-
           <Text style={styles.filterHint}>Listed by {sortMode === 'recent' ? 'recency' : sortLabel} · Swipe to see all filters →</Text>
           <ScrollView
             horizontal
