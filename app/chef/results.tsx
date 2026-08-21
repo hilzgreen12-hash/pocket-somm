@@ -35,15 +35,18 @@ function PairingCard({
 }) {
   return (
     <View style={styles.card}>
-      {/* Sharing lives only on the full-screen recipe card (via View Full
-          Recipe), not on the results thumbnail. */}
-      <Text style={styles.dishName}>{pairing.dishName}</Text>
-      <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
-      <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
-      <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
+      {/* Tap the recipe itself to open the full-screen recipe page (sharing
+          lives there, not on this thumbnail). */}
+      <TouchableOpacity activeOpacity={0.8} onPress={onViewFull}>
+        <Text style={styles.dishName}>{pairing.dishName}</Text>
+        <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
+        <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
+        <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
+        <Text style={styles.tapHint}>Tap for the full recipe →</Text>
+      </TouchableOpacity>
 
-      {/* Quick Save — a centred LINK above the main button. Saved recipes land
-          in the Cookbook as Unfiled (no folder assignment, not starred). */}
+      {/* Quick Save to Cookbook — the MAIN button. Saved recipes land in the
+          Cookbook as Unfiled (no folder assignment, not starred). */}
       {!isFromHistory && (
         saveState === 'saved' ? (
           <View style={styles.cardSavedBlock}>
@@ -53,18 +56,13 @@ function PairingCard({
             </TouchableOpacity>
           </View>
         ) : (
-          <TouchableOpacity onPress={onSave} disabled={saveState === 'saving'} activeOpacity={0.7}>
-            <Text style={styles.quickSaveLink}>
+          <TouchableOpacity style={styles.cardSaveButton} onPress={onSave} disabled={saveState === 'saving'} activeOpacity={0.8}>
+            <Text style={styles.cardSaveButtonText}>
               {saveState === 'saving' ? 'Saving…' : 'Quick Save to Cookbook'}
             </Text>
           </TouchableOpacity>
         )
       )}
-
-      {/* View Full Recipe — the MAIN button. Opens the full-screen recipe page. */}
-      <TouchableOpacity style={styles.cardSaveButton} onPress={onViewFull} activeOpacity={0.8}>
-        <Text style={styles.cardSaveButtonText}>View Full Recipe</Text>
-      </TouchableOpacity>
     </View>
   );
 }
@@ -667,7 +665,7 @@ const styles = StyleSheet.create({
   pairingNotes: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
   // Quick Save shown as a centred link above the main View Full Recipe button.
-  quickSaveLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, textAlign: 'center', textDecorationLine: 'underline', marginTop: spacing.md },
+  tapHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   cardSaveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   cardSaveButtonDisabled: { opacity: 0.6 },
