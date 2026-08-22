@@ -835,7 +835,7 @@ export default function ResultsScreen() {
               activeOpacity={0.7}
             >
               <Text style={[styles.shareBtnText, sharing && { opacity: 0.5 }]}>
-                {sharing ? 'Preparing…' : '+ Share'}
+                {sharing ? 'Preparing…' : '+ Export Results'}
               </Text>
             </TouchableOpacity>
             {restaurantName.trim().length > 0 && !editingRestaurant && (
@@ -1258,7 +1258,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: spacing.sm,
+    marginBottom: spacing.xl,
   },
   // Stacks + Share and + Review/Edit Restaurant at the top-right.
   topRightCol: { alignItems: 'flex-end', gap: spacing.xs },
@@ -1289,7 +1289,7 @@ const styles = StyleSheet.create({
   stampDate: {
     fontFamily: fonts.headingBold,
     fontSize: 18,
-    color: colors.gold,
+    color: '#FFFFFF',
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
