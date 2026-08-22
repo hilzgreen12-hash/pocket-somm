@@ -105,30 +105,7 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.divider} />
-
-      {/* "Archive a Night" photographs a bottle lineup, matches each to the
-          cellar and bulk-archives them. The archived-bottles list ("Cellar
-          Archive") is no longer a top-level button — it now lives as an
-          "Archive" folder in the Full Cellar List filter carousel. */}
-      <View style={styles.section}>
-        <TouchableOpacity
-          style={styles.buttonFull}
-          onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
-          onLongPress={() => showAlert({
-            title: 'Archive a Night',
-            body: "Drank some bottles?\n\nSnap a pic of your lineup to save automatically to Lineup Library to revisit, review, comment and share at a convenient time. Vinster can archive bottles it identifies from your cellar along the way.\n\nChin-Chin!",
-          })}
-        >
-          <Text style={styles.buttonText}>Archive a Night</Text>
-        </TouchableOpacity>
-        {/* Lineup Library sits below Archive a Night: the capture action, then
-            the gallery of everything captured (moved here from the You tab). */}
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/lineups'))}>
-          <Text style={styles.buttonText}>Lineup Library</Text>
-        </TouchableOpacity>
-      </View>
-
+      {/* "Archive a Lineup" and "Your Lineups" now live on the Scan tab. */}
 
       <SignInPromptModal
         visible={signInPromptVisible}

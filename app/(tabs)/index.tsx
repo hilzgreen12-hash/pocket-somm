@@ -317,6 +317,26 @@ export default function ScanLandingScreen() {
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>List Scan History</Text>
         </TouchableOpacity>
+
+        <View style={styles.divider} />
+
+        {/* Archive a Lineup → photograph a bottle lineup and save it; Your
+            Lineups is the gallery. (Both moved here from the Cellar tab.) */}
+        <TouchableOpacity
+          style={styles.scanButton}
+          onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
+          onLongPress={() => showAlert({
+            title: 'Archive a Lineup',
+            body: "Drank some bottles?\n\nSnap a pic of your lineup to save automatically to Your Lineups — revisit, review, comment and share at a convenient time. Vinster can archive bottles it identifies from your cellar along the way.\n\nChin-Chin!",
+          })}
+          activeOpacity={0.85}
+        >
+          <MaterialCommunityIcons name="camera-outline" size={26} color={colors.gold} style={styles.scanIcon} />
+          <Text style={styles.scanButtonText}>Archive a Lineup</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(() => router.push('/cellar/lineups'))} activeOpacity={0.8}>
+          <Text style={styles.uploadButtonText}>Your Lineups</Text>
+        </TouchableOpacity>
       </View>
 
       <Modal visible={scanningLabel} transparent animationType="fade">
