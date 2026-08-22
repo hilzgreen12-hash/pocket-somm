@@ -46,7 +46,9 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
 
     const resp = await client.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 8000,
+      // High enough that a full batch of verbose entries can't truncate the JSON
+      // array (truncation → parse failure → 0 inserted for that category).
+      max_tokens: 16000,
       messages: [{ role: 'user', content: prompt }],
     });
 
