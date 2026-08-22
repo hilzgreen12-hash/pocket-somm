@@ -1673,11 +1673,10 @@ export default function ChosenWinesScreen() {
                       </Text>
                       {/* Region, Country (yellow). No grape. */}
                       {w.region ? <Text style={styles.regionText} numberOfLines={1}>{regionWithCountry(w.region)}</Text> : null}
-                      {/* Review date · location stamp (white). No price. */}
-                      <View style={styles.cardCompactMetaRow}>
-                        <Text style={styles.metaText}>{formatDate(item.date)}</Text>
-                        {locText ? <Text style={styles.metaText} numberOfLines={1}> · {locText}</Text> : null}
-                      </View>
+                      {/* Review date · location stamp (white). Wraps when long. */}
+                      <Text style={[styles.metaText, styles.cardCompactMeta]}>
+                        {formatDate(item.date)}{locText ? ` · ${locText}` : ''}
+                      </Text>
                       {/* Yellow stats line — "Awaiting Review" for a pick not yet
                           reviewed, otherwise the entry count + average score. */}
                       <Text style={styles.reviewStatsLine}>
@@ -1824,9 +1823,9 @@ const styles = StyleSheet.create({
   reviewFavStar: { position: 'absolute', top: 5, right: 5, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
   reviewFavStarText: { fontSize: 18, color: colors.gold, lineHeight: 20 },
   cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
-  cardCompactMetaRow: { flexDirection: 'row', alignItems: 'baseline', marginTop: 2 },
+  cardCompactMeta: { marginTop: 2 },
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
-  wineNameCompact: { flex: 1, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
+  wineNameCompact: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: fonts.headingItalic, color: colors.gold, marginTop: 2 },
   // The user's own review score — white, matching the wine cards (critic scores
   // are gold; the user's score is white).
