@@ -279,8 +279,8 @@ const styles = StyleSheet.create({
   // Mixed-case form label (no caps) + centred variant for the cooking /
   // regional inputs, matching the rest of the app's input labels.
   fieldLabel: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted, letterSpacing: 0.3, marginBottom: spacing.xs },
-  // "What are you cooking?" + mic/bin on one centred, bottom-aligned row.
-  cookingHeaderRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  // "What are you cooking?" left-aligned, with the mic/bin pushed to the right.
+  cookingHeaderRow: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', gap: spacing.sm, marginBottom: spacing.sm },
   centredLabel: { textAlign: 'center', alignSelf: 'stretch' },
   // Label above each preference bubble group.
   chipFieldLabel: { marginTop: spacing.md, marginBottom: spacing.sm },
@@ -354,6 +354,6 @@ const styles = StyleSheet.create({
   styleBtnActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.10)' },
   styleBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.textMuted },
   styleBtnTextActive: { color: colors.gold },
-  button: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
-  buttonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
+  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
 });
