@@ -252,7 +252,7 @@ export default function ScanLandingScreen() {
             <Text style={styles.appName}>Scan</Text>
           </View>
           <Text style={styles.blurb}>
-            Scan or upload a wine label for deep intel on the bottle, or a wine list for tailored recommendations. Or search a wine by name.
+            Scan a wine label for intel, a wine list for recommendations, or a lineup to archive — or search a wine by name.
           </Text>
         </>
       ) : (
