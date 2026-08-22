@@ -8,8 +8,10 @@
 // chosen wine is still verified against Wine-Searcher when intel is generated.
 
 import Anthropic from 'npm:@anthropic-ai/sdk';
+import { createClient } from 'npm:@supabase/supabase-js';
 
 const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
+const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
 
 interface Result {
   producer: string;
@@ -24,6 +26,23 @@ Deno.serve(async (req) => {
     const { query } = await req.json().catch(() => ({}));
     const q = typeof query === 'string' ? query.trim() : '';
     if (q.length < 3) return json({ results: [] }, 200);
+
+    // Catalog first — the local wines_catalog gives instant, deterministic
+    // typeahead. When it returns a solid shortlist we skip the LLM entirely;
+    // only a thin result falls through to the Claude typeahead below.
+    try {
+      const { data: cat } = await admin.rpc('search_wines_catalog', { q, lim: 8 });
+      if (Array.isArray(cat) && cat.length >= 3) {
+        const results: Result[] = cat.map((r: any) => ({
+          producer: r.producer,
+          wineName: r.wine_name ?? null,
+          region: r.region ?? null,
+          style: r.style ?? null,
+          grape: r.grape ?? null,
+        }));
+        return json({ results, source: 'catalog' }, 200);
+      }
+    } catch { /* catalog unavailable — fall through to the Claude typeahead */ }
 
     const prompt = `A user is searching for a wine to add to their cellar. Their partial search text is: "${q}".
 
