@@ -69,7 +69,7 @@ export default function NewStorageLocationScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>New Location</Text>
+        <Text style={styles.title}>New Alt Cellar</Text>
         <View style={{ width: 40 }} />
       </View>
 

@@ -238,7 +238,7 @@ export default function RacksScreen() {
         { text: 'Add a Wine Rack', onPress: () => handleAddType('rack') },
         { text: 'Add a Wine Fridge', onPress: () => handleAddType('fridge') },
         { text: 'Add a Wine Bin (diamond shaped)', onPress: () => router.push('/cellar/bin/resize' as any) },
-        { text: 'Add an Other Location', onPress: () => router.push('/cellar/storage-location/new' as any) },
+        { text: 'Add an Alt Cellar', onPress: () => router.push('/cellar/storage-location/new' as any) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
@@ -355,7 +355,7 @@ export default function RacksScreen() {
           {/* Other Home Storage — the user's own free-form home
               places (shed, under the bed…). A distinct concept from the Cellar
               List "Locations" filter, so those are NOT shown here. */}
-          <Text style={styles.blockHeader}>Other Home Storage</Text>
+          <Text style={styles.blockHeader}>Alt Cellar</Text>
           {storageLocations.length > 0 && (
             <Text style={styles.homeSummaryLeft}>
               {storageLocations.length} Home Storage {storageLocations.length === 1 ? 'Location' : 'Locations'}
@@ -375,7 +375,7 @@ export default function RacksScreen() {
                 delayLongPress={400}
                 activeOpacity={0.85}
               >
-                <Text style={styles.storageCardType}>Location</Text>
+                <Text style={styles.storageCardType}>Alt Cellar</Text>
                 <Text style={styles.storageCardName} numberOfLines={2}>{loc.name}</Text>
                 <Text style={styles.storageCardCount}>{bottleLabel(loc.wineCount ?? 0)}</Text>
               </TouchableOpacity>

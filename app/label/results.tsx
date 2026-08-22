@@ -1247,7 +1247,7 @@ export default function LabelResultsScreen() {
           { text: 'Rack', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('rack'); router.replace('/cellar/rack/resize' as any); } },
           { text: 'Fridge', onPress: () => { setPendingWineId(savedWineId); setPendingStorageType('fridge'); router.replace('/cellar/rack/resize' as any); } },
           { text: 'Bin (diamonds)', onPress: () => router.replace('/cellar/bin/resize' as any) },
-          { text: 'Other Location', onPress: () => router.replace('/cellar/storage-location/new' as any) },
+          { text: 'Alt Cellar', onPress: () => router.replace('/cellar/storage-location/new' as any) },
           { text: 'Cancel', style: 'cancel', onPress: () => router.replace('/cellar/list?added=1' as any) },
         ],
       });
