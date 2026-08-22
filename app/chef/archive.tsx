@@ -205,59 +205,46 @@ export default function ChefArchiveScreen() {
 
   const isLoading = labelLoading;
 
-  const isAllOrFav = filter === FILTER_ALL || filter === FILTER_FAVOURITES;
-
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={styles.headerRow}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Cookbook</Text>
-        {session ? (
-          <TouchableOpacity
-            onPress={() => setNewFolderOpen(true)}
-            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-          >
-            <Text style={styles.addFolderHeader}>+ Add Folder</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 90 }} />
-        )}
       </View>
+      <Text style={styles.title}>Your Cookbook</Text>
 
-      {/* Folder carousel — segmented All/Favourites chip first, user
-          folders after. Long-press a user folder to rename or delete. */}
+      {/* Filter/stats bar — mirrors the Full Cellar List: instruction hint,
+          stats, then the folder carousel (All, your folders, + Add folder). */}
       {session && (
-        <View style={styles.foldersSection}>
-          <Text style={styles.foldersHeading}>Folders</Text>
+        <>
+          <Text style={styles.listHint}>Long hold a folder or recipe to move or delete it</Text>
+          <View style={styles.summaryRow}>
+            <Text style={styles.summaryText}>
+              {allItems.length} {allItems.length === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
+            </Text>
+          </View>
+          <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all folders →</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
             contentContainerStyle={styles.folderCarousel}
           >
-            <View style={[styles.segmentedChip, isAllOrFav && styles.segmentedChipActive]}>
-              <TouchableOpacity
-                style={[styles.segmentedHalf, filter === FILTER_ALL && styles.segmentedHalfActive]}
-                onPress={() => setFilter(FILTER_ALL)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.segmentedHalfText, filter === FILTER_ALL && styles.segmentedHalfTextActive]}>
-                  All ({allItems.length})
-                </Text>
-              </TouchableOpacity>
-              <View style={styles.segmentedDivider} />
-              <TouchableOpacity
-                style={[styles.segmentedHalf, filter === FILTER_FAVOURITES && styles.segmentedHalfActive]}
-                onPress={() => setFilter(FILTER_FAVOURITES)}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.segmentedHalfText, filter === FILTER_FAVOURITES && styles.segmentedHalfTextActive]}>
-                  ★ Favourites ({favouritesCount})
-                </Text>
-              </TouchableOpacity>
-            </View>
-
+            <TouchableOpacity
+              style={[styles.folderChip, filter === FILTER_ALL && styles.folderChipActive]}
+              onPress={() => setFilter(FILTER_ALL)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.folderChipText, filter === FILTER_ALL && styles.folderChipTextActive]} numberOfLines={1}>All ({allItems.length})</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.folderChip, filter === FILTER_FAVOURITES && styles.folderChipActive]}
+              onPress={() => setFilter(FILTER_FAVOURITES)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.folderChipText, filter === FILTER_FAVOURITES && styles.folderChipTextActive]} numberOfLines={1}>★ Favourites ({favouritesCount})</Text>
+            </TouchableOpacity>
             {collections.map((c) => {
               const active = filter === c.id;
               return (
@@ -275,19 +262,11 @@ export default function ChefArchiveScreen() {
                 </TouchableOpacity>
               );
             })}
+            <TouchableOpacity style={styles.folderChipAdd} onPress={() => setNewFolderOpen(true)} activeOpacity={0.7}>
+              <Text style={styles.folderChipAddText}>+ Add folder</Text>
+            </TouchableOpacity>
           </ScrollView>
-          {collections.length > 0 && (
-            <Text style={styles.folderHint}>Long-press a folder to rename or delete.</Text>
-          )}
-        </View>
-      )}
-
-      {session && (
-        <View style={styles.summaryRow}>
-          <Text style={styles.summaryText}>
-            {filteredItems.length} {filteredItems.length === 1 ? 'recipe' : 'recipes'}
-          </Text>
-        </View>
+        </>
       )}
 
       {!session ? (
@@ -488,32 +467,25 @@ export default function ChefArchiveScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Header — Back on its own row, then the title on a centred line with a
+  // bottom rule, mirroring the Full Cellar List.
+  headerRow: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-start' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },
-  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  // Inline "+ New folder" call-to-action in the header — treated as a button.
-  addFolderHeader: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.5 },
-  // Folders section — horizontal carousel of folder chips. The first
-  // chip is a segmented All / Favourites toggle; user folders trail to
-  // the right. Long-press a user folder to rename or delete.
-  foldersSection: { paddingTop: spacing.md, paddingBottom: spacing.xs },
-  foldersHeading: { fontFamily: fonts.headingBold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2, paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  folderCarousel: { paddingHorizontal: spacing.xl, paddingVertical: spacing.xs, gap: spacing.sm },
-  segmentedChip: { flexDirection: 'row', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, overflow: 'hidden' },
-  segmentedChipActive: { backgroundColor: 'rgba(212,176,96,0.06)' },
-  segmentedHalf: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, justifyContent: 'center' },
-  segmentedHalfActive: { backgroundColor: 'rgba(212,176,96,0.18)' },
-  segmentedHalfText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.textMuted, letterSpacing: 0.3 },
-  segmentedHalfTextActive: { color: colors.gold },
-  segmentedDivider: { width: 1, backgroundColor: colors.gold, opacity: 0.45 },
-  folderChip: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, justifyContent: 'center', maxWidth: 220 },
-  folderChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.18)' },
-  folderChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3 },
-  folderChipTextActive: { color: colors.gold },
-  folderHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingTop: spacing.xs, paddingHorizontal: spacing.xl },
-  // Stats bar — matches the Cellar List (bottom border only, no top rule).
+  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Filter/stats bar — copied from the Full Cellar List so the two read alike.
+  listHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center' },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
+  filterScroll: { flexGrow: 0, flexShrink: 0 },
+  folderCarousel: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  // Folder chips — same pill shape as the Cellar List's custom-filter chips.
+  folderChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm, maxWidth: 200 },
+  folderChipActive: { borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
+  folderChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3 },
+  folderChipTextActive: { color: colors.gold },
+  folderChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, marginRight: spacing.sm },
+  folderChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl, gap: spacing.md },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, textAlign: 'center' },
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
