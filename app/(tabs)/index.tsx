@@ -269,8 +269,19 @@ export default function ScanLandingScreen() {
       )}
 
       <View style={styles.actions}>
-        {/* Wine Label → intel. Big gold Scan (camera) with a smaller white
-            Upload beneath. Long-press Scan to revisit the last intel card. */}
+        {/* Manual-input search — sits at the top, just below the welcome. */}
+        <TextInput
+          style={styles.searchInput}
+          value={wineSearch}
+          onChangeText={setWineSearch}
+          placeholder="Search A Wine"
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="search"
+          onSubmitEditing={submitWineSearch}
+        />
+
+        {/* Wine Label → intel. Big gold Scan (camera), white Upload, then the
+            Label Scan History (the library of every label you've scanned). */}
         <TouchableOpacity
           style={styles.scanButton}
           onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
@@ -283,8 +294,14 @@ export default function ScanLandingScreen() {
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>Upload Wine Label</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(() => router.push('/scan/archive'))} activeOpacity={0.8}>
+          <Text style={styles.uploadButtonText}>Label Scan History</Text>
+        </TouchableOpacity>
 
-        {/* Wine List → recommendations. Long-press Scan to revisit the last. */}
+        <View style={styles.divider} />
+
+        {/* Wine List → recommendations. Big gold Scan (camera), white Upload,
+            then List Scan History (revisit the last list result). */}
         <TouchableOpacity
           style={styles.scanButton}
           onPress={() => router.push('/scan/wine-list')}
@@ -297,17 +314,9 @@ export default function ScanLandingScreen() {
         <TouchableOpacity style={styles.uploadButton} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>Upload Wine List</Text>
         </TouchableOpacity>
-
-        {/* Manual-input search — type a wine to generate intel by hand. */}
-        <TextInput
-          style={styles.searchInput}
-          value={wineSearch}
-          onChangeText={setWineSearch}
-          placeholder="Search A Wine"
-          placeholderTextColor={colors.textMuted}
-          returnKeyType="search"
-          onSubmitEditing={submitWineSearch}
-        />
+        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.8}>
+          <Text style={styles.uploadButtonText}>List Scan History</Text>
+        </TouchableOpacity>
       </View>
 
       <Modal visible={scanningLabel} transparent animationType="fade">
@@ -380,6 +389,7 @@ const styles = StyleSheet.create({
   // Big gold-outlined Scan buttons (camera icon + label), each with a smaller
   // white Upload button beneath; the manual search bar sits last.
   actions: {},
+  divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
   scanButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 16, paddingVertical: spacing.lg, marginTop: spacing.md },
   scanIcon: { marginRight: spacing.sm },
   scanButtonText: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, letterSpacing: 1, textAlign: 'center' },

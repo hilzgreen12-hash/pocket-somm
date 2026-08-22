@@ -9,7 +9,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-const SCAN_HELP = `Your wine and restaurant reviews live here, alongside your Label Library of every bottle you've scanned.
+const SCAN_HELP = `Your wine and restaurant reviews live here.
 
 And "Vinster's Review of You" — witty Wine and Foodie personality sketches Vinster draws from how you drink, cook and rate. Share them with friends or the community, and watch them evolve.`;
 
@@ -42,23 +42,20 @@ export default function ScanTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Your wine and restaurant reviews and your Label Library live here — plus Vinster's Review of You, your personality sketches.
+          Your wine and restaurant reviews live here — plus Vinster's Review of You, your personality sketches.
         </Text>
         <HelpButton label="More About Review" title="How Review works" body={SCAN_HELP} />
       </View>
 
       <View style={styles.divider} />
 
-      {/* Your reviews + Label Library. */}
+      {/* Your reviews. (Label Scan History now lives on the Scan tab.) */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/restaurants/reviews'))}>
           <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
           <Text style={styles.buttonText}>Your Wine Reviews</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
-          <Text style={styles.buttonText}>Your Label Library</Text>
         </TouchableOpacity>
       </View>
 
