@@ -6,7 +6,9 @@ import { router, useSegments } from 'expo-router';
 // Tab order matches the bottom tab bar left-to-right. Swipe left = next tab,
 // swipe right = previous tab. Wrap each tab screen's root in this view to
 // enable carousel-style navigation between the main tabs.
-const TAB_ORDER = ['scan', 'chef', 'cellar', 'community', 'you'] as const;
+// 'index' is the Scan landing tab (route '/(tabs)'); the rest are named routes.
+const TAB_ORDER = ['index', 'scan', 'chef', 'cellar', 'community', 'you'] as const;
+const routeFor = (name: string) => (name === 'index' ? '/(tabs)' : `/(tabs)/${name}`);
 
 // Tunables — firm enough that small finger drags don't trigger, but a
 // quick flick still switches tabs even when it travels a short distance.
@@ -22,9 +24,10 @@ interface Props {
 
 export function TabSwipeView({ children, style }: Props) {
   const segments = useSegments();
-  // Last segment of (tabs)/<name> is the active tab name. If we're not on
-  // a tab screen, currentTab will be empty and the gesture short-circuits.
-  const currentTab = segments[segments.length - 1] ?? '';
+  // Last segment of (tabs)/<name> is the active tab name. The Scan landing is
+  // the group's index route, so its last segment is '(tabs)' → treat as 'index'.
+  const raw = segments[segments.length - 1] ?? '';
+  const currentTab = raw === '(tabs)' ? 'index' : raw;
 
   const gesture = useMemo(
     () =>
@@ -41,9 +44,9 @@ export function TabSwipeView({ children, style }: Props) {
           const goNext = e.translationX < 0 && (e.translationX < -COMMIT_DISTANCE || e.velocityX < -FLING_VELOCITY);
           const goPrev = e.translationX > 0 && (e.translationX > COMMIT_DISTANCE || e.velocityX > FLING_VELOCITY);
           if (goNext && idx < TAB_ORDER.length - 1) {
-            router.replace(`/(tabs)/${TAB_ORDER[idx + 1]}` as any);
+            router.replace(routeFor(TAB_ORDER[idx + 1]) as any);
           } else if (goPrev && idx > 0) {
-            router.replace(`/(tabs)/${TAB_ORDER[idx - 1]}` as any);
+            router.replace(routeFor(TAB_ORDER[idx - 1]) as any);
           }
         }),
     [currentTab],

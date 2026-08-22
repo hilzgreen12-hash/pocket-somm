@@ -37,7 +37,7 @@ export default function WelcomeScreen() {
 
         {/* Guest entry — scanning is open to guests, so offer it up front here
             rather than burying it inside the Sign In page. */}
-        <TouchableOpacity style={styles.linkButton} onPress={() => router.replace('/(tabs)/scan')}>
+        <TouchableOpacity style={styles.linkButton} onPress={() => router.replace('/(tabs)')}>
           <Text style={styles.linkText}>Continue without an account</Text>
         </TouchableOpacity>
       </View>

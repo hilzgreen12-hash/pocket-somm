@@ -7,13 +7,17 @@ import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // Order + routes match TabSwipeView / the (tabs) navigator, left-to-right.
+// 'index' is the Scan landing tab (the group's index route, '/(tabs)').
 const TABS = [
+  { key: 'index', label: 'Scan' },
   { key: 'scan', label: 'Review' },
   { key: 'chef', label: 'Pair' },
   { key: 'cellar', label: 'Cellar' },
   { key: 'community', label: 'Share' },
   { key: 'you', label: 'You' },
 ] as const;
+
+const routeFor = (key: string) => (key === 'index' ? '/(tabs)' : `/(tabs)/${key}`);
 
 // First route segment groups where the bar should NOT show — the pre-app
 // flows (splash / auth / onboarding) and the home screen, which has its own
@@ -28,8 +32,8 @@ function sectionFor(first: string): string {
   switch (first) {
     case 'cellar': return 'cellar';
     case 'chef': return 'chef';
-    case 'scan':
-    case 'label': return 'scan';
+    case 'label': return 'index';
+    case 'scan': return 'scan';
     case 'community': return 'community';
     case 'profile':
     case 'wines':
@@ -63,7 +67,8 @@ export function AppBottomBar() {
   const isCapture = last === 'camera' || last === 'detect' || last === 'preview' || last === 'extracting';
   if (keyboardUp || segments.length === 0 || HIDDEN_FIRST.has(first) || isCapture) return null;
 
-  const active = first === '(tabs)' ? (segments[1] ?? '') : sectionFor(first);
+  // On the group's index route (Scan landing) segments[1] is undefined.
+  const active = first === '(tabs)' ? (segments[1] ?? 'index') : sectionFor(first);
   const bottomPad = Math.max(insets.bottom, Platform.OS === 'ios' ? 8 : 6);
 
   return (
@@ -74,7 +79,7 @@ export function AppBottomBar() {
           <TouchableOpacity
             key={t.key}
             style={styles.item}
-            onPress={() => router.navigate(`/(tabs)/${t.key}` as any)}
+            onPress={() => router.navigate(routeFor(t.key) as any)}
             activeOpacity={0.7}
             accessibilityRole="button"
             accessibilityLabel={t.label}

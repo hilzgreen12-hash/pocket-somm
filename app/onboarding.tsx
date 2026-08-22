@@ -121,7 +121,7 @@ export default function OnboardingScreen() {
 
       qc.invalidateQueries({ queryKey: ['onboarding-complete'] });
       qc.invalidateQueries({ queryKey: ['preferences'] });
-      router.replace('/home');
+      router.replace('/(tabs)');
     } catch (err) {
       showAlert({ title: 'Could not finish setup', body: err instanceof Error ? err.message : 'Please try again.' });
       setSaving(false);

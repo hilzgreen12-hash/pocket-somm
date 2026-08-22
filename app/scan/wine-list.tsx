@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, LayoutAnimation, Platform, UIManager, Modal } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
@@ -31,6 +31,7 @@ Record and/or review the bottle you ordered, as well as the restaurant you enjoy
 
 export default function WineListScreen() {
   const { session } = useAuth();
+  const { upload: uploadParam } = useLocalSearchParams<{ upload?: string }>();
   const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
@@ -238,6 +239,18 @@ export default function WineListScreen() {
     if (maybeShowSignInPrompt(go)) return;
     await go();
   }
+
+  // Arriving via "Upload Wine List" on the Scan landing (?upload=1) auto-opens
+  // the photo picker once, using the restored/default preferences — a quick
+  // upload path. "Scan a Wine List" (no param) shows the full form instead.
+  const autoUploadedRef = useRef(false);
+  useEffect(() => {
+    if (uploadParam === '1' && !autoUploadedRef.current) {
+      autoUploadedRef.current = true;
+      void handleScreenshot();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadParam]);
 
   return (
     <View style={styles.container}>

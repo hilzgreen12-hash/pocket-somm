@@ -51,12 +51,12 @@ export default function Index() {
   // Wait for the onboarding check before routing a signed-in user.
   if (statusLoading) return null;
 
-  // On a status-check failure, fail open to the hub rather than
+  // On a status-check failure, fail open to the Scan landing tab rather than
   // trapping a returning user in onboarding.
-  if (statusError) return <Redirect href="/home" />;
+  if (statusError) return <Redirect href="/(tabs)" />;
 
   // New (or not-yet-onboarded) users go through the carousel and then
-  // the onboarding setup page. Everyone else lands on the home hub.
+  // the onboarding setup page. Everyone else lands on the Scan tab.
   if (!onboardingComplete) return <Redirect href="/onboarding-tour" />;
-  return <Redirect href="/home" />;
+  return <Redirect href="/(tabs)" />;
 }
