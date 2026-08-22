@@ -845,6 +845,9 @@ export default function ResultsScreen() {
             )}
           </View>
         </View>
+
+        <Text style={styles.heading}>Vinster Recommends</Text>
+
         {stampDate ? (
           <View style={styles.stampRow}>
             <Text style={styles.stampDate}>{stampDate}</Text>
@@ -896,7 +899,6 @@ export default function ResultsScreen() {
           </View>
         )}
 
-        <Text style={styles.heading}>Vinster Recommends</Text>
         {noVintages && (
           <Text style={styles.vintageNote}>Note: there are no vintages provided on this list</Text>
         )}
