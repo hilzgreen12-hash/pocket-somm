@@ -100,7 +100,7 @@ const TILES: ReadonlyArray<{ label: string; desc: string; route: string; Motif: 
 
 // Top-right hamburger menu — a shortcut to every destination in the app.
 const MENU_ITEMS: ReadonlyArray<{ label: string; route: string }> = [
-  { label: 'Your Stuff',    route: '/(tabs)/you' },
+  { label: 'About You',     route: '/(tabs)/you' },
   { label: 'About Vinster', route: '/about' },
   { label: 'Review',        route: '/(tabs)/scan' },
   { label: 'Cellar',        route: '/(tabs)/cellar' },

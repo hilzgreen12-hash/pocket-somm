@@ -35,6 +35,7 @@ export default function ScanTab() {
   const { preferences } = usePreferences();
 
   const [addWineOpen, setAddWineOpen] = useState(false);
+  const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
   const [wineSearch, setWineSearch] = useState('');
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [hardGate, setHardGate] = useState(false);
@@ -246,14 +247,34 @@ export default function ScanTab() {
 
       {/* Your reviews + Label Library. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
-          <Text style={styles.buttonText}>Your Wine Reviews</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/restaurants/reviews'))}>
           <Text style={styles.buttonText}>Your Restaurant Reviews</Text>
         </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/wines/chosen'))}>
+          <Text style={styles.buttonText}>Your Wine Reviews</Text>
+        </TouchableOpacity>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/scan/archive'))}>
           <Text style={styles.buttonText}>Your Label Library</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.divider} />
+
+      {/* Vinster's Review of You — the personality sketches (moved here from
+          the You/About You tab). */}
+      <View style={styles.section}>
+        <Text style={styles.sectionHeader}>Vinster's Review of You</Text>
+        <View style={styles.sketchHeaderRow}>
+          <Text style={styles.sketchHeader}>Your Personality Sketch</Text>
+          <TouchableOpacity onPress={() => setSketchInfoOpen(true)} activeOpacity={0.7}>
+            <Text style={styles.whatsThis}>what's this?</Text>
+          </TouchableOpacity>
+        </View>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/profile/personality?category=wine'))}>
+          <Text style={styles.buttonText}>Your Wine Personality</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/profile/personality?category=recipe'))}>
+          <Text style={styles.buttonText}>Your Foodie Personality</Text>
         </TouchableOpacity>
       </View>
 
@@ -282,6 +303,21 @@ export default function ScanTab() {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* "What's this?" — explains the personality sketches. */}
+      <Modal visible={sketchInfoOpen} transparent animationType="fade" onRequestClose={() => setSketchInfoOpen(false)}>
+        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSketchInfoOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
+            <Text style={styles.modalTitle}>Your Personality Sketch</Text>
+            <Text style={styles.modalBody}>
+              As you scan, cellar, rate and cook, Vinster sketches a witty character profile of you — a separate Wine personality and Foodie personality drawn from your tastes. They evolve as you use the app, and you can share them with friends or post them to the community.
+            </Text>
+            <TouchableOpacity style={styles.modalButton} onPress={() => setSketchInfoOpen(false)}>
+              <Text style={styles.modalButtonText}>Got it</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -328,6 +364,12 @@ const styles = StyleSheet.create({
   // "View last result" link — matches the other tab pages.
   buttonFull: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
+  // "Vinster's Review of You" section header + the "Your Personality Sketch"
+  // sub-heading with its "what's this?" link.
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sketchHeaderRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
+  sketchHeader: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
+  whatsThis: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   // "Search A Wine" manual-input bar sitting under the two scan buttons.
   searchRow: { marginTop: spacing.xs },
   searchInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center' },

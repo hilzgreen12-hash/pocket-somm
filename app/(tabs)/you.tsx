@@ -39,7 +39,6 @@ export default function YouScreen() {
     session?.user.user_metadata?.notify_updates ?? true
   );
   const [currencyOpen, setCurrencyOpen] = useState(false);
-  const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
   const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
@@ -138,7 +137,7 @@ export default function YouScreen() {
           <VinsterHeader />
           <View style={styles.body}>
             <View style={styles.titleRow}>
-              <Text style={styles.title}>Your Stuff</Text>
+              <Text style={styles.title}>About You</Text>
             </View>
             <ArchiveSignInPrompt
               title="Sign in to manage your account"
@@ -187,31 +186,16 @@ export default function YouScreen() {
       <View style={styles.body}>
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>Your Stuff</Text>
+        <Text style={styles.title}>About You</Text>
       </View>
       <Text style={styles.identityLine}>
         {currentUsername || currentEmail.split('@')[0]} · Vinster since {formatJoinedShort(session?.user.created_at)}
       </Text>
 
-      {/* Restaurant & Wine Reviews live on the Review tab; the Lineup Library
-          is on the Cellar tab. This tab is now identity + settings only. */}
-      <View style={styles.divider} />
-
-      <View style={styles.block}>
-        <View style={styles.sketchHeaderRow}>
-          <Text style={styles.sketchHeader}>Your Personality Sketch</Text>
-          <TouchableOpacity onPress={() => setSketchInfoOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.whatsThis}>what's this?</Text>
-          </TouchableOpacity>
-        </View>
-        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=wine')} activeOpacity={0.7}>
-          <Text style={styles.personalityButtonText}>Your Wine Personality</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.personalityButton} onPress={() => router.push('/profile/personality?category=recipe')} activeOpacity={0.7}>
-          <Text style={styles.personalityButtonText}>Your Foodie Personality</Text>
-        </TouchableOpacity>
-      </View>
-
+      {/* Personality sketches now live on the Review tab under "Vinster's
+          Review of You"; Restaurant & Wine Reviews are there too, and the
+          Lineup Library is on the Cellar tab. About You starts with your
+          preferences, then account settings. */}
       <View style={styles.divider} />
 
       <View style={styles.block}>
@@ -356,19 +340,6 @@ export default function YouScreen() {
         </TouchableOpacity>
       </Modal>
 
-      <Modal visible={sketchInfoOpen} transparent animationType="fade" onRequestClose={() => setSketchInfoOpen(false)}>
-        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setSketchInfoOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.confirmSheet} onPress={() => {}}>
-            <Text style={styles.confirmTitle}>Your Personality Sketch</Text>
-            <Text style={styles.confirmBody}>
-              As you scan, cellar, rate and cook, Vinster sketches a witty character profile of you — a separate Wine personality and Foodie personality drawn from your tastes. They evolve as you use the app, and you can share them with friends or post them to the community.
-            </Text>
-            <TouchableOpacity style={styles.confirmGoldBtn} onPress={() => setSketchInfoOpen(false)}>
-              <Text style={styles.confirmGoldBtnText}>Got it</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
 
       <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
@@ -425,11 +396,6 @@ const styles = StyleSheet.create({
   block: { gap: 4 },
   // Section header label.
   blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
-  sketchHeaderRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
-  sketchHeader: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.text },
-  whatsThis: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
-  personalityButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
-  personalityButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
