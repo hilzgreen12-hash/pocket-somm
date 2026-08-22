@@ -7,6 +7,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
+import { HomeStorageSection } from '../../src/components/HomeStorageSection';
 
 const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bottle by hand — and Vinster fills in the details for you: critic scores, tasting notes, drinking windows, and what each bottle is worth today.
 
@@ -91,19 +92,21 @@ export default function CellarTab() {
 
       <View style={styles.divider} />
 
-      {/* Your Cellar List (the full list), Your Wines at Home (racks/fridges),
-          and Your Cellar Statistics — grouped, in that order. */}
+      {/* Your Cellar List (the full list) and Your Cellar Statistics. */}
       <View style={styles.section}>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAuth(() => router.push('/cellar/list'))}>
           <Text style={styles.buttonText}>Your Cellar List</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/racks'))}>
-          <Text style={styles.buttonText}>Your Wines at Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
           <Text style={styles.buttonText}>Your Cellar Statistics</Text>
         </TouchableOpacity>
       </View>
+
+      <View style={styles.divider} />
+
+      {/* Your Wines At Home — the home-storage carousel, embedded here (replaces
+          the old standalone Home Wine Storage page). */}
+      <HomeStorageSection requireAuth={requireAuth} />
 
       {/* "Archive a Lineup" and "Your Lineups" now live on the Scan tab. */}
 

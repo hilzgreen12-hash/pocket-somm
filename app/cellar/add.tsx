@@ -76,7 +76,7 @@ export default function AddWineScreen() {
             text: 'Add to Rack',
             onPress: () => {
               setPendingWineId(saved.id);
-              router.replace('/cellar/racks');
+              router.replace('/(tabs)/cellar');
             },
           },
           { text: 'View in cellar', onPress: () => router.replace('/cellar/list') },
