@@ -67,6 +67,9 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   const [tastingNote, setTastingNote] = useState('');
   const [otherObservations, setOtherObservations] = useState('');
   const [userScore, setUserScore] = useState<number | null>(null);
+  // Drinking window (optional) — a from/to year pair, stored as "YYYY - YYYY".
+  const [drinkingFrom, setDrinkingFrom] = useState('');
+  const [drinkingTo, setDrinkingTo] = useState('');
   const [isFavourite, setIsFavourite] = useState(false);
   const [saved, setSaved] = useState(false);
   // Drinking date — defaults to today, editable via the Discovered At
@@ -188,6 +191,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     // Normalise on save so anything the user typed by hand ("Greater London")
     // gets canonicalised before it hits the DB.
     const cityClean = normaliseCity(city);
+    const userDrinkingWindow = [drinkingFrom.trim(), drinkingTo.trim()].filter(Boolean).join(' - ') || null;
     try {
       if (mode === 'append' && existing) {
         // "Add to this review" = a NEW dated entry joining the existing review's
@@ -196,7 +200,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
           wine, scanSessionId: scanSessionId ?? null,
           restaurantName: restaurant, city: cityClean,
           tastingNote, otherObservations, userScore, listPrice: price, isFavourite,
-          reviewDate,
+          reviewDate, userDrinkingWindow,
           reviewGroupId: existing.review_group_id ?? existing.id,
         });
       } else if (mode === 'update' && existing) {
@@ -205,14 +209,14 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         const identity = { producer: existing.producer, wineName: existing.wine_name, vintage: existing.vintage };
         await update.mutateAsync({
           id: existing.id,
-          input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, ...identity },
+          input: { restaurantName: restaurant, city: cityClean, tastingNote, otherObservations, userScore, listPrice: price, isFavourite, userDrinkingWindow, ...identity },
         });
       } else {
         await save.mutateAsync({
           wine, scanSessionId: scanSessionId ?? null,
           restaurantName: restaurant, city: cityClean,
           tastingNote, otherObservations, userScore, listPrice: price, isFavourite,
-          reviewDate,
+          reviewDate, userDrinkingWindow,
         });
       }
       setSaved(true);
@@ -276,48 +280,15 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
               size="lg"
             />
 
-            <View style={styles.divider} />
-
-            {/* Discovered At — collapsed by default. The previous screen
-                already captured restaurant + city, so we surface a tidy
-                one-line summary with a subtle (edit) link rather than
-                rebuilding the inputs every time. */}
-            <View style={styles.discoveredRow}>
-              <Text style={styles.discoveredLabel}>Discovered At</Text>
-            </View>
-            <Text style={styles.discoveredSummary}>{formatDiscoveredSummary(restaurant, city, reviewDate)}</Text>
-
-            {editingLocation && (
-              <View style={styles.locationEditor}>
-                <Text style={styles.fieldLabel}>Restaurant name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={restaurant}
-                  onChangeText={setRestaurant}
-                  placeholder="e.g. The Clove Club"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <Text style={styles.fieldLabel}>City</Text>
-                <CityAutocomplete
-                  style={styles.input}
-                  value={city}
-                  onChangeText={setCity}
-                  placeholder="City"
-                  placeholderTextColor={colors.textMuted}
-                />
-                <Text style={styles.fieldLabel}>Date</Text>
-                <TextInput
-                  style={styles.input}
-                  value={reviewDate}
-                  onChangeText={(text) => setReviewDate(text.replace(/[^0-9-]/g, '').slice(0, 10))}
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor={colors.textMuted}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={10}
-                />
-                <Text style={styles.dateHint}>Format: YYYY-MM-DD · defaults to today.</Text>
-              </View>
-            )}
+            {/* Date · where you drank it — a header stamp under the title
+                (location + price are already pre-filled from the scan). The
+                editable date/location fields live only in the edit flow. */}
+            {(() => {
+              const loc = [restaurant.trim(), city.trim()].filter(Boolean).join(', ');
+              const dateStr = reviewDate ? new Date(reviewDate + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+              const stamp = [dateStr, loc].filter(Boolean).join(' · ');
+              return stamp ? <Text style={styles.stampLine}>{stamp}</Text> : null;
+            })()}
 
             <View style={styles.divider} />
 
@@ -366,6 +337,29 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
               numberOfLines={3}
               textAlignVertical="top"
             />
+
+            <Text style={styles.sectionLabel}>Drinking Window — your call (optional)</Text>
+            <View style={styles.dwRow}>
+              <TextInput
+                style={[styles.input, styles.dwInput]}
+                value={drinkingFrom}
+                onChangeText={(t) => setDrinkingFrom(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                placeholder="From (e.g. 2026)"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+              <Text style={styles.dwDash}>–</Text>
+              <TextInput
+                style={[styles.input, styles.dwInput]}
+                value={drinkingTo}
+                onChangeText={(t) => setDrinkingTo(t.replace(/[^0-9]/g, '').slice(0, 4))}
+                placeholder="To (e.g. 2032)"
+                placeholderTextColor={colors.textMuted}
+                keyboardType="number-pad"
+                maxLength={4}
+              />
+            </View>
 
             <Text style={styles.sectionLabel}>List Price ({currencySymbol.trim() || wine.currency})</Text>
             <TextInput
@@ -526,6 +520,12 @@ const styles = StyleSheet.create({
   priceInput: {
     width: 150,
   },
+  // Date · location header stamp under the title (matches the other review modals).
+  stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
+  // Drinking-window from/to year pair.
+  dwRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
+  dwInput: { flex: 1, marginBottom: 0 },
+  dwDash: { fontFamily: fonts.bodyRegular, fontSize: 18, color: colors.textMuted },
   scoreHint: {
     // Score hint — Inter italic
     fontFamily: fonts.bodyItalic,

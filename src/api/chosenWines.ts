@@ -16,6 +16,8 @@ export interface SaveChosenWineInput {
   // now() so the review carries the actual drinking date the user
   // selected on the review modal. Omit / pass null to fall back to now.
   reviewDate?: string | null;
+  // Optional "YYYY - YYYY" drinking window the user set on the review.
+  userDrinkingWindow?: string | null;
   // Set ONLY for an "Add to this review" entry — the existing review's
   // review_group_id, so this entry joins that review's card. Omit for a new
   // review; the DB defaults a fresh group id.
@@ -122,7 +124,7 @@ export async function addSessionBottle(userId: string, input: {
 }
 
 export async function saveChosenWine(userId: string, input: SaveChosenWineInput): Promise<ChosenWine> {
-  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore, listPrice, isFavourite, reviewDate } = input;
+  const { wine, scanSessionId, restaurantName, city, tastingNote, otherObservations, userScore, listPrice, isFavourite, reviewDate, userDrinkingWindow } = input;
   const row: Record<string, unknown> = {
     user_id: userId,
     scan_session_id: scanSessionId,
@@ -152,6 +154,7 @@ export async function saveChosenWine(userId: string, input: SaveChosenWineInput)
     tasting_note: tastingNote || null,
     other_observations: otherObservations || null,
     user_score: userScore,
+    user_drinking_window: userDrinkingWindow ?? null,
     is_favourite: isFavourite,
   };
   // Only set chosen_at when the user picked a specific date — letting the
@@ -179,6 +182,8 @@ export interface UpdateChosenWineInput {
   purchasePrice?: number | null;
   purchasePriceCurrency?: string | null;
   wishlist?: boolean;
+  // Optional "YYYY - YYYY" drinking window; only written when provided.
+  userDrinkingWindow?: string | null;
   // Identity carried through so the post-update sync can find any
   // matching wishlist row without an extra round-trip. The chosen_wines
   // update endpoint itself doesn't change these fields.
@@ -202,6 +207,7 @@ export async function updateChosenWine(id: string, input: UpdateChosenWineInput)
     updates.purchase_price_currency = input.purchasePriceCurrency ?? null;
   }
   if (input.wishlist !== undefined) updates.wishlist = input.wishlist;
+  if (input.userDrinkingWindow !== undefined) updates.user_drinking_window = input.userDrinkingWindow;
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);
   if (error) throw new Error(error.message);
 }

@@ -138,7 +138,6 @@ export function WineReviewFields({
         <>
           <Text style={styles.fieldLabel}>Location</Text>
           <View style={styles.locRow}>
-            <Text style={styles.locPin}>📍</Text>
             <View style={styles.locFields}>
               <TextInput
                 style={styles.locInput}

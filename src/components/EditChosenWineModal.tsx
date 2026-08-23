@@ -484,16 +484,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
                 {(wine.region || wine.grape) ? (
                   <Text style={[styles.region, styles.regionLeft]}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
                 ) : null}
-                {/* Date · where you drank it — a clean header stamp (kept out of
-                    the free-text notes below). */}
-                {(() => {
-                  const loc = [wine.restaurant_name, normaliseCity(wine.city)].filter(Boolean).join(', ');
-                  const dateStr = wine.chosen_at
-                    ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                    : '';
-                  const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                  return stamp ? <Text style={[styles.stampLine, styles.stampLineLeft]}>{stamp}</Text> : null;
-                })()}
+                {/* When editing, the date + location are the editable input fields
+                    below (Date + Location in WineReviewFields) — not a header
+                    stamp — so this is the one place they appear as fields. */}
               </View>
             </View>
 
