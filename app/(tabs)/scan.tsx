@@ -5,6 +5,7 @@ import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpButton } from '../../src/components/HelpButton';
+import { AlterEgoCarousel } from '../../src/components/AlterEgoCarousel';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -60,16 +61,14 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Vinster's Review of You — a single alter-ego sketch. */}
+      {/* Vinster's Review of You — a carousel of alter-ego sketches. */}
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Vinster's Review of You</Text>
         <Text style={styles.sketchBlurb}>
           As you scan, cellar, rate and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that evolves as you use the app. Share it with friends or the community.
         </Text>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/profile/personality?category=wine'))}>
-          <Text style={styles.buttonText}>Your Vinster Alter-Ego</Text>
-        </TouchableOpacity>
       </View>
+      <AlterEgoCarousel requireAccount={requireAccount} />
 
       <SignInPromptModal
         visible={signInPromptVisible}

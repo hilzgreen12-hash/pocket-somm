@@ -12,11 +12,11 @@ import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../cons
 interface Props {
   title: string | null;
   body: string;
-  category: 'wine' | 'recipe';
+  category: 'wine' | 'recipe' | 'alter-ego';
 }
 
 export const PersonalityShareCard = forwardRef<View, Props>(({ title, body, category }, ref) => {
-  const heading = category === 'wine' ? 'My Wine Personality' : 'My Foodie Personality';
+  const heading = category === 'wine' ? 'My Wine Personality' : category === 'recipe' ? 'My Foodie Personality' : 'My Vinster Alter-Ego';
   return (
     <View ref={ref} collapsable={false} style={styles.card}>
       <View style={styles.inner}>

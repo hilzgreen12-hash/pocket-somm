@@ -21,7 +21,12 @@ import { PersonalityShareCard } from '../../src/components/PersonalityShareCard'
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-type Category = 'wine' | 'recipe';
+type Category = 'wine' | 'recipe' | 'alter-ego';
+
+// The cached "now" columns on profiles for each category.
+function textColFor(cat: Category) {
+  return cat === 'wine' ? 'last_wine_personality' : cat === 'recipe' ? 'last_recipe_personality' : 'last_alter_ego_personality';
+}
 
 // Personality updates aren't user-triggered any more — the app surfaces a
 // fresh sketch only when Vinster decides the user has engaged enough to
@@ -31,8 +36,8 @@ type Category = 'wine' | 'recipe';
 
 export default function PersonalityScreen() {
   useKeepAwake();
-  const { category } = useLocalSearchParams<{ category: string }>();
-  const cat: Category = category === 'recipe' ? 'recipe' : 'wine';
+  const { category, sketchId } = useLocalSearchParams<{ category: string; sketchId?: string }>();
+  const cat: Category = category === 'recipe' ? 'recipe' : category === 'alter-ego' ? 'alter-ego' : 'wine';
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { wines, isLoading: cellarLoading } = useCellar();
@@ -56,7 +61,7 @@ export default function PersonalityScreen() {
     chefLabelSessions: chefLabelSessions ?? [],
     chefPairingSessions: chefPairingSessions ?? [],
   });
-  const hasEnoughData = cat === 'wine' ? wineReady : foodieReady;
+  const hasEnoughData = cat === 'wine' ? wineReady : cat === 'recipe' ? foodieReady : (wineReady || foodieReady);
 
   const [text, setText] = useState<string | null>(null);
   const [lastGeneratedAt, setLastGeneratedAt] = useState<string | null>(null);
@@ -78,12 +83,25 @@ export default function PersonalityScreen() {
     }
   }, [text, lastGeneratedAt, cat]);
 
-  // Hydrate cached sketch + last-generated timestamp.
+  // Hydrate: a specific archived sketch when opened from the carousel
+  // (?sketchId=…), otherwise the cached "now" sketch for this category.
   const [hydrated, setHydrated] = useState(false);
   useEffect(() => {
     if (!session?.user.id) return;
-    const textColumn = cat === 'wine' ? 'last_wine_personality' : 'last_recipe_personality';
-    const tsColumn = cat === 'wine' ? 'last_wine_personality_at' : 'last_recipe_personality_at';
+    if (sketchId) {
+      supabase
+        .from('personality_sketches')
+        .select('text, created_at')
+        .eq('id', sketchId)
+        .single()
+        .then(({ data }) => {
+          if (data) { setText((data as any).text); setLastGeneratedAt((data as any).created_at); }
+          setHydrated(true);
+        });
+      return;
+    }
+    const textColumn = textColFor(cat);
+    const tsColumn = `${textColumn}_at`;
     supabase
       .from('profiles')
       .select(`${textColumn}, ${tsColumn}`)
@@ -96,13 +114,13 @@ export default function PersonalityScreen() {
         }
         setHydrated(true);
       });
-  }, [session?.user.id, cat]);
+  }, [session?.user.id, cat, sketchId]);
 
   // Auto-generate on first visit if there's no cached text yet AND the user
   // has met the minimum activity bar — otherwise we'd invent a sketch from
   // thin air on someone's first session.
   useEffect(() => {
-    if (hydrated && !text && !loading && !error && !notReady && hasEnoughData) {
+    if (hydrated && !sketchId && !text && !loading && !error && !notReady && hasEnoughData) {
       generate();
     }
   }, [hydrated, hasEnoughData]);
@@ -113,7 +131,9 @@ export default function PersonalityScreen() {
     setError(null);
     setNotReady(false);
     try {
-      const wineData = cat === 'wine'
+      const wantsWine = cat === 'wine' || cat === 'alter-ego';
+      const wantsFood = cat === 'recipe' || cat === 'alter-ego';
+      const wineData = wantsWine
         ? [
             ...(wines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage, region: w.region })),
             ...(chosenWines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage != null ? String(w.vintage) : null, region: w.region })),
@@ -124,7 +144,7 @@ export default function PersonalityScreen() {
       // favourite/star carried through), and any free-form pairing
       // searches. Together this gives Vinster a picture of where they
       // eat, what they cook, and what they treasure.
-      const restaurantData = cat === 'recipe'
+      const restaurantData = wantsFood
         ? archive
             .filter((a) => (a.restaurantName && a.restaurantName.trim()) || a.ratingOverall != null || a.ratingFood != null)
             .slice(0, 25)
@@ -138,7 +158,7 @@ export default function PersonalityScreen() {
               note: a.restaurantNote,
             }))
         : undefined;
-      const recipeData = cat === 'recipe'
+      const recipeData = wantsFood
         ? (chefLabelSessions ?? [])
             .flatMap((s) => (s.pairings ?? []).map((p) => ({
               dishName: p.dishName,
@@ -165,8 +185,8 @@ export default function PersonalityScreen() {
       setPublishState('idle');
       const now = new Date().toISOString();
       setLastGeneratedAt(now);
-      const textColumn = cat === 'wine' ? 'last_wine_personality' : 'last_recipe_personality';
-      const tsColumn = cat === 'wine' ? 'last_wine_personality_at' : 'last_recipe_personality_at';
+      const textColumn = textColFor(cat);
+      const tsColumn = `${textColumn}_at`;
       // These two writes are logged but deliberately NOT thrown. The sketch
       // has already been generated and shown to the user via setText above,
       // so throwing here would land in the catch and replace a perfectly good
@@ -189,7 +209,7 @@ export default function PersonalityScreen() {
       // through every sketch Vinster has ever drawn for them.
       const { error: archiveError } = await supabase.from('personality_sketches').insert({
         user_id: session.user.id,
-        category: cat,
+        category: cat as any, // 'alter-ego' is valid post-migration 095; generated types lag
         text: result.text,
       });
       if (archiveError) {
@@ -206,7 +226,7 @@ export default function PersonalityScreen() {
     if (!text || !session?.user.id || publishState !== 'idle') return;
     const username = session.user.user_metadata?.display_name
       || (session.user.email?.split('@')[0] ?? 'Anonymous');
-    const field = cat === 'wine' ? 'wine_personality' : 'recipe_personality';
+    const field = cat === 'wine' ? 'wine_personality' : cat === 'recipe' ? 'recipe_personality' : 'alter_ego_personality';
     setPublishState('saving');
     try {
       const { error } = await supabase.from('community_profiles').upsert({
@@ -226,7 +246,7 @@ export default function PersonalityScreen() {
   async function handleShare() {
     if (!text) return;
     const { title, body } = splitPersonality(text);
-    const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : 'My Foodie Personality, by Vinster';
+    const heading = cat === 'wine' ? 'My Wine Personality, by Vinster' : cat === 'recipe' ? 'My Foodie Personality, by Vinster' : 'My Vinster Alter-Ego';
     const caption = [heading, title ? `\n${title}` : ''].filter(Boolean).join('\n');
 
     try {
@@ -275,7 +295,7 @@ export default function PersonalityScreen() {
 
         <View style={styles.intro}>
           <Text style={styles.heading}>{
-            cat === 'wine' ? 'Your Wine Personality' : 'Your Foodie Personality'
+            cat === 'wine' ? 'Your Wine Personality' : cat === 'recipe' ? 'Your Foodie Personality' : 'Your Vinster Alter-Ego'
           }</Text>
           <Text style={styles.subheading}>{personalityBlurb(cat)}</Text>
         </View>
@@ -301,7 +321,9 @@ export default function PersonalityScreen() {
             <Text style={styles.errorBody}>
               {cat === 'wine'
                 ? "There isn't quite a clear enough pattern yet to sketch you honestly. Keep adding and reviewing wines — a real personality is worth the wait."
-                : "There isn't quite a clear enough pattern yet to sketch you honestly. Review a few restaurants and save some recipes you love — a real personality is worth the wait."}
+                : cat === 'recipe'
+                  ? "There isn't quite a clear enough pattern yet to sketch you honestly. Review a few restaurants and save some recipes you love — a real personality is worth the wait."
+                  : "There isn't quite a clear enough pattern yet to sketch you honestly. Keep scanning, reviewing and cooking — your alter-ego is worth the wait."}
             </Text>
           </View>
         ) : !text && !hasEnoughData ? (
@@ -310,7 +332,9 @@ export default function PersonalityScreen() {
             <Text style={styles.errorBody}>
               {cat === 'wine'
                 ? 'Scan some lists or labels for your personality sketch.'
-                : 'Rate a few restaurants, save some recipes, or find wine pairings — we need a couple of breadcrumbs before we can sketch you as a foodie.'}
+                : cat === 'recipe'
+                  ? 'Rate a few restaurants, save some recipes, or find wine pairings — we need a couple of breadcrumbs before we can sketch you as a foodie.'
+                  : 'Keep scanning, reviewing and cooking — Vinster needs a few breadcrumbs before it can sketch your alter-ego.'}
             </Text>
           </View>
         ) : text ? (

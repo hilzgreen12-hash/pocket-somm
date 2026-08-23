@@ -384,7 +384,7 @@ export async function detectLineup(base64Image: string): Promise<{ bottles: Dete
   return invokeFunction('detect-lineup', { base64Image }) as Promise<{ bottles: DetectedBottle[] }>;
 }
 
-export async function generatePersonality(category: 'wine' | 'recipe' | 'restaurant', payload: {
+export async function generatePersonality(category: 'wine' | 'recipe' | 'restaurant' | 'alter-ego', payload: {
   preferences?: Record<string, unknown> | null;
   wines?: Array<{ producer: string | null; wine_name: string; vintage: string | null; region: string | null }>;
   restaurants?: Array<{ name: string | null; city: string | null; food: number | null; service: number | null; wineList: number | null; overall: number | null; note: string | null }>;

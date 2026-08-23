@@ -22,9 +22,12 @@ export function splitPersonality(text: string | null | undefined): { title: stri
 // Explainer shown under "Your Wine/Foodie Personality" on the personality
 // screen and on the shared card, so friends who receive a sketch understand
 // what it is.
-export function personalityBlurb(category: 'wine' | 'recipe'): string {
+export function personalityBlurb(category: 'wine' | 'recipe' | 'alter-ego'): string {
   if (category === 'recipe') {
     return "Vinster's take on who you really are in the kitchen, mandolin in hand. This character sketch is drawn up through the lens of your profile, the recipes you choose, what you cook, and your reviews. You've probably never taken the time to think of your foodie alter-ego — but Vinster has.";
+  }
+  if (category === 'alter-ego') {
+    return "Vinster's take on who you really are — reading whether your heart lies in the glass, on the plate, or somewhere gloriously in between. Drawn from your cellar and reviews, the restaurants you love and the recipes you save. You've never sat down to picture your gastronomic alter-ego — but Vinster has.";
   }
   return "Vinster's take on who you really are in the cellar, corkscrew in hand. This character sketch is drawn up through the lens of your profile, what bottles you choose, what's in your cellar, and your reviews. You've probably never taken the time to think of your vinous alter-ego — but Vinster has.";
 }

@@ -124,6 +124,77 @@ ${recipeLines}
 Return only the prose — no preamble, no markdown headers other than the title line. Just the title and the character sketch, ready to display.`;
 }
 
+// The combined "alter-ego" sketch. Reads BOTH the wine side and the food side
+// and, crucially, works out which one the user actually leans into — then
+// weights the sketch accordingly. A wine-obsessive gets a wine-forward
+// alter-ego; a keen cook/diner gets a food-forward one; someone equally into
+// both gets a blended gastronome. This wine-vs-food read is the point.
+function buildAlterEgoPrompt(payload: any): string {
+  const p = payload.preferences ?? {};
+  const wines: any[] = payload.wines ?? [];
+  const restaurants: any[] = payload.restaurants ?? [];
+  const recipes: any[] = payload.recipes ?? [];
+  const arr = (a: any) => Array.isArray(a) && a.length ? a.join(', ') : 'none specified';
+  const stars = (n: number | null | undefined) => (n != null ? '★'.repeat(n) + '☆'.repeat(Math.max(0, 5 - n)) : '—');
+
+  const wineLines = wines.length === 0
+    ? 'None yet.'
+    : wines.slice(0, 30).map((w: any) => `- ${[w.producer, w.wine_name, w.vintage].filter(Boolean).join(' — ')}${w.region ? ` (${w.region})` : ''}`).join('\n');
+  const restaurantLines = restaurants.length === 0
+    ? 'None yet.'
+    : restaurants.slice(0, 25).map((r: any) => `- ${r.name ?? 'Unnamed'}${r.city ? ` (${r.city})` : ''} — Food ${stars(r.food)}, Overall ${stars(r.overall)}${r.note ? ` · "${String(r.note).slice(0, 120)}"` : ''}`).join('\n');
+  const recipeLines = recipes.length === 0
+    ? 'None yet.'
+    : recipes.slice(0, 25).map((r: any) => `${r.isFavourite ? '★ ' : '- '}${r.dishName}${r.chefInspiration ? ` (inspired by ${r.chefInspiration})` : ''}`).join('\n');
+
+  // Rough signal counts so the model can gauge the balance up front.
+  const wineSignals = wines.length;
+  const foodSignals = restaurants.length + recipes.length;
+
+  return `You are Vinster — a sharp, warm, dry-witted British gastronome. Read the whole person below (their wine life AND their food life) and write ONE short, lovingly observed character sketch: their "alter-ego".
+
+THE KEY JUDGEMENT — do this first:
+Work out whether this person is fundamentally a WINE person, a FOOD person, or genuinely both in equal measure. Read it from the relative depth and richness of each side — how many wines vs restaurants/recipes, how specific and considered each is, where their evident passion sits (roughly: ${wineSignals} wine signals vs ${foodSignals} food signals, but weigh QUALITY and specificity, not just counts). Then WEIGHT the sketch accordingly:
+- Clearly wine-led → a wine-forward alter-ego; food is a supporting note.
+- Clearly food-led → a food-forward alter-ego; wine is a supporting note.
+- Genuinely balanced → a blended gastronome who lives at the intersection of the glass and the plate.
+Name what they are. This wine-vs-food read is the heart of the sketch — make it feel like Vinster has genuinely clocked where their heart lies.
+
+OUTPUT FORMAT — required:
+First line: a punchy title, prefixed with "# " (markdown H1). Six words or fewer, witty and specific. Then a blank line, then the body.
+
+HARD LIMIT for the body: 300 words. 3–4 tight paragraphs, every sentence earning its place.
+
+Tone: warm, dry, gently teasing, never mean — a friend who knows them well and is fond of them. Address them as "you"; give them a memorable nickname or archetype halfway through. Don't quote the data verbatim — read between the lines. Never name-drop famous critics or chefs.
+
+SUFFICIENCY GATE — check BEFORE writing:
+There must be enough genuine, varied signal on AT LEAST ONE side (real wines engaged with, or real restaurant reviews / saved recipes) to ground an authentic sketch — not bare preference toggles. If it's too thin to be true, respond with EXACTLY this single line and nothing else:
+NOT_ENOUGH_YET
+
+CITE YOUR EVIDENCE: every observation traces to something concrete — name the actual bottles, regions, restaurants or dishes. Never invent a pattern the data doesn't show.
+
+Here's what we know:
+
+WINE PROFILE
+- Colour/style: ${arr(p.wineTypes)}${p.styleProfiles ? ` / ${arr(p.styleProfiles)}` : ''}
+- Favourite regions/grapes: ${arr(p.favouriteRegions)} / ${arr(p.favouriteGrapes)}
+- Budget: ${p.defaultBudget ? `${p.defaultCurrency ?? 'GBP'} ${p.defaultBudget}` : 'not set'}
+
+WINES IN THEIR LIFE (cellar + reviewed picks)
+${wineLines}
+
+FOOD PROFILE
+- Dietary/cuisine: ${arr(p.dietaryNeeds)} / ${arr(p.regionalPreferences)}
+
+RESTAURANTS (where they eat and what they thought)
+${restaurantLines}
+
+SAVED RECIPES (★ = favourited)
+${recipeLines}
+
+Return only the prose — the title line then the sketch, ready to display.`;
+}
+
 Deno.serve(async (req) => {
   try {
     const limited = await checkRateLimit(req, 'personality', PERSONALITY_HOURLY_LIMIT, PERSONALITY_DAILY_LIMIT);
@@ -131,7 +202,11 @@ Deno.serve(async (req) => {
 
     const body = await req.json();
     const category = (body.category ?? 'wine').toString();
-    const prompt = category === 'recipe' ? buildRecipePrompt(body) : buildWinePrompt(body);
+    const prompt = category === 'alter-ego'
+      ? buildAlterEgoPrompt(body)
+      : category === 'recipe'
+        ? buildRecipePrompt(body)
+        : buildWinePrompt(body);
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',
