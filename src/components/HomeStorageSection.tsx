@@ -182,7 +182,9 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   return (
     <View>
       <Text style={styles.sectionHeader}>Your Wines At Home</Text>
-      <Text style={styles.intro}>Replicate your home wine storage in Vinster.</Text>
+      <Text style={styles.intro}>
+        Replicate your home wine storage in Vinster. Add a Fridge, Rack, Bin or Alternative location (In the shed, under the bed…) and populate it with thumbnails of your wines.
+      </Text>
 
       {hasStorage && (
         <Text style={styles.stats}>
