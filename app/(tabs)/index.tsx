@@ -88,15 +88,14 @@ export default function ScanLandingScreen() {
   const [hardGate, setHardGate] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
-  // First landing after opening the app shows the full brand hero; returning to
-  // the Scan tab (after using a function, or switching tabs and back) shows the
-  // compact "like any other page" header. Focus count survives while the tab
-  // stays mounted; it resets on a fresh app launch, so the hero returns then.
-  const [compact, setCompact] = useState(false);
-  const focusCountRef = useRef(0);
+  // The Scan tab always shows its normal compact header. On the first landing
+  // after opening the app, a welcome overlay (logo · "Your AI Sommelier" ·
+  // Welcome) appears over it, dismissed with "Continue". Shown once per app
+  // session (the ref resets on a fresh launch).
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const welcomeShownRef = useRef(false);
   useFocusEffect(useCallback(() => {
-    focusCountRef.current += 1;
-    if (focusCountRef.current > 1) setCompact(true);
+    if (!welcomeShownRef.current) { welcomeShownRef.current = true; setWelcomeOpen(true); }
   }, []));
 
   // Soft gate: guest sees the prompt but may Continue (scanning is guest-open).
@@ -344,28 +343,13 @@ export default function ScanLandingScreen() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-      {compact ? (
-        <>
-          <VinsterHeader />
-          <View style={styles.titleRow}>
-            <Text style={styles.appName}>Scan</Text>
-          </View>
-          <Text style={styles.blurb}>
-            Generate wine intel from labels, bottle recommendations from wine lists, and archive your vinous exploits — Vinster keeps a record of it all for you.
-          </Text>
-        </>
-      ) : (
-        <View style={styles.hero}>
-          <Image source={require('../../assets/vinster-logo.png')} style={styles.logo} resizeMode="contain" />
-          <Text style={styles.tagline}>Your AI Sommelier</Text>
-          <View style={styles.ruleRow}>
-            <View style={styles.rule} />
-            <Text style={styles.ruleMark}>◇</Text>
-            <View style={styles.rule} />
-          </View>
-          <Text style={styles.welcome}>{username ? `Welcome, ${username}` : 'Welcome'}</Text>
-        </View>
-      )}
+      <VinsterHeader />
+      <View style={styles.titleRow}>
+        <Text style={styles.appName}>Scan</Text>
+      </View>
+      <Text style={styles.blurb}>
+        Generate wine intel from labels, bottle recommendations from wine lists, and archive your vinous exploits — Vinster keeps a record of it all for you.
+      </Text>
 
       <View style={styles.actions}>
         {/* Predictive "Search a Wine" — as you type, matches from the catalog
@@ -519,6 +503,25 @@ export default function ScanLandingScreen() {
         </View>
       </Modal>
 
+      {/* Welcome overlay — brand block on first landing; "Continue" dismisses it. */}
+      <Modal visible={welcomeOpen} transparent animationType="fade" onRequestClose={() => setWelcomeOpen(false)}>
+        <View style={styles.welcomeOverlay}>
+          <View style={styles.welcomeSheet}>
+            <Image source={require('../../assets/vinster-logo.png')} style={styles.logo} resizeMode="contain" />
+            <Text style={styles.tagline}>Your AI Sommelier</Text>
+            <View style={styles.ruleRow}>
+              <View style={styles.rule} />
+              <Text style={styles.ruleMark}>◇</Text>
+              <View style={styles.rule} />
+            </View>
+            <Text style={styles.welcome}>{username ? `Welcome, ${username}` : 'Welcome'}</Text>
+            <TouchableOpacity onPress={() => setWelcomeOpen(false)} activeOpacity={0.7} style={styles.welcomeContinueBtn}>
+              <Text style={styles.welcomeContinue}>Continue</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <SignInPromptModal
         visible={signInPromptVisible}
         allowContinue={!hardGate}
@@ -563,6 +566,11 @@ const styles = StyleSheet.create({
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl },
 
   hero: { alignItems: 'center', marginBottom: spacing.sm },
+  // Welcome overlay — centred brand sheet on first landing.
+  welcomeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  welcomeSheet: { backgroundColor: colors.background, borderRadius: 20, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl, alignItems: 'center', width: '100%', maxWidth: 420 },
+  welcomeContinueBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xxl, alignItems: 'center', marginTop: spacing.lg },
+  welcomeContinue: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
   logo: { width: 220, height: 170, marginBottom: 0 },
   tagline: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, marginTop: -spacing.md, letterSpacing: 1 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.sm, marginBottom: spacing.sm, paddingHorizontal: spacing.xxl },
