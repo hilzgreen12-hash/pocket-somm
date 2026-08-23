@@ -23,13 +23,20 @@ function formatDate(iso: string) {
 }
 
 export default function ChefArchiveScreen() {
-  const { filter: initialFilter } = useLocalSearchParams<{ filter?: string }>();
+  const { filter: initialFilter, addFolder } = useLocalSearchParams<{ filter?: string; addFolder?: string }>();
   const { session } = useAuth();
   const { sessions: labelSessions, isLoading: labelLoading, remove: removeLabel } = useChefLabelHistory();
   const { collections, membershipMap, create, rename, remove, addItem, removeItem, toggleStar } = useChefArchiveCollections();
 
-  const [filter, setFilter] = useState<string>(initialFilter === 'favourites' ? FILTER_FAVOURITES : FILTER_ALL);
-  const [newFolderOpen, setNewFolderOpen] = useState(false);
+  // A `filter` param arriving from the Pair-tab Cookbook carousel is either
+  // 'favourites', a folder id, or nothing (→ All).
+  const [filter, setFilter] = useState<string>(
+    initialFilter === 'favourites' ? FILTER_FAVOURITES
+      : initialFilter && initialFilter !== 'all' && initialFilter !== FILTER_ALL ? initialFilter
+      : FILTER_ALL,
+  );
+  // ?addFolder=1 (the carousel's "+ Add folder") opens the create sheet on arrival.
+  const [newFolderOpen, setNewFolderOpen] = useState(addFolder === '1');
   // Remembered when the user taps "+ Create new folder" from inside the
   // Add to Folder modal — once the folder is created we add this recipe
   // to it automatically, so the user doesn't have to find it again.

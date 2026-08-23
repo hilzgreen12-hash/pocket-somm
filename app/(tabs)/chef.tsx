@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpButton } from '../../src/components/HelpButton';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
+import { CookbookFoldersCarousel } from '../../src/components/CookbookFoldersCarousel';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
@@ -118,12 +119,11 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Your Cookbook — saved recipes. */}
+      {/* Your Cookbook — saved recipes, surfaced as its folder carousel. */}
       <View style={styles.section}>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => router.push('/chef/archive')}>
-          <Text style={styles.buttonText}>Your Cookbook</Text>
-        </TouchableOpacity>
+        <Text style={styles.sectionHeader}>Your Cookbook</Text>
       </View>
+      <CookbookFoldersCarousel />
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
@@ -147,6 +147,8 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // "Your Cookbook" header — matches Cellar / Review section headers.
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Section question prompts ("Chosen your bottle?", "Have a recipe & need
   // a wine?") — Cormorant.
