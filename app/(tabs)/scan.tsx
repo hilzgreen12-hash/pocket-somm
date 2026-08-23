@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions, Modal } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
@@ -9,16 +9,15 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
-const SCAN_HELP = `Your wine and restaurant reviews live here.
+const SCAN_HELP = `Your wine and restaurant reviews live here. Restaurants you record, and wines you pick from a restaurant's list, appear here automatically for you to review.
 
-And "Vinster's Review of You" — witty Wine and Foodie personality sketches Vinster draws from how you drink, cook and rate. Share them with friends or the community, and watch them evolve.`;
+And "Vinster's Review of You" — your Vinster alter-ego, a witty character sketch Vinster draws from how you drink, cook and rate. Share it with friends or the community, and watch it evolve.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
 
-  const [sketchInfoOpen, setSketchInfoOpen] = useState(false);
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
@@ -42,7 +41,7 @@ export default function ScanTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Your wine and restaurant reviews live here — plus Vinster's Review of You, your personality sketches.
+          Your wine and restaurant reviews live here — restaurants you record and wines picked from their lists appear automatically — plus Vinster's Review of You.
         </Text>
         <HelpButton label="More About Review" title="How Review works" body={SCAN_HELP} />
       </View>
@@ -61,37 +60,16 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Vinster's Review of You — the personality sketches. */}
+      {/* Vinster's Review of You — a single alter-ego sketch. */}
       <View style={styles.section}>
         <Text style={styles.sectionHeader}>Vinster's Review of You</Text>
-        <View style={styles.sketchHeaderRow}>
-          <Text style={styles.sketchHeader}>Your Personality Sketch</Text>
-          <TouchableOpacity onPress={() => setSketchInfoOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.whatsThis}>what's this?</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.sketchBlurb}>
+          As you scan, cellar, rate and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that evolves as you use the app. Share it with friends or the community.
+        </Text>
         <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/profile/personality?category=wine'))}>
-          <Text style={styles.buttonText}>Your Wine Personality</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.buttonFull} onPress={() => requireAccount(() => router.push('/profile/personality?category=recipe'))}>
-          <Text style={styles.buttonText}>Your Foodie Personality</Text>
+          <Text style={styles.buttonText}>Your Vinster Alter-Ego</Text>
         </TouchableOpacity>
       </View>
-
-      {/* "What's this?" — explains the personality sketches. */}
-      <Modal visible={sketchInfoOpen} transparent animationType="fade" onRequestClose={() => setSketchInfoOpen(false)}>
-        <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setSketchInfoOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Your Personality Sketch</Text>
-            <Text style={styles.modalBody}>
-              As you scan, cellar, rate and cook, Vinster sketches a witty character profile of you — a separate Wine personality and Foodie personality drawn from your tastes. They evolve as you use the app, and you can share them with friends or post them to the community.
-            </Text>
-            <TouchableOpacity style={styles.modalButton} onPress={() => setSketchInfoOpen(false)}>
-              <Text style={styles.modalButtonText}>Got it</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -118,13 +96,5 @@ const styles = StyleSheet.create({
   // "Vinster's Review of You" section header + the "Your Personality Sketch"
   // sub-heading with its "what's this?" link.
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  sketchHeaderRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.xs },
-  sketchHeader: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
-  whatsThis: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
-  modalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
-  modalBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
-  modalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
-  modalButtonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  sketchBlurb: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
 });
