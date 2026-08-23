@@ -291,14 +291,14 @@ export default function ScanLandingScreen() {
           onLongPress={() => requireAccount(handleViewLastIntel)}
           activeOpacity={0.85}
         >
-          <Feather name="camera" size={22} color={colors.gold} style={styles.scanIcon} />
+          <Feather name="camera" size={20} color="#FFFFFF" style={styles.scanIcon} />
           <Text style={styles.scanButtonText}>Scan a Wine Label</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>Upload Wine Label</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(() => router.push('/scan/archive'))} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>Label Scan History</Text>
+          <Text style={styles.uploadButtonText}>Your Label Scans</Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -311,14 +311,14 @@ export default function ScanLandingScreen() {
           onLongPress={() => requireAccount(handleViewLastListResult)}
           activeOpacity={0.85}
         >
-          <Feather name="camera" size={22} color={colors.gold} style={styles.scanIcon} />
+          <Feather name="camera" size={20} color="#FFFFFF" style={styles.scanIcon} />
           <Text style={styles.scanButtonText}>Scan a Wine List</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.uploadButton} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>Upload Wine List</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>List Scan History</Text>
+          <Text style={styles.uploadButtonText}>Your List Scans</Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
@@ -334,7 +334,7 @@ export default function ScanLandingScreen() {
           })}
           activeOpacity={0.85}
         >
-          <Feather name="camera" size={22} color={colors.gold} style={styles.scanIcon} />
+          <Feather name="camera" size={20} color="#FFFFFF" style={styles.scanIcon} />
           <Text style={styles.scanButtonText}>Archive a Lineup</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(() => router.push('/cellar/lineups'))} activeOpacity={0.8}>
@@ -393,9 +393,9 @@ export default function ScanLandingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Brand block sits higher now (no hamburger row above it) — moderate top pad.
-  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.xxl, paddingBottom: spacing.xl },
+  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl },
 
-  hero: { alignItems: 'center', marginBottom: spacing.md },
+  hero: { alignItems: 'center', marginBottom: spacing.sm },
   logo: { width: 220, height: 170, marginBottom: 0 },
   tagline: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, marginTop: -spacing.md, letterSpacing: 1 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.sm, marginBottom: spacing.sm, paddingHorizontal: spacing.xxl },
@@ -413,11 +413,11 @@ const styles = StyleSheet.create({
   // white Upload button beneath; the manual search bar sits last.
   actions: {},
   divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
-  scanButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 16, paddingVertical: spacing.lg, marginTop: spacing.md },
+  scanButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 16, paddingVertical: spacing.md, marginTop: spacing.sm },
   scanIcon: { marginRight: spacing.sm },
-  scanButtonText: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, letterSpacing: 1, textAlign: 'center' },
-  uploadButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
-  uploadButtonText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', textAlign: 'center' },
+  scanButtonText: { fontFamily: fonts.headingBold, fontSize: 20, color: '#FFFFFF', letterSpacing: 1, textAlign: 'center' },
+  uploadButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
+  uploadButtonText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center' },
   // "Search a Wine Name for Intel" — magnifying-glass icon left of the field.
   searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginTop: spacing.md },
   searchIcon: { marginRight: spacing.sm },
