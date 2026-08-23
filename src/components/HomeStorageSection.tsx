@@ -199,7 +199,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
       ) : session && isError ? (
         <Text style={styles.error}>Couldn't load your storage — pull to refresh. Your wines are safe.</Text>
       ) : (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.carouselScroll} contentContainerStyle={styles.carousel}>
           {hasStorage ? (
             <>
               {racks.map((rack) => (
@@ -278,6 +278,8 @@ const styles = StyleSheet.create({
   addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
+  // Extra breathing room between "+ Add Storage Location" and the carousel.
+  carouselScroll: { marginTop: spacing.xl },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
   storageCardType: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
