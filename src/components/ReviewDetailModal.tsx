@@ -185,8 +185,6 @@ export function ReviewDetailModal({
                     </TouchableOpacity>
                   ) : null}
                 </View>
-                <Text style={styles.originLine}>{originLine}</Text>
-
                 {(e.favourite || e.score != null || drink) ? (
                   <View style={styles.scoreRow}>
                     {e.favourite ? <Text style={styles.star}>★</Text> : null}
@@ -194,6 +192,8 @@ export function ReviewDetailModal({
                     {drink ? <Text style={styles.drink}>Drink: {drink}</Text> : null}
                   </View>
                 ) : null}
+
+                <Text style={styles.originLine}>{originLine}</Text>
 
                 {(e.note ?? '').trim() ? (
                   <Text style={styles.sectionBody}>{e.note}</Text>
@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
 
   // View Vinster's Note — collapsible, sits between the stats band and the rule.
   vinsterToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
-  vinsterToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1.2 },
+  vinsterToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 1.2 },
   vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)', marginBottom: spacing.sm },
   vinsterLabel: { fontFamily: fonts.bodyBold, color: colors.gold },
   vinsterField: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 21 },
@@ -260,7 +260,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
   // Larger date · location stamp; concise origin line beneath it in white, smaller.
   stamp: { fontFamily: fonts.bodySemibold, fontSize: 17, color: colors.text, flex: 1 },
-  originLine: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.text, marginTop: 3 },
+  originLine: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, marginTop: spacing.sm },
   editLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
 
   scoreRow: { flexDirection: 'row', alignItems: 'baseline', gap: 10, marginTop: 8, marginBottom: spacing.sm },
