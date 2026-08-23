@@ -252,7 +252,7 @@ export default function ScanLandingScreen() {
             <Text style={styles.appName}>Scan</Text>
           </View>
           <Text style={styles.blurb}>
-            Scan a wine label for intel, a wine list for recommendations, or a lineup to archive — or search a wine by name.
+            Generate wine intel from labels, bottle recommendations from wine lists, and archive your vinous exploits — Vinster keeps a record of it all for you.
           </Text>
         </>
       ) : (
