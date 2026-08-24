@@ -29,6 +29,8 @@ export const colors = {
   // Borders — white with low opacity
   border: 'rgba(255,255,255,0.10)',
   borderLight: 'rgba(255,255,255,0.18)',
+  // Thin but clearly-visible white outline — framing the brown carousel cards.
+  borderWhite: 'rgba(255,255,255,0.55)',
   // Faded-gold content separators on the tab pages.
   divider: 'rgba(224,184,74,0.30)',
 

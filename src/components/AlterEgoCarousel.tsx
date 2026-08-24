@@ -76,7 +76,7 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Real sketch card — title then date beneath. Elegant (Cormorant) type to
   // match the Review header. Same footprint as the Cellar / Cookbook chips.
-  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'flex-start', gap: spacing.xs, backgroundColor: colors.surface },
+  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'flex-start', gap: spacing.xs, backgroundColor: colors.surface },
   cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 20 },
   cardDate: { fontSize: 12, fontFamily: fonts.headingRegular, color: colors.textMuted },
   // Brown "your alter-ego is coming" placeholder.

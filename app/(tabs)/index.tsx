@@ -578,7 +578,7 @@ const styles = StyleSheet.create({
   archiveEmpty: { fontFamily: fonts.headingItalic, fontSize: 15, color: 'rgba(255,255,255,0.7)', lineHeight: 22 },
   carousel: { gap: spacing.md, paddingRight: spacing.md },
   carouselItem: { width: 130 },
-  carouselImageWrap: { width: 130, height: 102, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  carouselImageWrap: { width: 130, height: 102, borderRadius: 8, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   carouselImage: { width: 130, height: 102 },
   carouselDate: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 4 },
 

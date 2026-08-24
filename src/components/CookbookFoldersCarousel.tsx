@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
 
   // Box tiles — matched to the Cellar storage carousel (HomeStorageSection).
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
-  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
+  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
   cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },

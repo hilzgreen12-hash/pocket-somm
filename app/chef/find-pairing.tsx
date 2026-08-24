@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 44 },
   // Cellar-style header bar.
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   blurb: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 22, textAlign: 'center', marginBottom: spacing.sm },
   // Inline preferences link — inherits the blurb's font/size, gold + underline.
   blurbLink: { color: colors.gold, textDecorationLine: 'underline' },

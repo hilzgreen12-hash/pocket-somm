@@ -284,7 +284,7 @@ const styles = StyleSheet.create({
   // Extra breathing room between "+ Add Storage Location" and the carousel.
   carouselScroll: { marginTop: spacing.xl },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
-  storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
+  storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
   storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted },

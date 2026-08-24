@@ -462,7 +462,7 @@ const styles = StyleSheet.create({
   content: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 48 },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginTop: spacing.xs, marginBottom: spacing.md },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
+  headerTitle: { flex: 1, textAlign: 'center', fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },
   heading: { fontSize: 32, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1, textAlign: 'center', marginBottom: spacing.xs },
   subheading: { fontSize: 16, fontFamily: fonts.headingItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22, marginBottom: spacing.sm },
   label: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, marginBottom: 2, letterSpacing: 0.3 },
