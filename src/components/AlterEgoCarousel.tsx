@@ -5,7 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../api/supabase';
 import { splitPersonality } from '../utils/personalityText';
 import { colors, spacing } from '../constants/theme';
-import { fonts } from '../constants/fonts';
+import { fontsSpectral as fonts } from '../constants/fonts';
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return '';
@@ -48,44 +48,42 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
               onPress={() => requireAccount(() => router.push(`/profile/personality?category=alter-ego&sketchId=${s.id}` as any))}
               activeOpacity={0.85}
             >
-              <Text style={styles.cardType}>Alter-Ego</Text>
               <Text style={styles.cardName} numberOfLines={3}>{title || 'Your Vinster Alter-Ego'}</Text>
               <Text style={styles.cardDate}>{fmtDate(s.created_at)}</Text>
             </TouchableOpacity>
           );
         })
       ) : (
-        <>
-          {/* Brown "coming" card — tap to have Vinster draw the first sketch
-              once there's enough to read. */}
-          <TouchableOpacity
-            style={styles.mysteryCard}
-            onPress={() => requireAccount(() => router.push('/profile/personality?category=alter-ego' as any))}
-            activeOpacity={0.85}
-          >
-            <Text style={styles.mysteryTitle}>You Are, As Yet, A Mystery</Text>
-            <Text style={styles.mysterySub}>Vinster is quietly judging… your alter-ego is coming.</Text>
-          </TouchableOpacity>
-          <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
-          <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
-        </>
+        // No sketches yet — the brown "coming" card. Tap to have Vinster draw
+        // the first sketch once there's enough to read.
+        <TouchableOpacity
+          style={styles.mysteryCard}
+          onPress={() => requireAccount(() => router.push('/profile/personality?category=alter-ego' as any))}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.mysteryTitle}>You Are, As Yet, A Mystery</Text>
+          <Text style={styles.mysterySub}>Vinster is quietly judging… your alter-ego is coming.</Text>
+        </TouchableOpacity>
       )}
+      {/* Two dashed "future" placeholders always trail the carousel. */}
+      <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
+      <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
-  // Real sketch card — same footprint as the Cellar storage / Cookbook chips.
-  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
-  cardType: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
-  cardName: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.gold, lineHeight: 18 },
-  cardDate: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  // Real sketch card — title then date beneath. Elegant (Cormorant) type to
+  // match the Review header. Same footprint as the Cellar / Cookbook chips.
+  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'flex-start', gap: spacing.xs, backgroundColor: colors.surface },
+  cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 20 },
+  cardDate: { fontSize: 12, fontFamily: fonts.headingRegular, color: colors.textMuted },
   // Brown "your alter-ego is coming" placeholder.
   mysteryCard: { width: 152, height: 108, borderWidth: 1, borderColor: '#6B4A32', borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: '#3A2A20' },
-  mysteryTitle: { fontSize: 14, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 18 },
-  mysterySub: { fontSize: 11, fontFamily: fonts.bodyItalic, color: 'rgba(232,214,184,0.75)', lineHeight: 14 },
+  mysteryTitle: { fontSize: 15, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 19 },
+  mysterySub: { fontSize: 12, fontFamily: fonts.headingItalic, color: 'rgba(232,214,184,0.8)', lineHeight: 15 },
   // Dashed gold "future" tiles — same look as the "+ Add" carousel tiles.
   futureCard: { width: 152, height: 108, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  futureText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'center', lineHeight: 16 },
+  futureText: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 17 },
 });
