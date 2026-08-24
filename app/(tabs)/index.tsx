@@ -13,6 +13,8 @@ import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel, searchWines, searchLabelImages, type WineSearchResult } from '../../src/api/label';
+import { listLineupArchives, lineupSignedUrl, type LineupArchive } from '../../src/api/lineups';
+import { useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
@@ -29,9 +31,29 @@ import { fonts } from '../../src/constants/fonts';
 // not every time the user returns to the Scan tab.
 let welcomeShownThisSession = false;
 
-// The Scan landing — the app's home tab. Brand block up top, then the two big
-// scan actions and a manual "Search A Wine" bar. The six-tab bar handles all
-// other navigation, so there's no hamburger here.
+// One photo in the "Your Lineup Archive" carousel — resolves a fresh signed URL
+// on mount and taps through to the lineup's detail screen.
+function LineupThumb({ item }: { item: LineupArchive }) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    lineupSignedUrl(item.image_path).then((u) => { if (active) setUrl(u); });
+    return () => { active = false; };
+  }, [item.image_path]);
+  const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  return (
+    <TouchableOpacity style={styles.carouselItem} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} activeOpacity={0.85}>
+      <View style={styles.carouselImageWrap}>
+        {url ? <Image source={{ uri: url }} style={styles.carouselImage} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} />}
+      </View>
+      <Text style={styles.carouselDate} numberOfLines={1}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
+    </TouchableOpacity>
+  );
+}
+
+// The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
+// an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
+// carousel. The six-tab bar handles all other navigation, so there's no hamburger.
 export default function ScanLandingScreen() {
   const { session } = useAuth();
   const username = (session?.user.user_metadata?.display_name ?? '').trim();
@@ -54,6 +76,16 @@ export default function ScanLandingScreen() {
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const [hardGate, setHardGate] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
+  // The "Search a Wine" tile opens the predictive typeahead in a prompt.
+  const [searchModalOpen, setSearchModalOpen] = useState(false);
+
+  // Your Lineup Archive carousel — the user's saved lineup photos, newest first.
+  const userId = session?.user.id;
+  const { data: lineups = [] } = useQuery({
+    queryKey: ['lineup-archives', userId],
+    queryFn: () => listLineupArchives(userId!),
+    enabled: !!userId,
+  });
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Your AI Sommelier" ·
@@ -139,6 +171,7 @@ export default function ScanLandingScreen() {
     requireAuth(() => {
       skipSearchRef.current = true;
       setSearchOpen(false);
+      setSearchModalOpen(false);
       setSearchResults([]);
       setWineSearch('');
       setVintageDraft('');
@@ -154,6 +187,7 @@ export default function ScanLandingScreen() {
     requireAuth(() => {
       skipSearchRef.current = true;
       setSearchOpen(false);
+      setSearchModalOpen(false);
       resetLabelStore();
       setWineSearch('');
       router.push(`/label/confirm?manual=1&context=intel&seed=${encodeURIComponent(q)}&backTo=${encodeURIComponent('/(tabs)')}`);
@@ -273,97 +307,93 @@ export default function ScanLandingScreen() {
         Generate wine intel from labels, bottle recommendations from wine lists, and archive your vinous exploits — Vinster keeps a record of it all for you.
       </Text>
 
-      <View style={styles.actions}>
-        {/* Predictive "Search a Wine" — as you type, matches from the catalog
-            drop down; pick one and Vinster only asks the vintage. */}
-        <View style={styles.searchRow}>
-          <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInputInner}
-            value={wineSearch}
-            onChangeText={setWineSearch}
-            placeholder="Search a Wine Name for Intel"
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="search"
-            autoCapitalize="words"
-            autoCorrect={false}
-            onSubmitEditing={useTypedWine}
-          />
-          {searchLoading ? <ActivityIndicator color={colors.gold} style={{ marginLeft: spacing.sm }} /> : null}
+      {/* 2×2 grid of scan actions. Each scan tile carries an "upload instead"
+          banner across its bottom; the Search tile opens the typeahead prompt. */}
+      <View style={styles.grid}>
+        {/* Scan a Wine Label → intel */}
+        <View style={styles.tile}>
+          <TouchableOpacity
+            style={styles.tileMain}
+            onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
+            onLongPress={() => requireAccount(handleViewLastIntel)}
+            activeOpacity={0.85}
+          >
+            <Feather name="camera" size={26} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Wine Label</Text>
+            <View style={styles.tileDivider} />
+            <Text style={styles.tileDesc} numberOfLines={2}>Wine intel from a bottle</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
+            <Feather name="upload" size={11} color={colors.gold} />
+            <Text style={styles.tileBannerText}>upload instead</Text>
+          </TouchableOpacity>
         </View>
-        {searchOpen && (searchLoading || searchResults.length > 0 || wineSearch.trim().length >= 3) ? (
-          <View style={styles.searchDropdown}>
-            {searchResults.length === 0 && searchLoading ? (
-              <Text style={styles.searchDropdownEmpty}>Searching…</Text>
-            ) : (
-              <>
-                {searchResults.map((r, i) => (
-                  <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
-                    <Text style={styles.searchOptionName} numberOfLines={2}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}</Text>
-                    {r.region || r.style ? <Text style={styles.searchOptionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text> : null}
-                  </TouchableOpacity>
-                ))}
-                {!searchLoading && wineSearch.trim().length >= 3 ? (
-                  <TouchableOpacity style={styles.searchOption} onPress={useTypedWine} activeOpacity={0.7}>
-                    <Text style={styles.searchOptionName}>Use “{wineSearch.trim()}”</Text>
-                    <Text style={styles.searchOptionMeta}>{searchResults.length ? 'Not listed? Enter it yourself.' : 'No match — enter it yourself.'}</Text>
-                  </TouchableOpacity>
-                ) : null}
-              </>
-            )}
-          </View>
-        ) : null}
 
-        {/* Wine Label → intel. Big gold Scan (camera) with a white Upload. */}
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
-          onLongPress={() => requireAccount(handleViewLastIntel)}
-          activeOpacity={0.85}
-        >
-          <Feather name="camera" size={20} color="#FFFFFF" style={styles.scanIcon} />
-          <Text style={styles.scanButtonText}>Scan a Wine Label</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>Upload Wine Label</Text>
-        </TouchableOpacity>
+        {/* Scan a Wine List → recommendations */}
+        <View style={styles.tile}>
+          <TouchableOpacity
+            style={styles.tileMain}
+            onPress={() => router.push('/scan/wine-list')}
+            onLongPress={() => requireAccount(handleViewLastListResult)}
+            activeOpacity={0.85}
+          >
+            <Feather name="list" size={26} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Wine List</Text>
+            <View style={styles.tileDivider} />
+            <Text style={styles.tileDesc} numberOfLines={2}>Bottle picks from a menu</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tileBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
+            <Feather name="upload" size={11} color={colors.gold} />
+            <Text style={styles.tileBannerText}>upload instead</Text>
+          </TouchableOpacity>
+        </View>
 
-        <View style={styles.divider} />
+        {/* Scan a Lineup → photograph a bottle lineup and save it */}
+        <View style={styles.tile}>
+          <TouchableOpacity
+            style={styles.tileMain}
+            onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
+            activeOpacity={0.85}
+          >
+            <Feather name="grid" size={26} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Lineup</Text>
+            <View style={styles.tileDivider} />
+            <Text style={styles.tileDesc} numberOfLines={2}>Save tonight's bottles</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(() => router.push('/cellar/archive-night?upload=1'))} activeOpacity={0.7}>
+            <Feather name="upload" size={11} color={colors.gold} />
+            <Text style={styles.tileBannerText}>upload instead</Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Wine List → recommendations. Big gold Scan (camera) with a white Upload. */}
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={() => router.push('/scan/wine-list')}
-          onLongPress={() => requireAccount(handleViewLastListResult)}
-          activeOpacity={0.85}
-        >
-          <Feather name="camera" size={20} color="#FFFFFF" style={styles.scanIcon} />
-          <Text style={styles.scanButtonText}>Scan a Wine List</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.uploadButton} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>Upload Wine List</Text>
-        </TouchableOpacity>
-
-        <View style={styles.divider} />
-
-        {/* Archive a Lineup → photograph a bottle lineup and save it; Your
-            Lineups is the gallery. (Both moved here from the Cellar tab.) */}
-        <TouchableOpacity
-          style={styles.scanButton}
-          onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
-          onLongPress={() => showAlert({
-            title: 'Archive a Lineup',
-            body: "Drank some bottles?\n\nSnap a pic of your lineup to save automatically to Your Lineups — revisit, review, comment and share at a convenient time. Vinster can archive bottles it identifies from your cellar along the way.\n\nChin-Chin!",
-          })}
-          activeOpacity={0.85}
-        >
-          <Feather name="camera" size={20} color="#FFFFFF" style={styles.scanIcon} />
-          <Text style={styles.scanButtonText}>Archive a Lineup</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(() => router.push('/cellar/lineups'))} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>Your Lineups</Text>
-        </TouchableOpacity>
+        {/* Search a Wine → predictive typeahead (no upload equivalent) */}
+        <View style={styles.tile}>
+          <TouchableOpacity style={styles.tileMain} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
+            <Feather name="search" size={26} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
+            <View style={styles.tileDivider} />
+            <Text style={styles.tileDesc} numberOfLines={2}>Wine intel by name</Text>
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Your Lineup Archive — a horizontal carousel of saved lineup photos. */}
+      <View style={styles.archiveDivider} />
+      <View style={styles.archiveHeaderRow}>
+        <Text style={styles.archiveTitle}>Your Lineup Archive</Text>
+        {lineups.length > 0 ? (
+          <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/lineups'))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={styles.archiveSeeAll}>See all</Text>
+          </TouchableOpacity>
+        ) : null}
+      </View>
+      {lineups.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+          {lineups.map((l) => <LineupThumb key={l.id} item={l} />)}
+        </ScrollView>
+      ) : (
+        <Text style={styles.archiveEmpty}>No lineups yet — “Scan a Lineup” to save tonight's bottles.</Text>
+      )}
 
       <Modal visible={scanningLabel} transparent animationType="fade">
         <View style={styles.scanningOverlay}>
@@ -413,6 +443,56 @@ export default function ScanLandingScreen() {
             <ActivityIndicator color={colors.gold} size="large" />
             <Text style={styles.scanningTitle}>Generating wine intel…</Text>
             <Text style={styles.scanningBody}>Vinster is pulling in scores, tasting notes, the drinking window and value.</Text>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Search a Wine — predictive typeahead in a prompt (opened from the tile). */}
+      <Modal visible={searchModalOpen} transparent animationType="fade" onRequestClose={() => setSearchModalOpen(false)}>
+        <View style={styles.searchModalOverlay}>
+          <View style={styles.searchModalSheet}>
+            <Text style={styles.searchModalTitle}>Search a Wine</Text>
+            <View style={styles.searchRow}>
+              <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInputInner}
+                value={wineSearch}
+                onChangeText={setWineSearch}
+                placeholder="Search a Wine Name for Intel"
+                placeholderTextColor={colors.textMuted}
+                returnKeyType="search"
+                autoCapitalize="words"
+                autoCorrect={false}
+                autoFocus
+                onSubmitEditing={useTypedWine}
+              />
+              {searchLoading ? <ActivityIndicator color={colors.gold} style={{ marginLeft: spacing.sm }} /> : null}
+            </View>
+            {searchOpen && (searchLoading || searchResults.length > 0 || wineSearch.trim().length >= 3) ? (
+              <View style={styles.searchDropdown}>
+                {searchResults.length === 0 && searchLoading ? (
+                  <Text style={styles.searchDropdownEmpty}>Searching…</Text>
+                ) : (
+                  <>
+                    {searchResults.map((r, i) => (
+                      <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
+                        <Text style={styles.searchOptionName} numberOfLines={2}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}</Text>
+                        {r.region || r.style ? <Text style={styles.searchOptionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text> : null}
+                      </TouchableOpacity>
+                    ))}
+                    {!searchLoading && wineSearch.trim().length >= 3 ? (
+                      <TouchableOpacity style={styles.searchOption} onPress={useTypedWine} activeOpacity={0.7}>
+                        <Text style={styles.searchOptionName}>Use “{wineSearch.trim()}”</Text>
+                        <Text style={styles.searchOptionMeta}>{searchResults.length ? 'Not listed? Enter it yourself.' : 'No match — enter it yourself.'}</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
+                )}
+              </View>
+            ) : null}
+            <TouchableOpacity onPress={() => { setSearchModalOpen(false); setWineSearch(''); setSearchOpen(false); }} style={styles.searchModalCancel}>
+              <Text style={styles.searchModalCancelText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -474,17 +554,38 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: spacing.xl },
 
-  // Big gold-outlined Scan buttons (camera icon + label), each with a smaller
-  // white Upload button beneath; the manual search bar sits last.
-  actions: {},
-  divider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
-  scanButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 16, paddingVertical: spacing.md, marginTop: spacing.sm },
-  scanIcon: { marginRight: spacing.sm },
-  scanButtonText: { fontFamily: fonts.headingBold, fontSize: 20, color: '#FFFFFF', letterSpacing: 1, textAlign: 'center' },
-  uploadButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
-  uploadButtonText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center' },
+  // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
+  // and (on scan tiles) an "upload instead" banner across the bottom.
+  grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
+  tile: { width: '48%', aspectRatio: 0.9, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden' },
+  tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  tileIcon: { marginBottom: spacing.sm },
+  tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 1, textAlign: 'center' },
+  tileDivider: { width: 34, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
+  tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 17 },
+  tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
+  tileBannerText: { fontFamily: fonts.headingItalic, fontSize: 12, color: colors.gold, letterSpacing: 0.3 },
+
+  // Your Lineup Archive — divider, header, then a horizontal thumbnail carousel.
+  archiveDivider: { height: 1, backgroundColor: colors.divider, marginTop: spacing.xl, marginBottom: spacing.lg },
+  archiveHeaderRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: spacing.md },
+  archiveTitle: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', letterSpacing: 0.5 },
+  archiveSeeAll: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  archiveEmpty: { fontFamily: fonts.headingItalic, fontSize: 15, color: 'rgba(255,255,255,0.7)', lineHeight: 22 },
+  carousel: { gap: spacing.md, paddingRight: spacing.md },
+  carouselItem: { width: 130 },
+  carouselImageWrap: { width: 130, height: 102, borderRadius: 8, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  carouselImage: { width: 130, height: 102 },
+  carouselDate: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 4 },
+
+  // Search-a-Wine prompt (opened from the Search tile).
+  searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  searchModalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
+  searchModalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
+  searchModalCancel: { alignItems: 'center', paddingTop: spacing.md },
+  searchModalCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   // "Search a Wine Name for Intel" — magnifying-glass icon left of the field.
-  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, backgroundColor: colors.surface, marginTop: spacing.md },
+  searchRow: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
   searchIcon: { marginRight: spacing.sm },
   searchInputInner: { flex: 1, paddingVertical: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
   // Predictive dropdown under the search bar.

@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, TextInput, Modal, Dimensions } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
@@ -32,6 +32,10 @@ export default function ArchiveNightScreen() {
   const { session } = useAuth();
   const { wines } = useCellar();
   const qc = useQueryClient();
+  // Arriving from the Scan tile's "upload instead" banner opens the library
+  // picker straight away instead of the in-app camera.
+  const params = useLocalSearchParams<{ upload?: string }>();
+  const uploadTriggeredRef = useRef(false);
 
   const [stage, setStage] = useState<Stage>('capture');
   // Which path the user chose at the preview. Both detect the wines and reach the
@@ -144,6 +148,14 @@ export default function ArchiveNightScreen() {
       showAlert({ title: 'Camera error', body: err instanceof Error ? err.message : 'Could not capture the photo. Please try again.' });
     }
   }
+
+  // Open the library picker once on mount when launched with ?upload=1.
+  useEffect(() => {
+    if (params.upload === '1' && !uploadTriggeredRef.current) {
+      uploadTriggeredRef.current = true;
+      void pickFromLibrary();
+    }
+  }, [params.upload]);
 
   // Upload an existing photo instead of shooting one — lands in the same preview.
   async function pickFromLibrary() {
