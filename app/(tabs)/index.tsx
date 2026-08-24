@@ -572,15 +572,15 @@ const styles = StyleSheet.create({
   hero: { alignItems: 'center', marginBottom: spacing.sm },
   // Welcome overlay — centred brand sheet on first landing.
   welcomeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
-  welcomeSheet: { backgroundColor: colors.background, borderRadius: 20, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl, alignItems: 'center', width: '100%', maxWidth: 420 },
+  welcomeSheet: { backgroundColor: colors.background, borderRadius: 20, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xl, alignItems: 'center', width: '100%', maxWidth: 460 },
   welcomeContinueBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xxl, alignItems: 'center', marginTop: spacing.lg },
   welcomeContinue: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5 },
-  logo: { width: 220, height: 170, marginBottom: 0 },
-  tagline: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, marginTop: -spacing.md, letterSpacing: 1 },
+  logo: { width: 300, height: 230, marginBottom: 0, marginTop: -spacing.sm },
+  tagline: { fontFamily: fonts.headingItalic, fontSize: 19, color: colors.gold, marginTop: -spacing.md, letterSpacing: 1 },
   ruleRow: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', marginTop: spacing.sm, marginBottom: spacing.sm, paddingHorizontal: spacing.xxl },
   rule: { flex: 1, height: 1, backgroundColor: 'rgba(224,184,74,0.55)' },
-  ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm, fontFamily: fonts.headingSemibold },
-  welcome: { fontFamily: fonts.headingItalic, fontSize: 18, color: '#FFFFFF', marginTop: spacing.xs },
+  ruleMark: { color: colors.gold, fontSize: 15, marginHorizontal: spacing.sm, fontFamily: fonts.headingSemibold },
+  welcome: { fontFamily: fonts.headingItalic, fontSize: 23, color: '#FFFFFF', marginTop: spacing.xs },
 
   // Compact header — mirrors the other tab pages (Vinster mark top-left via
   // VinsterHeader, big centred title, blurb beneath).
