@@ -80,9 +80,7 @@ export default function CommunityTab() {
           <Text style={styles.journalText}>The Journal</Text>
           <Text style={styles.journalSub}>Wine notes, stories &amp; finds from Vinster</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => gated('/community/profile')}>
-          <Text style={styles.buttonText}>Your Community Profile</Text>
-        </TouchableOpacity>
+        {/* "Your Community Profile" now lives on the You tab under preferences. */}
         <TouchableOpacity style={styles.button} onPress={() => gated('/community/wine')}>
           <Text style={styles.buttonText}>Wine Reviews</Text>
         </TouchableOpacity>

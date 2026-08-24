@@ -205,6 +205,10 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
         </TouchableOpacity>
+        {/* Moved here from the Share tab — how you appear to the community. */}
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/community/profile')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Community Profile</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.divider} />
