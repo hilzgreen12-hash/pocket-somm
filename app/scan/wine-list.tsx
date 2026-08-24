@@ -19,6 +19,7 @@ import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
 import { useAuth } from '../../src/hooks/useAuth';
+import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
@@ -31,7 +32,7 @@ Record and/or review the bottle you ordered, as well as the restaurant you enjoy
 export default function WineListScreen() {
   const { session } = useAuth();
   const { upload: uploadParam } = useLocalSearchParams<{ upload?: string }>();
-  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset } = useScanStore();
+  const { setPreferences, setImage, setImageUris, needsReset, clearNeedsReset, setExtractedWines, setRecommendation } = useScanStore();
   const { preferences: savedPreferences, prefsLoading } = usePreferences();
 
   // Restore the inputs from the last search when it FAILED, so a retry doesn't
@@ -183,6 +184,27 @@ export default function WineListScreen() {
     go();
   }
 
+  // Revisit the last restaurant-list recommendation — the yellow link beneath
+  // the scan/upload buttons.
+  async function handleViewLastResult() {
+    try {
+      const raw = await AsyncStorage.getItem(scanHistoryKey(session?.user.id));
+      const items = raw ? JSON.parse(raw) : [];
+      if (!items.length) { showAlert({ title: 'No previous search', body: 'Once you scan a wine list, you can come back here to revisit it.' }); return; }
+      const last = items[0];
+      setExtractedWines(last.extractedWines);
+      setRecommendation(last.recommendation);
+      const params = new URLSearchParams({ fromHistory: 'true' });
+      if (last.savedAt) params.set('date', last.savedAt);
+      if (last.restaurantName) params.set('restaurant', last.restaurantName);
+      if (last.city) params.set('city', last.city);
+      if (last.sessionId) params.set('sessionId', last.sessionId);
+      router.push(`/scan/results?${params.toString()}`);
+    } catch {
+      showAlert({ title: 'No previous search', body: 'Once you scan a wine list, you can come back here to revisit it.' });
+    }
+  }
+
   async function handleScreenshot() {
     if (isUploading) return;
     const go = async () => {
@@ -307,6 +329,10 @@ export default function WineListScreen() {
             <Text style={styles.buttonHalfText}>{isUploading ? 'Opening…' : 'Upload Wine List'}</Text>
           </TouchableOpacity>
         </View>
+
+        <TouchableOpacity onPress={handleViewLastResult} activeOpacity={0.7}>
+          <Text style={styles.lastResultLink}>View Last Result</Text>
+        </TouchableOpacity>
 
       </View>
 
@@ -451,6 +477,15 @@ const styles = StyleSheet.create({
   buttonRow: {
     flexDirection: 'row',
     gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  // "View Last Result" — yellow link beneath the scan/upload buttons.
+  lastResultLink: {
+    fontFamily: fonts.bodyRegular,
+    fontSize: 13,
+    color: colors.gold,
+    textDecorationLine: 'underline',
+    textAlign: 'center',
     marginTop: spacing.sm,
   },
   buttonHalf: {

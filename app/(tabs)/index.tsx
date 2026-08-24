@@ -314,8 +314,7 @@ export default function ScanLandingScreen() {
           </View>
         ) : null}
 
-        {/* Wine Label → intel. Big gold Scan (camera), white Upload, then the
-            Label Scan History (the library of every label you've scanned). */}
+        {/* Wine Label → intel. Big gold Scan (camera) with a white Upload. */}
         <TouchableOpacity
           style={styles.scanButton}
           onPress={() => requireAuth(() => router.push(`/label/camera?context=intel&backTo=${encodeURIComponent('/(tabs)')}`))}
@@ -328,14 +327,10 @@ export default function ScanLandingScreen() {
         <TouchableOpacity style={styles.uploadButton} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>Upload Wine Label</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(() => router.push('/scan/archive'))} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>Your Label Scans</Text>
-        </TouchableOpacity>
 
         <View style={styles.divider} />
 
-        {/* Wine List → recommendations. Big gold Scan (camera), white Upload,
-            then List Scan History (revisit the last list result). */}
+        {/* Wine List → recommendations. Big gold Scan (camera) with a white Upload. */}
         <TouchableOpacity
           style={styles.scanButton}
           onPress={() => router.push('/scan/wine-list')}
@@ -347,9 +342,6 @@ export default function ScanLandingScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={styles.uploadButton} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.8}>
           <Text style={styles.uploadButtonText}>Upload Wine List</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.uploadButton} onPress={() => requireAccount(handleViewLastListResult)} activeOpacity={0.8}>
-          <Text style={styles.uploadButtonText}>Your List Scans</Text>
         </TouchableOpacity>
 
         <View style={styles.divider} />
