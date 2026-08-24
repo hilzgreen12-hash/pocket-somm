@@ -1759,7 +1759,7 @@ export default function LabelResultsScreen() {
             </View>
             <Text style={styles.statBarSep}>·</Text>
             <View style={styles.statBarItem}>
-              <Text style={[styles.statBarValue, intel.drinkingWindowFrom && intel.drinkingWindowTo ? { color: windowM.color } : styles.statBarValueMuted]}>
+              <Text style={[styles.statBarValue, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
                 {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom}/${intel.drinkingWindowTo}` : '—'}
               </Text>
               <Text style={styles.statBarLabel}>Drinking Window</Text>
@@ -1771,19 +1771,21 @@ export default function LabelResultsScreen() {
               exact vintage the proxy already falls back to the all-vintage
               average — say so rather than passing it off as the exact vintage.
               When there's no live price at all, state it plainly. */}
-          {intel.valueSource === 'wine-searcher' && intel.priceScope === 'all-vintage' ? (
+          {intel.valueSource === 'wine-searcher' ? (
             <Text style={styles.marketNote}>
-              Wine-Searcher average across all vintages — no price for this exact vintage
+              {intel.estimatedValueLow != null && intel.estimatedValueHigh != null && intel.estimatedValueLow !== intel.estimatedValueHigh
+                ? `Wine-Searcher values range from ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage)' : ''}`
+                : `Wine-Searcher market value${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage)' : ''}`}
             </Text>
           ) : intel.valueSource === 'vinster' && intel.estimatedValue != null ? (
             <Text style={styles.marketNote}>
-              Value and score in this case are Vinster's estimate — no Wine-Searcher match for this exact wine exists
+              Value and score here are Vinster's estimate — there is no Wine-Searcher price for this exact wine
             </Text>
-          ) : intel.estimatedValue == null ? (
+          ) : (
             <Text style={styles.marketNote}>
-              No Wine-Searcher price for this wine
+              There is no price on Wine-Searcher for this wine
             </Text>
-          ) : null}
+          )}
 
           {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
               one above the other with no separator between them; the section's
@@ -2491,7 +2493,7 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 20 },
   statValueMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
   statSub: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  marketNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 18, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, marginHorizontal: spacing.xl },
+  marketNote: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 18, textAlign: 'center', marginTop: spacing.sm, marginBottom: spacing.sm, marginHorizontal: spacing.xl },
   estimatedByLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: 3 },
   estimatedValueGold: { color: colors.gold },
   // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
