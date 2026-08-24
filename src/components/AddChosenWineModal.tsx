@@ -123,6 +123,27 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     if (!session) { showAlert({ title: 'Sign in required', body: 'Sign in to save a review.' }); return; }
     if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name before saving.' }); return; }
     Keyboard.dismiss();
+    // Every review must record a vintage. Accept a four-digit year or an
+    // explicit "NV"; anything else is either a typo (block) or blank (confirm
+    // the wine really is non-vintage rather than saving an unknown silently).
+    const vt = vintage.trim();
+    const validYear = /^\d{4}$/.test(vt) && Number(vt) >= 1800 && Number(vt) <= new Date().getFullYear() + 1;
+    const isNV = /^nv$/i.test(vt);
+    if (!validYear && !isNV) {
+      if (vt === '') {
+        showAlert({
+          title: 'Add a vintage',
+          body: 'Every review needs a vintage. Enter the four-digit year, or confirm this wine is non-vintage.',
+          buttons: [
+            { text: 'Confirm non-vintage', onPress: () => { setVintage('NV'); void proceedSave(); } },
+            { text: 'Add a vintage', style: 'cancel' },
+          ],
+        });
+      } else {
+        showAlert({ title: 'Check the vintage', body: 'A vintage must be a four-digit year, e.g. 2023 — or NV for a non-vintage wine.' });
+      }
+      return;
+    }
     // Pre-save nudge: a review is complete with a date + location stamp, a
     // score, and at least one word in EITHER Your Review or Personal Notes. A
     // list price is NOT required to save. Only nudge when one of those is empty.
