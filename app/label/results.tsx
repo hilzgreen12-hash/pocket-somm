@@ -206,14 +206,8 @@ export default function LabelResultsScreen() {
       // New wine → re-map the producer range for it.
       producerRangeTriedRef.current = false;
       setProducerRange(null);
-      // Replace the auto-saved library label so it reflects the CORRECTED wine —
-      // drop the misread one, then save the new read (best-effort).
-      try {
-        if (savedLabelIdRef.current) { await removeLabel.mutateAsync(savedLabelIdRef.current); savedLabelIdRef.current = null; }
-        const city = await captureCity();
-        const created = await createLabel.mutateAsync({ imageUri: uri, producer: confirmed.producer, wineName: confirmed.wineName, vintage: confirmed.vintage, region: confirmed.region, intel, city });
-        savedLabelIdRef.current = created?.id ?? null;
-      } catch { /* best-effort — library save is not critical */ }
+      // (Label Library retired — scanned labels are no longer saved to a library;
+      // the user saves the wine to Your Wine Reviews from the intel card instead.)
     } catch {
       showAlert({ title: 'Could not read that label', body: 'Please try another photo.' });
     } finally {
@@ -675,43 +669,11 @@ export default function LabelResultsScreen() {
     if (isAddFlow) setAddingToCellar(true);
   }, [isAddFlow]);
 
-  // A fresh Scan Wine Label intel result is kept in Your Label Library
-  // automatically — the old "add to library?" prompt was redundant friction, so
-  // the user now lands straight on the intel card and the label is saved
-  // silently in the background. Fires exactly once (guarded ref), and only when
-  // there's an actual photo to save (manual-input intel has no imageUri → no
-  // save; "View last result" pushes without fresh=1 → no save).
-  const libraryPromptShown = useRef(false);
-  // Id of the label this scan auto-saved, so "Upload Again" can replace it with
-  // the corrected wine instead of leaving the misread one behind.
+  // Label Library retired — scanned labels are no longer auto-saved to a
+  // library. The user files the wine into Your Wine Reviews from the intel card
+  // ("Save to Your Wine Reviews") instead. Ref kept (always null) so the few
+  // remaining references stay harmless.
   const savedLabelIdRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (libraryPromptShown.current) return;
-    // Hold off until the wine is confirmed — otherwise we'd save the misread
-    // label + null intel to the library before the user fixes the identity.
-    if (!isIntelOnlyFlow || fresh !== '1' || awaitingConfirm) return;
-    const imageUri = useLabelStore.getState().imageUri;
-    const w = useLabelStore.getState().wineDetailsConfirmed;
-    if (!imageUri || !w) return;
-    libraryPromptShown.current = true;
-    const intelSnapshot = useLabelStore.getState().intelligence;
-    void (async () => {
-      try {
-        const city = await captureCity();
-        const created = await createLabel.mutateAsync({
-          imageUri,
-          producer: w.producer,
-          wineName: w.wineName,
-          vintage: w.vintage,
-          region: w.region,
-          intel: intelSnapshot,
-          city,
-        });
-        savedLabelIdRef.current = created?.id ?? null;
-      } catch { /* silent — saving the label to the library is best-effort */ }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isIntelOnlyFlow, fresh, awaitingConfirm]);
 
   // Duplicate-detection memos. These MUST run before any early-return (the guard
   // below, and the confirm-first early-return) — otherwise toggling awaitingConfirm
@@ -1549,6 +1511,52 @@ export default function LabelResultsScreen() {
   // Dive Deeper works pre-save: the wine-knowledge screen falls back to query
   // params when the path id matches no cellar row (so we pass a placeholder id
   // + the wine fields). It just won't cache, which is fine for a preview.
+  // "Save to Your Wine Reviews" — replaces the retired Label Library. Review now
+  // (opens the +Add review pre-filled) or later (files it as an awaiting pick).
+  function handleSaveToReviews() {
+    if (!wine) return;
+    const label = [wine.producer, wine.wineName, wine.vintage].filter(Boolean).join(' ');
+    showAlert({
+      title: 'Save to Your Wine Reviews',
+      body: `${label}\n\nReview it now, or save it to review later?`,
+      buttons: [
+        {
+          text: 'Review now',
+          onPress: () => {
+            const qs = new URLSearchParams({ seedAdd: '1' });
+            if (wine.producer) qs.set('sp', wine.producer);
+            if (wine.wineName) qs.set('sw', wine.wineName);
+            if (wine.vintage) qs.set('sv', wine.vintage);
+            if (wine.region) qs.set('sr', wine.region);
+            router.push(`/wines/chosen?${qs.toString()}` as any);
+          },
+        },
+        { text: 'Review later', onPress: () => void saveReviewLater() },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  async function saveReviewLater() {
+    if (!wine) return;
+    const vn = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
+    try {
+      await saveManual.mutateAsync({
+        wineName: wine.wineName ?? '', producer: wine.producer ?? '', region: wine.region ?? '',
+        vintage: Number.isFinite(vn as number) ? (vn as number) : null,
+        restaurantName: '', city: '', listPrice: null, currency: userCurrency,
+        tastingNote: '', otherObservations: '', userScore: null, isFavourite: false,
+        source: 'other',
+      });
+      showAlert({
+        title: 'Saved to Your Wine Reviews',
+        body: 'It\'s waiting in Your Wine Reviews for you to review when you\'re ready.',
+        buttons: [{ text: 'View', onPress: () => router.push('/wines/chosen') }, { text: 'OK', style: 'cancel' }],
+      });
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   function handleDiveDeeper() {
     const q = [
       `producer=${encodeURIComponent(wine.producer ?? '')}`,
@@ -1870,7 +1878,10 @@ export default function LabelResultsScreen() {
           so it isn't repeated here. */}
       {isIntelOnlyFlow ? (
         <View style={styles.section}>
-          <TouchableOpacity style={styles.deepBtn} onPress={handleDiveDeeper} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.saveReviewBtn} onPress={handleSaveToReviews} activeOpacity={0.85}>
+            <Text style={styles.saveReviewBtnText}>Save to Your Wine Reviews</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.deepBtn, { marginTop: spacing.sm }]} onPress={handleDiveDeeper} activeOpacity={0.8}>
             <Text style={styles.deepBtnText}>Dive Deeper into this wine</Text>
           </TouchableOpacity>
           <TouchableOpacity style={[styles.deepBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.8}>
@@ -2499,6 +2510,9 @@ const styles = StyleSheet.create({
   // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
   deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   deepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Primary CTA above Dive Deeper — gold-filled to stand out.
+  saveReviewBtn: { backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
+  saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background, letterSpacing: 0.3 },
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
   // Vinster's Map — collapsible heading + placeholder body.
   mapHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
