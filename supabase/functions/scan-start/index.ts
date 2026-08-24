@@ -88,6 +88,7 @@ function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | u
 
 interface ScanPrefs {
   wineTypes?: string[]; styleProfiles?: string[]; budget?: number | null; foodPairing?: string;
+  preferredCountry?: string;
   favouriteRegions?: string[]; favouriteGrapes?: string[]; dislikedRegions?: string[]; dislikedGrapes?: string[];
   profileWineTypes?: string[]; profileStyleProfiles?: string[];
 }
@@ -204,6 +205,7 @@ Deno.serve(async (req) => {
           styleProfiles: scanPreferences.styleProfiles,
           budget: scanPreferences.budget,
           foodPairing: scanPreferences.foodPairing,
+          preferredCountry: scanPreferences.preferredCountry,
           favouriteRegions: scanPreferences.favouriteRegions,
           favouriteGrapes: scanPreferences.favouriteGrapes,
           dislikedRegions: scanPreferences.dislikedRegions,

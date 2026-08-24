@@ -18,6 +18,7 @@ import { WineTypePicker, WineType } from '../../src/components/preferences/WineT
 import { StylePicker } from '../../src/components/preferences/StylePicker';
 import { BudgetSlider } from '../../src/components/preferences/BudgetSlider';
 import { FoodPairingInput } from '../../src/components/preferences/FoodPairingInput';
+import { PreferredCountryInput } from '../../src/components/preferences/PreferredCountryInput';
 import { useAuth } from '../../src/hooks/useAuth';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import { colors, spacing } from '../../src/constants/theme';
@@ -44,7 +45,7 @@ export default function WineListScreen() {
   const isRestoring = useRef(
     !useScanStore.getState().needsReset && (
       restored.wineTypes.length > 0 || restored.styleProfiles.length > 0 ||
-      !!restored.foodPairing || restored.budget != null
+      !!restored.foodPairing || restored.budget != null || !!restored.preferredCountry
     )
   ).current;
 
@@ -52,12 +53,13 @@ export default function WineListScreen() {
   const [styleProfiles, setStyleProfiles] = useState<string[]>(isRestoring ? restored.styleProfiles : []);
   const [budget, setBudget] = useState<number | null>(isRestoring ? restored.budget : (savedPreferences?.defaultBudget ?? null));
   const [foodPairing, setFoodPairing] = useState(isRestoring ? restored.foodPairing : '');
+  const [preferredCountry, setPreferredCountry] = useState(isRestoring ? (restored.preferredCountry ?? '') : '');
   const [wineTypeOpen, setWineTypeOpen] = useState(false);
   const [styleOpen, setStyleOpen] = useState(false);
   // Top-scoring is now the DEFAULT search (no manual toggle): with no preferences
   // entered, Vinster returns the three highest quality + value wines. Entering any
   // preference (wine type, style, food, budget) switches to tailored picks.
-  const topScoringMode = wineTypes.length === 0 && styleProfiles.length === 0 && !foodPairing.trim() && budget == null;
+  const topScoringMode = wineTypes.length === 0 && styleProfiles.length === 0 && !foodPairing.trim() && budget == null && !preferredCountry.trim();
 
   function toggleSection(section: 'wineType' | 'style') {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -137,6 +139,7 @@ export default function WineListScreen() {
       styleProfiles,
       budget,
       foodPairing,
+      preferredCountry,
       favouriteRegions: savedPreferences?.favouriteRegions ?? [],
       favouriteGrapes: savedPreferences?.favouriteGrapes ?? [],
       dislikedRegions: savedPreferences?.dislikedRegions ?? [],
@@ -310,6 +313,13 @@ export default function WineListScreen() {
           <View style={styles.bubbleWrap}>
             <Text style={styles.question}>What are you dining on? (optional)</Text>
             <FoodPairingInput value={foodPairing} onChange={setFoodPairing} />
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <View style={styles.bubbleWrap}>
+            <Text style={styles.question}>Preferred country of origin? (optional)</Text>
+            <PreferredCountryInput value={preferredCountry} onChange={setPreferredCountry} />
           </View>
         </View>
 

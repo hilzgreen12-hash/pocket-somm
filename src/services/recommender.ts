@@ -9,6 +9,7 @@ interface RecommendInput {
   styleProfiles: string[];
   budget: number | null;
   foodPairing: string;
+  preferredCountry?: string;
   favouriteRegions: string[];
   favouriteGrapes: string[];
   dislikedRegions: string[];

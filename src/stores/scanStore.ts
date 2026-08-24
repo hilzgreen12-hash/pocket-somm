@@ -6,6 +6,9 @@ export interface ScanPreferences {
   styleProfiles: string[];
   budget: number | null;
   foodPairing: string;
+  // Free-text "preferred country of origin" for the wine picks — a soft
+  // preference (weights, never excludes). Empty string = no preference.
+  preferredCountry: string;
   favouriteRegions: string[];
   favouriteGrapes: string[];
   dislikedRegions: string[];
@@ -43,6 +46,7 @@ const DEFAULT_PREFERENCES: ScanPreferences = {
   styleProfiles: [],
   budget: null,
   foodPairing: '',
+  preferredCountry: '',
   favouriteRegions: [],
   favouriteGrapes: [],
   dislikedRegions: [],

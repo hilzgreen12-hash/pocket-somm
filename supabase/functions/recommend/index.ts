@@ -206,6 +206,7 @@ Deno.serve(async (req) => {
       styleProfiles,
       budget,
       foodPairing,
+      preferredCountry,
       favouriteRegions,
       favouriteGrapes,
       dislikedRegions,
@@ -244,9 +245,14 @@ Deno.serve(async (req) => {
       ? `HARD RULE — EXCLUDE GRAPES: Never recommend wines made primarily from these varieties: ${dislikedGrapes.join(', ')}. This is absolute.`
       : '';
 
+    const countryPref = typeof preferredCountry === 'string' ? preferredCountry.trim() : '';
+    const countryLine = countryPref
+      ? `SOFT PREFERENCE — COUNTRY OF ORIGIN: The diner would prefer wines from ${countryPref}. Weight wines from there positively in your ranking, but do NOT exclude wines from elsewhere if they score significantly higher on critic score, value, vintage or overall fit. This is a preference, not a restriction.`
+      : '';
+
     const topScoringOverride = topScoringMode ? `
 TOP SCORING MODE — ACTIVE:
-The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, criticScoreNote, valueNote, standoutNote, etc.) accurately. The standoutNote should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
+The diner has requested the three highest-scoring wines on the list regardless of any other preference. Ignore colour, style, budget, food pairing, preferred country of origin, favourite/disliked regions and grapes. Select purely by critic score. Do NOT apply the colour, budget, or exclusion hard rules. Simply rank the wines by critic score and return the top 3. You MUST still populate all fields (vintageAssessment, drinkingWindow, rarityAssessment, criticScoreNote, valueNote, standoutNote, etc.) accurately. The standoutNote should be honest about any caveats — e.g. poor value, not yet in drinking window, outside the diner's usual preferences.
 
 SUMMARY FIELD — TOP SCORING MODE (MANDATORY OPENING):
 The top-level "summary" MUST open by explicitly acknowledging that the diner asked for the highest-scoring wines on the list. This acknowledgement is the VERY FIRST thing in the summary — before any discussion of individual wines, regions, value, or anything else. Address the diner directly in the second person. Open with a sentence along the lines of "You've requested the three top-scoring wines from this list…" — you may vary the wording (e.g. "You asked for the three highest-scoring bottles on this list, so that's what I've sorted for…", "As requested, here are the three top-scoring wines on the list…") but it MUST state up front, in the first sentence, that the selection criterion was top critic score. Only AFTER that opening acknowledgement may you go on to discuss the three picks and their attributes (1–2 further sentences). A summary that opens by describing a wine instead of acknowledging the top-scoring request is a failure.
@@ -264,6 +270,7 @@ Diner preferences:
 - Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.join(', ') : 'No preference — prioritise quality and value'}
 - Budget: up to ${sym}${budget ?? 'unlimited'} per bottle on the menu (${cur})
 - Food pairing: ${foodPairing || 'Not specified'}
+- Preferred country of origin (soft preference — weight, do not exclude): ${countryPref || 'No preference'}
 - Favourite regions (prioritise these): ${favouriteRegions?.length ? favouriteRegions.join(', ') : 'None specified'}
 - Favourite grapes (prioritise these): ${favouriteGrapes?.length ? favouriteGrapes.join(', ') : 'None specified'}
 - Regions to avoid (EXCLUDE): ${dislikedRegions?.length ? dislikedRegions.join(', ') : 'None'}
@@ -273,6 +280,7 @@ ${colourLine}
 ${budgetLine}
 ${dislikedRegionsLine}
 ${dislikedGrapesLine}
+${countryLine}
 `;
 
     const wineListText = JSON.stringify(wines, null, 2);
