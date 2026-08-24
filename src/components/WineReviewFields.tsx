@@ -247,7 +247,7 @@ export function WineReviewFields({
             )
           ) : onEstimate ? (
             <TouchableOpacity onPress={onEstimate} activeOpacity={0.7}>
-              <Text style={styles.estLink}>(estimate)</Text>
+              <Text style={styles.estGenerate}>Generate</Text>
             </TouchableOpacity>
           ) : (
             <Text style={[styles.estValue, styles.estMuted]}>—</Text>
@@ -311,6 +311,9 @@ const styles = StyleSheet.create({
   estMuted: { color: colors.textMuted, fontFamily: fonts.bodyItalic },
   estGold: { color: colors.gold },
   estLink: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+  // Yellow italic "Generate" — click to fetch an estimate on demand (Vinster no
+  // longer estimates automatically on every review open).
+  estGenerate: { fontFamily: fonts.bodyItalic, fontSize: 16, color: colors.gold, paddingVertical: spacing.xs },
   estSub: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   sectionTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, marginTop: spacing.sm, marginBottom: spacing.sm },
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

@@ -113,11 +113,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
       // Auto-fill the estimated value once (no "Generate" button) — mirrors
       // the cellar flow where every wine carries an estimate. Only fires
       // when we don't already have one.
-      // Auto-estimate ONCE per wine — gate on the timestamp (have we tried?), not
-      // the value. Wines Wine-Searcher can't price return a null value; keying on
-      // the value re-ran the estimate on every open. The saved valuation (with its
-      // date stamp) is reused; the "update" link re-fetches on demand.
-      if (wine.estimated_value_at == null) void fetchEstimate(wine, false);
+      // No auto-estimate — Vinster only values on demand now (the yellow
+      // "Generate" link), so a fresh review isn't priced until the user asks.
+      // An already-saved valuation (with its date stamp) is reused above.
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, wine?.id]);

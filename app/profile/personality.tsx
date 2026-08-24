@@ -282,7 +282,7 @@ export default function PersonalityScreen() {
           {text ? (
             <View style={styles.topRightStack}>
               <TouchableOpacity onPress={handleShare} style={styles.shareBtn} activeOpacity={0.7}>
-                <Text style={styles.shareText}>+ SHARE</Text>
+                <Text style={styles.shareText}>+ Export</Text>
               </TouchableOpacity>
               {/* Community isn't live yet — the "post to community" link is
                   faded out and non-interactive until there's a feed to post to. */}
@@ -338,27 +338,17 @@ export default function PersonalityScreen() {
             </Text>
           </View>
         ) : text ? (
-          <>
-            <View style={styles.sketchCard}>
-              {(() => {
-                const { title, body } = splitPersonality(text);
-                return (
-                  <>
-                    {title ? <Text style={styles.sketchTitle}>{title}</Text> : null}
-                    <Text style={styles.sketchText}>{body}</Text>
-                  </>
-                );
-              })()}
-            </View>
-
-            <TouchableOpacity
-              onPress={() => router.push({ pathname: '/profile/personality-archive', params: { category: cat } })}
-              style={styles.archiveLink}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.archiveLinkText}>Personality Archive →</Text>
-            </TouchableOpacity>
-          </>
+          <View style={styles.sketchCard}>
+            {(() => {
+              const { title, body } = splitPersonality(text);
+              return (
+                <>
+                  {title ? <Text style={styles.sketchTitle}>{title}</Text> : null}
+                  <Text style={styles.sketchText}>{body}</Text>
+                </>
+              );
+            })()}
+          </View>
         ) : null}
       </ScrollView>
 
