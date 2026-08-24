@@ -4,13 +4,10 @@ import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useQuery } from '@tanstack/react-query';
 import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
-import { PersonalityPromptModal } from '../../src/components/PersonalityPromptModal';
-import { usePersonalityPrompt } from '../../src/hooks/usePersonalityPrompt';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -22,50 +19,15 @@ import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
-import { supabase } from '../../src/api/supabase';
-import { splitPersonality } from '../../src/utils/personalityText';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
-// Per-category AsyncStorage key — the timestamp of the most recent sketch the
-// user has viewed for that category (drives the "your sketch is ready" popup).
-function ackKey(category: 'wine' | 'recipe') {
-  return `vinster_personality_acked_${category}`;
-}
-const NUDGE_CAP = 3;
-const NUDGE_COUNT_KEY = 'vinster_personality_nudge_shows';
-
 // Module-level so it survives the Scan tab unmounting/remounting on navigation:
 // the welcome overlay shows once per app session (a fresh launch resets it),
 // not every time the user returns to the Scan tab.
 let welcomeShownThisSession = false;
-
-// Most-recently-generated sketch (wine or recipe) so the landing can decide
-// whether to surface the "your personality is ready" popup.
-function useFeaturedPersonality(userId: string | undefined) {
-  return useQuery({
-    queryKey: ['home-featured-personality', userId],
-    enabled: !!userId,
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('last_wine_personality, last_wine_personality_at, last_recipe_personality, last_recipe_personality_at')
-        .eq('user_id', userId!)
-        .maybeSingle();
-      if (!data) return null;
-      const candidates: Array<{ category: 'wine' | 'recipe'; text: string; at: string | null }> = [];
-      if (data.last_wine_personality) candidates.push({ category: 'wine', text: data.last_wine_personality, at: data.last_wine_personality_at });
-      if (data.last_recipe_personality) candidates.push({ category: 'recipe', text: data.last_recipe_personality, at: data.last_recipe_personality_at });
-      if (candidates.length === 0) return null;
-      candidates.sort((a, b) => (b.at ?? '').localeCompare(a.at ?? ''));
-      const top = candidates[0];
-      const { title } = splitPersonality(top.text);
-      return { category: top.category, title: title ?? '', at: top.at };
-    },
-  });
-}
 
 // The Scan landing — the app's home tab. Brand block up top, then the two big
 // scan actions and a manual "Search A Wine" bar. The six-tab bar handles all
@@ -299,50 +261,6 @@ export default function ScanLandingScreen() {
     }
   }
 
-  // --- Personality nudge + "ready" popups (moved from the old home hub) ------
-  const { data: featured } = useFeaturedPersonality(session?.user.id);
-  const personalityCategory = usePersonalityPrompt();
-  const [promptDismissed, setPromptDismissed] = useState(false);
-  const [nudgeSuppressed, setNudgeSuppressed] = useState(false);
-  const nudgeBumpedRef = useRef(false);
-  useEffect(() => {
-    (async () => {
-      const n = parseInt((await AsyncStorage.getItem(NUDGE_COUNT_KEY)) ?? '0', 10) || 0;
-      if (n >= NUDGE_CAP) setNudgeSuppressed(true);
-    })();
-  }, []);
-  useEffect(() => {
-    if (!personalityCategory || promptDismissed || nudgeSuppressed || nudgeBumpedRef.current) return;
-    nudgeBumpedRef.current = true;
-    (async () => {
-      const n = (parseInt((await AsyncStorage.getItem(NUDGE_COUNT_KEY)) ?? '0', 10) || 0) + 1;
-      await AsyncStorage.setItem(NUDGE_COUNT_KEY, String(n));
-      if (n >= NUDGE_CAP) setNudgeSuppressed(true);
-    })();
-  }, [personalityCategory, promptDismissed, nudgeSuppressed]);
-
-  const [readyPopupVisible, setReadyPopupVisible] = useState(false);
-  useFocusEffect(useCallback(() => {
-    let cancelled = false;
-    (async () => {
-      if (!featured?.at) { if (!cancelled) setReadyPopupVisible(false); return; }
-      const ackedAt = await AsyncStorage.getItem(ackKey(featured.category));
-      const needsAck = !ackedAt || (featured.at ?? '') > ackedAt;
-      if (!cancelled) setReadyPopupVisible(needsAck);
-    })();
-    return () => { cancelled = true; };
-  }, [featured?.at, featured?.category]));
-
-  function handleViewReady() {
-    if (!featured) return;
-    setReadyPopupVisible(false);
-    router.push(`/profile/personality?category=${featured.category}` as any);
-  }
-  async function handleDismissReady() {
-    if (featured?.at) { try { await AsyncStorage.setItem(ackKey(featured.category), featured.at); } catch { /* non-fatal */ } }
-    setReadyPopupVisible(false);
-  }
-
   return (
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
@@ -534,30 +452,6 @@ export default function ScanLandingScreen() {
         onCreateAccount={() => { dismissSignInPrompt(); router.push('/(auth)/sign-up'); }}
         onContinue={continueWithoutAccount}
       />
-
-      <PersonalityPromptModal
-        visible={!!personalityCategory && !promptDismissed && !nudgeSuppressed}
-        category={personalityCategory ?? 'wine'}
-        onGenerate={() => { setPromptDismissed(true); router.push(`/profile/personality?category=${personalityCategory}` as any); }}
-        onDismiss={() => setPromptDismissed(true)}
-      />
-
-      <Modal visible={readyPopupVisible} transparent animationType="fade" onRequestClose={handleDismissReady}>
-        <TouchableOpacity style={styles.readyOverlay} activeOpacity={1} onPress={handleDismissReady}>
-          <TouchableOpacity activeOpacity={1} style={styles.readySheet} onPress={() => {}}>
-            <Text style={styles.readyLabel}>{featured?.category === 'wine' ? 'YOUR WINE PERSONALITY' : 'YOUR FOODIE PERSONALITY'}</Text>
-            <Text style={styles.readyHeading}>Your sketch is ready</Text>
-            {featured?.title ? <Text style={styles.readyTitle} numberOfLines={2}>"{featured.title}"</Text> : null}
-            <Text style={styles.readyBody}>Vinster has sketched a fresh personality for you — take a look, share it with friends, or just enjoy it.</Text>
-            <TouchableOpacity style={styles.readyPrimaryBtn} onPress={handleViewReady} activeOpacity={0.8}>
-              <Text style={styles.readyPrimaryBtnText}>View my personality</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.readyDismissBtn} onPress={handleDismissReady} activeOpacity={0.7}>
-              <Text style={styles.readyDismissBtnText}>Not now</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
 
     </ScrollView>
     </TabSwipeView>
