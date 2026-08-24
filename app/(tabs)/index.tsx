@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -56,6 +56,10 @@ function LineupThumb({ item }: { item: LineupArchive }) {
 // carousel. The six-tab bar handles all other navigation, so there's no hamburger.
 export default function ScanLandingScreen() {
   const { session } = useAuth();
+  // Match every other tab page's top spacing so the Vinster mark + title sit at
+  // a consistent height across the bottom-nav surfaces.
+  const { height } = useWindowDimensions();
+  const paddingTop = Math.max(55, height * 0.095);
   const username = (session?.user.user_metadata?.display_name ?? '').trim();
   const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError, reset: resetLabelStore } = useLabelStore();
   const { setExtractedWines, setRecommendation } = useScanStore();
@@ -297,7 +301,7 @@ export default function ScanLandingScreen() {
 
   return (
     <TabSwipeView style={styles.container}>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
       <VinsterHeader />
       <View style={styles.titleRow}>
@@ -533,7 +537,7 @@ export default function ScanLandingScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Brand block sits higher now (no hamburger row above it) — moderate top pad.
-  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
 
   hero: { alignItems: 'center', marginBottom: spacing.sm },
   // Welcome overlay — centred brand sheet on first landing.

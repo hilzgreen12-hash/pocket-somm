@@ -1,39 +1,76 @@
-import { ScrollView, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, ScrollView, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useChefArchiveCollections } from '../hooks/useChefArchiveCollections';
+import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-// The Cookbook's folder filters, surfaced on the Pair tab as a carousel of
-// shortcuts into Your Cookbook — All, ★ Favourites, the user's folders, and a
-// dashed "+ Add folder" tile. Styled like the Cellar / Review carousels.
+// Your Cookbook, surfaced on the Pair tab: the archive page's header + stats bar
+// are copied here verbatim, but the folders render as boxes (like the Cellar /
+// Review carousels) rather than the chips used on the Cookbook page itself.
+// Tapping any box drills into /chef/archive, where the format switches back to
+// that page's own layout.
+function recipeLabel(n: number): string {
+  return `${n} ${n === 1 ? 'Recipe' : 'Recipes'}`;
+}
+
 export function CookbookFoldersCarousel() {
   const { collections } = useChefArchiveCollections();
+  const { sessions } = useChefLabelHistory();
+  const recipeCount = sessions.length;
+  const favouritesCount = sessions.filter((s) => !!s.is_starred).length;
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-      <TouchableOpacity style={styles.chip} onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7}>
-        <Text style={styles.chipText}>All</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={styles.chip} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.7}>
-        <Text style={styles.chipText}>★ Favourites</Text>
-      </TouchableOpacity>
-      {collections.map((c) => (
-        <TouchableOpacity key={c.id} style={styles.chip} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} activeOpacity={0.7}>
-          <Text style={styles.chipText} numberOfLines={1}>{c.name} ({c.item_count})</Text>
+    <View>
+      {/* Header + stats bar — copied from the Your Cookbook landing page. */}
+      <Text style={styles.title}>Your Cookbook</Text>
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryText}>
+          {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
+        </Text>
+      </View>
+      <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all folders →</Text>
+
+      {/* Folders as boxes — mirrors the Cellar storage / Review carousels. */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.8}>
+          <Text style={styles.cardType}>Cookbook</Text>
+          <Text style={styles.cardName} numberOfLines={2}>All</Text>
+          <Text style={styles.cardCount}>{recipeLabel(recipeCount)}</Text>
         </TouchableOpacity>
-      ))}
-      <TouchableOpacity style={styles.chipAdd} onPress={() => router.push('/chef/archive?addFolder=1' as any)} activeOpacity={0.7}>
-        <Text style={styles.chipAddText}>+ Add folder</Text>
-      </TouchableOpacity>
-    </ScrollView>
+        <TouchableOpacity style={styles.card} onPress={() => router.push('/chef/archive?filter=favourites' as any)} activeOpacity={0.8}>
+          <Text style={styles.cardType}>Cookbook</Text>
+          <Text style={styles.cardName} numberOfLines={2}>★ Favourites</Text>
+          <Text style={styles.cardCount}>{recipeLabel(favouritesCount)}</Text>
+        </TouchableOpacity>
+        {collections.map((c) => (
+          <TouchableOpacity key={c.id} style={styles.card} onPress={() => router.push(`/chef/archive?filter=${c.id}` as any)} activeOpacity={0.8}>
+            <Text style={styles.cardType}>Folder</Text>
+            <Text style={styles.cardName} numberOfLines={2}>{c.name}</Text>
+            <Text style={styles.cardCount}>{recipeLabel(c.item_count)}</Text>
+          </TouchableOpacity>
+        ))}
+        <TouchableOpacity style={styles.cardAdd} onPress={() => router.push('/chef/archive?addFolder=1' as any)} activeOpacity={0.8}>
+          <Text style={styles.cardAddText}>+ Add folder</Text>
+        </TouchableOpacity>
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.sm },
-  chip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, maxWidth: 220 },
-  chipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3 },
-  chipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md },
-  chipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  // Header + stats — copied from app/chef/archive.tsx so the two read alike.
+  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
+
+  // Box tiles — matched to the Cellar storage carousel (HomeStorageSection).
+  carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
+  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
+  cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
+  cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },
+  cardAdd: { width: 152, height: 108, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  cardAddText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold },
 });

@@ -116,10 +116,8 @@ export default function ChefTab() {
 
       <View style={styles.divider} />
 
-      {/* Your Cookbook — saved recipes, surfaced as its folder carousel. */}
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>Your Cookbook</Text>
-      </View>
+      {/* Your Cookbook — the archive header + stats bar copied here, with the
+          folders rendered as boxes (see CookbookFoldersCarousel). */}
       <CookbookFoldersCarousel />
 
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
