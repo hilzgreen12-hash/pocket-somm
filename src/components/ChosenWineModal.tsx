@@ -29,6 +29,14 @@ function todayIso(): string {
   return `${y}-${m}-${day}`;
 }
 
+// A vintage must be a real four-digit year (or an explicitly-confirmed
+// non-vintage). Extraction sometimes yields 0 or null when it can't read a
+// year off a list — those must never be saved silently, so we treat them as
+// invalid and make the user confirm.
+function isValidVintageYear(v: number | null | undefined): v is number {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1800 && v <= new Date().getFullYear() + 1;
+}
+
 // One-line summary for the collapsed "Discovered At" row. Combines whatever
 // the user has into a readable phrase so they don't need to expand the
 // editor unless something looks wrong.
@@ -80,6 +88,12 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   // captured the restaurant and city, so we assume they're correct unless
   // the user opens the editor to adjust.
   const [editingLocation, setEditingLocation] = useState(false);
+  // Vintage the review will actually be saved with. Seeded from the pick, but
+  // if that isn't a valid year the user is asked to confirm it before saving
+  // (see the vintage-confirm prompt below).
+  const [vintageValue, setVintageValue] = useState<number | null>(null);
+  const [vintagePromptOpen, setVintagePromptOpen] = useState(false);
+  const [vintageDraft, setVintageDraft] = useState('');
 
   useEffect(() => {
     if (visible) {
@@ -93,6 +107,9 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
       setSaved(false);
       setReviewDate(todayIso());
       setEditingLocation(false);
+      setVintageValue(isValidVintageYear(wine?.vintage) ? wine!.vintage : null);
+      setVintagePromptOpen(false);
+      setVintageDraft('');
 
       // If we don't already have a city (e.g. fresh scan that hasn't been
       // saved yet), try a quick GPS reverse-geocode to pre-fill it. Best
@@ -117,7 +134,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         })();
       }
     }
-  }, [visible, initialRestaurantName, initialCity, wine?.menuPrice]);
+  }, [visible, initialRestaurantName, initialCity, wine?.menuPrice, wine?.vintage]);
 
   async function handleSave() {
     if (!wine || !session) return;
@@ -125,6 +142,22 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     // Save sometimes only dismisses the numeric keypad (from the score
     // input) and the user has to tap a second time to actually save.
     Keyboard.dismiss();
+    // Every review must carry a vintage. If the pick didn't come with a valid
+    // year (list scans sometimes yield 0 or nothing), stop and ask the user to
+    // confirm it — no review is ever saved with a bogus "0" vintage.
+    if (!isValidVintageYear(vintageValue)) {
+      setVintageDraft('');
+      setVintagePromptOpen(true);
+      return;
+    }
+    await afterVintage(vintageValue);
+  }
+
+  // Continue the save once we have a confirmed vintage (a real year, or null
+  // for a user-confirmed non-vintage). Threaded explicitly rather than read
+  // from state so the value is never stale after the confirm prompt.
+  async function afterVintage(vintage: number | null) {
+    if (!wine || !session) return;
     // Pre-save nudge: list anything empty except the optional Personal Notes.
     const missing = missingReviewFields([
       { label: 'Your Review', filled: !!tastingNote.trim() },
@@ -137,23 +170,41 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         title: 'Ready to Save?',
         body: `You're missing ${missing.join(', ')}.`,
         buttons: [
-          { text: 'Yes, Save', onPress: () => { void proceedSave(); } },
+          { text: 'Yes, Save', onPress: () => { void proceedSave(vintage); } },
           { text: 'Return to Review', style: 'cancel' },
         ],
       });
       return;
     }
-    await proceedSave();
+    await proceedSave(vintage);
   }
 
-  async function proceedSave() {
+  // Confirm handlers for the vintage prompt.
+  function submitVintageYear() {
+    const raw = vintageDraft.trim();
+    const y = parseInt(raw, 10);
+    if (!/^\d{4}$/.test(raw) || !isValidVintageYear(y)) {
+      showAlert({ title: 'Enter a four-digit year', body: 'A vintage must be a four-digit year, e.g. 2023 — or choose Non-vintage if this wine has none.' });
+      return;
+    }
+    setVintageValue(y);
+    setVintagePromptOpen(false);
+    void afterVintage(y);
+  }
+  function confirmNonVintage() {
+    setVintageValue(null);
+    setVintagePromptOpen(false);
+    void afterVintage(null);
+  }
+
+  async function proceedSave(vintage: number | null) {
     if (!wine || !session) return;
     // If this wine is already in Your Wine Reviews, offer to add a NEW dated
     // entry to that review or start a separate one — never to edit/replace it.
     const existing = findExistingReview(chosenWines, {
       producer: wine.producer,
       wineName: wine.name,
-      vintage: wine.vintage,
+      vintage,
     });
     if (existing) {
       // A bottle pick added from the list starts as an empty row (no note,
@@ -165,7 +216,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         (existing.other_observations ?? '').trim()
       );
       if (!hasContent) {
-        await doSave('update', existing);
+        await doSave('update', existing, vintage);
         return;
       }
       const dateLabel = existing.chosen_at ? new Date(existing.chosen_at).toLocaleDateString('en-GB') : 'a previous date';
@@ -173,18 +224,20 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         title: "You've reviewed this wine before",
         body: `You reviewed this wine on ${dateLabel}. Add this as a new dated entry on that review, or start a separate new review?`,
         buttons: [
-          { text: 'Add to that review', onPress: () => { void doSave('append', existing); } },
-          { text: 'Create a new review', onPress: () => { void doSave('create', null); } },
+          { text: 'Add to that review', onPress: () => { void doSave('append', existing, vintage); } },
+          { text: 'Create a new review', onPress: () => { void doSave('create', null, vintage); } },
           { text: 'Cancel', style: 'cancel' },
         ],
       });
       return;
     }
-    await doSave('create', null);
+    await doSave('create', null, vintage);
   }
 
-  async function doSave(mode: 'create' | 'update' | 'append', existing: ChosenWine | null) {
+  async function doSave(mode: 'create' | 'update' | 'append', existing: ChosenWine | null, vintage: number | null) {
     if (!wine || !session) return;
+    // Save with the confirmed vintage, not whatever the pick arrived with.
+    const wineForSave: WineRecommendation = { ...wine, vintage };
     const trimmedPrice = listPrice.trim();
     const parsedPrice = trimmedPrice ? parseFloat(trimmedPrice) : NaN;
     const price = Number.isFinite(parsedPrice) ? parsedPrice : null;
@@ -197,7 +250,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         // "Add to this review" = a NEW dated entry joining the existing review's
         // card (same review_group_id), leaving the earlier entry untouched.
         await save.mutateAsync({
-          wine, scanSessionId: scanSessionId ?? null,
+          wine: wineForSave, scanSessionId: scanSessionId ?? null,
           restaurantName: restaurant, city: cityClean,
           tastingNote, otherObservations, userScore, listPrice: price, isFavourite,
           reviewDate, userDrinkingWindow,
@@ -213,7 +266,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
         });
       } else {
         await save.mutateAsync({
-          wine, scanSessionId: scanSessionId ?? null,
+          wine: wineForSave, scanSessionId: scanSessionId ?? null,
           restaurantName: restaurant, city: cityClean,
           tastingNote, otherObservations, userScore, listPrice: price, isFavourite,
           reviewDate, userDrinkingWindow,
@@ -273,7 +326,7 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             <WineIdentityHeader
               producer={wine.producer}
               wineName={wine.name}
-              vintage={wine.vintage}
+              vintage={vintageValue}
               region={wine.region}
               grape={(wine as any).grape}
               align="center"
@@ -407,11 +460,57 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
           </KeyboardAwareScrollView>
         </View>
       </View>
+
+      {/* Vintage-confirm prompt — shown when the pick has no valid year. Every
+          review must record a vintage, so the user either types the four-digit
+          year or explicitly confirms the wine is non-vintage. */}
+      <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={() => setVintagePromptOpen(false)}>
+        <View style={styles.vpOverlay}>
+          <View style={styles.vpCard}>
+            <Text style={styles.vpTitle}>What's the vintage?</Text>
+            <Text style={styles.vpBody}>
+              We couldn't read a vintage for this wine. Enter its four-digit year, or confirm it's non-vintage.
+            </Text>
+            <TextInput
+              style={styles.vpInput}
+              value={vintageDraft}
+              onChangeText={(t) => setVintageDraft(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              placeholder="e.g. 2023"
+              placeholderTextColor={colors.textMuted}
+              keyboardType="number-pad"
+              maxLength={4}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={submitVintageYear}
+            />
+            <TouchableOpacity style={styles.vpPrimaryBtn} onPress={submitVintageYear} activeOpacity={0.85}>
+              <Text style={styles.vpPrimaryText}>Save this vintage</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.vpLinkBtn} onPress={confirmNonVintage} activeOpacity={0.7}>
+              <Text style={styles.vpLinkText}>This wine is non-vintage (NV)</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.vpLinkBtn} onPress={() => setVintagePromptOpen(false)} activeOpacity={0.7}>
+              <Text style={styles.vpCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
+  // Vintage-confirm prompt.
+  vpOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.lg },
+  vpCard: { backgroundColor: colors.surfaceElevated, borderRadius: 16, padding: spacing.lg, borderWidth: 1, borderColor: colors.border },
+  vpTitle: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
+  vpBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, opacity: 0.85, textAlign: 'center', marginBottom: spacing.md, lineHeight: 20 },
+  vpInput: { backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border, color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 18, textAlign: 'center', paddingVertical: spacing.sm, letterSpacing: 2, marginBottom: spacing.md },
+  vpPrimaryBtn: { backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  vpPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
+  vpLinkBtn: { paddingVertical: spacing.sm, alignItems: 'center' },
+  vpLinkText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.gold },
+  vpCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, opacity: 0.6 },
   overlay: {
     flex: 1,
     backgroundColor: colors.background,
