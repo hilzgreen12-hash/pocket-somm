@@ -126,6 +126,15 @@ export default function LabelResultsScreen() {
   // the value labels match how the intel was priced. Other flows use the home
   // default.
   const userCurrency = (isIntelOnlyFlow ? peekIntelCurrency(preferences?.defaultCurrency) : null) ?? (preferences?.defaultCurrency ?? 'GBP');
+  // A cellar wine is a long-lived home asset, so its stored value must always be
+  // in the user's HOME (default) currency — never the transient abroad/session
+  // currency that intel may have been priced in (peekIntelCurrency). If the
+  // on-card value was priced in a different currency (you were abroad), we don't
+  // carry that figure into the cellar; the cellar values it in the home currency
+  // on its next valuation pass. This stops a one-off "use local currency?" choice
+  // silently turning a GBP cellar into a mixed-currency one.
+  const homeCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
+  const cellarValueInHomeCurrency = userCurrency.toUpperCase() === homeCurrency;
 
   // When Generate Wine Intel comes back empty (no score, no value) it's almost
   // always a misspelt / wrongly-ordered name — prompt the user to check it.
@@ -934,13 +943,14 @@ export default function LabelResultsScreen() {
       // Prefer the intel estimate; otherwise fall back to the value we pre-fetched
       // for the add card (Wine-Searcher, or Vinster's own estimate) so add flows
       // that skip full intel still contribute to Total Estimated Current Value.
-      estimated_value: intel.estimatedValue ?? prefetchedValue?.value ?? null,
-      estimated_value_currency: userCurrency,
-      estimated_value_at: (intel.estimatedValue != null || prefetchedValue != null) ? new Date().toISOString() : null,
+      estimated_value: cellarValueInHomeCurrency ? (intel.estimatedValue ?? prefetchedValue?.value ?? null) : null,
+      estimated_value_currency: homeCurrency,
+      estimated_value_at: (cellarValueInHomeCurrency && (intel.estimatedValue != null || prefetchedValue != null)) ? new Date().toISOString() : null,
       // The Wine-Searcher offer spread the headline value averages (from full
-      // intel; the price-prefetch add path has only the single figure).
-      estimated_value_low: intel.estimatedValueLow ?? null,
-      estimated_value_high: intel.estimatedValueHigh ?? null,
+      // intel; the price-prefetch add path has only the single figure). Only
+      // kept when the value is in the home currency (see cellarValueInHomeCurrency).
+      estimated_value_low: cellarValueInHomeCurrency ? (intel.estimatedValueLow ?? null) : null,
+      estimated_value_high: cellarValueInHomeCurrency ? (intel.estimatedValueHigh ?? null) : null,
       // Real Wine-Searcher market price vs Claude estimate — drives the card's
       // value source label.
       estimated_value_source: intel.estimatedValue != null ? (intel.valueSource ?? 'vinster') : (prefetchedValue?.source ?? null),

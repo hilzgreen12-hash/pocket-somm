@@ -99,6 +99,17 @@ export default function CellarStatsScreen() {
   // Wines whose purchase price is an auto-estimate the user hasn't confirmed.
   const winesEstimatedPurchase = wines.filter((w) => w.purchase_price != null && w.purchase_price_estimated);
 
+  // Current values are stored in whatever currency was the user's default when
+  // the valuation ran. If the user later changes their default currency, those
+  // estimates are stale (e.g. valued in AUD, now GBP) — changing the preference
+  // doesn't convert them, so we surface them for a one-tap re-valuation in the
+  // new currency rather than silently mixing currencies in Total Current Value.
+  const defaultCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
+  const winesStaleCurrency = wines.filter(
+    (w) => w.estimated_value != null && (w.estimated_value_currency ?? 'GBP').toUpperCase() !== defaultCurrency,
+  );
+  const staleCurrencyCodes = Array.from(new Set(winesStaleCurrency.map((w) => (w.estimated_value_currency ?? 'GBP').toUpperCase())));
+
   // % change from Total Purchase Value to Total Current Value, per currency, so
   // the figure matches the two totals shown directly above it (rather than a
   // matched subset that could read 0% while the totals plainly differ). Compares
@@ -253,6 +264,21 @@ export default function CellarStatsScreen() {
     }
   }
 
+  // Re-value the wines whose stored current value is in a currency other than
+  // the user's current default — converts a stale AUD (etc.) valuation to the
+  // new currency by regenerating it. processBatch stamps the new currency.
+  async function handleRefreshStaleCurrency() {
+    if (winesStaleCurrency.length === 0) return;
+    setCalculating(true);
+    try {
+      await processBatch(winesStaleCurrency);
+    } catch {
+      showAlert({ title: 'Could not finish', body: 'Some wines could not be re-valued. Please try again.' });
+    } finally {
+      setCalculating(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <View style={styles.center}>
@@ -364,6 +390,18 @@ export default function CellarStatsScreen() {
 
             {wines.length === 0 ? null : (
               <View style={styles.estimateMetaStack}>
+                {/* Estimates stored in a different currency than the current
+                    default (e.g. the default was changed after valuing) — offer
+                    a one-tap re-valuation so Total Current Value isn't in a
+                    stale / mixed currency. */}
+                {winesStaleCurrency.length > 0 ? (
+                  <TouchableOpacity style={styles.missingValueRow} onPress={handleRefreshStaleCurrency} activeOpacity={0.7}>
+                    <Text style={styles.missingValueText}>
+                      {winesStaleCurrency.length} valued in {staleCurrencyCodes.length === 1 ? staleCurrencyCodes[0] : 'another currency'} · <Text style={styles.missingIntelLink}>Refresh in {defaultCurrency}</Text>
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+
                 {/* Wines Vinster couldn't value — left-indented directly under
                     Total Estimated Current Value. */}
                 {winesUnvaluable.length > 0 ? (
