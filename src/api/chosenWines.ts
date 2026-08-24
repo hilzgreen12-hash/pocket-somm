@@ -351,6 +351,7 @@ export async function patchChosenWine(
     style: string | null;
     chosen_at: string;              // when the wine was drunk / reviewed (ISO)
     review_dismissed: boolean;      // hide from Your Wine Reviews' awaiting list
+    is_favourite: boolean;          // starred from the review thumbnail
   }>
 ): Promise<void> {
   const { error } = await supabase.from('chosen_wines').update(updates).eq('id', id);

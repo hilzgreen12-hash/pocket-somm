@@ -95,5 +95,15 @@ export function useChosenWines() {
     },
   });
 
-  return { chosenWines, isLoading, save, update, saveManual, remove, dismissAwaiting };
+  // Lightweight favourite toggle from the review thumbnail — a single-column
+  // patch, so it never touches the review body or its timestamps.
+  const setFavourite = useMutation({
+    mutationFn: ({ id, isFavourite }: { id: string; isFavourite: boolean }) =>
+      patchChosenWine(id, { is_favourite: isFavourite }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+    },
+  });
+
+  return { chosenWines, isLoading, save, update, saveManual, remove, dismissAwaiting, setFavourite };
 }

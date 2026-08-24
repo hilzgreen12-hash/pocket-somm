@@ -158,7 +158,7 @@ type ReviewItem =
   | { source: 'cellar';     date: string; score: number | null; wine: CellarWine };
 
 export default function ChosenWinesScreen() {
-  const { chosenWines, isLoading, remove, dismissAwaiting } = useChosenWines();
+  const { chosenWines, isLoading, remove, dismissAwaiting, setFavourite } = useChosenWines();
   const { wines: cellarWines, updateWine } = useCellar();
   const { wines: archivedWines } = useArchive();
   const qc = useQueryClient();
@@ -1569,18 +1569,27 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
             </TouchableOpacity>
-            {customFilters.map((f) => (
-              <TouchableOpacity
-                key={f.id}
-                style={[styles.customChip, activeCustomId === f.id && styles.customChipActive]}
-                onPress={() => applyCustom(f.id)}
-                onLongPress={() => openFilterOptions(f)}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
-              </TouchableOpacity>
-            ))}
+            {customFilters.map((f) => {
+              const active = activeCustomId === f.id;
+              return (
+                <TouchableOpacity
+                  key={f.id}
+                  style={[styles.filterChip, active && styles.filterChipSort]}
+                  onPress={() => applyCustom(f.id)}
+                  onLongPress={() => openFilterOptions(f)}
+                  delayLongPress={400}
+                  activeOpacity={0.7}
+                >
+                  {/* Two-row layout with a top-right chevron so bespoke filters
+                      match the standard filter bubbles. */}
+                  <View style={styles.filterChipHeadingRow}>
+                    <Text style={styles.filterChipLabel}>Tag</Text>
+                    <Text style={styles.filterChipChevron}>▾</Text>
+                  </View>
+                  <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>
+                </TouchableOpacity>
+              );
+            })}
             <TouchableOpacity style={styles.customChipAdd} onPress={openCreateFilter} activeOpacity={0.7}>
               <Text style={styles.customChipAddText}>+ Add</Text>
             </TouchableOpacity>
@@ -1658,13 +1667,25 @@ export default function ChosenWinesScreen() {
                           })}
                         />
                       )}
-                      {/* Favourite star — top-right of the thumbnail, as in the
-                          Label Library. */}
-                      {isChosen && (item.wine as ChosenWine).is_favourite ? (
-                        <View style={styles.reviewFavStar}>
-                          <Text style={styles.reviewFavStarText}>★</Text>
-                        </View>
-                      ) : null}
+                      {/* Favourite star — always visible in the thumbnail's
+                          top-right; a subtle outline when off, gold ★ when on.
+                          Tapping toggles it without opening the review. */}
+                      {(() => {
+                        const fav = !!(item.wine as { is_favourite?: boolean }).is_favourite;
+                        return (
+                          <TouchableOpacity
+                            style={styles.reviewFavStar}
+                            onPress={() => {
+                              if (isChosen) setFavourite.mutate({ id: w.id, isFavourite: !fav });
+                              else updateWine.mutate({ id: w.id, updates: { is_favourite: !fav } });
+                            }}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            activeOpacity={0.7}
+                          >
+                            <Text style={[styles.reviewFavStarText, !fav && styles.reviewFavStarTextOff]}>{fav ? '★' : '☆'}</Text>
+                          </TouchableOpacity>
+                        );
+                      })()}
                     </View>
                     <View style={styles.cardCompactBody}>
                       {/* Producer · Name · Vintage (white). No score here. */}
@@ -1820,8 +1841,9 @@ const styles = StyleSheet.create({
   // Larger thumbnail, matching the Label Library, with a top-right favourite star.
   reviewThumb: { width: 100, height: 130 },
   reviewThumbWrap: { width: 100, height: 130 },
-  reviewFavStar: { position: 'absolute', top: 5, right: 5, width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center' },
-  reviewFavStarText: { fontSize: 18, color: colors.gold, lineHeight: 20 },
+  reviewFavStar: { position: 'absolute', top: 4, right: 4, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' },
+  reviewFavStarText: { fontSize: 14, color: colors.gold, lineHeight: 16 },
+  reviewFavStarTextOff: { color: 'rgba(255,255,255,0.75)' },
   cardCompactRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', gap: spacing.sm },
   cardCompactMeta: { marginTop: 2 },
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
