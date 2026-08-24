@@ -79,13 +79,6 @@ export function ReviewDetailModal({
     }
   }
 
-  // Where this wine came from — one concise line, no "still in your cellar" tail.
-  const originLine = review.source === 'restaurant'
-    ? 'You purchased this from the wine list'
-    : (review.source === 'cellar' || cellarBottles > 0 || archiveBottles > 0)
-      ? 'You brought this from your cellar'
-      : 'This wine was brought';
-
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
       <View style={styles.container}>
@@ -100,6 +93,9 @@ export function ReviewDetailModal({
             <Text style={styles.shareText}>Export</Text>
           </TouchableOpacity>
         ) : null}
+        {/* Centred card-type label — matches the Cellar wine card's gold chip so
+            the two cards read as the same family. */}
+        <Text style={styles.cardTypeLabel} pointerEvents="none">Wine Review</Text>
 
         <ScrollView contentContainerStyle={styles.content}>
           {/* Header — thumbnail left, wine name right. Sits well clear of the
@@ -119,7 +115,7 @@ export function ReviewDetailModal({
               region={review.region}
               grape={review.grape}
               align="left"
-              size="md"
+              size="lg"
               numberOfLinesName={3}
               containerStyle={styles.headerIdentity}
             />
@@ -140,7 +136,7 @@ export function ReviewDetailModal({
 
           {/* Vinster's own take — collapsed, off by default, separate from the
               diner's OWN review below. Sommelier note fetched on demand. */}
-          <TouchableOpacity style={styles.vinsterToggleRow} onPress={toggleNote} activeOpacity={0.7}>
+          <TouchableOpacity style={[styles.vinsterToggleRow, styles.vinsterToggleCentered]} onPress={toggleNote} activeOpacity={0.7}>
             <Text style={styles.vinsterToggleText}>View Vinster's Note</Text>
             <Ionicons name={noteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
           </TouchableOpacity>
@@ -171,14 +167,16 @@ export function ReviewDetailModal({
           <View style={styles.rule} />
 
           {entries.map((e, i) => {
+            // The Location field ("Restaurant, home, other…") drives the single
+            // origin line: when it's set we show "You had this wine at X" — no
+            // "brought"/"purchased" wording. The date stands alone as the stamp.
             const place = (e.location ?? '').trim();
-            const meta = [fmtDate(e.dateIso), place].filter(Boolean).join(' · ');
             const editable = i === 0 && review.latestEditable;
             const drink = (e.drinkingWindow ?? '').trim();
             return (
               <View key={e.id} style={styles.entry}>
                 <View style={styles.metaRow}>
-                  <Text style={styles.stamp}>{meta || 'Latest entry'}</Text>
+                  <Text style={styles.stamp}>{fmtDate(e.dateIso) || 'Latest entry'}</Text>
                   {editable ? (
                     <TouchableOpacity onPress={onEditLatest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                       <Text style={styles.editLink}>Edit</Text>
@@ -193,7 +191,7 @@ export function ReviewDetailModal({
                   </View>
                 ) : null}
 
-                <Text style={styles.originLine}>{originLine}</Text>
+                {place ? <Text style={styles.originLine}>You had this wine at {place}</Text> : null}
 
                 {(e.note ?? '').trim() ? (
                   <Text style={styles.sectionBody}>{e.note}</Text>
@@ -234,20 +232,24 @@ const styles = StyleSheet.create({
   // Share sits directly below "+ Add Review".
   shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
   shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Centred gold card-type chip — same face/size/spacing as the Cellar card's.
+  cardTypeLabel: { position: 'absolute', top: 58, left: 0, right: 0, textAlign: 'center', zIndex: 5, fontFamily: fonts.headingBold, fontSize: 16, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   // Extra top padding drops the header clear of the back / Share controls.
   content: { padding: spacing.xl, paddingTop: 128, paddingBottom: 60 },
 
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  headerThumb: { width: 54, height: 72 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
+  headerThumb: { width: 60, height: 76 },
   headerIdentity: { flex: 1 },
 
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.borderLight },
-  statsBand: { paddingVertical: spacing.sm, gap: 3 },
-  stats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
-  statsSub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
+  // Stats band + Vinster's Note are centred, matching the request.
+  statsBand: { paddingVertical: spacing.sm, gap: 3, alignItems: 'center' },
+  stats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+  statsSub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
 
   // View Vinster's Note — collapsible, sits between the stats band and the rule.
   vinsterToggleRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
+  vinsterToggleCentered: { justifyContent: 'center' },
   vinsterToggleText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: '#FFFFFF', textTransform: 'uppercase', letterSpacing: 1.2 },
   vinsterBlock: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.md, gap: spacing.sm, backgroundColor: 'rgba(212,176,96,0.06)', marginBottom: spacing.sm },
   vinsterLabel: { fontFamily: fonts.bodyBold, color: colors.gold },
