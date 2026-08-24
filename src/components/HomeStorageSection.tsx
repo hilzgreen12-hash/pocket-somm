@@ -274,19 +274,20 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
 const styles = StyleSheet.create({
   // Matches "Vinster's Review of You" on the Review tab.
   sectionHeader: { fontFamily: fontsSpectral.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  intro: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  // Elegant Cormorant, matching the Cellar header/blurb above.
+  intro: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   stats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginBottom: spacing.xs },
   addRow: { alignItems: 'center', paddingVertical: spacing.xs, marginBottom: spacing.xs },
-  addLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
+  addLink: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   // Extra breathing room between "+ Add Storage Location" and the carousel.
   carouselScroll: { marginTop: spacing.xl },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.border, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
-  storageCardType: { fontSize: 11, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
-  storageCardName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
-  storageCardCount: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
+  storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
+  storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted },
   addTile: { width: 152, height: 108, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
 });
