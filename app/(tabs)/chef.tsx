@@ -13,9 +13,11 @@ import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 interface AppMessage { title: string; body: string; }
 
-const CHEF_HELP = `Start with a wine and Vinster generates original, chef-inspired recipes shaped around your dietary needs (set in You, or per search). Start with a recipe and it finds a wine to match — from your cellar or in the wild, suited to your ingredients and budget.
+const CHEF_HELP = `Start with a wine and Vinster generates original, chef-inspired recipes; start with a recipe and it finds a wine to match — from your cellar or beyond, suited to your ingredients and budget.
 
-Keep your favourites in Your Cookbook, and share them with friends and the community.`;
+Set your dietary preferences and restrictions in the You tab (or adjust them per search) and Vinster shapes every recipe and pairing around them.
+
+Keep the recipes and pairing notes you love in Your Cookbook, and share them with friends and the community.`;
 
 export default function ChefTab() {
   const { height } = useWindowDimensions();
@@ -86,12 +88,7 @@ export default function ChefTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Start with a wine and Vinster finds chef-inspired recipes to match; start with a recipe and it finds the wine. Keep the ones you love in Your Cookbook.
-        </Text>
-        <Text style={styles.prefsBlurb}>
-          Vinster will use your preferences in{' '}
-          <Text style={styles.prefsLink} onPress={() => router.push('/(tabs)/you')}>You</Text>
-          {' '}to guide its results.
+          Generate chef-inspired recipes or wine pairing recommendations from your cellar and beyond. Keep the recipes you love and pairing notes in your cookbook.
         </Text>
         <HelpButton label="More About Pair" title="How Pair works" body={CHEF_HELP} />
       </View>
