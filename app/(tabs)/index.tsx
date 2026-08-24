@@ -37,6 +37,11 @@ function ackKey(category: 'wine' | 'recipe') {
 const NUDGE_CAP = 3;
 const NUDGE_COUNT_KEY = 'vinster_personality_nudge_shows';
 
+// Module-level so it survives the Scan tab unmounting/remounting on navigation:
+// the welcome overlay shows once per app session (a fresh launch resets it),
+// not every time the user returns to the Scan tab.
+let welcomeShownThisSession = false;
+
 // Most-recently-generated sketch (wine or recipe) so the landing can decide
 // whether to surface the "your personality is ready" popup.
 function useFeaturedPersonality(userId: string | undefined) {
@@ -93,9 +98,8 @@ export default function ScanLandingScreen() {
   // Welcome) appears over it, dismissed with "Continue". Shown once per app
   // session (the ref resets on a fresh launch).
   const [welcomeOpen, setWelcomeOpen] = useState(false);
-  const welcomeShownRef = useRef(false);
   useFocusEffect(useCallback(() => {
-    if (!welcomeShownRef.current) { welcomeShownRef.current = true; setWelcomeOpen(true); }
+    if (!welcomeShownThisSession) { welcomeShownThisSession = true; setWelcomeOpen(true); }
   }, []));
 
   // Soft gate: guest sees the prompt but may Continue (scanning is guest-open).
