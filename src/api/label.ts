@@ -2,6 +2,7 @@ import * as ImageManipulator from 'expo-image-manipulator';
 import { File, Paths } from 'expo-file-system';
 import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
+import { supabase } from './supabase';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
 
 // All edge calls go through invokeResilient, which attaches the user's JWT (via
@@ -37,6 +38,25 @@ export interface WineSearchResult {
 // Predictive wine typeahead for manual entry — returns real wines matching the
 // partial query, with clean/consistent formatting, to fill the identity fields.
 export async function searchWines(query: string): Promise<WineSearchResult[]> {
+  const q = query.trim();
+  if (q.length < 3) return [];
+  // Fast path: hit the trigram-indexed catalog RPC directly — no edge-function
+  // round-trip, so the typeahead updates in tens of milliseconds. The catalog is
+  // public-readable (RLS select using(true)); when it yields a solid shortlist
+  // we're done. Only a thin/empty result falls through to the edge function,
+  // which adds the Claude typeahead for wines the catalog doesn't know.
+  try {
+    const { data, error } = await supabase.rpc('search_wines_catalog', { q, lim: 8 });
+    if (!error && Array.isArray(data) && data.length >= 3) {
+      return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; grape: string | null }) => ({
+        producer: r.producer,
+        wineName: r.wine_name ?? null,
+        region: r.region ?? null,
+        style: r.style ?? null,
+        grape: r.grape ?? null,
+      }));
+    }
+  } catch { /* fall through to the edge function (catalog + Claude fallback) */ }
   const data = await invokeFunction('wine-search', { query }) as { results?: WineSearchResult[] };
   return data.results ?? [];
 }

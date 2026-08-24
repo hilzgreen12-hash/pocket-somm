@@ -166,7 +166,7 @@ export default function ScanLandingScreen() {
       } finally {
         if (id === searchReqRef.current) setSearchLoading(false);
       }
-    }, 300);
+    }, 150);
     return () => clearTimeout(t);
   }, [wineSearch]);
 
