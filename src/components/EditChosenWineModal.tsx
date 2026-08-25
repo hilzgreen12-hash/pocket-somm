@@ -123,17 +123,29 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   async function fetchEstimate(w: ChosenWine, announce: boolean) {
     if (estimating) return;
     setEstimating(true);
+    // Stage 1 — generate the estimate. ONLY a failure here means "couldn't
+    // estimate"; the announce alert belongs to this stage alone.
+    let intel: Awaited<ReturnType<typeof generateWineIntel>>;
     try {
-      const intel = await generateWineIntel({
+      intel = await generateWineIntel({
         producer: w.producer ?? '',
         region: w.region ?? '',
         wineName: w.wine_name || null,
         vintage: w.vintage != null ? String(w.vintage) : 'NV',
         style: null,
       } as any, currency);
-      const at = new Date().toISOString();
-      setEstimatedValue(intel.estimatedValue ?? null);
-      setEstimatedValueAt(at);
+    } catch (err) {
+      if (announce) showAlert({ title: 'Could not estimate', body: err instanceof Error ? err.message : 'Please try again.' });
+      setEstimating(false);
+      return;
+    }
+    // The estimate succeeded — show it straight away.
+    const at = new Date().toISOString();
+    setEstimatedValue(intel.estimatedValue ?? null);
+    setEstimatedValueAt(at);
+    // Stage 2 — persist. A save hiccup must NOT surface as "could not estimate"
+    // (the value is already generated and shown); it'll re-persist on Save.
+    try {
       await patchChosenWine(w.id, {
         estimated_value: intel.estimatedValue ?? null,
         estimated_value_currency: currency,
@@ -151,11 +163,8 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
       });
       qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
-    } catch (err) {
-      if (announce) showAlert({ title: 'Could not estimate', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setEstimating(false);
-    }
+    } catch { /* value shown locally; will persist on Save */ }
+    setEstimating(false);
   }
 
   async function persist() {
