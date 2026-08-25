@@ -246,7 +246,20 @@ export default function LabelResultsScreen() {
           wineName: wineDetailsConfirmed.wineName,
           vintage: wineDetailsConfirmed.vintage,
         });
-        if (list.length > 0) { setCandidates(list); setSelectedCand(null); setCandidatesOpen(true); }
+        // LAST RESORT only. Build a single list that INCLUDES the wine as read
+        // (first) plus any genuinely-different bottlings. If there are no real
+        // alternatives (the producer range is just this wine, or empty), don't
+        // prompt at all — asking "which wine is this?" with one option that IS
+        // the current wine is the loop the user hit. Only open with ≥2 choices.
+        const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
+        const readAsCand: WineCandidate = {
+          wineName: wineDetailsConfirmed.wineName ?? '',
+          region: wineDetailsConfirmed.region ?? null,
+          style: wineDetailsConfirmed.style ?? null,
+        };
+        const alternatives = list.filter((c) => norm(c.wineName) !== norm(readAsCand.wineName));
+        const combined = [readAsCand, ...alternatives];
+        if (combined.length >= 2) { setCandidates(combined); setSelectedCand(0); setCandidatesOpen(true); }
       } catch { /* silent — NoIntelPrompt stays as the fallback */ }
     })();
   }, [intelligence, isIntelOnlyFlow, wineDetailsConfirmed]);
@@ -499,6 +512,11 @@ export default function LabelResultsScreen() {
   // Confirm a candidate → update the identity and regenerate intel for it.
   async function pickCandidate(c: WineCandidate) {
     if (!wineDetailsConfirmed || regenerating) return;
+    // Never re-prompt for this scan once the user has chosen (prevents the loop).
+    candidatesTriedRef.current = true;
+    const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
+    // Picking the wine as-read (option 1) needs no regeneration — just close.
+    if (norm(c.wineName) === norm(wineDetailsConfirmed.wineName)) { setCandidatesOpen(false); return; }
     const updated = {
       ...wineDetailsConfirmed,
       wineName: c.wineName,
@@ -1759,15 +1777,14 @@ export default function LabelResultsScreen() {
                   style={[styles.candConfirmBtn, selectedCand == null && styles.candConfirmBtnDisabled]}
                   onPress={() => { if (selectedCand != null) pickCandidate(candidates[selectedCand]); }}
                   disabled={selectedCand == null}
-                  activeOpacity={0.85}
+                  activeOpacity={0.8}
                 >
                   <Text style={styles.candConfirmText}>Select This Wine</Text>
                 </TouchableOpacity>
               </>
             )}
-            <TouchableOpacity style={styles.candCancel} onPress={() => { setCandidatesOpen(false); }} disabled={regenerating}>
-              <Text style={styles.candCancelText}>None of these — keep as is</Text>
-            </TouchableOpacity>
+            {/* No "None of these — keep as is": the wine as read is already the
+                first option in the list, so picking it keeps it. */}
           </View>
         </View>
       </Modal>
