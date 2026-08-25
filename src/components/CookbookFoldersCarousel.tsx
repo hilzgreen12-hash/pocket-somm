@@ -24,7 +24,7 @@ export function CookbookFoldersCarousel() {
     <View>
       {/* Header + stats bar — copied from the Your Cookbook landing page. */}
       <Text style={styles.title}>Your Cookbook</Text>
-      <Text style={styles.blurb}>Recipes you generate in Vinster can be saved and organised here. Create your own folders and pairing notes.</Text>
+      <Text style={styles.blurb}>Recipes you generate can be saved and organised here. Create folders and record your pairing notes.</Text>
       <View style={styles.summaryRow}>
         <Text style={styles.summaryText}>
           {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
