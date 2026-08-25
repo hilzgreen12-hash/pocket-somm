@@ -8,13 +8,12 @@ import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
+import { MicButton } from '../../src/components/MicButton';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import { prepareImageBase64, scanLabel, searchWines, searchLabelImages, type WineSearchResult } from '../../src/api/label';
-import { listLineupArchives, lineupSignedUrl, type LineupArchive } from '../../src/api/lineups';
-import { useQuery } from '@tanstack/react-query';
 import { File, Paths } from 'expo-file-system';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { generateWineIntel, fetchPricing } from '../../src/services/pricing';
@@ -31,26 +30,6 @@ import { fonts } from '../../src/constants/fonts';
 // not every time the user returns to the Scan tab.
 let welcomeShownThisSession = false;
 
-// One photo in the "Your Lineup Archive" carousel — resolves a fresh signed URL
-// on mount and taps through to the lineup's detail screen.
-function LineupThumb({ item }: { item: LineupArchive }) {
-  const [url, setUrl] = useState<string | null>(null);
-  useEffect(() => {
-    let active = true;
-    lineupSignedUrl(item.image_path).then((u) => { if (active) setUrl(u); });
-    return () => { active = false; };
-  }, [item.image_path]);
-  const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-  return (
-    <TouchableOpacity style={styles.carouselItem} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} activeOpacity={0.85}>
-      <View style={styles.carouselImageWrap}>
-        {url ? <Image source={{ uri: url }} style={styles.carouselImage} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} />}
-      </View>
-      <Text style={styles.carouselDate} numberOfLines={1}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
-    </TouchableOpacity>
-  );
-}
-
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
 // carousel. The six-tab bar handles all other navigation, so there's no hamburger.
@@ -59,7 +38,9 @@ export default function ScanLandingScreen() {
   // Match every other tab page's top spacing so the Vinster mark + title sit at
   // a consistent height across the bottom-nav surfaces.
   const { height } = useWindowDimensions();
-  const paddingTop = Math.max(55, height * 0.095);
+  // Nudged a little lower than the shared formula: the Scan landing reads as
+  // sitting higher than the other tabs, so give the mark + title more headroom.
+  const paddingTop = Math.max(55, height * 0.095) + spacing.xl;
   const username = (session?.user.user_metadata?.display_name ?? '').trim();
   const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError, reset: resetLabelStore } = useLabelStore();
   const { setExtractedWines, setRecommendation } = useScanStore();
@@ -82,14 +63,6 @@ export default function ScanLandingScreen() {
   const pendingActionRef = useRef<(() => void) | null>(null);
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
-
-  // Your Lineup Archive carousel — the user's saved lineup photos, newest first.
-  const userId = session?.user.id;
-  const { data: lineups = [] } = useQuery({
-    queryKey: ['lineup-archives', userId],
-    queryFn: () => listLineupArchives(userId!),
-    enabled: !!userId,
-  });
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Your AI Sommelier" ·
@@ -392,23 +365,12 @@ export default function ScanLandingScreen() {
         </View>
       </View>
 
-      {/* Your Lineup Archive — a horizontal carousel of saved lineup photos. */}
-      <View style={styles.archiveDivider} />
-      <View style={styles.archiveHeaderRow}>
-        <Text style={styles.archiveTitle}>Your Lineup Archive</Text>
-        {lineups.length > 0 ? (
-          <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/lineups'))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Text style={styles.archiveSeeAll}>See all</Text>
-          </TouchableOpacity>
-        ) : null}
+      {/* Dictate a wine name to search by voice — same on-device mic used across
+          the app. Speaking fills the search and opens the results. */}
+      <View style={styles.dictateBar}>
+        <MicButton value={wineSearch} onChangeText={(t) => { setWineSearch(t); if (t.trim().length >= 3) setSearchModalOpen(true); }} />
+        <Text style={styles.dictateLabel}>Dictate to search a wine</Text>
       </View>
-      {lineups.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-          {lineups.map((l) => <LineupThumb key={l.id} item={l} />)}
-        </ScrollView>
-      ) : (
-        <Text style={styles.archiveEmpty}>No lineups yet — “Scan a Lineup” to save tonight's bottles.</Text>
-      )}
 
       <Modal visible={scanningLabel} transparent animationType="fade">
         <View style={styles.scanningOverlay}>
@@ -579,19 +541,11 @@ const styles = StyleSheet.create({
   tileDivider: { width: 34, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
   tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 17 },
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
-  tileBannerText: { fontFamily: fonts.headingItalic, fontSize: 12, color: colors.gold, letterSpacing: 0.3 },
+  tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  // "Dictate to search a wine" — a mic bar under the grid.
+  dictateBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginTop: spacing.md },
+  dictateLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
 
-  // Your Lineup Archive — divider, header, then a horizontal thumbnail carousel.
-  archiveDivider: { height: 1, backgroundColor: colors.divider, marginTop: spacing.xl, marginBottom: spacing.lg },
-  archiveHeaderRow: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between', marginBottom: spacing.md },
-  archiveTitle: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', letterSpacing: 0.5 },
-  archiveSeeAll: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
-  archiveEmpty: { fontFamily: fonts.headingItalic, fontSize: 15, color: 'rgba(255,255,255,0.7)', lineHeight: 22 },
-  carousel: { gap: spacing.md, paddingRight: spacing.md },
-  carouselItem: { width: 130 },
-  carouselImageWrap: { width: 130, height: 102, borderRadius: 8, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
-  carouselImage: { width: 130, height: 102 },
-  carouselDate: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 4 },
 
   // Search-a-Wine prompt (opened from the Search tile).
   searchModalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },

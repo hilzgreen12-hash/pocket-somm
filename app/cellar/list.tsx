@@ -944,17 +944,9 @@ export default function FullCellarListScreen() {
           </View>
           <Text style={[styles.filterChipValue, colourFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
         </TouchableOpacity>
-        {/* Archive folder — enters the dedicated archived-bottles view
-            (?archived=1); a navigation "folder" (› not ▾). Hidden in the Archive. */}
-        {!isArchiveView && (
-          <TouchableOpacity style={styles.filterChip} onPress={() => router.push('/cellar/list?archived=1')}>
-            <View style={styles.filterChipHeadingRow}>
-              <Text style={styles.filterChipLabel}>Archive</Text>
-              <Text style={styles.filterChipChevron}>›</Text>
-            </View>
-            <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">Archived bottles</Text>
-          </TouchableOpacity>
-        )}
+        {/* The Archive folder chip is retired here — the archived-bottles view is
+            reached from Your Wine Archive → Your Cellar Archive instead. The
+            ?archived=1 route still powers that dedicated view. */}
       </ScrollView>
 
       {/* Search sits below the filter chips and narrows whatever the chips
