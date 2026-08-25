@@ -290,7 +290,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
   const parsedScore = score.trim() ? Math.round(Number(score.trim())) : null;
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>

@@ -457,8 +457,10 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const drinkingRange = wine.drinking_window?.from && wine.drinking_window?.to ? `${wine.drinking_window.from}–${wine.drinking_window.to}` : null;
   const drinkingStatus = wine.drinking_window?.status ?? null;
 
+  // No presentationStyle — iOS-only, and it forces a black modal window on
+  // Android during the slide-in. iOS is full-screen by default (not transparent).
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>

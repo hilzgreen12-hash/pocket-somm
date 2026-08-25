@@ -289,11 +289,12 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
     return map[cur] ?? `${cur} `;
   })();
 
+  // No presentationStyle — iOS-only, and it forces a black modal window on
+  // Android during the slide-in. iOS is full-screen by default (not transparent).
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>

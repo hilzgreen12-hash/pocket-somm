@@ -579,7 +579,7 @@ export function RestaurantReviewModal({
   };
 
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={handleBack}>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleBack}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           {/* Top bar: gold back arrow (left); Share + favourite star (right). */}

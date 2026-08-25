@@ -273,8 +273,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     return (v: T) => { setter(v); if (saved) setSaved(false); };
   }
 
+  // No presentationStyle on the Modal: it's iOS-only and forces a black modal
+  // window on Android during the slide-in ("screen turns black while loading").
+  // Not transparent, so iOS already presents full-screen by default.
   return (
-    <Modal visible={visible} animationType="slide" presentationStyle="fullScreen" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
