@@ -20,6 +20,11 @@ const VALUES: (number | null)[] = [
 
 const MAX_INDEX = VALUES.length - 1;
 
+// Minimum-budget stops: "No minimum" (null) first, then every numeric stop
+// from the max scale (no "Baller" — a minimum of Baller makes no sense).
+const MIN_VALUES: (number | null)[] = [null, ...VALUES.filter((v): v is number => v !== null)];
+const MIN_MAX_INDEX = MIN_VALUES.length - 1;
+
 function valueToIndex(value: number | null): number {
   if (value === null) return MAX_INDEX;
   let closest = 0;
@@ -33,9 +38,26 @@ function valueToIndex(value: number | null): number {
   return closest;
 }
 
+function minValueToIndex(value: number | null): number {
+  if (value == null) return 0; // No minimum
+  let closest = 0;
+  let diff = Infinity;
+  MIN_VALUES.forEach((v, i) => {
+    if (v !== null) {
+      const d = Math.abs(v - value);
+      if (d < diff) { diff = d; closest = i; }
+    }
+  });
+  return closest;
+}
+
 interface Props {
   value: number | null;
   onChange: (value: number | null) => void;
+  // Optional MINIMUM budget. When onMinChange is provided, a second "minimum"
+  // slider renders and the header shows a range. minValue null = no minimum.
+  minValue?: number | null;
+  onMinChange?: (value: number | null) => void;
   currency?: string;
   // Optional prefix shown before the value on the same line, e.g. "Budget?"
   // so the header reads "Budget? £200." / "Budget? Baller."
@@ -45,19 +67,29 @@ interface Props {
   compact?: boolean;
 }
 
-export function BudgetSlider({ value, onChange, currency, label, compact }: Props) {
+export function BudgetSlider({ value, onChange, minValue, onMinChange, currency, label, compact }: Props) {
   // Track index locally during drag so the slider doesn't fight the
   // controlled `value` prop (each parent update would otherwise force the
   // thumb back and break the gesture). Commit upstream on release.
   const [localIndex, setLocalIndex] = useState(() => valueToIndex(value));
+  const [localMinIndex, setLocalMinIndex] = useState(() => minValueToIndex(minValue ?? null));
 
-  useEffect(() => {
-    setLocalIndex(valueToIndex(value));
-  }, [value]);
+  useEffect(() => { setLocalIndex(valueToIndex(value)); }, [value]);
+  useEffect(() => { setLocalMinIndex(minValueToIndex(minValue ?? null)); }, [minValue]);
 
   const current = VALUES[localIndex];
   const atMax = current === null;
+  const minCurrent = MIN_VALUES[localMinIndex];
   const sym = currencySymbol(currency);
+  const rangeMode = !!onMinChange;
+
+  const maxText = atMax ? 'Baller' : `${sym}${current}`;
+  // Header: single mode → "£200." ; range mode → "Up to £200." / "£50 – £200."
+  const headerValue = !rangeMode
+    ? `${maxText}.`
+    : minCurrent == null
+      ? `Up to ${maxText}.`
+      : `${sym}${minCurrent} – ${maxText}.`;
 
   return (
     <View style={{ width: '100%' }}>
@@ -65,10 +97,32 @@ export function BudgetSlider({ value, onChange, currency, label, compact }: Prop
         {label ? `${label}  ` : ''}
         {/* The budget value is always an active selection (Baller is the
             default), so it reads gold from the start. */}
-        <Text style={styles.valueConfirmed}>
-          {atMax ? 'Baller' : `${sym}${current}`}.
-        </Text>
+        <Text style={styles.valueConfirmed}>{headerValue}</Text>
       </Text>
+
+      {rangeMode ? (
+        <>
+          <Text style={[styles.rangeLabel, compact && styles.labelCompact]}>Minimum</Text>
+          <Slider
+            style={compact ? styles.sliderCompact : undefined}
+            minimumValue={0}
+            maximumValue={MIN_MAX_INDEX}
+            step={1}
+            value={localMinIndex}
+            onValueChange={(i) => setLocalMinIndex(Math.round(i))}
+            onSlidingComplete={(i) => onMinChange?.(MIN_VALUES[Math.round(i)])}
+            minimumTrackTintColor="rgba(255,255,255,0.80)"
+            maximumTrackTintColor="rgba(255,255,255,0.20)"
+            thumbTintColor="#FFFFFF"
+          />
+          <View style={styles.labels}>
+            <Text style={[styles.label, compact && styles.labelCompact]}>No min</Text>
+            <Text style={[styles.label, compact && styles.labelCompact]}>{sym}950</Text>
+          </View>
+          <Text style={[styles.rangeLabel, compact && styles.labelCompact, { marginTop: spacing.sm }]}>Maximum</Text>
+        </>
+      ) : null}
+
       <Slider
         style={compact ? styles.sliderCompact : undefined}
         minimumValue={0}
@@ -107,6 +161,14 @@ const styles = StyleSheet.create({
   },
   sliderCompact: {
     height: 28,
+  },
+  // "Minimum" / "Maximum" sub-labels in range mode.
+  rangeLabel: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.65)',
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
   },
   labels: {
     flexDirection: 'row',

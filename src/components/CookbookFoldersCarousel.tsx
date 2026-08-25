@@ -33,7 +33,7 @@ export function CookbookFoldersCarousel() {
           {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
         </Text>
       </View>
-      <Text style={styles.filterHint}>Swipe to see all folders →</Text>
+      <Text style={styles.filterHint}>Swipe to view and add folders →</Text>
 
       {/* Folders as boxes — mirrors the Cellar storage / Review carousels. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>

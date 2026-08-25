@@ -5,6 +5,9 @@ export interface ScanPreferences {
   wineTypes: string[];
   styleProfiles: string[];
   budget: number | null;
+  // Optional MINIMUM budget per bottle (null = no minimum). Pairs with `budget`
+  // (the maximum) to form a price range.
+  budgetMin: number | null;
   foodPairing: string;
   // Free-text "preferred country of origin" for the wine picks — a soft
   // preference (weights, never excludes). Empty string = no preference.
@@ -45,6 +48,7 @@ const DEFAULT_PREFERENCES: ScanPreferences = {
   wineTypes: [],
   styleProfiles: [],
   budget: null,
+  budgetMin: null,
   foodPairing: '',
   preferredCountry: '',
   favouriteRegions: [],

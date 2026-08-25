@@ -205,6 +205,7 @@ Deno.serve(async (req) => {
       wineTypes,
       styleProfiles,
       budget,
+      budgetMin,
       foodPairing,
       preferredCountry,
       favouriteRegions,
@@ -234,7 +235,11 @@ Deno.serve(async (req) => {
         : 'No colour restriction — recommend the best option regardless of colour.';
 
     const budgetLine = budget
-      ? `HARD RULE — BUDGET: The diner's maximum budget is ${sym}${budget} per bottle (currency: ${cur}). Exclude every wine priced above ${sym}${budget} on the menu. Treat all menu prices as being in ${cur}. This is absolute.`
+      ? `HARD RULE — BUDGET (MAX): The diner's maximum budget is ${sym}${budget} per bottle (currency: ${cur}). Exclude every wine priced above ${sym}${budget} on the menu. Treat all menu prices as being in ${cur}. This is absolute.`
+      : '';
+
+    const budgetMinLine = budgetMin
+      ? `HARD RULE — BUDGET (MIN): The diner's minimum budget is ${sym}${budgetMin} per bottle (currency: ${cur}). Exclude every wine priced BELOW ${sym}${budgetMin} on the menu — they want to spend at least this much. A wine whose menu price is unknown (null) may be included. This is absolute.`
       : '';
 
     const dislikedRegionsLine = dislikedRegions?.length
@@ -268,7 +273,7 @@ Today's date: ${today} — use this as the anchor when assessing every wine's dr
 Diner preferences:
 - Colour: ${wineTypes?.length ? wineTypes.join(', ') : profileWineTypes?.length ? `${profileWineTypes.join(', ')} (soft preference — do not exclude other colours)` : 'No preference'}
 - Style profiles: ${mergedStyleProfiles.length ? mergedStyleProfiles.join(', ') : 'No preference — prioritise quality and value'}
-- Budget: up to ${sym}${budget ?? 'unlimited'} per bottle on the menu (${cur})
+- Budget: ${budgetMin ? `${sym}${budgetMin} (min) to ` : ''}up to ${sym}${budget ?? 'unlimited'} per bottle on the menu (${cur})
 - Food pairing: ${foodPairing || 'Not specified'}
 - Preferred country of origin (soft preference — weight, do not exclude): ${countryPref || 'No preference'}
 - Favourite regions (prioritise these): ${favouriteRegions?.length ? favouriteRegions.join(', ') : 'None specified'}
@@ -278,6 +283,7 @@ Diner preferences:
 
 ${colourLine}
 ${budgetLine}
+${budgetMinLine}
 ${dislikedRegionsLine}
 ${dislikedGrapesLine}
 ${countryLine}

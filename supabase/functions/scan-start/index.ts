@@ -87,7 +87,7 @@ function preFilterWines(wines: ExtractedWine[], prefs: ProfileFilters | null | u
 }
 
 interface ScanPrefs {
-  wineTypes?: string[]; styleProfiles?: string[]; budget?: number | null; foodPairing?: string;
+  wineTypes?: string[]; styleProfiles?: string[]; budget?: number | null; budgetMin?: number | null; foodPairing?: string;
   preferredCountry?: string;
   favouriteRegions?: string[]; favouriteGrapes?: string[]; dislikedRegions?: string[]; dislikedGrapes?: string[];
   profileWineTypes?: string[]; profileStyleProfiles?: string[];
@@ -97,6 +97,8 @@ function applyScanFilters(wines: ExtractedWine[], preferences: ScanPrefs | null 
   let out = wines;
   const budget = preferences.budget;
   if (budget) out = out.filter((w) => w.menuPrice == null || w.menuPrice <= budget);
+  const budgetMin = preferences.budgetMin;
+  if (budgetMin) out = out.filter((w) => w.menuPrice == null || w.menuPrice >= budgetMin);
   const types = preferences.wineTypes ?? [];
   if (types.length) {
     const byColour = out.filter((w) => !w.colour || colourMatches(w.colour, types));
@@ -204,6 +206,7 @@ Deno.serve(async (req) => {
           wineTypes: scanPreferences.wineTypes,
           styleProfiles: scanPreferences.styleProfiles,
           budget: scanPreferences.budget,
+          budgetMin: scanPreferences.budgetMin,
           foodPairing: scanPreferences.foodPairing,
           preferredCountry: scanPreferences.preferredCountry,
           favouriteRegions: scanPreferences.favouriteRegions,

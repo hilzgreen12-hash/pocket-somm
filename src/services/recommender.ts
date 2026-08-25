@@ -8,6 +8,7 @@ interface RecommendInput {
   wineTypes: string[];
   styleProfiles: string[];
   budget: number | null;
+  budgetMin?: number | null;
   foodPairing: string;
   preferredCountry?: string;
   favouriteRegions: string[];

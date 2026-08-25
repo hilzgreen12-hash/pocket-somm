@@ -45,13 +45,14 @@ export default function WineListScreen() {
   const isRestoring = useRef(
     !useScanStore.getState().needsReset && (
       restored.wineTypes.length > 0 || restored.styleProfiles.length > 0 ||
-      !!restored.foodPairing || restored.budget != null || !!restored.preferredCountry
+      !!restored.foodPairing || restored.budget != null || restored.budgetMin != null || !!restored.preferredCountry
     )
   ).current;
 
   const [wineTypes, setWineTypes] = useState<WineType[]>(isRestoring ? (restored.wineTypes as WineType[]) : []);
   const [styleProfiles, setStyleProfiles] = useState<string[]>(isRestoring ? restored.styleProfiles : []);
   const [budget, setBudget] = useState<number | null>(isRestoring ? restored.budget : (savedPreferences?.defaultBudget ?? null));
+  const [budgetMin, setBudgetMin] = useState<number | null>(isRestoring ? (restored.budgetMin ?? null) : null);
   const [foodPairing, setFoodPairing] = useState(isRestoring ? restored.foodPairing : '');
   const [preferredCountry, setPreferredCountry] = useState(isRestoring ? (restored.preferredCountry ?? '') : '');
   const [wineTypeOpen, setWineTypeOpen] = useState(false);
@@ -59,7 +60,7 @@ export default function WineListScreen() {
   // Top-scoring is now the DEFAULT search (no manual toggle): with no preferences
   // entered, Vinster returns the three highest quality + value wines. Entering any
   // preference (wine type, style, food, budget) switches to tailored picks.
-  const topScoringMode = wineTypes.length === 0 && styleProfiles.length === 0 && !foodPairing.trim() && budget == null && !preferredCountry.trim();
+  const topScoringMode = wineTypes.length === 0 && styleProfiles.length === 0 && !foodPairing.trim() && budget == null && budgetMin == null && !preferredCountry.trim();
 
   function toggleSection(section: 'wineType' | 'style') {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -138,6 +139,7 @@ export default function WineListScreen() {
       wineTypes,
       styleProfiles,
       budget,
+      budgetMin,
       foodPairing,
       preferredCountry,
       favouriteRegions: savedPreferences?.favouriteRegions ?? [],
@@ -327,7 +329,7 @@ export default function WineListScreen() {
           <View style={styles.bubbleWrap}>
             {prefsLoading
               ? <View style={{ height: 60 }} />
-              : <BudgetSlider value={budget} onChange={setBudget} currency={savedPreferences?.defaultCurrency} label="Budget?" />}
+              : <BudgetSlider value={budget} onChange={setBudget} minValue={budgetMin} onMinChange={setBudgetMin} currency={savedPreferences?.defaultCurrency} label="Budget?" />}
           </View>
         </View>
 
