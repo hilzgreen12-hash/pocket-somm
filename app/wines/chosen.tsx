@@ -437,7 +437,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   // Broader "arrived via a deep link to a specific wine's review" flag — also
   // covers the cellar-review links (used by the Lineup wine list). Any of these
@@ -545,6 +545,16 @@ export default function ChosenWinesScreen() {
       }
       return;
     }
+    if (params.addManual === '1') {
+      // From the Review tab's "Add a wine review" — open a blank manual review
+      // input straight away (no chooser).
+      if (handledParamRef.current === 'addManual') return;
+      handledParamRef.current = 'addManual';
+      setAddSource('other');
+      setAddToGroupId(null);
+      handleChooseManual();
+      return;
+    }
     if (params.seedAdd === '1') {
       const key = `add:${params.sp}|${params.sw}|${params.sv}`;
       if (handledParamRef.current === key) return;
@@ -561,7 +571,7 @@ export default function ChosenWinesScreen() {
       setAddOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.seedAdd, params.sp, params.sw, params.sv, params.sr, params.slu, chosenWines, cellarWines, archivedWines]);
+  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.seedAdd, params.addManual, params.sp, params.sw, params.sv, params.sr, params.slu, chosenWines, cellarWines, archivedWines]);
 
   // "Don't show me this again" — a direct action (no tick box): opt out
   // permanently and dismiss.
@@ -1480,7 +1490,7 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
         <TouchableOpacity
-          onPress={() => setCollectionChooserOpen(true)}
+          onPress={() => { setAddSource('other'); setAddToGroupId(null); handleChooseManual(); }}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Text style={styles.addLink}>+ Add</Text>

@@ -37,9 +37,10 @@ export default function ScanLandingScreen() {
   // Match every other tab page's top spacing so the Vinster mark + title sit at
   // a consistent height across the bottom-nav surfaces.
   const { height } = useWindowDimensions();
-  // Nudged a little lower than the shared formula: the Scan landing reads as
-  // sitting higher than the other tabs, so give the mark + title more headroom.
-  const paddingTop = Math.max(55, height * 0.095) + spacing.xl;
+  // SET RULE: every tab page's title sits at the SAME height. This must match
+  // Review (scan.tsx), Pair (chef.tsx), Cellar, Share and You exactly — the same
+  // Math.max(55, height * 0.095) with no per-tab nudges.
+  const paddingTop = Math.max(55, height * 0.095);
   const username = (session?.user.user_metadata?.display_name ?? '').trim();
   const { setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence, setError, reset: resetLabelStore } = useLabelStore();
   const { setExtractedWines, setRecommendation } = useScanStore();

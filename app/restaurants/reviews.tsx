@@ -232,7 +232,8 @@ export default function RestaurantReviewsScreen() {
   // Deep-link from the List results page (?openSession=<id>) — auto-open
   // that visit's review form once the archive has loaded, so the user lands
   // on the input rather than the bare list. Only fires once.
-  const { openSession } = useLocalSearchParams<{ openSession?: string }>();
+  const { openSession, add } = useLocalSearchParams<{ openSession?: string; add?: string }>();
+  const addTriggeredRef = useRef(false);
   const autoOpenedRef = useRef(false);
   useEffect(() => {
     if (autoOpenedRef.current || !openSession) return;
@@ -285,6 +286,16 @@ export default function RestaurantReviewsScreen() {
       setAddingRestaurant(false);
     }
   }
+
+  // From the Review tab's "Add a restaurant review" (?add=1) — start a fresh
+  // restaurant review on arrival, once.
+  useEffect(() => {
+    if (add === '1' && session?.user.id && !addTriggeredRef.current) {
+      addTriggeredRef.current = true;
+      void handleAddRestaurant();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [add, session]);
 
   // `pop` controls the deep-link back-pop. It MUST be false when the close is
   // immediately followed by opening a sibling in-page modal (Edit/Review Wine):
