@@ -78,9 +78,9 @@ const styles = StyleSheet.create({
   // match the Review header. Same footprint as the Cellar / Cookbook chips.
   // Deliberately a touch larger than the Cellar/Cookbook chips (190×134 vs
   // 152×108), with bigger type, as these alter-ego cards are the hero here.
-  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'flex-start', gap: spacing.xs, backgroundColor: colors.surface },
-  cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24 },
-  cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted },
+  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
+  cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
+  cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
   // Brown "your alter-ego is coming" placeholder.
   mysteryCard: { width: 190, height: 134, borderWidth: 1, borderColor: '#6B4A32', borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: '#3A2A20' },
   mysteryTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 23 },

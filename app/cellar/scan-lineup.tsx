@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Image, Modal, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { useQueryClient } from '@tanstack/react-query';
@@ -119,6 +119,18 @@ export default function ScanLineupScreen() {
   // If the store already holds a lineup (we've returned mid-flow after
   // onboarding a wine), open straight onto the review list.
   const [stage, setStage] = useState<Stage>(lineupWines.length > 0 ? 'review' : 'capture');
+
+  // Arriving from the Scan tile's "upload instead" opens the library picker
+  // straight away instead of the capture chooser.
+  const params = useLocalSearchParams<{ upload?: string }>();
+  const uploadTriggeredRef = useRef(false);
+  useEffect(() => {
+    if (params.upload === '1' && stage === 'capture' && !uploadTriggeredRef.current) {
+      uploadTriggeredRef.current = true;
+      void pickFrom('library');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.upload, stage]);
 
   async function pickFrom(source: 'camera' | 'library') {
     try {

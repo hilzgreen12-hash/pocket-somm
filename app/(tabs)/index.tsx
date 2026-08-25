@@ -233,6 +233,27 @@ export default function ScanLandingScreen() {
       ],
     }));
   }
+  // "manual input" under Search a Wine — enter a wine by hand (no typeahead) via
+  // the manual confirm screen.
+  function handleManualInput() {
+    requireAuth(() => {
+      resetLabelStore();
+      router.push(`/label/confirm?manual=1&context=intel&backTo=${encodeURIComponent('/(tabs)')}`);
+    });
+  }
+  // "upload instead" — same two destinations, but each opens the library picker
+  // straight away (?upload=1) rather than the in-app camera.
+  function handleUploadLineup() {
+    requireAuth(() => showAlert({
+      title: 'Upload a Lineup',
+      body: 'What would you like to do with this lineup?',
+      buttons: [
+        { text: 'Add a lineup to Your Cellar', onPress: () => router.push('/cellar/scan-lineup?upload=1' as any) },
+        { text: 'Archive a Lineup', onPress: () => router.push('/cellar/archive-night?upload=1') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    }));
+  }
 
   async function handleUploadLabel() {
     if (!(await ensureMediaPermission('library'))) return;
@@ -338,8 +359,8 @@ export default function ScanLandingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Scan a Lineup → a popup chooses Add-to-Cellar vs Archive; each flow
-            offers its own camera/upload, so this tile has no "upload instead". */}
+        {/* Scan a Lineup → a popup chooses Add-to-Cellar vs Archive; the banner
+            offers the same two, opened straight into the library picker. */}
         <View style={styles.tile}>
           <TouchableOpacity
             style={styles.tileMain}
@@ -351,6 +372,10 @@ export default function ScanLandingScreen() {
             <View style={styles.tileDivider} />
             <Text style={styles.tileDesc} numberOfLines={2}>Add or Archive bottles</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.tileBanner} onPress={handleUploadLineup} activeOpacity={0.7}>
+            <Feather name="upload" size={11} color={colors.gold} />
+            <Text style={styles.tileBannerText}>upload instead</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Search a Wine → predictive typeahead (no upload equivalent) */}
@@ -360,6 +385,10 @@ export default function ScanLandingScreen() {
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
             <View style={styles.tileDivider} />
             <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel, Review &amp; Cellar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tileBanner} onPress={handleManualInput} activeOpacity={0.7}>
+            <Feather name="edit-3" size={11} color={colors.gold} />
+            <Text style={styles.tileBannerText}>manual input</Text>
           </TouchableOpacity>
         </View>
       </View>
