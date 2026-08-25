@@ -408,13 +408,15 @@ export default function LabelResultsScreen() {
   // Save the entered vintage → rebuild the card for it (score / value / drinking
   // window all depend on the year). Reuses resolveConfirm's regenerate path.
   async function submitVintage() {
-    const y = vintageInput.trim();
-    if (y.length !== 4) {
-      showAlert({ title: 'Enter a 4-digit year', body: 'e.g. 2018 — or choose non-vintage below.' });
+    const raw = vintageInput.trim();
+    // Accept "NV" / "Non vintage" typed straight into the box (no separate link).
+    if (/^(nv|non[\s-]?vintage)$/i.test(raw)) { confirmNoVintage(); return; }
+    if (!/^\d{4}$/.test(raw)) {
+      showAlert({ title: 'Enter a 4-digit year or NV', body: 'e.g. 2018, or NV for a non-vintage wine.' });
       return;
     }
     if (!wineDetailsConfirmed) { setVintagePromptOpen(false); return; }
-    await resolveConfirm({ ...wineDetailsConfirmed, vintage: y });
+    await resolveConfirm({ ...wineDetailsConfirmed, vintage: raw });
     setVintagePromptOpen(false);
   }
   function confirmNoVintage() {
@@ -1703,22 +1705,23 @@ export default function LabelResultsScreen() {
             ) : (
               <>
                 <Text style={styles.candTitle}>What's the vintage?</Text>
-                <Text style={styles.candBody}>Vinster couldn't read the vintage from the label. Enter the year so the score, value and drinking window are accurate.</Text>
+                <Text style={styles.candBody}>Vinster couldn't read the vintage from the label. Enter the year — or "NV" for a non-vintage wine — so the score, value and drinking window are accurate.</Text>
                 <TextInput
                   style={styles.vintagePromptInput}
                   value={vintageInput}
-                  onChangeText={(t) => setVintageInput(t.replace(/[^0-9]/g, '').slice(0, 4))}
-                  placeholder="e.g. 2018"
+                  onChangeText={(t) => setVintageInput(t.replace(/[^0-9a-zA-Z ]/g, '').slice(0, 12))}
+                  placeholder="e.g. 2018 or NV"
                   placeholderTextColor={colors.textMuted}
-                  keyboardType="number-pad"
-                  maxLength={4}
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  maxLength={12}
                   autoFocus
                 />
-                <TouchableOpacity style={styles.candConfirmBtn} onPress={submitVintage} activeOpacity={0.85}>
+                <TouchableOpacity style={styles.candConfirmBtn} onPress={submitVintage} activeOpacity={0.8}>
                   <Text style={styles.candConfirmText}>Save</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.candCancel} onPress={confirmNoVintage} activeOpacity={0.7}>
-                  <Text style={styles.candCancelText}>This is a non-vintage wine (NV)</Text>
+                <TouchableOpacity style={styles.candCancel} onPress={() => setVintagePromptOpen(false)} activeOpacity={0.7}>
+                  <Text style={styles.candCancelText}>Cancel</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -2465,9 +2468,9 @@ const styles = StyleSheet.create({
   candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   vintagePromptInput: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', letterSpacing: 3, marginBottom: spacing.sm },
-  candConfirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
+  candConfirmBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
   candConfirmBtnDisabled: { opacity: 0.4 },
-  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
+  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   producer: { fontSize: 20.5, fontFamily: fonts.bodyBold, color: colors.text },

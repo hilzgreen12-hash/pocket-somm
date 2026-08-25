@@ -418,19 +418,17 @@ export default function ScanLandingScreen() {
             <TextInput
               style={styles.vintageInput}
               value={vintageDraft}
-              onChangeText={setVintageDraft}
-              placeholder="e.g. 2019"
+              onChangeText={(t) => setVintageDraft(t.replace(/[^0-9a-zA-Z ]/g, '').slice(0, 12))}
+              placeholder="e.g. 2019 or NV"
               placeholderTextColor={colors.textMuted}
-              keyboardType="number-pad"
-              maxLength={4}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={12}
               autoFocus
-              onSubmitEditing={() => generateSelectedIntel(vintageDraft)}
+              onSubmitEditing={() => generateSelectedIntel(/^(nv|non[\s-]?vintage)$/i.test(vintageDraft.trim()) ? 'NV' : vintageDraft)}
             />
-            <TouchableOpacity style={styles.vintageBtn} onPress={() => generateSelectedIntel(vintageDraft)} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.vintageBtn} onPress={() => generateSelectedIntel(/^(nv|non[\s-]?vintage)$/i.test(vintageDraft.trim()) ? 'NV' : vintageDraft)} activeOpacity={0.8}>
               <Text style={styles.vintageBtnText}>Generate Intel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => generateSelectedIntel('NV')} activeOpacity={0.7}>
-              <Text style={styles.vintageNv}>No vintage (NV)</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setVintageWine(null)} style={styles.vintageCancel}>
               <Text style={styles.vintageCancelText}>Cancel</Text>

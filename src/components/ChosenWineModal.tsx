@@ -182,9 +182,11 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
   // Confirm handlers for the vintage prompt.
   function submitVintageYear() {
     const raw = vintageDraft.trim();
+    // "NV" / "Non vintage" typed into the box confirms a non-vintage wine.
+    if (/^(nv|non[\s-]?vintage)$/i.test(raw)) { confirmNonVintage(); return; }
     const y = parseInt(raw, 10);
     if (!/^\d{4}$/.test(raw) || !isValidVintageYear(y)) {
-      showAlert({ title: 'Enter a four-digit year', body: 'A vintage must be a four-digit year, e.g. 2023 — or choose Non-vintage if this wine has none.' });
+      showAlert({ title: 'Enter a four-digit year or NV', body: 'A vintage must be a four-digit year, e.g. 2023 — or "NV" for a non-vintage wine.' });
       return;
     }
     setVintageValue(y);
@@ -470,25 +472,23 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
           <View style={styles.vpCard}>
             <Text style={styles.vpTitle}>What's the vintage?</Text>
             <Text style={styles.vpBody}>
-              We couldn't read a vintage for this wine. Enter its four-digit year, or confirm it's non-vintage.
+              We couldn't read a vintage for this wine. Enter its four-digit year — or "NV" for a non-vintage wine.
             </Text>
             <TextInput
               style={styles.vpInput}
               value={vintageDraft}
-              onChangeText={(t) => setVintageDraft(t.replace(/[^0-9]/g, '').slice(0, 4))}
-              placeholder="e.g. 2023"
+              onChangeText={(t) => setVintageDraft(t.replace(/[^0-9a-zA-Z ]/g, '').slice(0, 12))}
+              placeholder="e.g. 2023 or NV"
               placeholderTextColor={colors.textMuted}
-              keyboardType="number-pad"
-              maxLength={4}
+              autoCapitalize="characters"
+              autoCorrect={false}
+              maxLength={12}
               autoFocus
               returnKeyType="done"
               onSubmitEditing={submitVintageYear}
             />
-            <TouchableOpacity style={styles.vpPrimaryBtn} onPress={submitVintageYear} activeOpacity={0.85}>
+            <TouchableOpacity style={styles.vpPrimaryBtn} onPress={submitVintageYear} activeOpacity={0.8}>
               <Text style={styles.vpPrimaryText}>Save this vintage</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.vpLinkBtn} onPress={confirmNonVintage} activeOpacity={0.7}>
-              <Text style={styles.vpLinkText}>This wine is non-vintage (NV)</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.vpLinkBtn} onPress={() => setVintagePromptOpen(false)} activeOpacity={0.7}>
               <Text style={styles.vpCancelText}>Cancel</Text>
@@ -507,8 +507,8 @@ const styles = StyleSheet.create({
   vpTitle: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.xs },
   vpBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, opacity: 0.85, textAlign: 'center', marginBottom: spacing.md, lineHeight: 20 },
   vpInput: { backgroundColor: colors.surface, borderRadius: 10, borderWidth: 1, borderColor: colors.border, color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 18, textAlign: 'center', paddingVertical: spacing.sm, letterSpacing: 2, marginBottom: spacing.md },
-  vpPrimaryBtn: { backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
-  vpPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
+  vpPrimaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  vpPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   vpLinkBtn: { paddingVertical: spacing.sm, alignItems: 'center' },
   vpLinkText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.gold },
   vpCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, opacity: 0.6 },
