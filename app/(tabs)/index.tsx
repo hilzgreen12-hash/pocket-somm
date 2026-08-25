@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions, KeyboardAvoidingView, Platform } from 'react-native';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -450,7 +450,7 @@ export default function ScanLandingScreen() {
 
       {/* Search a Wine — predictive typeahead in a prompt (opened from the tile). */}
       <Modal visible={searchModalOpen} transparent animationType="fade" onRequestClose={() => setSearchModalOpen(false)}>
-        <View style={styles.searchModalOverlay}>
+        <KeyboardAvoidingView style={styles.searchModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.searchModalSheet}>
             <Text style={styles.searchModalTitle}>Search a Wine</Text>
             <View style={styles.searchRow}>
@@ -470,7 +470,7 @@ export default function ScanLandingScreen() {
               {searchLoading ? <ActivityIndicator color={colors.gold} style={{ marginLeft: spacing.sm }} /> : null}
             </View>
             {searchOpen && (searchLoading || searchResults.length > 0 || wineSearch.trim().length >= 3) ? (
-              <View style={styles.searchDropdown}>
+              <ScrollView style={styles.searchDropdown} keyboardShouldPersistTaps="handled">
                 {searchResults.length === 0 && searchLoading ? (
                   <Text style={styles.searchDropdownEmpty}>Searching…</Text>
                 ) : (
@@ -489,13 +489,13 @@ export default function ScanLandingScreen() {
                     ) : null}
                   </>
                 )}
-              </View>
+              </ScrollView>
             ) : null}
             <TouchableOpacity onPress={() => { setSearchModalOpen(false); setWineSearch(''); setSearchOpen(false); }} style={styles.searchModalCancel}>
               <Text style={styles.searchModalCancelText}>Cancel</Text>
             </TouchableOpacity>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Welcome overlay — brand block on first landing; "Continue" dismisses it. */}
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: spacing.sm },
   searchInputInner: { flex: 1, paddingVertical: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text },
   // Predictive dropdown under the search bar.
-  searchDropdown: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, marginTop: spacing.xs, overflow: 'hidden' },
+  searchDropdown: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.surface, marginTop: spacing.xs, maxHeight: 280 },
   searchDropdownEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, padding: spacing.md },
   searchOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   searchOptionName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
