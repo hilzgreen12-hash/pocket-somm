@@ -1851,6 +1851,18 @@ export default function LabelResultsScreen() {
             <View style={styles.section}>
               <Text style={styles.insiderTitle}>The Inside Line</Text>
               <Text style={styles.insiderBody}>{intel.insiderNote.trim()}</Text>
+              {isIntelOnlyFlow ? (
+                <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7}>
+                  <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          ) : isIntelOnlyFlow ? (
+            // No inside line for this wine — still offer the deep-dive link.
+            <View style={styles.section}>
+              <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7}>
+                <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
+              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -1906,11 +1918,20 @@ export default function LabelResultsScreen() {
           <TouchableOpacity style={styles.saveReviewBtn} onPress={handleSaveToReviews} activeOpacity={0.85}>
             <Text style={styles.saveReviewBtnText}>Save to Your Wine Reviews</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.deepBtn, { marginTop: spacing.sm }]} onPress={handleDiveDeeper} activeOpacity={0.8}>
-            <Text style={styles.deepBtnText}>Dive Deeper into this wine</Text>
+          <TouchableOpacity
+            style={[styles.saveReviewBtn, { marginTop: spacing.sm }]}
+            onPress={() => {
+              // Seed the price field with Vinster's estimate so the user adjusts
+              // rather than typing from scratch (mirrors the dedicated add flow).
+              if (!purchasePrice && intel.estimatedValue != null) setPurchasePrice(String(intel.estimatedValue));
+              setAddingToCellar(true);
+            }}
+            activeOpacity={0.85}
+          >
+            <Text style={styles.saveReviewBtnText}>Save to Your Cellar</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={[styles.deepBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.8}>
-            <Text style={styles.deepBtnText}>Find me a recipe for this wine</Text>
+          <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.85}>
+            <Text style={styles.saveReviewBtnText}>Find me a Recipe</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -2535,6 +2556,8 @@ const styles = StyleSheet.create({
   // "Dive Deeper" / "Chef, find me a recipe" — gold-outline actions.
   deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   deepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Yellow italic "Dive deeper" link, sits below The Inside Line blurb.
+  diveDeeperLink: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
   // Primary CTA above Dive Deeper — gold-filled to stand out.
   saveReviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
   saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },

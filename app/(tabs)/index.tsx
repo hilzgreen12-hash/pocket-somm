@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Modal, Image, ActivityIndicator, TextInput, useWindowDimensions } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -248,6 +248,20 @@ export default function ScanLandingScreen() {
     }
   }
 
+  // "Scan a Lineup" now offers two destinations: add the bottles to the cellar
+  // (scan-lineup), or archive them as a drunk lineup (archive-night).
+  function handleScanLineup() {
+    requireAuth(() => showAlert({
+      title: 'Scan a Lineup',
+      body: 'What would you like to do with this lineup?',
+      buttons: [
+        { text: 'Add a lineup to Your Cellar', onPress: () => router.push('/cellar/scan-lineup' as any) },
+        { text: 'Archive a Lineup', onPress: () => router.push('/cellar/archive-night') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    }));
+  }
+
   async function handleUploadLabel() {
     if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
@@ -322,10 +336,10 @@ export default function ScanLandingScreen() {
             onLongPress={() => requireAccount(handleViewLastIntel)}
             activeOpacity={0.85}
           >
-            <Feather name="camera" size={26} color={colors.gold} style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Wine Label</Text>
+            <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Label</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Wine intel from a bottle</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel, Review &amp; Cellar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
             <Feather name="upload" size={11} color={colors.gold} />
@@ -341,10 +355,10 @@ export default function ScanLandingScreen() {
             onLongPress={() => requireAccount(handleViewLastListResult)}
             activeOpacity={0.85}
           >
-            <Feather name="list" size={26} color={colors.gold} style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Wine List</Text>
+            <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a List</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Bottle picks from a menu</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Tailored bottle picks from a wine menu</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
             <Feather name="upload" size={11} color={colors.gold} />
@@ -352,31 +366,28 @@ export default function ScanLandingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Scan a Lineup → photograph a bottle lineup and save it */}
+        {/* Scan a Lineup → a popup chooses Add-to-Cellar vs Archive; each flow
+            offers its own camera/upload, so this tile has no "upload instead". */}
         <View style={styles.tile}>
           <TouchableOpacity
             style={styles.tileMain}
-            onPress={() => requireAuth(() => router.push('/cellar/archive-night'))}
+            onPress={handleScanLineup}
             activeOpacity={0.85}
           >
-            <Feather name="grid" size={26} color={colors.gold} style={styles.tileIcon} />
+            <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Lineup</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Save tonight's bottles</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(() => router.push('/cellar/archive-night?upload=1'))} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color={colors.gold} />
-            <Text style={styles.tileBannerText}>upload instead</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Add or Archive bottles</Text>
           </TouchableOpacity>
         </View>
 
         {/* Search a Wine → predictive typeahead (no upload equivalent) */}
         <View style={styles.tile}>
           <TouchableOpacity style={styles.tileMain} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
-            <Feather name="search" size={26} color={colors.gold} style={styles.tileIcon} />
+            <Ionicons name="search-outline" size={28} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Wine intel by name</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel, Review &amp; Cellar</Text>
           </TouchableOpacity>
         </View>
       </View>
