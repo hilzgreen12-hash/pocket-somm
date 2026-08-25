@@ -359,6 +359,9 @@ export interface StorageLocation {
   name: string;
   photo_path: string | null;
   created_at: string;
+  // Migration 097 — an Alt Cellar marked as external (offsite / bonded /
+  // merchant) rather than at home. Racks, fridges and bins are always home.
+  is_external: boolean;
   // Convenience count of wines filed here, when the query provides it.
   wineCount?: number;
 }

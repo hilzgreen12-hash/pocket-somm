@@ -4,7 +4,7 @@ import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
@@ -417,6 +417,16 @@ export default function StorageLocationScreen() {
         {
           text: 'Rename location',
           onPress: () => { setRenameVal(location.name); setRenaming(true); },
+        },
+        {
+          text: location.is_external ? 'Mark as at home' : 'Mark as external',
+          onPress: async () => {
+            try {
+              await setStorageLocationExternal(location.id, !location.is_external);
+              qc.invalidateQueries({ queryKey: ['storage-location', id] });
+              qc.invalidateQueries({ queryKey: ['storage-locations'] });
+            } catch (err) { showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' }); }
+          },
         },
         {
           text: 'Delete location',

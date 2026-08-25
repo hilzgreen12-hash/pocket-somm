@@ -6,7 +6,7 @@ import type { StorageLocation, StorageCase, CellarWine } from '../types/wine';
 // and fills with a loose list of wines via cellar_wines.storage_location_id.
 // Photos live in the wine-labels bucket; display via useLabelImageUrl.
 
-const LIST_COLS = 'id, user_id, name, photo_path, created_at';
+const LIST_COLS = 'id, user_id, name, photo_path, created_at, is_external';
 
 // All of a user's home storage locations, newest last, each with a wine count.
 export async function fetchStorageLocations(userId: string): Promise<StorageLocation[]> {
@@ -29,6 +29,7 @@ export async function fetchStorageLocations(userId: string): Promise<StorageLoca
       name: r.name,
       photo_path: r.photo_path,
       created_at: r.created_at,
+      is_external: !!r.is_external,
       wineCount,
     };
   });
@@ -44,14 +45,23 @@ export async function fetchStorageLocation(id: string): Promise<StorageLocation 
   return (data as StorageLocation) ?? null;
 }
 
-export async function createStorageLocation(userId: string, name: string): Promise<StorageLocation> {
+export async function createStorageLocation(userId: string, name: string, isExternal = false): Promise<StorageLocation> {
   const { data, error } = await supabase
     .from('storage_locations')
-    .insert({ user_id: userId, name: name.trim() || 'My Location' })
+    .insert({ user_id: userId, name: name.trim() || 'My Location', is_external: isExternal })
     .select(LIST_COLS)
     .single();
   if (error) throw error;
   return data as StorageLocation;
+}
+
+// Toggle an Alt Cellar between at-home and external.
+export async function setStorageLocationExternal(id: string, isExternal: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('storage_locations')
+    .update({ is_external: isExternal })
+    .eq('id', id);
+  if (error) throw error;
 }
 
 export async function setStorageLocationPhoto(id: string, photoPath: string): Promise<void> {

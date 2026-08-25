@@ -546,8 +546,15 @@ export default function FullCellarListScreen() {
       : wines;
   const filtered = baseWines.filter((w) => {
     if (locationFilter !== 'All') {
-      if (locationFilter === 'Unassigned') {
-        if (wineToRackId[w.id]) return false;
+      if (locationFilter === 'home') {
+        // At home = anything NOT filed in an external Alt Cellar (racks, bins,
+        // home cellars and unplaced wines all qualify).
+        if (w.storage_location_id && externalLocIds.has(w.storage_location_id)) return false;
+      } else if (locationFilter === 'external') {
+        if (!w.storage_location_id || !externalLocIds.has(w.storage_location_id)) return false;
+      } else if (locationFilter === 'Unassigned') {
+        // Truly unplaced — not in a rack, an Alt Cellar, or a bin.
+        if (wineToRackId[w.id] || w.storage_location_id || w.bin_cell_id) return false;
       } else if (locationFilter.startsWith('loc:')) {
         const loc = locations.find((l) => l.id === locationFilter.slice(4));
         if (!loc || !loc.wineIds.includes(w.id)) return false;
@@ -673,12 +680,29 @@ export default function FullCellarListScreen() {
 
   // Location dropdown: All · each rack/fridge · each custom location · Not in a
   // rack · "+ Add Location" (an action, handled specially in onSelect).
+  // Alt Cellars split into home vs external (migration 097). Racks/fridges/bins
+  // are always home; only Alt Cellars (storage_locations) can be external.
+  const externalLocIds = useMemo(
+    () => new Set(storageLocations.filter((s) => s.is_external).map((s) => s.id)),
+    [storageLocations],
+  );
   const locationOptions = useMemo(() => {
-    const opts: { value: string; label: string }[] = [{ value: 'All', label: 'All locations' }];
-    for (const r of racks) opts.push({ value: r.id, label: r.name });
+    type Opt = { value: string; label: string; indent?: boolean; group?: boolean };
+    const homeCellars = storageLocations.filter((s) => !s.is_external);
+    const externalCellars = storageLocations.filter((s) => s.is_external);
+    const opts: Opt[] = [{ value: 'All', label: 'All locations' }];
+    // Bespoke cellar-wide Location filters stay at the top level.
     for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
-    for (const s of storageLocations) opts.push({ value: `sloc:${s.id}`, label: s.name });
-    opts.push({ value: 'Unassigned', label: 'Not Placed in a Storage Location' });
+    // At-home group — the racks/fridges, home Alt Cellars, then the unplaced.
+    opts.push({ value: 'home', label: 'All wines at home', group: true });
+    for (const r of racks) opts.push({ value: r.id, label: r.name, indent: true });
+    for (const s of homeCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
+    opts.push({ value: 'Unassigned', label: 'Not placed in a storage location', indent: true });
+    // External group — only shown once at least one Alt Cellar is external.
+    if (externalCellars.length) {
+      opts.push({ value: 'external', label: 'All wines stored externally', group: true });
+      for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
+    }
     return opts;
   }, [racks, locations, storageLocations]);
 
@@ -699,7 +723,7 @@ export default function FullCellarListScreen() {
         ?? SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label
         ?? 'Recently Added');
 
-  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
+  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string; indent?: boolean; group?: boolean }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'location') {
       return {
         title: 'Filter by location',
@@ -1144,7 +1168,7 @@ export default function FullCellarListScreen() {
                     return (
                       <TouchableOpacity
                         key={opt.value}
-                        style={[styles.modalOption, active && styles.modalOptionActive]}
+                        style={[styles.modalOption, opt.indent && styles.modalOptionIndent, active && styles.modalOptionActive]}
                         onPress={() => {
                           activeDropdown.onSelect(opt.value);
                           setOpenDropdown(null);
@@ -1153,7 +1177,7 @@ export default function FullCellarListScreen() {
                         delayLongPress={400}
                         activeOpacity={0.7}
                       >
-                        <Text style={[styles.modalOptionText, active && styles.modalOptionTextActive]}>{opt.label}</Text>
+                        <Text style={[styles.modalOptionText, opt.group && styles.modalOptionGroupText, active && styles.modalOptionTextActive]}>{opt.label}</Text>
                         {active && <Text style={styles.modalOptionCheck}>✓</Text>}
                       </TouchableOpacity>
                     );
@@ -1366,9 +1390,13 @@ const styles = StyleSheet.create({
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   locationHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.sm },
   modalOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Sub-items under a group header ("All wines at home" / "…externally").
+  modalOptionIndent: { paddingLeft: spacing.xl },
   modalOptionActive: { backgroundColor: 'rgba(212,176,96,0.10)' },
   // Cormorant — option button text
   modalOptionText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
+  // Group headers ("All wines at home" / "…externally") — bold, uppercase.
+  modalOptionGroupText: { fontFamily: fonts.headingBold, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 14, color: colors.gold },
   modalOptionTextActive: { color: colors.gold },
   // Inter — check glyph
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
