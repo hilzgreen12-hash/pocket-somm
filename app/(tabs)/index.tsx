@@ -8,7 +8,6 @@ import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
-import { MicButton } from '../../src/components/MicButton';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -365,12 +364,9 @@ export default function ScanLandingScreen() {
         </View>
       </View>
 
-      {/* Dictate a wine name to search by voice — same on-device mic used across
-          the app. Speaking fills the search and opens the results. */}
-      <View style={styles.dictateBar}>
-        <MicButton value={wineSearch} onChangeText={(t) => { setWineSearch(t); if (t.trim().length >= 3) setSearchModalOpen(true); }} />
-        <Text style={styles.dictateLabel}>Dictate to search a wine</Text>
-      </View>
+      {/* Dictate-to-search is shelved for now: on-device speech-to-text mangles
+          foreign/proper wine names (e.g. "Heidsieck" → "Isaac"), which then risks
+          a hallucinated match. Re-enable once the search is dictation-hardened. */}
 
       <Modal visible={scanningLabel} transparent animationType="fade">
         <View style={styles.scanningOverlay}>
@@ -542,9 +538,6 @@ const styles = StyleSheet.create({
   tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 17 },
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
   tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  // "Dictate to search a wine" — a mic bar under the grid.
-  dictateBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 16, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginTop: spacing.md },
-  dictateLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
 
 
   // Search-a-Wine prompt (opened from the Search tile).
