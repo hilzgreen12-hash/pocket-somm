@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -29,10 +29,16 @@ export default function RecipeFullScreen() {
   const { index, sessionId } = useLocalSearchParams<{ index?: string; sessionId?: string }>();
   const { session } = useAuth();
   const { wineDetailsConfirmed, pairings: freshPairings } = useLabelStore();
-  const { sessions: labelSessions } = useChefLabelHistory();
+  const { sessions: labelSessions, updateNotes } = useChefLabelHistory();
   const shareCardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [printing, setPrinting] = useState(false);
+  // The user's own pairing notes on this saved recipe (chef_label_sessions
+  // .user_notes, migration 036). Editable via the "Add Your Pairing Notes" link.
+  const savedSession = sessionId ? labelSessions.find((row) => row.id === sessionId) : null;
+  const userNotes = (savedSession?.user_notes ?? '').trim();
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [notesDraft, setNotesDraft] = useState('');
 
   // Resolve the pairing + wine from whichever source the caller indicated.
   const { pairing, wine } = useMemo<{ pairing: Pairing | null; wine: WineDetailsComplete | null }>(() => {
@@ -124,7 +130,7 @@ export default function RecipeFullScreen() {
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={handleShare} disabled={sharing || printing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={[styles.actionLink, (sharing || printing) && { opacity: 0.4 }]}>
-              {sharing ? 'PREPARING…' : '+ SHARE'}
+              {sharing ? 'PREPARING…' : '+ EXPORT'}
             </Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={handlePrint} disabled={sharing || printing} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -148,13 +154,30 @@ export default function RecipeFullScreen() {
         <Text style={styles.toPair}>To pair with</Text>
         <Text style={styles.wineHeader}>{wineLine}</Text>
 
+        {/* The user's own pairing notes — only on a saved recipe (needs a
+            session to attach them to). Centred gold link above the divider. */}
+        {sessionId ? (
+          userNotes ? (
+            <>
+              <Text style={styles.yourNotesBody}>{userNotes}</Text>
+              <TouchableOpacity onPress={() => { setNotesDraft(userNotes); setNotesOpen(true); }} activeOpacity={0.7}>
+                <Text style={styles.addNotesLink}>Edit Your Pairing Notes</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity onPress={() => { setNotesDraft(''); setNotesOpen(true); }} activeOpacity={0.7}>
+              <Text style={styles.addNotesLink}>Add Your Pairing Notes</Text>
+            </TouchableOpacity>
+          )
+        ) : null}
+
         <View style={styles.shortDivider} />
 
         <Text style={styles.dishName}>{pairing.dishName}</Text>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
         <Text style={styles.meta}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
 
-        <Text style={styles.sectionLabel}>Pairing notes</Text>
+        <Text style={styles.sectionLabel}>Vinster's Pairing Notes</Text>
         <Text style={styles.body}>{pairing.pairingNotes}</Text>
 
         <Text style={styles.sectionLabel}>Introduction</Text>
@@ -170,11 +193,8 @@ export default function RecipeFullScreen() {
           <Text key={i} style={styles.bullet}>{step}</Text>
         ))}
 
-        <View style={styles.footerRule} />
-        <View style={styles.footerBlock}>
-          <Text style={styles.footerHeadline}>{VINSTER_GET_LABEL}</Text>
-          <Text style={styles.footerTagline}>{VINSTER_TAGLINE}</Text>
-        </View>
+        {/* The "Get Vinster" footer is retired from the on-screen card (it still
+            appears on the shared/printed export via buildRecipeHtml). */}
 
         {(sharing || printing) && (
           <View style={styles.busyOverlay}>
@@ -191,6 +211,39 @@ export default function RecipeFullScreen() {
       <View style={styles.offscreen} pointerEvents="none">
         <RecipeShareCard ref={shareCardRef} pairing={pairing} wineHeader={wineLine || null} />
       </View>
+
+      {/* Add / edit the user's own pairing notes on this recipe. */}
+      <Modal visible={notesOpen} transparent animationType="fade" onRequestClose={() => setNotesOpen(false)}>
+        <View style={styles.notesOverlay}>
+          <View style={styles.notesSheet}>
+            <Text style={styles.notesTitle}>Your Pairing Notes</Text>
+            <TextInput
+              style={styles.notesInput}
+              value={notesDraft}
+              onChangeText={setNotesDraft}
+              placeholder="How did the pairing go? Tweaks, occasion, who you cooked it for…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              autoFocus
+              textAlignVertical="top"
+            />
+            <TouchableOpacity
+              style={styles.notesSaveBtn}
+              onPress={() => {
+                if (!sessionId) return;
+                updateNotes.mutate({ id: sessionId, notes: notesDraft.trim() || null });
+                setNotesOpen(false);
+              }}
+              activeOpacity={0.85}
+            >
+              <Text style={styles.notesSaveText}>Save</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setNotesOpen(false)} style={styles.notesCancel} activeOpacity={0.7}>
+              <Text style={styles.notesCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -265,6 +318,18 @@ const styles = StyleSheet.create({
   ruleMark: { color: colors.gold, fontSize: 12, marginHorizontal: spacing.sm },
 
   toPair: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, letterSpacing: 2, textTransform: 'uppercase', textAlign: 'center' },
+  // "Add / Edit Your Pairing Notes" — centred gold link under the wine name.
+  addNotesLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center', marginTop: spacing.sm },
+  yourNotesBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.text, textAlign: 'center', lineHeight: 22, marginTop: spacing.sm, paddingHorizontal: spacing.xl },
+  // Your-pairing-notes editor.
+  notesOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  notesSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
+  notesTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
+  notesInput: { minHeight: 120, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
+  notesSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  notesSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  notesCancel: { alignItems: 'center', paddingTop: spacing.md },
+  notesCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   wineHeader: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginTop: 4, lineHeight: 28 },
   shortDivider: { width: 40, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', alignSelf: 'center', marginVertical: spacing.lg },
 

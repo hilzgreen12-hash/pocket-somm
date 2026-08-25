@@ -76,14 +76,16 @@ const styles = StyleSheet.create({
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Real sketch card — title then date beneath. Elegant (Cormorant) type to
   // match the Review header. Same footprint as the Cellar / Cookbook chips.
-  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'flex-start', gap: spacing.xs, backgroundColor: colors.surface },
-  cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 20 },
-  cardDate: { fontSize: 12, fontFamily: fonts.headingRegular, color: colors.textMuted },
+  // Deliberately a touch larger than the Cellar/Cookbook chips (190×134 vs
+  // 152×108), with bigger type, as these alter-ego cards are the hero here.
+  card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'flex-start', gap: spacing.xs, backgroundColor: colors.surface },
+  cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24 },
+  cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted },
   // Brown "your alter-ego is coming" placeholder.
-  mysteryCard: { width: 152, height: 108, borderWidth: 1, borderColor: '#6B4A32', borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: '#3A2A20' },
-  mysteryTitle: { fontSize: 15, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 19 },
-  mysterySub: { fontSize: 12, fontFamily: fonts.headingItalic, color: 'rgba(232,214,184,0.8)', lineHeight: 15 },
+  mysteryCard: { width: 190, height: 134, borderWidth: 1, borderColor: '#6B4A32', borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: '#3A2A20' },
+  mysteryTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 23 },
+  mysterySub: { fontSize: 14, fontFamily: fonts.headingItalic, color: 'rgba(232,214,184,0.8)', lineHeight: 18 },
   // Dashed gold "future" tiles — same look as the "+ Add" carousel tiles.
-  futureCard: { width: 152, height: 108, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
-  futureText: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 17 },
+  futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  futureText: { fontSize: 15, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 19 },
 });

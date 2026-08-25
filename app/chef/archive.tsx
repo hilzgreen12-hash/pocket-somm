@@ -184,19 +184,9 @@ export default function ChefArchiveScreen() {
 
   function handleViewItem(item: UnifiedItem) {
     const s = item.session;
-    // Don't write to the label store here — the results screen reads a
-    // history view straight from the chef_label_session row by id.
-    // Writing the store used to clobber an un-saved fresh result still
-    // sitting on the nav stack.
-    router.push({
-      pathname: '/chef/results',
-      params: {
-        fromHistory: 'true',
-        sessionId: s.id,
-        savedAt: s.saved_at,
-        city: s.city ?? '',
-      },
-    });
+    // Straight to the full recipe card — it reads the saved session by id from
+    // the same chef-label history, so no need to route via the results list.
+    router.push(`/chef/recipe-full?sessionId=${encodeURIComponent(s.id)}` as any);
   }
 
   // Recipe name comes from the first (and currently only) pairing on
