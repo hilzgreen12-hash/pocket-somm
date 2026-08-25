@@ -5,7 +5,7 @@ import { useAuth } from '../../src/hooks/useAuth';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { showAlert } from '../../src/components/AppAlert';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
-import { HelpButton } from '../../src/components/HelpButton';
+import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HomeStorageSection } from '../../src/components/HomeStorageSection';
 
@@ -82,13 +82,12 @@ export default function CellarTab() {
 
       <View style={styles.titleRow}>
         <View style={styles.titleSide} />
-        <Text style={styles.title}>Cellar</Text>
+        <HelpTitle label="Cellar" title="How Cellar works" body={CELLAR_HELP} textStyle={styles.title} />
         <TouchableOpacity style={styles.titleSide} onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={styles.importLink}>+ Import</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
-      <HelpButton label="More About Cellar" title="How Cellar works" body={CELLAR_HELP} />
 
       <View style={styles.divider} />
 

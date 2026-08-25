@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
-import { HelpButton } from '../../src/components/HelpButton';
+import { HelpTitle } from '../../src/components/HelpTitle';
 import { AlterEgoCarousel } from '../../src/components/AlterEgoCarousel';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
@@ -37,14 +37,13 @@ export default function ScanTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.appName}>Review</Text>
+        <HelpTitle label="Review" title="How Review works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
           Your wine and restaurant reviews live here — restaurants you record and wines picked from their lists appear automatically — plus Vinster's Review of You.
         </Text>
-        <HelpButton label="More About Review" title="How Review works" body={SCAN_HELP} />
       </View>
 
       <View style={styles.divider} />

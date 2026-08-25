@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensio
 import { router } from 'expo-router';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
-import { HelpButton } from '../../src/components/HelpButton';
+import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 
 const COMMUNITY_HELP = `Share is where Vinster users will share wine reviews, restaurant finds and personality sketches with friends and the wider community.
@@ -62,13 +62,12 @@ export default function CommunityTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.title}>Share</Text>
+        <HelpTitle label="Share" title="How Share works" body={COMMUNITY_HELP} textStyle={styles.title} />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
         <Text style={styles.comingSoonNotice}>Coming Soon</Text>
-        <HelpButton label="More About Share" title="How Share works" body={COMMUNITY_HELP} />
       </View>
 
       <View style={styles.divider} />

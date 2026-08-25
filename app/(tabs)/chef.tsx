@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Modal } from 'react-native';
 import { router } from 'expo-router';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
-import { HelpButton } from '../../src/components/HelpButton';
+import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { CookbookFoldersCarousel } from '../../src/components/CookbookFoldersCarousel';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -83,14 +83,13 @@ export default function ChefTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <Text style={styles.appName}>Pair</Text>
+        <HelpTitle label="Pair" title="How Pair works" body={CHEF_HELP} textStyle={styles.appName} />
       </View>
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
           Generate chef-inspired recipes or wine pairing recommendations from your cellar and beyond. Keep the recipes you love and pairing notes in your cookbook.
         </Text>
-        <HelpButton label="More About Pair" title="How Pair works" body={CHEF_HELP} />
       </View>
 
       <View style={styles.divider} />
