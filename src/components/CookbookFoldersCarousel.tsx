@@ -22,15 +22,18 @@ export function CookbookFoldersCarousel() {
 
   return (
     <View>
-      {/* Header + stats bar — copied from the Your Cookbook landing page. */}
-      <Text style={styles.title}>Your Cookbook</Text>
+      {/* Header + stats bar — copied from the Your Cookbook landing page. The
+          title is a link into the cookbook (All, by recently added). */}
+      <TouchableOpacity onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7}>
+        <Text style={[styles.title, styles.titleLink]}>Your Cookbook</Text>
+      </TouchableOpacity>
       <Text style={styles.blurb}>Recipes you generate can be saved and organised here. Create folders and record your pairing notes.</Text>
       <View style={styles.summaryRow}>
         <Text style={styles.summaryText}>
           {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
         </Text>
       </View>
-      <Text style={styles.filterHint}>Listed by Recently Added · Swipe to see all folders →</Text>
+      <Text style={styles.filterHint}>Swipe to see all folders →</Text>
 
       {/* Folders as boxes — mirrors the Cellar storage / Review carousels. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
@@ -62,6 +65,8 @@ export function CookbookFoldersCarousel() {
 const styles = StyleSheet.create({
   // Header + stats — copied from app/chef/archive.tsx so the two read alike.
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.md },
+  // Underline to signal the title links into the cookbook.
+  titleLink: { textDecorationLine: 'underline' },
   // Two-line intro beneath the title (Cormorant, matching the tab blurbs).
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },

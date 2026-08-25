@@ -391,17 +391,23 @@ export default function ChosenWinesScreen() {
     persistTags([...otherTags, clean]);
     return clean;
   }
-  // Confirm the "New filter" sheet. If it was opened mid-assign (from a review's
-  // "Add to a filter" sheet), file the new tag onto that review and reopen the
-  // assign sheet; otherwise just make it the active filter.
+  // Toggle a review in/out of a bespoke Folder (LibraryFilter). This is the same
+  // system the folder chips + filtering use, so an assignment is reflected there.
+  function toggleReviewInFolder(reviewId: string, f: LibraryFilter) {
+    const has = f.itemIds.includes(reviewId);
+    setFilterItems.mutate({ filterId: f.id, itemIds: has ? f.itemIds.filter((x) => x !== reviewId) : [...f.itemIds, reviewId] });
+  }
+  // Confirm the "New folder" sheet. If it was opened mid-assign (from a review's
+  // "Add to Folder" sheet), create the folder with that review already in it and
+  // reopen the assign sheet; otherwise just create an empty folder.
   function commitNewTag() {
-    const t = createTag(newTagName);
+    const name = newTagName.trim();
     const target = pendingAssignRef.current;
     pendingAssignRef.current = null;
     setNewTagOpen(false);
-    if (!t) return;
-    if (target) { toggleTagForReview(target, t); setAssignForId(target); }
-    else setTagFilter(t);
+    if (!name) return;
+    createFilter.mutate({ name, itemIds: target ? [target] : [] });
+    if (target) setAssignForId(target);
   }
   // Cancel the "New filter" sheet. If it was opened mid-assign, return to that
   // review's assign sheet rather than dropping the user back to the list.
@@ -699,7 +705,7 @@ export default function ChosenWinesScreen() {
   function openFilterOptions(f: LibraryFilter) {
     showAlert({
       title: f.name,
-      body: 'Edit this filter’s name and wines, or delete it. Your reviews stay in the list either way.',
+      body: 'Edit this folder’s name and wines, or delete it. Your reviews stay in the list either way.',
       buttons: [
         { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
         { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); removeFilter.mutate(f.id); } },
@@ -821,7 +827,7 @@ export default function ChosenWinesScreen() {
       showAlert({
         title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
         buttons: [
-          { text: 'Add to a filter', onPress: () => setAssignForId(w.id) },
+          { text: 'Add to Folder', onPress: () => setAssignForId(w.id) },
           { text: 'Delete wine', style: 'destructive', onPress: () => confirmDeleteReview(item) },
           { text: 'Cancel', style: 'cancel' },
         ],
@@ -1171,8 +1177,9 @@ export default function ChosenWinesScreen() {
 
       <LibraryFilterModal
         visible={filterModalOpen}
-        title={editingFilter ? 'Edit filter' : 'New filter'}
+        title={editingFilter ? 'Edit folder' : 'New folder'}
         itemNoun="wines"
+        nounLabel="folder"
         items={filterItems}
         initialName={editingFilter?.name}
         initialSelected={editingFilter?.itemIds}
@@ -1341,8 +1348,8 @@ export default function ChosenWinesScreen() {
       <Modal visible={newTagOpen} transparent animationType="fade" onRequestClose={cancelNewTag}>
         <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={cancelNewTag}>
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
-            <Text style={styles.chooserTitle}>New filter</Text>
-            <Text style={styles.chooserBody}>Name a bespoke filter for your Other wine reviews — a tasting, an event, a merchant. You'll then file reviews under it.</Text>
+            <Text style={styles.chooserTitle}>New folder</Text>
+            <Text style={styles.chooserBody}>Name a bespoke folder for your Other wine reviews — a tasting, an event, a merchant. You'll then file reviews under it.</Text>
             <TextInput
               style={styles.pickerSearch}
               value={newTagName}
@@ -1354,7 +1361,7 @@ export default function ChosenWinesScreen() {
               onSubmitEditing={commitNewTag}
             />
             <TouchableOpacity style={styles.chooserBtn} onPress={commitNewTag} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Create filter</Text>
+              <Text style={styles.chooserBtnText}>Create folder</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={cancelNewTag} style={styles.chooserCancel}>
               <Text style={styles.chooserCancelText}>Cancel</Text>
@@ -1368,21 +1375,21 @@ export default function ChosenWinesScreen() {
       <Modal visible={!!assignForId} transparent animationType="fade" onRequestClose={() => setAssignForId(null)}>
         <TouchableOpacity style={styles.dropdownOverlay} activeOpacity={1} onPress={() => setAssignForId(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
-            <Text style={styles.dropdownTitle}>Add to a filter</Text>
-            {otherTags.length === 0 ? (
-              <Text style={styles.pickerEmpty}>No filters yet — create one below.</Text>
+            <Text style={styles.dropdownTitle}>Add to Folder</Text>
+            {customFilters.length === 0 ? (
+              <Text style={styles.pickerEmpty}>No folders yet — create one below.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 340 }}>
-                {otherTags.map((t) => {
-                  const on = !!(assignForId && (tagAssign[assignForId] ?? []).includes(t));
+                {customFilters.map((f) => {
+                  const on = !!(assignForId && f.itemIds.includes(assignForId));
                   return (
                     <TouchableOpacity
-                      key={t}
+                      key={f.id}
                       style={[styles.dropdownOption, on && styles.dropdownOptionActive]}
-                      onPress={() => { if (assignForId) toggleTagForReview(assignForId, t); }}
+                      onPress={() => { if (assignForId) toggleReviewInFolder(assignForId, f); }}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.dropdownOptionText, on && styles.dropdownOptionTextActive]}>{t}</Text>
+                      <Text style={[styles.dropdownOptionText, on && styles.dropdownOptionTextActive]}>{f.name}</Text>
                       {on && <Text style={styles.dropdownOptionCheck}>✓</Text>}
                     </TouchableOpacity>
                   );
@@ -1394,7 +1401,7 @@ export default function ChosenWinesScreen() {
               onPress={() => { pendingAssignRef.current = assignForId; setAssignForId(null); setNewTagName(''); setNewTagOpen(true); }}
               activeOpacity={0.85}
             >
-              <Text style={styles.chooserBtnText}>＋ New filter</Text>
+              <Text style={styles.chooserBtnText}>＋ New folder</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dropdownCancel} onPress={() => setAssignForId(null)}>
               <Text style={styles.dropdownCancelText}>Done</Text>
@@ -1586,7 +1593,7 @@ export default function ChosenWinesScreen() {
                   {/* Two-row layout with a top-right chevron so bespoke filters
                       match the standard filter bubbles. */}
                   <View style={styles.filterChipHeadingRow}>
-                    <Text style={styles.filterChipLabel}>Tag</Text>
+                    <Text style={styles.filterChipLabel}>Folder</Text>
                     <Text style={styles.filterChipChevron}>▾</Text>
                   </View>
                   <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>

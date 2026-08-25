@@ -13,6 +13,9 @@ interface Props {
   visible: boolean;
   title: string;          // e.g. "New filter" / "Edit filter"
   itemNoun: string;       // e.g. "labels" / "lineups"
+  // What the bespoke grouping is called in this context — "filter" (default) or
+  // "folder" (Your Wine Reviews). Used in the placeholder / hint / save button.
+  nounLabel?: string;
   items: FilterItem[];
   initialName?: string;
   initialSelected?: string[];
@@ -23,7 +26,7 @@ interface Props {
 
 // Shared create/edit sheet for a bespoke library filter: name it, tick the
 // items that belong to it. Used by the Label + Lineup libraries.
-export function LibraryFilterModal({ visible, title, itemNoun, items, initialName, initialSelected, saving, onSave, onClose }: Props) {
+export function LibraryFilterModal({ visible, title, itemNoun, nounLabel = 'filter', items, initialName, initialSelected, saving, onSave, onClose }: Props) {
   const [name, setName] = useState(initialName ?? '');
   const [selected, setSelected] = useState<Set<string>>(new Set(initialSelected ?? []));
 
@@ -53,10 +56,10 @@ export function LibraryFilterModal({ visible, title, itemNoun, items, initialNam
             style={styles.nameInput}
             value={name}
             onChangeText={setName}
-            placeholder="Filter name (e.g. Special Occasions)"
+            placeholder={`${nounLabel[0].toUpperCase()}${nounLabel.slice(1)} name (e.g. Special Occasions)`}
             placeholderTextColor={colors.textMuted}
           />
-          <Text style={styles.pickHint}>Choose the {itemNoun} in this filter</Text>
+          <Text style={styles.pickHint}>Choose the {itemNoun} in this {nounLabel}</Text>
           {items.length === 0 ? (
             <Text style={styles.empty}>Nothing to add yet.</Text>
           ) : (
@@ -76,7 +79,7 @@ export function LibraryFilterModal({ visible, title, itemNoun, items, initialNam
             </ScrollView>
           )}
           <TouchableOpacity style={[styles.saveBtn, !canSave && styles.saveBtnDisabled]} disabled={!canSave} onPress={() => onSave(name.trim(), Array.from(selected))} activeOpacity={0.85}>
-            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save filter'}</Text>
+            <Text style={styles.saveBtnText}>{saving ? 'Saving…' : `Save ${nounLabel}`}</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.cancelBtn} onPress={onClose}>
             <Text style={styles.cancelText}>Cancel</Text>
