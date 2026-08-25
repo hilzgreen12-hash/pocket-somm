@@ -40,25 +40,25 @@ export interface WineSearchResult {
 export async function searchWines(query: string): Promise<WineSearchResult[]> {
   const q = query.trim();
   if (q.length < 3) return [];
-  // Fast path: hit the trigram-indexed catalog RPC directly — no edge-function
-  // round-trip, so the typeahead updates in tens of milliseconds. The catalog is
-  // public-readable (RLS select using(true)); when it yields a solid shortlist
-  // we're done. Only a thin/empty result falls through to the edge function,
-  // which adds the Claude typeahead for wines the catalog doesn't know.
+  // Catalog ONLY — the trigram-indexed wines_catalog (public-readable) is the
+  // single source of truth for the typeahead. Deliberately NO generative
+  // fallback: an LLM "correction" can hallucinate a plausible-but-fake wine from
+  // garbled input (e.g. a dictation misread), so the typeahead can only ever
+  // return REAL wines. An unmatched query returns []; the UI then offers
+  // "Use '<typed text>' — enter it yourself".
   try {
     const { data, error } = await supabase.rpc('search_wines_catalog', { q, lim: 8 });
-    if (!error && Array.isArray(data) && data.length >= 3) {
-      return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; grape: string | null }) => ({
-        producer: r.producer,
-        wineName: r.wine_name ?? null,
-        region: r.region ?? null,
-        style: r.style ?? null,
-        grape: r.grape ?? null,
-      }));
-    }
-  } catch { /* fall through to the edge function (catalog + Claude fallback) */ }
-  const data = await invokeFunction('wine-search', { query }) as { results?: WineSearchResult[] };
-  return data.results ?? [];
+    if (error || !Array.isArray(data)) return [];
+    return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; grape: string | null }) => ({
+      producer: r.producer,
+      wineName: r.wine_name ?? null,
+      region: r.region ?? null,
+      style: r.style ?? null,
+      grape: r.grape ?? null,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export interface WineCandidate {
