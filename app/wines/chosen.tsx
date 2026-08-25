@@ -431,7 +431,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; sd?: string; backTo?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   // Broader "arrived via a deep link to a specific wine's review" flag — also
   // covers the cellar-review links (used by the Lineup wine list). Any of these
@@ -544,15 +544,18 @@ export default function ChosenWinesScreen() {
       if (handledParamRef.current === key) return;
       handledParamRef.current = key;
       setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null, date: params.sd || null });
-      setPendingReviewLabelUri(null);
-      // From the Label Library: identity is confirmed → review-card presentation,
-      // carrying the label's existing photo path (slp).
+      // slu=1 → a fresh scan (Save to Reviews → Review now) whose label is still
+      // a local uri in the label store; carry it so the +Add modal uploads it on
+      // save. slp carries an already-uploaded storage path instead.
+      setPendingReviewLabelUri(params.slu === '1' ? (useLabelStore.getState().imageUri ?? null) : null);
+      // Identity is confirmed → review-card presentation, carrying the label's
+      // photo (existing path via slp, or the local scan via slu above).
       setAddConfirmed(true);
       setAddLabelPath(params.slp || null);
       setAddOpen(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.seedAdd, params.sp, params.sw, params.sv, params.sr, chosenWines, cellarWines, archivedWines]);
+  }, [params.openReview, params.openCellarReview, params.openCellarReviewInput, params.seedAdd, params.sp, params.sw, params.sv, params.sr, params.slu, chosenWines, cellarWines, archivedWines]);
 
   // "Don't show me this again" — a direct action (no tick box): opt out
   // permanently and dismiss.

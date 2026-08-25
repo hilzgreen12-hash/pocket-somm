@@ -16,6 +16,7 @@ import { promptAddToLabelLibrary } from '../../src/utils/labelLibraryPrompt';
 import { captureCity } from '../../src/utils/captureCity';
 import { useCellar, useWishList } from '../../src/hooks/useCellar';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
+import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
 import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases } from '../../src/api/storageLocations';
@@ -1538,6 +1539,9 @@ export default function LabelResultsScreen() {
             if (wine.wineName) qs.set('sw', wine.wineName);
             if (wine.vintage) qs.set('sv', wine.vintage);
             if (wine.region) qs.set('sr', wine.region);
+            // Carry the scanned label into the +Add review as a local uri to
+            // upload on save (slu = seed label uri, read from the label store).
+            if (imageUri) qs.set('slu', '1');
             router.push(`/wines/chosen?${qs.toString()}` as any);
           },
         },
@@ -1550,13 +1554,24 @@ export default function LabelResultsScreen() {
     if (!wine) return;
     const vn = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
     try {
-      await saveManual.mutateAsync({
+      const row = await saveManual.mutateAsync({
         wineName: wine.wineName ?? '', producer: wine.producer ?? '', region: wine.region ?? '',
         vintage: Number.isFinite(vn as number) ? (vn as number) : null,
         restaurantName: '', city: '', listPrice: null, currency: userCurrency,
         tastingNote: '', otherObservations: '', userScore: null, isFavourite: false,
         source: 'other',
       });
+      // Carry the scanned label photo onto the review. The intel flow keeps the
+      // shot as a local uri only (the Label Library auto-upload was retired), so
+      // upload it against the new review's id and stamp the path. Best-effort:
+      // a failed upload must not lose the review the user just saved.
+      const labelUri = useLabelStore.getState().imageUri;
+      if (row?.id && labelUri && session?.user?.id) {
+        try {
+          const path = await uploadLabelImage(session.user.id, labelUri, row.id);
+          await patchChosenWine(row.id, { label_image_path: path });
+        } catch { /* label image is best-effort — keep the saved review */ }
+      }
       showAlert({
         title: 'Saved to Your Wine Reviews',
         body: 'It\'s waiting in Your Wine Reviews for you to review when you\'re ready.',
@@ -2521,8 +2536,8 @@ const styles = StyleSheet.create({
   deepBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   deepBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Primary CTA above Dive Deeper — gold-filled to stand out.
-  saveReviewBtn: { backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
-  saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background, letterSpacing: 0.3 },
+  saveReviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
+  saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
   // Vinster's Map — collapsible heading + placeholder body.
   mapHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
