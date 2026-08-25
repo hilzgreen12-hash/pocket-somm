@@ -1796,9 +1796,14 @@ export default function CellarWineDetail() {
               <Text style={styles.editReviewLink}>Edit Cellar Note</Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
-              <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
-            </TouchableOpacity>
+            // Mirror the Your Review chevron's empty state — a "nothing yet"
+            // line above the add link, laid out full-width below the row.
+            <>
+              <Text style={styles.reviewEmptyText}>No cellar note yet.</Text>
+              <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
+                <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
+              </TouchableOpacity>
+            </>
           )}
         </View>
       ) : null}
