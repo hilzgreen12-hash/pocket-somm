@@ -187,14 +187,19 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
       </Text>
 
       {hasStorage && (
-        <Text style={styles.stats}>
-          {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
-        </Text>
+        <>
+          {/* Faded rule between the blurb and the stats bar. */}
+          <View style={styles.fadedRule} />
+          <Text style={styles.stats}>
+            {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
+          </Text>
+          {/* Adding is now via the carousel's "+ Add" card — the yellow button is
+              gone; this italic hint (matching the Full Cellar List filter hint)
+              points the user to it. */}
+          <Text style={styles.swipeHint}>Swipe right to add a location →</Text>
+          <View style={styles.fadedRule} />
+        </>
       )}
-
-      <TouchableOpacity onPress={() => requireAuth(handleAddAnyStorage)} activeOpacity={0.7} style={styles.addRow}>
-        <Text style={styles.addLink}>+ Add Storage Location</Text>
-      </TouchableOpacity>
 
       {isLoading ? (
         <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>
@@ -277,12 +282,14 @@ const styles = StyleSheet.create({
   // Elegant Cormorant, matching the Cellar header/blurb above.
   intro: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   stats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginBottom: spacing.xs },
-  addRow: { alignItems: 'center', paddingVertical: spacing.xs, marginBottom: spacing.xs },
-  addLink: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
+  // Full-width faded separators framing the stats bar.
+  fadedRule: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
+  // Italic hint pointing to the carousel's "+ Add" card (matches the FCL filter hint).
+  swipeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.xs },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
-  // Extra breathing room between "+ Add Storage Location" and the carousel.
-  carouselScroll: { marginTop: spacing.xl },
+  // The bottom faded rule already provides separation from the stats bar.
+  carouselScroll: { marginTop: spacing.sm },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
   storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
