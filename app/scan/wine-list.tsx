@@ -311,14 +311,14 @@ export default function WineListScreen() {
 
         <View style={styles.section}>
           <View style={styles.bubbleWrap}>
-            <Text style={styles.question}>What are you dining on? (optional)</Text>
+            <Text style={styles.question}>What are you dining on?</Text>
             <FoodPairingInput value={foodPairing} onChange={setFoodPairing} />
           </View>
         </View>
 
         <View style={styles.section}>
           <View style={styles.bubbleWrap}>
-            <Text style={styles.question}>Preferred country of origin? (optional)</Text>
+            <Text style={styles.question}>Preferred country of origin?</Text>
             <PreferredCountryInput value={preferredCountry} onChange={setPreferredCountry} />
           </View>
         </View>
