@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { LabelThumb } from './LabelThumb';
+import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
@@ -88,6 +89,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   // Confirmed-identity card: name/region + date·location stamp, edited via a
   // separate identity sheet (mirrors the cellar review card).
   const [identityEditOpen, setIdentityEditOpen] = useState(false);
+  // Full-screen label viewer — the thumbnail enlarges on a short press.
+  const [labelViewerOpen, setLabelViewerOpen] = useState(false);
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
 
   async function pickIdentityPhoto(source: 'camera' | 'library') {
@@ -340,7 +343,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
             ) : (
               <>
                 <Text style={styles.heading}>Add a Wine Review</Text>
-                <Text style={styles.subheading}>Record a wine you drank — every field is editable.</Text>
 
                 <View style={styles.divider} />
 
@@ -363,28 +365,26 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     mirroring a cellar wine card. */}
                 <View style={labelImageUri ? styles.identityRow : undefined}>
                   {labelImageUri ? (
-                    <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
+                    <TouchableOpacity onPress={() => setLabelViewerOpen(true)} activeOpacity={0.85}>
+                      <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
+                    </TouchableOpacity>
                   ) : null}
+                  {/* Identity fields as inline, borderless text (not boxed inputs)
+                      so they read like the wine's own line — producer, name,
+                      vintage, region, sitting to the right of the larger label. */}
                   <View style={labelImageUri ? styles.identityFields : undefined}>
-                    <Text style={styles.fieldLabel}>Producer</Text>
-                    <TextInput style={styles.input} value={producer} onChangeText={edited(setProducer)} placeholder="e.g. Domaine Leflaive" placeholderTextColor={colors.textMuted} />
-
-                    <Text style={styles.fieldLabel}>Wine name</Text>
-                    <TextInput style={styles.input} value={wineName} onChangeText={edited(setWineName)} placeholder="e.g. Puligny-Montrachet" placeholderTextColor={colors.textMuted} />
-
-                    <Text style={styles.fieldLabel}>Vintage</Text>
+                    <TextInput style={styles.inputInline} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textMuted} />
+                    <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
                     <TextInput
-                      style={styles.input}
+                      style={styles.inputInline}
                       value={vintage}
                       onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
-                      placeholder="e.g. 2018"
+                      placeholder="Vintage"
                       placeholderTextColor={colors.textMuted}
                       keyboardType="numeric"
                       maxLength={4}
                     />
-
-                    <Text style={styles.fieldLabel}>Region</Text>
-                    <TextInput style={styles.input} value={region} onChangeText={edited(setRegion)} placeholder="e.g. Burgundy" placeholderTextColor={colors.textMuted} />
+                    <TextInput style={styles.inputInline} value={region} onChangeText={edited(setRegion)} placeholder="Region" placeholderTextColor={colors.textMuted} />
                   </View>
                 </View>
 
@@ -422,6 +422,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           </KeyboardAwareScrollView>
         </View>
       </View>
+
+      {/* Enlarge the label photo on a short press of the thumbnail. */}
+      <LabelPhotoViewer visible={labelViewerOpen} uri={labelImageUri} fallbackText={wineName} onClose={() => setLabelViewerOpen(false)} />
 
       {/* Edit the wine's identity, location, date + label photo — the same sheet
           as the cellar review card. Edits the form state directly; the main
@@ -505,8 +508,12 @@ const styles = StyleSheet.create({
     fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.sm,
   },
   identityRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
-  identityThumb: { width: 60, height: 80, borderRadius: 6, backgroundColor: colors.surface },
-  identityFields: { flex: 1 },
+  // Larger label thumbnail — tap to enlarge full-screen.
+  identityThumb: { width: 112, height: 150, borderRadius: 8, backgroundColor: colors.surface },
+  identityFields: { flex: 1, justifyContent: 'center' },
+  // Inline, borderless identity fields — read like the wine's own line, with a
+  // faint underline to hint they're editable (vs the clunky boxed inputs).
+  inputInline: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.sm },
   cardHeader: { alignItems: 'center', marginBottom: spacing.sm },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerThumb: { width: 52, height: 68 },
