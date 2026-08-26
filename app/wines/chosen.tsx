@@ -1025,6 +1025,19 @@ export default function ChosenWinesScreen() {
   async function handleChooseScan() { setChooserOpen(false); void ocrThenReview('camera'); }
   async function handleChooseUpload() { setChooserOpen(false); void ocrThenReview('library'); }
 
+  // "Scan again" from the review input — redo the capture for a bad OCR read.
+  function handleScanAgain() {
+    showAlert({
+      title: 'Scan again',
+      body: 'Take a new photo of the label, or upload one.',
+      buttons: [
+        { text: 'Scan Photo', onPress: () => void ocrThenReview('camera') },
+        { text: 'Upload Photo', onPress: () => void ocrThenReview('library') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   async function ocrThenReview(source: 'camera' | 'library') {
     try {
       if (!(await ensureMediaPermission(source))) return;
@@ -1034,6 +1047,9 @@ export default function ChosenWinesScreen() {
         : await ImagePicker.launchImageLibraryAsync(opts);
       if (picked.canceled || !picked.assets?.[0]) return;
       const uri = picked.assets[0].uri;
+      // Close any open add modal so it re-seeds cleanly on reopen (the reset only
+      // runs on a visible false→true toggle). No-op on the first scan.
+      setAddOpen(false);
       let ocr: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null } | null = null;
       setUploading(true);
       try {
@@ -1172,6 +1188,7 @@ export default function ChosenWinesScreen() {
         visible={addOpen}
         initial={addInitial}
         labelImageUri={pendingReviewLabelUri}
+        onScanAgain={handleScanAgain}
         confirmedIdentity={addConfirmed}
         labelImagePath={addLabelPath}
         addToGroupId={addToGroupId}

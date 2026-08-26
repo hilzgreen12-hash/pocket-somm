@@ -59,9 +59,12 @@ interface Props {
   // EXISTING review. We append to this review_group_id and skip the "you've
   // reviewed this before" prompt (the user already knows — they're on its card).
   addToGroupId?: string | null;
+  // Present only when the modal was reached by scanning/uploading a label — a
+  // "Scan again" link re-runs the capture so a bad OCR read can be redone.
+  onScanAgain?: () => void;
 }
 
-export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null, source = 'other', addToGroupId = null }: Props) {
+export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelImageUri, confirmedIdentity = false, labelImagePath = null, source = 'other', addToGroupId = null, onScanAgain }: Props) {
   const { session } = useAuth();
   const { preferences } = usePreferences();
   const { saveManual, update, chosenWines } = useChosenWines();
@@ -388,6 +391,13 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   </View>
                 </View>
 
+                {/* Reached via scan/upload — let the user redo a bad read. */}
+                {onScanAgain && labelImageUri ? (
+                  <TouchableOpacity onPress={onScanAgain} activeOpacity={0.7} style={styles.scanAgainRow}>
+                    <Text style={styles.scanAgainLink}>Scan again</Text>
+                  </TouchableOpacity>
+                ) : null}
+
                 <View style={styles.divider} />
               </>
             )}
@@ -514,6 +524,9 @@ const styles = StyleSheet.create({
   // Inline, borderless identity fields — read like the wine's own line, with a
   // faint underline to hint they're editable (vs the clunky boxed inputs).
   inputInline: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.sm },
+  // "Scan again" — gold link, shown when the review was reached via scan/upload.
+  scanAgainRow: { alignItems: 'center', paddingVertical: spacing.sm },
+  scanAgainLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
   cardHeader: { alignItems: 'center', marginBottom: spacing.sm },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerThumb: { width: 52, height: 68 },
