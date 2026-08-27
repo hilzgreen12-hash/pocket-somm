@@ -196,7 +196,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           <View style={styles.fadedRule} />
           {/* Directly above the carousel, left-indented: adding is via the
               carousel's "+ Add" card — swipe right to reach it. */}
-          <Text style={styles.swipeHint}>Swipe right to add a location →</Text>
+          <Text style={styles.swipeHint}>Swipe Right to view and add locations →</Text>
         </>
       )}
 

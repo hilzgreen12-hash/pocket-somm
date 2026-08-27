@@ -16,7 +16,7 @@ export const VINSTERS_NOTE_EXPLAINER =
 export function VinstersNoteHeading({ expanded, onToggle, hideExplainerLink }: { expanded?: boolean; onToggle?: () => void; hideExplainerLink?: boolean }) {
   return (
     <View style={styles.row}>
-      <Text style={styles.title}>Vinster's Note</Text>
+      <Text style={styles.title}>Vinster's Tasting Note</Text>
       {onToggle ? (
         <TouchableOpacity onPress={onToggle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text style={styles.chevron}>{expanded ? '⌃' : '⌄'}</Text>
@@ -24,7 +24,7 @@ export function VinstersNoteHeading({ expanded, onToggle, hideExplainerLink }: {
       ) : null}
       {!hideExplainerLink ? (
         <TouchableOpacity
-          onPress={() => showAlert({ title: "Vinster's Note", body: VINSTERS_NOTE_EXPLAINER })}
+          onPress={() => showAlert({ title: "Vinster's Tasting Note", body: VINSTERS_NOTE_EXPLAINER })}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
           <Text style={styles.whatsThis}>(what's this)</Text>

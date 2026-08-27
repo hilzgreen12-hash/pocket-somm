@@ -8,6 +8,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
+import { HelpTitle } from '../../src/components/HelpTitle';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -28,6 +29,10 @@ import { fonts } from '../../src/constants/fonts';
 // the welcome overlay shows once per app session (a fresh launch resets it),
 // not every time the user returns to the Scan tab.
 let welcomeShownThisSession = false;
+
+// "How Scan works" — the help body behind the underlined Scan title, matching
+// the other tabs' tappable titles.
+const SCAN_HELP = `Scan is your way in. Point the camera at a single label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — then save it to your reviews or cellar. Scan a wine list for tailored bottle picks from the menu, or a lineup to add several bottles at once. No label to hand? Search a Wine finds it from Vinster's catalogue, or type the details in yourself.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
@@ -239,7 +244,7 @@ export default function ScanLandingScreen() {
   function handleManualInput() {
     requireAuth(() => {
       resetLabelStore();
-      router.push(`/label/confirm?manual=1&context=intel&backTo=${encodeURIComponent('/(tabs)')}`);
+      router.push(`/label/confirm?manual=1&mode=input&context=intel&backTo=${encodeURIComponent('/(tabs)')}`);
     });
   }
   // "upload instead" — same two destinations, but each opens the library picker
@@ -313,11 +318,13 @@ export default function ScanLandingScreen() {
 
       <VinsterHeader />
       <View style={styles.titleRow}>
-        <Text style={styles.appName}>Scan</Text>
+        <HelpTitle label="Scan" title="How Scan works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
       <Text style={styles.blurb}>
         Generate wine intel from labels, bottle recommendations from wine lists, and archive your vinous exploits — Vinster keeps a record of it all for you.
       </Text>
+
+      <View style={styles.blurbSeparator} />
 
       {/* 2×2 grid of scan actions. Each scan tile carries an "upload instead"
           banner across its bottom; the Search tile opens the typeahead prompt. */}
@@ -333,7 +340,7 @@ export default function ScanLandingScreen() {
             <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Label</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel, Review &amp; Cellar</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel{'\n'}Review &amp; Cellar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
             <Feather name="upload" size={11} color={colors.gold} />
@@ -382,10 +389,10 @@ export default function ScanLandingScreen() {
         {/* Search a Wine → predictive typeahead (no upload equivalent) */}
         <View style={styles.tile}>
           <TouchableOpacity style={styles.tileMain} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
-            <Ionicons name="search-outline" size={28} color={colors.gold} style={styles.tileIcon} />
+            <Ionicons name="search-outline" size={30} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel, Review &amp; Cellar</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel{'\n'}Review &amp; Cellar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={handleManualInput} activeOpacity={0.7}>
             <Feather name="edit-3" size={11} color={colors.gold} />
@@ -553,12 +560,14 @@ const styles = StyleSheet.create({
   // VinsterHeader, big centred title, blurb beneath).
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
-  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: spacing.xl },
+  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: spacing.lg },
+  // Rule between the intro blurb and the 2×2 grid.
+  blurbSeparator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.xl },
 
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
-  tile: { width: '48%', aspectRatio: 0.9, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden' },
+  tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden' },
   tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   tileIcon: { marginBottom: spacing.sm },
   tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 1, textAlign: 'center' },

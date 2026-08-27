@@ -878,9 +878,20 @@ export default function LabelResultsScreen() {
                   <Text style={styles.confirmPrimaryText}>Keep the current wine</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.confirmPrimary} onPress={recaptureFromConfirm} activeOpacity={0.85}>
-                  <Text style={styles.confirmPrimaryText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity style={styles.confirmPrimary} onPress={recaptureFromConfirm} activeOpacity={0.85}>
+                    <Text style={styles.confirmPrimaryText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
+                  </TouchableOpacity>
+                  {/* Vinster couldn't find it — let the user type it in by hand
+                      rather than only re-capturing. */}
+                  <TouchableOpacity
+                    style={styles.confirmManualLink}
+                    onPress={() => router.replace(`/label/confirm?manual=1&mode=input&context=intel&backTo=${encodeURIComponent('/(tabs)')}`)}
+                    activeOpacity={0.7}
+                  >
+                    <Text style={styles.confirmManualText}>Manually input wine</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </>
           )}
@@ -2563,6 +2574,8 @@ const styles = StyleSheet.create({
   confirmRowMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   confirmPrimary: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
+  confirmManualLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  confirmManualText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   // "Not this wine?" correction link under the header on the intel card.
   wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.md },
   wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center' },

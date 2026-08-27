@@ -43,11 +43,34 @@ Deno.serve(async (req) => {
       if (cached?.response) return json(cached.response, 200);
     } catch (e) { console.warn('[producer-range] cache read failed (continuing):', e); }
 
+    // Catalog-first: pull this producer's REAL cuvées from Vinster's own
+    // wines_catalog (thousands of seeded bottlings) and hand them to Claude as
+    // the authoritative set to order/band/summarise — so the range is grounded
+    // in Vinster's database, not just the model's recall. Keep only the
+    // best-matching producer variant(s) so a different producer sharing a word
+    // (e.g. "Domaine Dutraive" vs "Domaine Leflaive") doesn't leak in.
+    let catalogBlock = '';
+    try {
+      const { data: rows } = await admin.rpc('catalog_producer_wines', { p: String(producer), lim: 40 });
+      if (Array.isArray(rows) && rows.length) {
+        const topSim = Number(rows[0].sim) || 0;
+        const cutoff = Math.max(0.4, topSim - 0.15);
+        const kept = rows.filter((r: any) => (Number(r.sim) || 0) >= cutoff);
+        const lines = Array.from(new Set(
+          kept.map((r: any) => `- ${r.producer} — ${r.wine_name}`),
+        )).slice(0, 40);
+        if (lines.length >= 2) {
+          catalogBlock = `\n\nVinster's catalogue lists these REAL wines for this producer — treat them as the AUTHORITATIVE set: use these exact wines (merging obvious variant spellings of the SAME wine, e.g. "Domaine Georges Roumier" and "Georges Roumier"), and do NOT invent others beyond this list. Only use entries whose producer matches the scanned producer; ignore any that clearly belong to a different producer. You MAY add the scanned wine if it's genuinely missing.\n${lines.join('\n')}`;
+        }
+      }
+    } catch (e) { console.warn('[producer-range] catalog lookup failed (continuing):', e); }
+
     const prompt = `A wine label was scanned and identified as:
 - Producer: "${producer ?? ''}"
 - Region: "${region ?? ''}"
 - Wine name / cuvée: "${wineName ?? ''}"
 - Vintage: "${vintage ?? ''}"
+${catalogBlock}
 
 If the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then give that producer's core range so the user can see WHERE this wine sits within it.
 

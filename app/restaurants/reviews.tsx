@@ -297,6 +297,22 @@ export default function RestaurantReviewsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [add, session]);
 
+  // Keep the open review's photo path in step with the archive. Attaching a
+  // "photo of the night" writes the DB row and invalidates the archive, but
+  // `editing` is a snapshot — so without this the banner wouldn't refresh, and
+  // a manual draft that ONLY got a photo would be discarded on close. Syncing
+  // reflects the photo immediately AND marks the draft worth keeping.
+  useEffect(() => {
+    if (!editing) return;
+    const fresh = archive.find((a) => a.id === editing.id);
+    if (fresh && fresh.restaurantPhotoPath !== editing.restaurantPhotoPath) {
+      if (fresh.restaurantPhotoPath && manualDraftIdRef.current === editing.id) {
+        manualSavedRef.current = true;
+      }
+      setEditing((prev) => (prev ? { ...prev, restaurantPhotoPath: fresh.restaurantPhotoPath } : prev));
+    }
+  }, [archive, editing]);
+
   // `pop` controls the deep-link back-pop. It MUST be false when the close is
   // immediately followed by opening a sibling in-page modal (Edit/Review Wine):
   // router.back() there pops THIS screen instance, so the subsequent state set
@@ -739,6 +755,12 @@ export default function RestaurantReviewsScreen() {
                 delayLongPress={400}
                 activeOpacity={0.7}
               >
+                {/* Capitalized "YOUR FOLDER" heading mirrors the built-in
+                    chips' CITY / FAVOURITES label so bespoke folders read the
+                    same way in the filter row. */}
+                <View style={styles.filterChipHeadingRow}>
+                  <Text style={styles.filterChipLabel}>Your Folder</Text>
+                </View>
                 <Text style={[styles.customChipText, activeCustomId === f.id && { color: colors.gold }]} numberOfLines={1}>{f.name}</Text>
               </TouchableOpacity>
             ))}
@@ -1110,9 +1132,9 @@ const styles = StyleSheet.create({
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   // Bespoke user-created filter chips (the "+ Add" row) — same look as the
   // Label Library.
-  customChip: { height: 56, justifyContent: 'center', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.md, maxWidth: 160 },
+  customChip: { height: 56, justifyContent: 'center', alignItems: 'flex-start', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, minWidth: 110, maxWidth: 180, overflow: 'hidden' },
   customChipActive: { borderColor: colors.gold },
-  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text },
+  customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
   customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },

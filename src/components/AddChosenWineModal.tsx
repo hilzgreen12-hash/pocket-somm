@@ -18,6 +18,7 @@ import { useAuth } from '../hooks/useAuth';
 import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
+import { generateWineIntel } from '../services/pricing';
 import { findExistingReview, missingReviewFields } from '../utils/reviewDedup';
 import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
@@ -86,12 +87,27 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [isFavourite, setIsFavourite] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Estimated Value — generated on demand (Wine-Searcher-first) and persisted
+  // onto the new review row when it's saved.
+  const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
+  const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
+  const [estimating, setEstimating] = useState(false);
   // Drinking date defaults to today; editable in the identity sheet.
   const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [style, setStyle] = useState('');
   // Confirmed-identity card: name/region + date·location stamp, edited via a
   // separate identity sheet (mirrors the cellar review card).
   const [identityEditOpen, setIdentityEditOpen] = useState(false);
+  // Manual entry: once the user confirms the wine (name + vintage) with the tick,
+  // the typed fields collapse into the SAME review card the Label-Library flow
+  // shows (title as text, thumbnail area, date · location stamp). `showCard`
+  // unifies that with the prop-driven confirmed identity.
+  const [identityConfirmed, setIdentityConfirmed] = useState(false);
+  const showCard = confirmedIdentity || identityConfirmed;
+  // After a predictive-search pick fills a long producer/name, single-line
+  // inputs scroll to the END. Setting the selection to the start (once) snaps
+  // them back so the value reads from its beginning; cleared on first focus/edit.
+  const [justFilled, setJustFilled] = useState(false);
   // Full-screen label viewer — the thumbnail enlarges on a short press.
   const [labelViewerOpen, setLabelViewerOpen] = useState(false);
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
@@ -103,6 +119,68 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
     if (res.canceled || !res.assets[0]) return;
     setEditImageUri(res.assets[0].uri);
+  }
+
+  // Photo chooser for the confirmed review card's thumbnail area.
+  function openPhotoChooser() {
+    showAlert({
+      title: 'Add a photo',
+      body: 'Add a label photo to this review.',
+      buttons: [
+        { text: 'Take Photo', onPress: () => setTimeout(() => pickIdentityPhoto('camera'), 300) },
+        { text: 'Upload', onPress: () => setTimeout(() => pickIdentityPhoto('library'), 300) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Manual-entry "Confirm Wine" tick: validate name + vintage (prompting for a
+  // missing vintage, or NV), then collapse the typed fields into the review card.
+  function confirmIdentity() {
+    if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name to confirm.' }); return; }
+    const vt = vintage.trim();
+    const validYear = /^\d{4}$/.test(vt) && Number(vt) >= 1800 && Number(vt) <= new Date().getFullYear() + 1;
+    const isNV = /^nv$/i.test(vt);
+    if (!validYear && !isNV) {
+      showAlert({
+        title: 'Add a vintage',
+        body: 'Every review needs a vintage. Enter the four-digit year, or confirm this wine is non-vintage.',
+        buttons: [
+          { text: 'Confirm non-vintage', onPress: () => { setVintage('NV'); Keyboard.dismiss(); setIdentityConfirmed(true); } },
+          { text: 'Add a vintage', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    Keyboard.dismiss();
+    setIdentityConfirmed(true);
+  }
+
+  // Generate an Estimated Value on demand from the current identity fields.
+  // Held locally and written onto the row when the review is saved.
+  async function fetchEstimate() {
+    if (estimating) return;
+    if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add the wine name before estimating a value.' }); return; }
+    setEstimating(true);
+    try {
+      const intel = await generateWineIntel({
+        producer: producer.trim(),
+        region: region.trim(),
+        wineName: wineName.trim() || null,
+        vintage: vintage.trim() || 'NV',
+        style: style.trim() || null,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any, currency);
+      setEstimatedValue(intel.estimatedValue ?? null);
+      setEstimatedValueAt(new Date().toISOString());
+      if (intel.estimatedValue == null) {
+        showAlert({ title: 'No value found', body: "Vinster couldn't find a market value for this wine just now." });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not estimate', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setEstimating(false);
+    }
   }
 
   useEffect(() => {
@@ -120,6 +198,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       // wine from the Label Library), falling back to today. Still editable.
       setReviewDate((initial?.date && /^\d{4}-\d{2}-\d{2}$/.test(initial.date)) ? initial.date : new Date().toISOString().split('T')[0]);
       setStyle(''); setEditImageUri(null); setIdentityEditOpen(false);
+      setIdentityConfirmed(false); setJustFilled(false);
+      setEstimatedValue(null); setEstimatedValueAt(null); setEstimating(false);
       // Prefill the city from GPS for a fresh review.
       captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
     }
@@ -233,6 +313,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           await patchChosenWine(existing.id, { user_drinking_window: dw });
           qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
         }
+        if (estimatedValue != null) {
+          try { await patchChosenWine(existing.id, { estimated_value: estimatedValue, estimated_value_currency: currency, estimated_value_at: estimatedValueAt }); } catch { /* non-fatal */ }
+        }
       } else {
         // create OR append. "Add to this review" (append) = a NEW dated entry
         // that joins the existing review's card via its review_group_id.
@@ -250,6 +333,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
         // Persist any style the user set via the identity sheet.
         if (style.trim() && row?.id) {
           try { await patchChosenWine(row.id, { style: style.trim() }); } catch { /* non-fatal */ }
+        }
+        // Persist a generated Estimated Value onto the new row.
+        if (estimatedValue != null && row?.id) {
+          try { await patchChosenWine(row.id, { estimated_value: estimatedValue, estimated_value_currency: currency, estimated_value_at: estimatedValueAt }); } catch { /* non-fatal */ }
         }
         // Attach the label photo — a photo picked in the identity sheet wins,
         // else the scanned one. Best-effort: a failed upload never blocks save.
@@ -292,18 +379,18 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           {/* Header favourite star — hidden on the review-card layout, where the
               star is stacked BELOW the top-right "Edit" (with a gap) so the two
               never overlap. Shown here for manual entry and add-to-review. */}
-          {!(confirmedIdentity && !addToGroupId) ? (
+          {!(showCard && !addToGroupId) ? (
             <TouchableOpacity style={styles.favouriteBtn} onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
               <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
             </TouchableOpacity>
           ) : null}
 
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
-            {confirmedIdentity ? (
-              // Review CARD — the wine is already confirmed (from Your Label
-              // Library). Mirrors the cellar review card: thumbnail + name/region
-              // + date·location stamp, with a top-right "Edit" opening a full
-              // identity/photo sheet. Review inputs sit below.
+            {showCard ? (
+              // Review CARD — the wine is confirmed (from Your Label Library, or
+              // via the manual "Confirm Wine" tick). Mirrors the cellar review
+              // card: thumbnail + name/region + date·location stamp, with a
+              // top-right "Edit" opening a full identity/photo sheet.
               <>
                 {/* Adding to an existing review — the wine is fixed, so no Edit
                     affordance (edit the wine from its card, not here). */}
@@ -317,26 +404,48 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     </TouchableOpacity>
                   </View>
                 )}
-                <View style={[styles.cardHeader, (editImageUri || labelImagePath) ? styles.cardHeaderRow : null]}>
+                <View style={[styles.cardHeader, styles.cardHeaderRow]}>
+                  {/* Thumbnail area — the label photo, or a tappable "add photo"
+                      placeholder so every confirmed review has room for one. */}
                   {editImageUri ? (
-                    <Image source={{ uri: editImageUri }} style={styles.headerThumb} resizeMode="cover" />
+                    <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
+                      <Image source={{ uri: editImageUri }} style={styles.headerThumb} resizeMode="cover" />
+                    </TouchableOpacity>
                   ) : labelImagePath ? (
-                    <LabelThumb path={labelImagePath} fallbackText={wineName} style={styles.headerThumb} radius={5} frame={0} />
-                  ) : null}
-                  <View style={(editImageUri || labelImagePath) ? styles.headerTextCol : undefined}>
+                    <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
+                      <LabelThumb path={labelImagePath} fallbackText={wineName} style={styles.headerThumb} radius={5} frame={0} />
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.8} style={styles.headerThumbAdd}>
+                      <Text style={styles.headerThumbAddIcon}>＋</Text>
+                      <Text style={styles.headerThumbAddText}>Photo</Text>
+                    </TouchableOpacity>
+                  )}
+                  <View style={styles.headerTextCol}>
                     <WineIdentityHeader
                       producer={producer}
                       wineName={wineName}
                       vintage={vintage}
                       region={region}
-                      align={(editImageUri || labelImagePath) ? 'left' : 'center'}
+                      align="left"
                       size="lg"
                     />
                     {(() => {
                       const loc = [locName.trim(), locCity.trim()].filter(Boolean).join(', ');
                       const dateStr = reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                      const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                      return stamp ? <Text style={[styles.stampLine, (editImageUri || labelImagePath) ? styles.headerLineLeft : null]}>{stamp}</Text> : null;
+                      // Location present → plain date · location stamp. Otherwise
+                      // show the (auto-filled) date with an "Add your location"
+                      // link that opens the identity sheet.
+                      if (loc) {
+                        const stamp = [dateStr, loc].filter(Boolean).join(' · ');
+                        return stamp ? <Text style={[styles.stampLine, styles.headerLineLeft]}>{stamp}</Text> : null;
+                      }
+                      return (
+                        <Text style={[styles.stampLine, styles.headerLineLeft]}>
+                          {dateStr ? `${dateStr} · ` : ''}
+                          <Text style={styles.addLocationLink} onPress={() => setIdentityEditOpen(true)}>Add your location</Text>
+                        </Text>
+                      );
                     })()}
                   </View>
                 </View>
@@ -349,8 +458,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
 
                 <View style={styles.divider} />
 
-                <Text style={styles.sectionLabel}>The wine</Text>
-
                 {/* Predictive search — type the wine and pick a real match to fill
                     the fields below (vintage stays yours to enter). Manual typing
                     still works. Hidden when a label photo already sourced these. */}
@@ -360,6 +467,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     setWineName(r.wineName ?? '');
                     setRegion(r.region ?? '');
                     if (r.style) setStyle(r.style);
+                    // Snap the just-filled single-line inputs back to their start
+                    // so a long name reads from the beginning, not its tail.
+                    setJustFilled(true);
                     if (saved) setSaved(false);
                   }} />
                 ) : null}
@@ -376,8 +486,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                       so they read like the wine's own line — producer, name,
                       vintage, region, sitting to the right of the larger label. */}
                   <View style={labelImageUri ? styles.identityFields : undefined}>
-                    <TextInput style={styles.inputInline} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textMuted} />
-                    <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name" placeholderTextColor={colors.textMuted} />
+                    <TextInput style={styles.inputInline} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
+                    <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
                     <TextInput
                       style={styles.inputInline}
                       value={vintage}
@@ -387,7 +497,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                       keyboardType="numeric"
                       maxLength={4}
                     />
-                    <TextInput style={styles.inputInline} value={region} onChangeText={edited(setRegion)} placeholder="Region" placeholderTextColor={colors.textMuted} />
+                    <TextInput style={styles.inputInline} value={region} onChangeText={edited(setRegion)} placeholder="Region" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
                   </View>
                 </View>
 
@@ -395,6 +505,14 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 {onScanAgain && labelImageUri ? (
                   <TouchableOpacity onPress={onScanAgain} activeOpacity={0.7} style={styles.scanAgainRow}>
                     <Text style={styles.scanAgainLink}>Scan again</Text>
+                  </TouchableOpacity>
+                ) : null}
+
+                {/* Confirm the wine (manual entry) → collapse these fields into the
+                    review card. Prompts for a vintage if one's missing. */}
+                {!labelImageUri ? (
+                  <TouchableOpacity style={styles.confirmIdentityBtn} onPress={confirmIdentity} activeOpacity={0.85}>
+                    <Text style={styles.confirmIdentityText}>✓  Confirm Wine</Text>
                   </TouchableOpacity>
                 ) : null}
 
@@ -409,8 +527,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               pricePaid={listPrice}
               onPricePaid={edited(setListPrice)}
               currency={currency}
-              estimatedValue={null}
-              estimatedValueAt={null}
+              estimatedValue={estimatedValue}
+              estimatedValueAt={estimatedValueAt}
+              estimating={estimating}
+              onEstimate={fetchEstimate}
               review={tastingNote}
               onReview={edited(setTastingNote)}
               personalNotes={otherObservations}
@@ -439,7 +559,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       {/* Edit the wine's identity, location, date + label photo — the same sheet
           as the cellar review card. Edits the form state directly; the main
           "Add to Your Wine Reviews" save creates the record with these. */}
-      {confirmedIdentity ? (
+      {showCard ? (
         <Modal visible={identityEditOpen} transparent animationType="fade" onRequestClose={() => setIdentityEditOpen(false)}>
           <View style={styles.confirmOverlay}>
             <KeyboardAwareScrollView contentContainerStyle={styles.editScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
@@ -530,6 +650,15 @@ const styles = StyleSheet.create({
   cardHeader: { alignItems: 'center', marginBottom: spacing.sm },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerThumb: { width: 52, height: 68 },
+  // Tappable "add photo" placeholder in the confirmed-card thumbnail slot.
+  headerThumbAdd: { width: 52, height: 68, borderRadius: 5, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 2 },
+  headerThumbAddIcon: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.gold },
+  headerThumbAddText: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.gold },
+  // "Add your location" — gold link in the date stamp when no location is set.
+  addLocationLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
+  // Manual-entry "Confirm Wine" tick — outline, gold (no filled buttons).
+  confirmIdentityBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
+  confirmIdentityText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   headerTextCol: { flex: 1 },
   headerLine: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
   headerLineLeft: { textAlign: 'left' },

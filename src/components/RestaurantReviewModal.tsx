@@ -16,11 +16,12 @@ import { uploadLabelImage } from '../api/labelPhotos';
 import { prepareImageBase64, detectLineup } from '../api/label';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { useCellar } from '../hooks/useCellar';
+import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
+import type { ChosenWine } from '../types/wine';
 import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
 import { LabelThumb } from './LabelThumb';
-import { AddPhotoThumb } from './AddPhotoThumb';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { COMMUNITY_ENABLED } from '../constants/features';
@@ -89,6 +90,7 @@ export function RestaurantReviewModal({
   const qc = useQueryClient();
   const { session } = useAuth();
   const { wines: cellarWines } = useCellar();
+  const { chosenWines } = useChosenWines();
   // Restaurant identity — prefilled from the scan but editable here so the
   // user can correct the name or place while saving their review.
   const [restaurantName, setRestaurantName] = useState((initialName ?? '').trim());
@@ -186,6 +188,13 @@ export function RestaurantReviewModal({
   const [bottleChooserOpen, setBottleChooserOpen] = useState(false);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [cellarSearch, setCellarSearch] = useState('');
+  // "Link to a Wine Review" — attach existing reviews (not yet tied to a visit)
+  // to this restaurant. Multi-select; linking sets each review's scan_session_id
+  // so it appears under "Wines You Drank".
+  const [reviewPickerOpen, setReviewPickerOpen] = useState(false);
+  const [reviewSearch, setReviewSearch] = useState('');
+  const [reviewChecked, setReviewChecked] = useState<Set<string>>(new Set());
+  const [linkBusy, setLinkBusy] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [bottleBusy, setBottleBusy] = useState(false);
   const [cbProducer, setCbProducer] = useState('');
@@ -276,6 +285,51 @@ export function RestaurantReviewModal({
       : cellarWines;
     return list.slice(0, 50);
   }, [cellarWines, cellarSearch]);
+
+  // Reviews the user can link to this visit — their wine reviews not already
+  // tied to a restaurant visit (scan_session_id null), newest first. Searchable.
+  const reviewMatches = useMemo(() => {
+    const q = reviewSearch.trim().toLowerCase();
+    const list = chosenWines
+      .filter((w) => !w.scan_session_id)
+      .filter((w) => (q ? [w.producer, w.wine_name, w.region, w.vintage].filter(Boolean).join(' ').toLowerCase().includes(q) : true))
+      .slice()
+      .sort((a, b) => new Date(b.chosen_at).getTime() - new Date(a.chosen_at).getTime());
+    return list.slice(0, 100);
+  }, [chosenWines, reviewSearch]);
+
+  function chooseLinkReview() { setBottleChooserOpen(false); setReviewSearch(''); setReviewChecked(new Set()); setReviewPickerOpen(true); }
+  function toggleReviewCheck(id: string) {
+    setReviewChecked((prev) => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }
+
+  // Link the ticked reviews to this visit: stamp each with this session id (so
+  // findChosenForVisit surfaces it) plus the restaurant name/city so its own
+  // review card reads "You had this wine at …".
+  async function handleLinkReviews() {
+    if (linkBusy) return;
+    if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to link reviews to a visit.' }); return; }
+    const ids = Array.from(reviewChecked);
+    if (ids.length === 0) { setReviewPickerOpen(false); return; }
+    setLinkBusy(true);
+    try {
+      for (const id of ids) {
+        await patchChosenWine(id, {
+          scan_session_id: sessionId,
+          restaurant_name: restaurantName.trim() || null,
+          city: cityValue.trim() || null,
+        });
+      }
+      qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+      setReviewPickerOpen(false);
+      setReviewChecked(new Set());
+    } catch (err) {
+      showAlert({ title: 'Could not link reviews', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setLinkBusy(false);
+    }
+  }
 
   function toggleMultiCheck(i: number) {
     setMultiChecked((prev) => { const next = new Set(prev); if (next.has(i)) next.delete(i); else next.add(i); return next; });
@@ -449,6 +503,9 @@ export function RestaurantReviewModal({
     setSaving(true);
     try {
       await persist();
+      // Once saved, collapse Your Review back to read-only text (like a wine
+      // review) — Edit re-opens the box on command.
+      setNoteEditing(false);
       // Saving a restaurant review no longer auto-publishes it. Community
       // sharing happens only via the explicit "Share to Community" button
       // (handleShareToCommunity) so nothing reaches the public feed silently.
@@ -556,9 +613,10 @@ export function RestaurantReviewModal({
     const line = [w.producer, w.wineName, w.vintage].filter((x) => x != null && String(x).trim().length > 0).join(' · ');
     const buttons: { text: string; style?: 'cancel' | 'destructive'; onPress?: () => void }[] = [];
     if (onReviewWine) buttons.push({ text: 'Add/View Review', onPress: () => onReviewWine(w._idx) });
-    // "Edit Wine" intentionally removed — a wine added in Your Restaurants isn't
-    // editable here; corrections happen on its review in Wine Reviews.
     if (onViewIntel) buttons.push({ text: 'View Wine Intel', onPress: () => onViewIntel(w._idx) });
+    // Correct a misread producer/name/vintage inline — opens the identity sheet
+    // (onEditWine) rather than sending the user off to Wine Reviews.
+    if (onEditWine) buttons.push({ text: 'Edit Wine Name', onPress: () => onEditWine(w._idx) });
     if (onDeleteWine) buttons.push({ text: 'Delete Wine', style: 'destructive', onPress: () => onDeleteWine(w._idx) });
     buttons.push({ text: 'Cancel', style: 'cancel' });
     showAlert({ title: line || 'This wine', body: w.source === 'other' ? 'Brought to this visit.' : 'Chosen off the list.', buttons });
@@ -600,44 +658,65 @@ export function RestaurantReviewModal({
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
             {/* Photo of the night — same thumbnail shown on the Your Restaurants
                 list. Tap to view full-screen, or add one when there's none. */}
-            <View style={styles.photoRow}>
+            {/* Photo of the night as a large header banner — the picture fills
+                the header and the restaurant name + location · date sit
+                overlaid on it (a scrim + text shadow keep them legible). Tap an
+                empty banner to add a photo; tap "Change" to replace one. */}
+            <View style={styles.photoBanner}>
               {restaurantPhotoPath ? (
-                <TouchableOpacity onPress={() => onViewPhoto?.()} activeOpacity={0.85}>
-                  <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoThumb} radius={8} frame={3} />
-                </TouchableOpacity>
+                <>
+                  <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoBannerImg} radius={0} frame={0} />
+                  <View style={styles.photoBannerScrim} pointerEvents="none" />
+                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.()} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={styles.photoChangeText}>Change</Text>
+                  </TouchableOpacity>
+                </>
               ) : (
-                <AddPhotoThumb style={styles.photoThumb} radius={8} onPress={() => onAddPhoto?.()} />
+                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.()} activeOpacity={0.85}>
+                  <Text style={styles.photoBannerAddIcon}>＋</Text>
+                  <Text style={styles.photoBannerAddText}>Add a photo of the night</Text>
+                </TouchableOpacity>
               )}
+              {/* Overlaid identity — always editable, anchored to the bottom.
+                  Location · date share one line beneath the name. */}
+              <View style={styles.photoBannerText} pointerEvents="box-none">
+                <TextInput
+                  style={styles.bannerNameInput}
+                  value={restaurantName}
+                  onChangeText={setRestaurantName}
+                  placeholder="Restaurant name"
+                  placeholderTextColor="rgba(255,255,255,0.6)"
+                />
+                <View style={styles.bannerMetaRow}>
+                  <TextInput
+                    style={styles.bannerMetaInput}
+                    value={cityValue}
+                    onChangeText={setCityValue}
+                    placeholder="City or location"
+                    placeholderTextColor="rgba(255,255,255,0.55)"
+                  />
+                  {capturedAt != null ? (
+                    <>
+                      <Text style={styles.bannerMetaDot}>·</Text>
+                      <TextInput
+                        style={[styles.bannerMetaInput, styles.bannerDateInput]}
+                        value={dateValue}
+                        onChangeText={(t) => setDateValue(t.replace(/[^0-9-]/g, '').slice(0, 10))}
+                        placeholder="YYYY-MM-DD"
+                        placeholderTextColor="rgba(255,255,255,0.55)"
+                        keyboardType="numbers-and-punctuation"
+                        maxLength={10}
+                      />
+                    </>
+                  ) : date ? (
+                    <>
+                      <Text style={styles.bannerMetaDot}>·</Text>
+                      <Text style={styles.bannerMetaStatic}>{date}</Text>
+                    </>
+                  ) : null}
+                </View>
+              </View>
             </View>
-            {/* Restaurant + location read as headers at the top, date below —
-                all prefilled from the scan, editable here. */}
-            <TextInput
-              style={styles.restaurantHeaderInput}
-              value={restaurantName}
-              onChangeText={setRestaurantName}
-              placeholder="Restaurant name"
-              placeholderTextColor={colors.textMuted}
-            />
-            <TextInput
-              style={styles.locationHeaderInput}
-              value={cityValue}
-              onChangeText={setCityValue}
-              placeholder="City or location"
-              placeholderTextColor={colors.textMuted}
-            />
-            {capturedAt != null ? (
-              <TextInput
-                style={styles.dateHeaderInput}
-                value={dateValue}
-                onChangeText={(t) => setDateValue(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
-              />
-            ) : date ? (
-              <Text style={styles.dateHeader}>{date}</Text>
-            ) : null}
 
             <View style={styles.divider} />
 
@@ -667,7 +746,7 @@ export function RestaurantReviewModal({
               />
             ) : (
               <TouchableOpacity onPress={() => setNoteEditing(true)} activeOpacity={0.7} style={styles.noteReadonlyWrap}>
-                <Text style={styles.noteReadonly}>{note}</Text>
+                <Text style={note.trim() ? styles.noteReadonly : styles.noteReadonlyEmpty}>{note.trim() || 'No review yet'}</Text>
               </TouchableOpacity>
             )}
 
@@ -719,6 +798,7 @@ export function RestaurantReviewModal({
                 <Text style={styles.bottleSheetTitle}>Add a bottle</Text>
                 <Text style={styles.bottleSheetBody}>Log a wine you drank at this visit — pick one from your cellar, or scan, upload, or type its label.</Text>
                 <TouchableOpacity style={styles.bottleOptBtn} onPress={chooseCellar} activeOpacity={0.85}><Text style={styles.bottleOptText}>Add Bottle From Cellar</Text></TouchableOpacity>
+                <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseLinkReview} activeOpacity={0.85}><Text style={styles.bottleOptText}>Link to a Wine Review</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('library')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Upload a Wine Label</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={() => chooseFromImage('camera')} activeOpacity={0.85}><Text style={styles.bottleOptText}>Scan a Label</Text></TouchableOpacity>
                 <TouchableOpacity style={[styles.bottleOptBtn, styles.bottleOptMt]} onPress={chooseManual} activeOpacity={0.85}><Text style={styles.bottleOptText}>Manual Input</Text></TouchableOpacity>
@@ -750,6 +830,49 @@ export function RestaurantReviewModal({
                   ))}
                 </ScrollView>
                 <TouchableOpacity style={styles.bottleCancel} onPress={() => setCellarPickerOpen(false)}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
+              </View>
+            </View>
+          )}
+
+          {/* Link-to-a-Wine-Review picker — multi-select list of the user's
+              wine reviews, newest first. Ticked reviews are attached to this
+              visit and show under "Wines You Drank". */}
+          {reviewPickerOpen && (
+            <View style={styles.bottleOverlay}>
+              <TouchableOpacity style={styles.bottleBackdrop} activeOpacity={1} onPress={() => setReviewPickerOpen(false)} />
+              <View style={styles.bottleSheet}>
+                <Text style={styles.bottleSheetTitle}>Link to a wine review</Text>
+                <Text style={styles.bottleSheetBody}>Select one or more of your wine reviews to add to this visit.</Text>
+                <TextInput style={styles.bottleInput} value={reviewSearch} onChangeText={setReviewSearch} placeholder="Search your reviews…" placeholderTextColor={colors.textMuted} />
+                <ScrollView style={styles.cellarList} keyboardShouldPersistTaps="handled">
+                  {reviewMatches.length === 0 ? (
+                    <Text style={styles.cellarEmpty}>No reviews available to link.</Text>
+                  ) : reviewMatches.map((w) => {
+                    const checked = reviewChecked.has(w.id);
+                    return (
+                      <TouchableOpacity
+                        key={w.id}
+                        style={[styles.cellarRow, { flexDirection: 'row', alignItems: 'center', gap: spacing.sm }]}
+                        onPress={() => toggleReviewCheck(w.id)}
+                        activeOpacity={0.7}
+                      >
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.cellarRowName} numberOfLines={1}>{w.wine_name}</Text>
+                          <Text style={styles.cellarRowMeta} numberOfLines={1}>{[w.producer, w.vintage, w.chosen_at ? new Date(w.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : null].filter(Boolean).join(' · ')}</Text>
+                        </View>
+                        <Text style={[styles.reviewCheck, checked && { color: colors.gold }]}>{checked ? '☑' : '☐'}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </ScrollView>
+                <TouchableOpacity
+                  style={[styles.bottleAddBtn, (linkBusy || reviewChecked.size === 0) && styles.btnDisabled]}
+                  onPress={handleLinkReviews}
+                  disabled={linkBusy || reviewChecked.size === 0}
+                >
+                  <Text style={styles.bottleAddText}>{linkBusy ? 'Linking…' : reviewChecked.size > 0 ? `Add ${reviewChecked.size} ${reviewChecked.size === 1 ? 'Review' : 'Reviews'}` : 'Add Reviews'}</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.bottleCancel} onPress={() => setReviewPickerOpen(false)}><Text style={styles.bottleCancelText}>Cancel</Text></TouchableOpacity>
               </View>
             </View>
           )}
@@ -896,15 +1019,26 @@ const styles = StyleSheet.create({
   favouriteStar: { fontSize: 26, color: colors.textMuted },
   favouriteStarActive: { color: colors.gold },
   content: { padding: spacing.xl, paddingTop: spacing.md, paddingBottom: 60 },
-  // Restaurant + location read as headers; date beneath.
-  photoRow: { alignItems: 'center', marginBottom: spacing.md },
-  photoThumb: { width: 96, height: 128 },
-  restaurantHeaderInput: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, letterSpacing: 0.3, paddingVertical: 2 },
-  locationHeaderInput: { fontFamily: fonts.headingItalic, fontSize: 17, color: colors.textMuted, paddingVertical: 2, marginTop: 2 },
-  dateHeader: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
-  // Editable version of the date stamp — white so it clearly reads as a
-  // tappable field (like the restaurant-name input), not a muted read-only stamp.
-  dateHeaderInput: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, marginTop: spacing.xs, paddingVertical: 2 },
+  // Large photo-of-the-night banner: bleeds to the screen edges and fills the
+  // header area, with the restaurant identity overlaid on it.
+  photoBanner: { height: 230, marginHorizontal: -spacing.xl, marginTop: -spacing.md, marginBottom: spacing.md, backgroundColor: '#1c1712', overflow: 'hidden', justifyContent: 'flex-end' },
+  photoBannerImg: { ...StyleSheet.absoluteFillObject },
+  // Dark scrim over the picture so the overlaid white text stays legible.
+  photoBannerScrim: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.34)' },
+  // Empty-state: the whole banner is a tap target to add a photo.
+  photoBannerAdd: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  photoBannerAddIcon: { fontFamily: fonts.headingBold, fontSize: 34, color: colors.gold },
+  photoBannerAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  photoChangeBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: 6 },
+  photoChangeText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: '#fff', letterSpacing: 0.3 },
+  // Overlaid, editable identity anchored to the bottom of the banner.
+  photoBannerText: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.md },
+  bannerNameInput: { fontFamily: fonts.headingBold, fontSize: 28, color: '#fff', letterSpacing: 0.3, paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
+  bannerMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
+  bannerMetaInput: { flexShrink: 1, fontFamily: fonts.headingItalic, fontSize: 15, color: 'rgba(255,255,255,0.92)', paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
+  bannerDateInput: { flexShrink: 0, width: 118, fontStyle: 'normal', fontFamily: fonts.bodyRegular },
+  bannerMetaDot: { fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.7)', marginHorizontal: 6, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
+  bannerMetaStatic: { fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.92)', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
@@ -948,6 +1082,7 @@ const styles = StyleSheet.create({
   editNoteLink: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
   noteReadonlyWrap: { marginBottom: spacing.lg },
   noteReadonly: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
+  noteReadonlyEmpty: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, lineHeight: 22 },
   ratingsBlock: {
     borderWidth: 1,
     borderColor: colors.border,
@@ -1052,6 +1187,7 @@ const styles = StyleSheet.create({
   cellarList: { maxHeight: 320, marginBottom: spacing.sm },
   cellarEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
   cellarRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  reviewCheck: { fontSize: 20, color: colors.textMuted },
   cellarRowName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   cellarRowMeta: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, marginTop: 2 },
   ocrCard: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, paddingVertical: spacing.xl, paddingHorizontal: spacing.xl, alignItems: 'center', gap: spacing.md },

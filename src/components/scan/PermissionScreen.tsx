@@ -32,7 +32,7 @@ export function PermissionScreen({ onRequest, onBack, hideBack }: Props) {
           onPress={handleBack}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
         >
-          <Text style={styles.backLink}>Back</Text>
+          <Text accessibilityLabel="Back" style={styles.backLink}>←</Text>
         </TouchableOpacity>
       )}
 
@@ -59,9 +59,9 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   backLink: {
-    fontSize: 16,
+    fontSize: 22,
     fontFamily: fonts.bodyRegular,
-    color: colors.textMuted,
+    color: colors.gold,
   },
   body: {
     flex: 1,

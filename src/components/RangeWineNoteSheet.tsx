@@ -36,6 +36,7 @@ export function RangeWineNoteSheet({
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
+          {producer ? <Text style={styles.producerLine} numberOfLines={1}>{producer}</Text> : null}
           <Text style={styles.title} numberOfLines={2}>{wineName ?? 'Wine'}</Text>
           {loading ? (
             <View style={styles.loadingRow}>
@@ -62,6 +63,7 @@ export function RangeWineNoteSheet({
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  producerLine: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: 2, letterSpacing: 0.3 },
   title: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm, letterSpacing: 0.3 },
   details: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.md, letterSpacing: 0.3 },
   note: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, lineHeight: 24 },

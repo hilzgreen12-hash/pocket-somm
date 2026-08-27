@@ -61,7 +61,7 @@ function computeFreeSlots(
 
 export default function LabelConfirmScreen() {
   useKeepAwake();
-  const { context, manual, backTo, via, seed } = useLocalSearchParams<{ context?: string; manual?: string; backTo?: string; via?: string; seed?: string }>();
+  const { context, manual, mode, backTo, via, seed } = useLocalSearchParams<{ context?: string; manual?: string; mode?: string; backTo?: string; via?: string; seed?: string }>();
   // Reached by uploading a photo (not the camera): the bottom link is "Cancel"
   // and returns to the Scan screen — "Scan Again" (reopen camera) only belongs
   // to the camera flow.
@@ -72,6 +72,10 @@ export default function LabelConfirmScreen() {
   // Reached straight from Cellar → Add Wine → Manual Input: no scan
   // happened, so the form opens blank and there's nothing to "scan again".
   const isManual = manual === '1';
+  // Pure manual input (Scan → Manual Input): the user explicitly chose to type,
+  // not search — so no predictive search bar, and the screen reads "Input Wine
+  // Details" rather than "Confirm …".
+  const isPureInput = mode === 'input';
   // Reached from Scan a Lineup — Back returns to the lineup list to continue
   // onboarding the remaining bottles.
   const isLineup = context === 'lineup';
@@ -626,9 +630,11 @@ export default function LabelConfirmScreen() {
       keyboardDismissMode="interactive"
       bottomOffset={24}
     >
-      <Text style={styles.heading}>Confirm Wine Details</Text>
+      <Text style={styles.heading}>{isPureInput ? 'Input Wine Details' : 'Confirm Wine Details'}</Text>
       <Text style={styles.subheading}>
-        {isManual
+        {isPureInput
+          ? 'Enter your wine details below.'
+          : isManual
           ? 'Search for your wine, or enter the details below.'
           : 'Correct anything that looks wrong.'}
       </Text>
@@ -649,7 +655,7 @@ export default function LabelConfirmScreen() {
           entry to one of Vinster's known bottlings, so a hand-typed name gets
           canonicalised (e.g. "Marroneto" → "Il Marroneto Brunello di
           Montalcino") and doesn't become a near-duplicate. */}
-      {isManual ? (
+      {isManual && !isPureInput ? (
         <>
           <WineSearchInput initialQuery={seed} onSelect={(r) => {
             setProducer(r.producer);
@@ -806,6 +812,11 @@ export default function LabelConfirmScreen() {
                 </ScrollView>
                 <TouchableOpacity style={styles.candKeepBtn} onPress={() => { const b = pendingConfirmRef.current; setMatchOpen(false); if (b) void proceedIntel(b); }} activeOpacity={0.85}>
                   <Text style={styles.candKeepText}>{matchOptions.length ? 'None of these — use what I typed' : 'Use what I typed'}</Text>
+                </TouchableOpacity>
+                {/* Discard — abandon this wine entirely rather than proceeding
+                    with any entry. Drops back out of the confirm flow. */}
+                <TouchableOpacity style={styles.candDiscard} onPress={() => { setMatchOpen(false); if (router.canGoBack()) router.back(); else router.replace('/(tabs)/scan'); }} activeOpacity={0.7}>
+                  <Text style={styles.candDiscardText}>Discard</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -983,6 +994,8 @@ const styles = StyleSheet.create({
   candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  candDiscard: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
+  candDiscardText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   // "Use what I typed" — a real, prominent action (not a muted link), since for
   // obscure wines it's the RIGHT choice, not a fallback.
   candKeepBtn: { marginTop: spacing.md, alignSelf: 'stretch', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
