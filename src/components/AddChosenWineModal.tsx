@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   Modal, View, Text, TextInput, TouchableOpacity,
-  StyleSheet, Keyboard, Image,
+  StyleSheet, Keyboard, Image, ActivityIndicator,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
@@ -19,6 +19,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { generateWineIntel } from '../services/pricing';
+import { fetchAutoLabelUri } from '../api/label';
 import { findExistingReview } from '../utils/reviewDedup';
 import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
@@ -92,6 +93,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
   const [estimatedValueAt, setEstimatedValueAt] = useState<string | null>(null);
   const [estimating, setEstimating] = useState(false);
+  const [findingLabel, setFindingLabel] = useState(false);
   // Drinking date defaults to today; editable in the identity sheet.
   const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [style, setStyle] = useState('');
@@ -124,20 +126,38 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   // Photo chooser for the confirmed review card's thumbnail area.
   function openPhotoChooser() {
     showAlert({
-      title: 'Add a photo',
+      title: 'Add a Label',
       body: 'Add a label photo to this review.',
       buttons: [
-        { text: 'Take Photo', onPress: () => setTimeout(() => pickIdentityPhoto('camera'), 300) },
+        { text: 'Scan a Label', onPress: () => setTimeout(() => pickIdentityPhoto('camera'), 300) },
         { text: 'Upload', onPress: () => setTimeout(() => pickIdentityPhoto('library'), 300) },
+        { text: 'Find Online', onPress: () => setTimeout(() => void findLabelOnline(), 300) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
   }
 
+  // "Find Online" — fetch a web label photo for the current producer/wine.
+  async function findLabelOnline() {
+    if (!producer.trim() && !wineName.trim()) { showAlert({ title: 'Wine details needed', body: 'Add a producer or wine name first.' }); return; }
+    setFindingLabel(true);
+    try {
+      const uri = await fetchAutoLabelUri(producer.trim(), wineName.trim());
+      if (uri) setEditImageUri(uri);
+      else showAlert({ title: 'No label found', body: "Vinster couldn't find a label photo online for this wine." });
+    } catch {
+      showAlert({ title: 'Could not search', body: 'Please try again.' });
+    } finally {
+      setFindingLabel(false);
+    }
+  }
+
   // Manual-entry "Confirm Wine" tick: validate name + vintage (prompting for a
   // missing vintage, or NV), then collapse the typed fields into the review card.
   function confirmIdentity() {
-    if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name to confirm.' }); return; }
+    // Wine name is optional — a flagship sold under the producer's own name
+    // (e.g. Château Lafite Rothschild) needs only the producer. Require one of them.
+    if (!wineName.trim() && !producer.trim()) { showAlert({ title: 'Wine details needed', body: 'Add at least a producer or a wine name to confirm.' }); return; }
     const vt = vintage.trim();
     const validYear = /^\d{4}$/.test(vt) && Number(vt) >= 1800 && Number(vt) <= new Date().getFullYear() + 1;
     const isNV = /^nv$/i.test(vt);
@@ -160,7 +180,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   // Held locally and written onto the row when the review is saved.
   async function fetchEstimate() {
     if (estimating) return;
-    if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add the wine name before estimating a value.' }); return; }
+    if (!wineName.trim() && !producer.trim()) { showAlert({ title: 'Wine details needed', body: 'Add a producer or wine name before estimating a value.' }); return; }
     setEstimating(true);
     try {
       const intel = await generateWineIntel({
@@ -207,7 +227,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
 
   async function handleSave() {
     if (!session) { showAlert({ title: 'Sign in required', body: 'Sign in to save a review.' }); return; }
-    if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name before saving.' }); return; }
+    if (!wineName.trim() && !producer.trim()) { showAlert({ title: 'Wine details needed', body: 'Add at least a producer or a wine name before saving.' }); return; }
     Keyboard.dismiss();
     // Hard requirements FIRST — a review can't be saved without a date, a
     // location (city) and a score. Checked BEFORE the vintage prompt so the
@@ -470,7 +490,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                       vintage, region, sitting to the right of the larger label. */}
                   <View style={labelImageUri ? styles.identityFields : undefined}>
                     <TextInput style={styles.inputInline} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
-                    <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
+                    <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name (optional)" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
                     <TextInput
                       style={styles.inputInline}
                       value={vintage}
@@ -536,6 +556,12 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
             />
           </KeyboardAwareScrollView>
         </View>
+        {findingLabel ? (
+          <View style={styles.findingOverlay} pointerEvents="auto">
+            <ActivityIndicator size="large" color={colors.gold} />
+            <Text style={styles.findingText}>Finding a label…</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Enlarge the label photo on a short press of the thumbnail. */}
@@ -554,8 +580,8 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 <Text style={styles.editLabel}>Producer</Text>
                 <TextInput style={styles.editInput} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textSubtle} />
 
-                <Text style={styles.editLabel}>Wine name</Text>
-                <TextInput style={styles.editInput} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name" placeholderTextColor={colors.textSubtle} />
+                <Text style={styles.editLabel}>Wine name (optional)</Text>
+                <TextInput style={styles.editInput} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name (optional)" placeholderTextColor={colors.textSubtle} />
 
                 <Text style={styles.editLabel}>Vintage</Text>
                 <TextInput style={styles.editInput} value={vintage} onChangeText={edited((t: string) => setVintage(t.replace(/[^0-9A-Za-z]/g, '').slice(0, 7)))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textSubtle} autoCapitalize="characters" maxLength={7} />
@@ -657,6 +683,8 @@ const styles = StyleSheet.create({
   stampLine: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 5, letterSpacing: 0.3 },
   confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   confirmTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginBottom: spacing.sm },
+  findingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  findingText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3 },
   confirmButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.md },
   confirmButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   editScroll: { flexGrow: 1, justifyContent: 'center', paddingVertical: spacing.xl },

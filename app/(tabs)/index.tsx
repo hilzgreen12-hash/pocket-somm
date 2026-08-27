@@ -576,7 +576,10 @@ const styles = StyleSheet.create({
   tileIcon: { marginBottom: spacing.sm, height: 34, lineHeight: 34, textAlign: 'center' },
   tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 1, textAlign: 'center' },
   tileDivider: { width: 34, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
-  tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 17 },
+  // Fixed two-line height so every tile's blurb occupies the same space — a
+  // one-line blurb (Scan a Lineup) would otherwise shift its title down out of
+  // line with the two-line tiles beside it. Font is +1pt (14) per request.
+  tileDesc: { fontFamily: fonts.headingItalic, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 18, minHeight: 36 },
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
   tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
 

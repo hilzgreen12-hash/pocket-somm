@@ -55,19 +55,37 @@ export function useAttachLabelPhoto() {
     );
   }
 
+  async function remove(kind: AttachKind, wineId: string) {
+    const userId = session?.user.id;
+    if (!userId) return;
+    try {
+      if (kind === 'cellar') {
+        await updateCellarWine(wineId, { label_image_path: null, label_image_fetched: false } as any);
+        qc.invalidateQueries({ queryKey: ['cellar'] });
+      } else {
+        await patchChosenWine(wineId, { label_image_path: null });
+        qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
+      }
+    } catch (err) {
+      showAlert({ title: 'Could not remove the image', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
   // Presents the sheet for a saved wine (a row that already has an id).
-  function present(opts: { kind: AttachKind; wineId: string; producer: string | null; wineName: string | null }) {
-    const { kind, wineId, producer, wineName } = opts;
+  // `hasPhoto` adds a Delete option (and reframes the copy) when a label exists.
+  function present(opts: { kind: AttachKind; wineId: string; producer: string | null; wineName: string | null; hasPhoto?: boolean }) {
+    const { kind, wineId, producer, wineName, hasPhoto } = opts;
     showAlert({
-      title: 'Add a photo',
-      body: 'Give this wine a label photo.',
+      title: hasPhoto ? 'Label' : 'Add a Label',
+      body: hasPhoto ? "Change or remove this wine's label image." : 'Give this wine a label image.',
       buttons: [
         // AppAlert fires onPress as it dismisses; iOS can't present the image
         // picker (or cleanly navigate) mid-dismiss, so defer past the animation.
-        { text: 'Take Photo', onPress: () => setTimeout(() => pick(kind, wineId, 'camera'), 350) },
-        { text: 'Upload', onPress: () => setTimeout(() => pick(kind, wineId, 'library'), 350) },
-        { text: 'Search Online', onPress: () => setTimeout(() => searchOnline(kind, wineId, producer, wineName), 350) },
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Scan a Label', onPress: () => setTimeout(() => pick(kind, wineId, 'camera'), 350) },
+        { text: 'Upload Image', onPress: () => setTimeout(() => pick(kind, wineId, 'library'), 350) },
+        { text: 'Find Image Online', onPress: () => setTimeout(() => searchOnline(kind, wineId, producer, wineName), 350) },
+        ...(hasPhoto ? [{ text: 'Delete Image', style: 'destructive' as const, onPress: () => setTimeout(() => void remove(kind, wineId), 200) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
       ],
     });
   }

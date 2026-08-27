@@ -546,13 +546,13 @@ export default function ChosenWinesScreen() {
       return;
     }
     if (params.addManual === '1') {
-      // From the Review tab's "Add a wine review" — open a blank manual review
-      // input straight away (no chooser).
+      // From the Review tab's "Add a wine review" — open the mode-of-input
+      // chooser (Scan / Upload / Manual Input / Select from Cellar).
       if (handledParamRef.current === 'addManual') return;
       handledParamRef.current = 'addManual';
       setAddSource('other');
       setAddToGroupId(null);
-      handleChooseManual();
+      setChooserOpen(true);
       return;
     }
     if (params.seedAdd === '1') {
@@ -1024,6 +1024,9 @@ export default function ChosenWinesScreen() {
   // Manual (pre-filled) — no wine intel card, no /label detour.
   async function handleChooseScan() { setChooserOpen(false); void ocrThenReview('camera'); }
   async function handleChooseUpload() { setChooserOpen(false); void ocrThenReview('library'); }
+  // Review a wine already in the cellar — hand off to the cellar picker, which
+  // opens that bottle's cellar review.
+  function handleChooseCellar() { setChooserOpen(false); setCellarPickerSearch(''); setCellarPickerOpen(true); }
 
   // "Scan again" from the review input — redo the capture for a bad OCR read.
   function handleScanAgain() {
@@ -1354,7 +1357,7 @@ export default function ChosenWinesScreen() {
         <TouchableOpacity style={styles.chooserOverlay} activeOpacity={1} onPress={() => setChooserOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.chooserSheet} onPress={() => {}}>
             <Text style={styles.chooserTitle}>Add a wine review</Text>
-            <Text style={styles.chooserBody}>Scan or upload a wine label and Vinster will identify the bottle, then take you straight to your review — or enter it by hand.</Text>
+            <Text style={styles.chooserBody}>Scan or upload a label and Vinster identifies the bottle, enter it by hand, or pick a wine from your cellar — then straight to your review.</Text>
             <TouchableOpacity style={styles.chooserBtn} onPress={handleChooseScan} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Scan Label</Text>
             </TouchableOpacity>
@@ -1363,6 +1366,9 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseManual} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseCellar} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Select from Cellar</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setChooserOpen(false)} style={styles.chooserCancel}>
               <Text style={styles.chooserCancelText}>Cancel</Text>
@@ -1507,7 +1513,7 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
         <TouchableOpacity
-          onPress={() => { setAddSource('other'); setAddToGroupId(null); handleChooseManual(); }}
+          onPress={() => { setAddSource('other'); setAddToGroupId(null); setChooserOpen(true); }}
           hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
         >
           <Text style={styles.addLink}>+ Add</Text>

@@ -182,7 +182,7 @@ export function ReviewDetailModal({
                   <Text style={styles.stamp}>{fmtDate(e.dateIso) || 'Latest entry'}</Text>
                   {editable ? (
                     <TouchableOpacity onPress={onEditLatest} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Text style={styles.editLink}>Edit</Text>
+                      <Text style={styles.editLink}>View Full Review / Edit</Text>
                     </TouchableOpacity>
                   ) : null}
                 </View>
@@ -239,9 +239,11 @@ const styles = StyleSheet.create({
   shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
   shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   // Centred gold card-type chip — same face/size/spacing as the Cellar card's.
-  cardTypeLabel: { position: 'absolute', top: 58, left: 0, right: 0, textAlign: 'center', zIndex: 5, fontFamily: fonts.headingBold, fontSize: 16, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
+  // Sits BELOW the top controls (back / +Add Review / Export) rather than level
+  // with them, so the card's title and everything under it clear the header.
+  cardTypeLabel: { position: 'absolute', top: 112, left: 0, right: 0, textAlign: 'center', zIndex: 5, fontFamily: fonts.headingBold, fontSize: 16, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   // Extra top padding drops the header clear of the back / Share controls.
-  content: { padding: spacing.xl, paddingTop: 128, paddingBottom: 60 },
+  content: { padding: spacing.xl, paddingTop: 150, paddingBottom: 60 },
 
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
   // Larger label thumbnail next to the wine name — tap to enlarge full-screen.

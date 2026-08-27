@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   // Your Cellar Archive — a white-bubble button matching the Cookbook title.
   bubbleWrap: { alignItems: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
   bubble: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  bubbleText: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
+  bubbleText: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
 
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 

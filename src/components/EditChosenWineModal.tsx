@@ -10,6 +10,7 @@ import { uploadLabelImage } from '../api/labelPhotos';
 import { LabelThumb } from './LabelThumb';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { AddPhotoThumb } from './AddPhotoThumb';
+import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
@@ -79,6 +80,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [editRestaurant, setEditRestaurant] = useState('');
   const [editCity, setEditCity] = useState('');
   const [editImageUri, setEditImageUri] = useState<string | null>(null);
+  const [labelViewerOpen, setLabelViewerOpen] = useState(false);
   const [savingIdentity, setSavingIdentity] = useState(false);
   const shareCardRef = useRef<View>(null);
 
@@ -460,6 +462,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   // No presentationStyle — iOS-only, and it forces a black modal window on
   // Android during the slide-in. iOS is full-screen by default (not transparent).
   return (
+    <>
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
@@ -479,7 +482,16 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
                 identity beside it. No favourite star. */}
             <View style={[styles.header, styles.headerWithThumb]}>
               {wine.label_image_path ? (
-                <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
+                // Tap to enlarge; long-press for image options (scan / upload /
+                // find online / delete).
+                <TouchableOpacity
+                  onPress={() => setLabelViewerOpen(true)}
+                  onLongPress={() => attachPhoto.present({ kind: 'chosen', wineId: wine.id, producer: wine.producer, wineName: wine.wine_name, hasPhoto: true })}
+                  delayLongPress={350}
+                  activeOpacity={0.85}
+                >
+                  <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
+                </TouchableOpacity>
               ) : (
                 // No photo (e.g. a scanned-list pick) — offer to add one.
                 <AddPhotoThumb
@@ -639,6 +651,15 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
         </View>
       )}
     </Modal>
+    {/* Full-screen zoomable viewer — a SIBLING of the edit Modal (nested modals
+        fail to present on Android). Opened by tapping the header thumbnail. */}
+    <LabelPhotoViewer
+      visible={labelViewerOpen}
+      path={wine.label_image_path}
+      fallbackText={wine.wine_name}
+      onClose={() => setLabelViewerOpen(false)}
+    />
+    </>
   );
 }
 

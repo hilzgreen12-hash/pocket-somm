@@ -879,6 +879,12 @@ export default function LabelResultsScreen() {
                 </TouchableOpacity>
               ) : (
                 <>
+                  {/* Accept the read as-is — Vinster builds intel from exactly
+                      what was scanned (same as manual input), inferring the grape
+                      and details even when the catalog had no close match. */}
+                  <TouchableOpacity style={styles.confirmPrimary} onPress={keepCurrentOrRead} activeOpacity={0.85}>
+                    <Text style={styles.confirmPrimaryText}>Yes, this is my wine</Text>
+                  </TouchableOpacity>
                   <TouchableOpacity style={styles.confirmPrimary} onPress={recaptureFromConfirm} activeOpacity={0.85}>
                     <Text style={styles.confirmPrimaryText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
                   </TouchableOpacity>
