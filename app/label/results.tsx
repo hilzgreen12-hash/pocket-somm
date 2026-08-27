@@ -886,7 +886,13 @@ export default function LabelResultsScreen() {
                       rather than only re-capturing. */}
                   <TouchableOpacity
                     style={styles.confirmManualLink}
-                    onPress={() => router.replace(`/label/confirm?manual=1&mode=input&context=intel&backTo=${encodeURIComponent('/(tabs)')}`)}
+                    onPress={() => {
+                      // Clear the just-scanned wine so its grape / bottle size /
+                      // quantity don't leak into the fresh manual entry (the
+                      // confirm screen only blanks the visible fields).
+                      useLabelStore.getState().reset();
+                      router.replace(`/label/confirm?manual=1&mode=input&context=intel&backTo=${encodeURIComponent('/(tabs)')}`);
+                    }}
                     activeOpacity={0.7}
                   >
                     <Text style={styles.confirmManualText}>Manually input wine</Text>
@@ -1689,7 +1695,6 @@ export default function LabelResultsScreen() {
               grape={intel.grapeVariety ?? wine.grape}
               align="left"
               size="md"
-              numberOfLinesName={3}
             />
           </View>
         </View>

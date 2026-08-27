@@ -11,6 +11,8 @@ import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, u
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
 import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
 import { matchLineupToCellar } from '../../../src/services/archiveNight';
+import { wineNameKey } from '../../../src/utils/wineIdentity';
+import { labelSignedUrl } from '../../../src/api/labelPhotos';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
 import { Ionicons } from '@expo/vector-icons';
@@ -202,9 +204,16 @@ export default function LineupDetailScreen() {
     try {
       const intel = await generateWineIntel(details as any, currency);
       const ls = useLabelStore.getState();
-      // Lineup wines have no photo of their own — auto-fetch a web label so the
-      // intel card still gets a thumbnail (best-effort).
-      ls.setImageUri(await fetchAutoLabelUri(w.producer, w.wine_name));
+      // Give the intel card a thumbnail like every other generate-intel flow:
+      // reuse the matched cellar wine's own label photo if it has one, else
+      // auto-fetch a web label. (Best-effort — a miss just leaves it photoless.)
+      let img: string | null = null;
+      if (w.cellar_wine_id) {
+        const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
+        if (cw?.label_image_path) { try { img = await labelSignedUrl(cw.label_image_path); } catch { /* fall through */ } }
+      }
+      if (!img) img = await fetchAutoLabelUri(w.producer, w.wine_name);
+      ls.setImageUri(img);
       ls.setWineDetailsConfirmed(details as any);
       ls.setIntelligence(intel);
       useLastIntelStore.getState().setLast(details as any, intel);
@@ -255,10 +264,27 @@ export default function LineupDetailScreen() {
       }
       // Match to the live cellar so confirmed wines carry a cellar link where possible.
       const { matched, unmatched } = matchLineupToCellar(bottles, cellarWines);
-      const candidates: LineupWine[] = [
-        ...matched.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: m.wine.id, archived: false, count: m.count })),
-        ...unmatched.map((b) => ({ producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 })),
+      // Keep the photo's left-to-right order: matchLineupToCellar groups all
+      // matched wines ahead of unmatched ones, which scrambles the list. Sort
+      // every candidate back to where its bottle first appears in the detection.
+      const firstIdxForWine = (producer: string | null | undefined, wineName: string | null | undefined) => {
+        const kFull = wineNameKey(producer, wineName);
+        const kProd = wineNameKey(producer, null);
+        const kName = wineNameKey(null, wineName);
+        return bottles.findIndex((b) => {
+          const bFull = wineNameKey(b.producer, b.wineName);
+          if (kFull && bFull === kFull) return true;
+          const bProd = wineNameKey(b.producer, null);
+          const bName = wineNameKey(null, b.wineName);
+          return (!!kProd && (bProd === kProd || bName === kProd)) || (!!kName && (bName === kName || bProd === kName));
+        });
+      };
+      const withIdx = [
+        ...matched.map((m) => ({ idx: firstIdxForWine(m.wine.producer, m.wine.wine_name), cand: { producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: m.wine.id, archived: false, count: m.count } as LineupWine })),
+        ...unmatched.map((b) => ({ idx: bottles.indexOf(b), cand: { producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 } as LineupWine })),
       ];
+      withIdx.sort((a, b) => (a.idx < 0 ? 9999 : a.idx) - (b.idx < 0 ? 9999 : b.idx));
+      const candidates: LineupWine[] = withIdx.map((x) => x.cand);
       setIncluded(new Set(candidates.map((_, i) => i)));
       setConfirmWines(candidates);
     } catch (err) {

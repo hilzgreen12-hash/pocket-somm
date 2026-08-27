@@ -484,7 +484,7 @@ export default function ScanLandingScreen() {
                   <>
                     {searchResults.map((r, i) => (
                       <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
-                        <Text style={styles.searchOptionName} numberOfLines={2}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}</Text>
+                        <Text style={styles.searchOptionName}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}</Text>
                         {r.region || r.style ? <Text style={styles.searchOptionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text> : null}
                       </TouchableOpacity>
                     ))}
@@ -569,7 +569,11 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
   tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden' },
   tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
-  tileIcon: { marginBottom: spacing.sm },
+  // Fixed line box so every tile's icon occupies the SAME vertical space — the
+  // search vs camera glyphs have different metrics, which pushed the Search a
+  // Wine title higher than its neighbours. A constant height keeps all four
+  // titles on the same line.
+  tileIcon: { marginBottom: spacing.sm, height: 34, lineHeight: 34, textAlign: 'center' },
   tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 1, textAlign: 'center' },
   tileDivider: { width: 34, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
   tileDesc: { fontFamily: fonts.headingItalic, fontSize: 13, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 17 },

@@ -58,7 +58,7 @@ interface Props {
   compact?: boolean;
 }
 
-const THUMB = 24;
+const THUMB = 16;
 
 // Two-thumb range track (min + max on one scale), built on PanResponder since
 // @react-native-community/slider is single-thumb. Only used in range mode.
@@ -107,7 +107,7 @@ function RangeTrack({ minIndex, maxIndex, setMinIndex, setMaxIndex, commitMin, c
     onPanResponderTerminate: () => commitMax(maxRef.current),
   })).current;
 
-  const H = compact ? 32 : 40;
+  const H = compact ? 26 : 30;
   const thumbTop = (H - THUMB) / 2;
 
   return (
@@ -115,14 +115,16 @@ function RangeTrack({ minIndex, maxIndex, setMinIndex, setMaxIndex, commitMin, c
       style={{ height: H, justifyContent: 'center' }}
       onLayout={(e: LayoutChangeEvent) => setWidth(e.nativeEvent.layout.width)}
     >
-      {/* Background rail */}
-      <View style={styles.rail} />
+      {/* Background rail — vertically centred on the thumbs. */}
+      <View style={[styles.rail, { top: (H - 3) / 2 }]} />
       {/* Active range fill between the two dots */}
-      <View style={[styles.railFill, { left: xFor(minIndex) + THUMB / 2, width: Math.max(0, xFor(maxIndex) - xFor(minIndex)) }]} />
-      {/* Min dot */}
-      <View {...minPan.panHandlers} style={[styles.thumb, { left: xFor(minIndex), top: thumbTop }]} />
+      <View style={[styles.railFill, { top: (H - 3) / 2, left: xFor(minIndex) + THUMB / 2, width: Math.max(0, xFor(maxIndex) - xFor(minIndex)) }]} />
+      {/* Min dot — lifted above the max dot when they coincide so it stays
+          grabbable (the max is rendered last, so it would otherwise capture the
+          touch and trap the min underneath at the top of the range). */}
+      <View {...minPan.panHandlers} style={[styles.thumb, { left: xFor(minIndex), top: thumbTop, zIndex: minIndex >= maxIndex ? 2 : 1 }]} />
       {/* Max dot */}
-      <View {...maxPan.panHandlers} style={[styles.thumb, { left: xFor(maxIndex), top: thumbTop }]} />
+      <View {...maxPan.panHandlers} style={[styles.thumb, { left: xFor(maxIndex), top: thumbTop, zIndex: 1 }]} />
     </View>
   );
 }
@@ -145,12 +147,11 @@ export function BudgetSlider({ value, onChange, minValue, onMinChange, currency,
   const rangeMode = !!onMinChange;
 
   const maxText = atMax ? 'Baller' : `${sym}${current}`;
-  // Header: single mode → "£200." ; range mode → "Up to £200." / "£50 – £200."
-  const headerValue = !rangeMode
+  // Header: no minimum → just the ceiling ("£200." / "Baller."); with a minimum
+  // → a range ("£50 – £200."). No "Up to" prefix.
+  const headerValue = minCurrent == null
     ? `${maxText}.`
-    : minCurrent == null
-      ? `Up to ${maxText}.`
-      : `${sym}${minCurrent} – ${maxText}.`;
+    : `${sym}${minCurrent} – ${maxText}.`;
 
   return (
     <View style={{ width: '100%' }}>
@@ -213,8 +214,8 @@ const styles = StyleSheet.create({
     height: 28,
   },
   // Custom two-thumb range track.
-  rail: { position: 'absolute', left: THUMB / 2, right: THUMB / 2, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.20)' },
-  railFill: { position: 'absolute', height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.80)' },
+  rail: { position: 'absolute', left: THUMB / 2, right: THUMB / 2, height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.20)' },
+  railFill: { position: 'absolute', height: 3, borderRadius: 1.5, backgroundColor: 'rgba(255,255,255,0.80)' },
   thumb: { position: 'absolute', width: THUMB, height: THUMB, borderRadius: THUMB / 2, backgroundColor: '#FFFFFF', shadowColor: '#000', shadowOpacity: 0.25, shadowRadius: 2, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
   labels: {
     flexDirection: 'row',

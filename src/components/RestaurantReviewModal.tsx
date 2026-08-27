@@ -665,7 +665,7 @@ export function RestaurantReviewModal({
             <View style={styles.photoBanner}>
               {restaurantPhotoPath ? (
                 <>
-                  <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoBannerImg} radius={0} frame={0} />
+                  <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoBannerImg} radius={0} frame={0} resizeMode="contain" />
                   <View style={styles.photoBannerScrim} pointerEvents="none" />
                   <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.()} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                     <Text style={styles.photoChangeText}>Change</Text>

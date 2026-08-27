@@ -50,7 +50,9 @@ export function ReviewDetailModal({
 
   // A new review opened → reset the collapsible + its fetched note.
   const reviewKey = review ? `${review.title}|${review.entries[0]?.id ?? ''}` : null;
-  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteLoading(false); }, [reviewKey]);
+  // Also close the (now sibling) photo viewer, so it can't linger over the
+  // parent screen when switching between reviews or dismissing the card.
+  useEffect(() => { setNoteOpen(false); setFetchedNote(null); setNoteLoading(false); setViewerOpen(false); }, [reviewKey]);
 
   if (!review) return null;
   const { entries } = review; // newest first
@@ -80,6 +82,7 @@ export function ReviewDetailModal({
   }
 
   return (
+    <>
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.container}>
         <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
@@ -211,15 +214,18 @@ export function ReviewDetailModal({
             );
           })}
         </ScrollView>
-        {/* Full-screen zoomable viewer for the header thumbnail. */}
-        <LabelPhotoViewer
-          visible={viewerOpen}
-          path={thumbPath}
-          fallbackText={review.title}
-          onClose={() => setViewerOpen(false)}
-        />
       </View>
     </Modal>
+    {/* Full-screen zoomable viewer — a SIBLING of the card Modal, not nested:
+        a <Modal> nested inside another <Modal> fails to present on Android, so
+        tapping the thumbnail did nothing. As a sibling it stacks on top. */}
+    <LabelPhotoViewer
+      visible={viewerOpen}
+      path={thumbPath}
+      fallbackText={review.title}
+      onClose={() => setViewerOpen(false)}
+    />
+    </>
   );
 }
 
@@ -238,7 +244,8 @@ const styles = StyleSheet.create({
   content: { padding: spacing.xl, paddingTop: 128, paddingBottom: 60 },
 
   headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md, marginBottom: spacing.md },
-  headerThumb: { width: 60, height: 76 },
+  // Larger label thumbnail next to the wine name — tap to enlarge full-screen.
+  headerThumb: { width: 96, height: 128 },
   headerIdentity: { flex: 1 },
 
   rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.borderLight },

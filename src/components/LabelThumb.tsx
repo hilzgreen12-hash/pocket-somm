@@ -15,11 +15,15 @@ interface Props {
   // Cream mat thickness around the photo.
   frame?: number;
   fallbackFontSize?: number;
+  // How the photo fills its frame. Default 'cover' (crop to fill) suits portrait
+  // label tiles; 'contain' shows the WHOLE shot (used by the restaurant-review
+  // banner so wide photos aren't cropped).
+  resizeMode?: 'cover' | 'contain';
 }
 
 // A wine label presented as a framed picture: the photo sits inside a cream
 // mat so a grid of them reads as a cohesive gallery against any background.
-export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, fallbackFontSize = 11 }: Props) {
+export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, fallbackFontSize = 11, resizeMode = 'cover' }: Props) {
   const url = useLabelImageUrl(path);
   // A real path whose signed URL hasn't resolved yet is "loading" — show a
   // plain framed tile rather than the "No photo" card so we don't flash it.
@@ -30,7 +34,7 @@ export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, f
         <Image
           source={{ uri: url }}
           style={[styles.img, { borderRadius: radius }]}
-          resizeMode="cover"
+          resizeMode={resizeMode}
         />
       ) : loading ? (
         <View style={[styles.fallback, { borderRadius: radius }]} />

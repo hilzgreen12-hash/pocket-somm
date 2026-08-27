@@ -82,7 +82,7 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
             <>
               {results.map((r, i) => (
                 <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.option} onPress={() => choose(r)} activeOpacity={0.7}>
-                  <Text style={styles.optionName} numberOfLines={2}>
+                  <Text style={styles.optionName}>
                     {formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}
                   </Text>
                   {r.style ? (

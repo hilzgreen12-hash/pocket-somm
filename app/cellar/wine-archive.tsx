@@ -42,6 +42,7 @@ export default function WineArchiveScreen() {
   });
   const { wines: archivedWines } = useArchive();
   const archivedBottles = archivedWines.reduce((s, w) => s + (w.quantity ?? 1), 0);
+  const lineupBottles = lineups.reduce((s, l) => s + (l.bottle_count ?? 0), 0);
 
   return (
     <View style={styles.container}>
@@ -54,30 +55,45 @@ export default function WineArchiveScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* Your Lineups — stats + a carousel of large lineup thumbnails. */}
-        <Text style={styles.sectionHeader}>Your Lineups</Text>
-        <Text style={styles.stats}>{lineups.length} {lineups.length === 1 ? 'Lineup' : 'Lineups'}</Text>
-        {lineupsLoading ? (
-          <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>
-        ) : lineups.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-            {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
-          </ScrollView>
-        ) : (
-          <Text style={styles.empty}>No lineups yet — “Scan a Lineup” from the Scan tab to save one.</Text>
-        )}
-
-        <View style={styles.separator} />
-
-        {/* Your Cellar Archive — click through to the dedicated archived-bottles
-            view (the old "Archive" filter, now its own destination). */}
-        <Text style={styles.sectionHeader}>Your Cellar Archive</Text>
+        {/* Your Cellar Archive — a large white-bubble button (its own link), a
+            short blurb, then the stats bar bracketed by full-width rules. */}
+        <View style={styles.bubbleWrap}>
+          <TouchableOpacity style={styles.bubble} onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7}>
+            <Text style={styles.bubbleText}>Your Cellar Archive</Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.blurb}>Bottles you've moved out of your live cellar rest here — a standing record of everything you've cellared and since drunk, gifted or cleared.</Text>
+        <View style={styles.sepFull} />
         <Text style={styles.stats}>
           {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
-        <TouchableOpacity style={styles.archiveBtn} onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.85}>
-          <Text style={styles.archiveBtnText}>View Your Cellar Archive</Text>
-        </TouchableOpacity>
+        <View style={styles.sepFull} />
+
+        <View style={styles.sepShort} />
+
+        {/* Your Lineups — a sub-header (not a bubble), its blurb, the stats bar
+            bracketed by full-width rules, then the thumbnail carousel with a
+            swipe hint above it. */}
+        <Text style={styles.sectionHeader}>Your Lineups</Text>
+        <Text style={styles.blurb}>Your vinous exploits save here automatically from Scan a Lineup, or add Lineups directly. This archive is a diary of your best wine memories.</Text>
+        <View style={styles.sepFull} />
+        <Text style={styles.stats}>
+          {lineups.length} {lineups.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
+        </Text>
+        <View style={styles.sepFull} />
+
+        <Text style={styles.swipeHint}>Swipe right to view and add lineups →</Text>
+        {lineupsLoading ? (
+          <View style={styles.loading}><ActivityIndicator color={colors.gold} /></View>
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
+            {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
+            <TouchableOpacity style={styles.addCard} onPress={() => router.push('/cellar/archive-night')} activeOpacity={0.85}>
+              <Text style={styles.addCardIcon}>＋</Text>
+              <Text style={styles.addCardText}>Add a lineup</Text>
+            </TouchableOpacity>
+          </ScrollView>
+        )}
       </ScrollView>
     </View>
   );
@@ -89,10 +105,25 @@ const styles = StyleSheet.create({
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
 
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.xl, marginBottom: spacing.xs },
-  stats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginBottom: spacing.md },
+  // Your Cellar Archive — a white-bubble button matching the Cookbook title.
+  bubbleWrap: { alignItems: 'center', paddingTop: spacing.xl, paddingBottom: spacing.md },
+  bubble: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  bubbleText: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
+
+  blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
+  stats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingVertical: spacing.sm },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
-  empty: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 22 },
+
+  // Full-bleed rules bracket each stats bar; the short indented rule divides the
+  // two sections.
+  sepFull: { height: 1, backgroundColor: colors.border },
+  sepShort: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg, marginHorizontal: spacing.xl },
+
+  // "Swipe right to view and add lineups →" — white italic, left-indented above
+  // the carousel (matches the Pair / cellar carousels).
+  swipeHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: '#FFFFFF', paddingLeft: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.xs, letterSpacing: 0.3 },
 
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.md, paddingBottom: spacing.sm },
   card: { width: 220 },
@@ -100,8 +131,8 @@ const styles = StyleSheet.create({
   cardImage: { width: 220, height: 165 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 6 },
 
-  separator: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.xl, marginHorizontal: spacing.xl },
-
-  archiveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginHorizontal: spacing.xl },
-  archiveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  // Dashed "add a lineup" tile trailing the carousel, sized to the thumbnails.
+  addCard: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  addCardIcon: { fontFamily: fonts.headingBold, fontSize: 30, color: colors.gold },
+  addCardText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
 });

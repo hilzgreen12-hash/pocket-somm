@@ -815,7 +815,7 @@ export default function LabelConfirmScreen() {
                 </TouchableOpacity>
                 {/* Discard — abandon this wine entirely rather than proceeding
                     with any entry. Drops back out of the confirm flow. */}
-                <TouchableOpacity style={styles.candDiscard} onPress={() => { setMatchOpen(false); if (router.canGoBack()) router.back(); else router.replace('/(tabs)/scan'); }} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.candDiscard} onPress={() => { setMatchOpen(false); if (router.canGoBack()) router.back(); else router.replace('/(tabs)'); }} activeOpacity={0.7}>
                   <Text style={styles.candDiscardText}>Discard</Text>
                 </TouchableOpacity>
               </>

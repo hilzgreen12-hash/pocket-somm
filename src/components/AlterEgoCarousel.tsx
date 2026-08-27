@@ -1,8 +1,9 @@
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../api/supabase';
+import { showAlert } from './AppAlert';
 import { splitPersonality } from '../utils/personalityText';
 import { colors, spacing } from '../constants/theme';
 import { fontsSpectral as fonts } from '../constants/fonts';
@@ -19,10 +20,17 @@ function fmtDate(iso: string | null | undefined) {
 export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: () => void) => void }) {
   const { session } = useAuth();
   const userId = session?.user.id;
+  const qc = useQueryClient();
 
   const { data: sketches = [] } = useQuery({
     queryKey: ['alter-ego-sketches', userId],
     enabled: !!userId,
+    // Keep the cache alive for a day so returning to the Review tab renders the
+    // cards INSTANTLY from cache (the momentary "unpopulated" flash was the
+    // cache being garbage-collected between visits, not staleness). A normal
+    // refetch still runs in the background — showing cached data meanwhile, so
+    // no flash — which is what surfaces a newly generated alter-ego.
+    gcTime: 1000 * 60 * 60 * 24,
     queryFn: async () => {
       const { data } = await supabase
         .from('personality_sketches')
@@ -36,6 +44,34 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
 
   const hasSketches = sketches.length > 0;
 
+  // Long-press an alter-ego card to remove it from the carousel.
+  function confirmDelete(s: { id: string; text?: string | null }) {
+    const { title } = splitPersonality(s.text ?? '');
+    showAlert({
+      title: 'Delete this alter-ego?',
+      body: `${title || 'This alter-ego'} will be removed from your carousel.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // supabase-js RESOLVES (doesn't throw) on a DB/RLS failure, so
+              // check the returned error explicitly or a failed delete would be
+              // silently swallowed and the card would reappear on refetch.
+              const { error } = await supabase.from('personality_sketches').delete().eq('id', s.id);
+              if (error) throw new Error(error.message);
+              qc.invalidateQueries({ queryKey: ['alter-ego-sketches', userId] });
+            } catch (e) {
+              showAlert({ title: 'Could not delete', body: e instanceof Error ? e.message : 'Please try again.' });
+            }
+          },
+        },
+      ],
+    });
+  }
+
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {hasSketches ? (
@@ -46,6 +82,8 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
               key={s.id}
               style={styles.card}
               onPress={() => requireAccount(() => router.push(`/profile/personality?category=alter-ego&sketchId=${s.id}` as any))}
+              onLongPress={() => requireAccount(() => confirmDelete(s))}
+              delayLongPress={400}
               activeOpacity={0.85}
             >
               <Text style={styles.cardName} numberOfLines={3}>{title || 'Your Vinster Alter-Ego'}</Text>

@@ -1620,7 +1620,7 @@ export default function ChosenWinesScreen() {
                   {/* Two-row layout with a top-right chevron so bespoke filters
                       match the standard filter bubbles. */}
                   <View style={styles.filterChipHeadingRow}>
-                    <Text style={styles.filterChipLabel}>Folder</Text>
+                    <Text style={styles.filterChipLabel}>Your Folder</Text>
                     <Text style={styles.filterChipChevron}>▾</Text>
                   </View>
                   <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>

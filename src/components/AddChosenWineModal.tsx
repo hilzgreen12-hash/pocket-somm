@@ -19,7 +19,7 @@ import { usePreferences } from '../hooks/usePreferences';
 import { patchChosenWine } from '../api/chosenWines';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { generateWineIntel } from '../services/pricing';
-import { findExistingReview, missingReviewFields } from '../utils/reviewDedup';
+import { findExistingReview } from '../utils/reviewDedup';
 import { splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
 import { colors, spacing } from '../constants/theme';
@@ -209,6 +209,18 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     if (!session) { showAlert({ title: 'Sign in required', body: 'Sign in to save a review.' }); return; }
     if (!wineName.trim()) { showAlert({ title: 'Wine name needed', body: 'Add at least the wine name before saving.' }); return; }
     Keyboard.dismiss();
+    // Hard requirements FIRST — a review can't be saved without a date, a
+    // location (city) and a score. Checked BEFORE the vintage prompt so the
+    // "Confirm non-vintage" path (which calls proceedSave directly) can't
+    // bypass them. (A written note stays optional.)
+    const need: string[] = [];
+    if (!reviewDate.trim()) need.push('a date');
+    if (!locCity.trim()) need.push('a location');
+    if (userScore == null) need.push('a score');
+    if (need.length) {
+      showAlert({ title: 'A bit more needed', body: `Please add ${need.join(', ')} before saving your review.` });
+      return;
+    }
     // Every review must record a vintage. Accept a four-digit year or an
     // explicit "NV"; anything else is either a typo (block) or blank (confirm
     // the wine really is non-vintage rather than saving an unknown silently).
@@ -228,26 +240,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       } else {
         showAlert({ title: 'Check the vintage', body: 'A vintage must be a four-digit year, e.g. 2023 — or NV for a non-vintage wine.' });
       }
-      return;
-    }
-    // Pre-save nudge: a review is complete with a date + location stamp, a
-    // score, and at least one word in EITHER Your Review or Personal Notes. A
-    // list price is NOT required to save. Only nudge when one of those is empty.
-    const missing = missingReviewFields([
-      { label: 'a Date', filled: !!reviewDate.trim() },
-      { label: 'a Location', filled: !!(locName.trim() || locCity.trim()) },
-      { label: 'Your Score', filled: userScore != null },
-      { label: 'a Note (Your Review or Personal Notes)', filled: !!(tastingNote.trim() || otherObservations.trim()) },
-    ]);
-    if (missing.length) {
-      showAlert({
-        title: 'Ready to Save?',
-        body: `You're missing ${missing.join(', ')}.`,
-        buttons: [
-          { text: 'Yes, Save', onPress: () => { void proceedSave(); } },
-          { text: 'Return to Review', style: 'cancel' },
-        ],
-      });
       return;
     }
     await proceedSave();
@@ -433,19 +425,10 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     {(() => {
                       const loc = [locName.trim(), locCity.trim()].filter(Boolean).join(', ');
                       const dateStr = reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                      // Location present → plain date · location stamp. Otherwise
-                      // show the (auto-filled) date with an "Add your location"
-                      // link that opens the identity sheet.
-                      if (loc) {
-                        const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                        return stamp ? <Text style={[styles.stampLine, styles.headerLineLeft]}>{stamp}</Text> : null;
-                      }
-                      return (
-                        <Text style={[styles.stampLine, styles.headerLineLeft]}>
-                          {dateStr ? `${dateStr} · ` : ''}
-                          <Text style={styles.addLocationLink} onPress={() => setIdentityEditOpen(true)}>Add your location</Text>
-                        </Text>
-                      );
+                      // Read-only date · location display; both are entered (and
+                      // required) in the review fields below.
+                      const stamp = [dateStr, loc].filter(Boolean).join(' · ');
+                      return stamp ? <Text style={[styles.stampLine, styles.headerLineLeft]}>{stamp}</Text> : null;
                     })()}
                   </View>
                 </View>
@@ -535,11 +518,13 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               onReview={edited(setTastingNote)}
               personalNotes={otherObservations}
               onPersonalNotes={edited(setOtherObservations)}
+              date={reviewDate}
+              onDate={edited((t: string) => setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)))}
               city={locCity}
               onCity={edited(setLocCity)}
               locationName={locName}
               onLocationName={edited(setLocName)}
-              showLocation={!!addToGroupId}
+              showLocation
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={edited(setDrinkingWindow)}
               saving={saveManual.isPending || update.isPending}
