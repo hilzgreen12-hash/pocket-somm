@@ -4,6 +4,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Haptics from 'expo-haptics';
+import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
 import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useRacks } from '../../src/hooks/useRacks';
@@ -119,6 +122,25 @@ export default function ScanLineupScreen() {
   // If the store already holds a lineup (we've returned mid-flow after
   // onboarding a wine), open straight onto the review list.
   const [stage, setStage] = useState<Stage>(lineupWines.length > 0 ? 'review' : 'capture');
+  // Live in-app camera (matches Archive a Lineup) — go straight to the scanner
+  // with an instruction overlay, no take/upload chooser.
+  const [permission, requestPermission] = useCameraPermissions();
+  const cameraRef = useRef<CameraView>(null);
+  const [showInstruction, setShowInstruction] = useState(true);
+
+  async function handleCapture() {
+    if (!cameraRef.current) return;
+    try {
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      const photo = await cameraRef.current.takePictureAsync({ base64: false, quality: 1 });
+      if (!photo?.uri) return;
+      setRawUri(photo.uri);
+      setFlipped(false);
+      await analyze(photo.uri, false);
+    } catch (err) {
+      showAlert({ title: 'Camera error', body: err instanceof Error ? err.message : 'Could not capture the photo. Please try again.' });
+    }
+  }
 
   // Arriving from the Scan tile's "upload instead" opens the library picker
   // straight away instead of the capture chooser.
@@ -138,7 +160,9 @@ export default function ScanLineupScreen() {
       const result = source === 'camera'
         ? await ImagePicker.launchCameraAsync(opts)
         : await ImagePicker.launchImageLibraryAsync(opts);
-      if (result.canceled || !result.assets.length) return;
+      // Cancelling the "upload instead" picker leaves the flow rather than
+      // dropping onto the live camera behind it.
+      if (result.canceled || !result.assets.length) { if (params.upload === '1') router.back(); return; }
       const uri = result.assets[0].uri;
       setRawUri(uri);
       // Read the photo exactly as taken — never auto-rotate. A 180° flip also
@@ -504,9 +528,34 @@ export default function ScanLineupScreen() {
       </View>
 
       {stage === 'capture' ? (
-        // The "Before you photograph" modal (below) is the capture entry — Take
-        // a Photo / Upload a Photo scan directly, so no instruction screen here.
-        <View style={{ flex: 1 }} />
+        // "Upload instead" opens the gallery only (via the effect above); the
+        // default is the live camera with a 6-bottle instruction overlay.
+        params.upload === '1' ? (
+          <View style={styles.cameraWrap} />
+        ) : !permission ? (
+          <View style={styles.cameraWrap} />
+        ) : !permission.granted ? (
+          <PermissionScreen onRequest={requestPermission} hideBack />
+        ) : (
+          <View style={styles.cameraWrap}>
+            <CameraView ref={cameraRef} style={StyleSheet.absoluteFill} facing="back" autofocus="on" />
+            {showInstruction ? (
+              <View style={styles.instructionCard}>
+                <TouchableOpacity style={styles.instructionClose} onPress={() => setShowInstruction(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Text style={styles.instructionCloseText}>✕</Text>
+                </TouchableOpacity>
+                <Text style={styles.instructionText}>Photograph up to 6 bottles with their front labels facing the camera.</Text>
+              </View>
+            ) : null}
+            <View style={styles.cameraControls}>
+              <View style={styles.sideAction} />
+              <TouchableOpacity style={styles.captureBtn} onPress={handleCapture} activeOpacity={0.85}>
+                <View style={styles.captureBtnInner} />
+              </TouchableOpacity>
+              <View style={styles.sideAction} />
+            </View>
+          </View>
+        )
       ) : stage === 'analyzing' ? (
         <View style={styles.centerBlock}>
           {imageUri ? <Image source={{ uri: imageUri }} style={styles.preview} resizeMode="contain" /> : null}
@@ -698,32 +747,29 @@ export default function ScanLineupScreen() {
         </View>
       </Modal>
 
-      {/* "Before you photograph" — the lineup capture entry. It IS the chooser:
-          Take a Photo / Upload a Photo start the scan directly, so there's no
-          separate instruction screen after it. */}
-      <Modal visible={stage === 'capture'} transparent animationType="fade" onRequestClose={() => router.back()}>
-        <View style={styles.tipOverlay}>
-          <View style={styles.tipSheet}>
-            <Text style={styles.tipTitle}>Before you photograph</Text>
-            <Text style={styles.tipBody}>Lineup up to 6 bottles with all the front labels facing forward and right side up.</Text>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => pickFrom('camera')} activeOpacity={0.85}>
-              <Text style={styles.primaryBtnText}>Take a Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.primaryBtn, { marginTop: spacing.sm }]} onPress={() => pickFrom('library')} activeOpacity={0.85}>
-              <Text style={styles.primaryBtnText}>Upload a Photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.tipCancel} onPress={() => router.back()} activeOpacity={0.7}>
-              <Text style={styles.tipCancelText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Live in-app camera scan (matches Archive a Lineup).
+  cameraWrap: { flex: 1, backgroundColor: '#000' },
+  instructionCard: {
+    position: 'absolute', top: spacing.lg, left: spacing.xl, right: spacing.xl,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12, borderWidth: 1, borderColor: colors.gold,
+    paddingHorizontal: spacing.lg, paddingVertical: spacing.md,
+  },
+  instructionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, paddingHorizontal: spacing.md },
+  instructionClose: { position: 'absolute', top: 2, right: 4, padding: 6, zIndex: 2 },
+  instructionCloseText: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.gold },
+  cameraControls: {
+    position: 'absolute', bottom: 40, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl,
+  },
+  sideAction: { width: 80, alignItems: 'center' },
+  captureBtn: { width: 74, height: 74, borderRadius: 37, borderWidth: 4, borderColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  captureBtnInner: { width: 58, height: 58, borderRadius: 29, backgroundColor: '#FFFFFF' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 44 },
   headerSpacer: { width: 44 },

@@ -55,19 +55,19 @@ export default function WineArchiveScreen() {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 60 }}>
-        {/* Your Cellar Archive — a large white-bubble button (its own link), a
-            short blurb, then the stats bar bracketed by full-width rules. */}
-        <View style={styles.bubbleWrap}>
-          <TouchableOpacity style={styles.bubble} onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7}>
-            <Text style={styles.bubbleText}>Your Cellar Archive</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Your Cellar Archive — a plain sub-header (matches Your Lineups), a
+            short blurb, the stats bar bracketed by full-width rules, then a gold
+            "View Cellar Archive" link (the way through to the archived bottles). */}
+        <Text style={styles.sectionHeader}>Your Cellar Archive</Text>
         <Text style={styles.blurb}>Bottles you've moved out of your live cellar rest here — a standing record of everything you've cellared and since drunk, gifted or cleared.</Text>
         <View style={styles.sepFull} />
         <Text style={styles.stats}>
           {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
         <View style={styles.sepFull} />
+        <TouchableOpacity onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7} style={styles.viewLinkRow}>
+          <Text style={styles.viewLink}>View Cellar Archive →</Text>
+        </TouchableOpacity>
 
         <View style={styles.sepShort} />
 
@@ -102,13 +102,14 @@ export default function WineArchiveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
+  // width 40 mirrors the right spacer so the flex-1 title is screen-centred.
+  back: { width: 40, fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
 
   // Your Cellar Archive — a white-bubble button matching the Cookbook title.
-  bubbleWrap: { alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.sm },
-  bubble: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingHorizontal: spacing.lg, paddingVertical: 6 },
-  bubbleText: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
+  // Gold "View Cellar Archive →" link beneath the Cellar Archive stats bar.
+  viewLinkRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
 
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 

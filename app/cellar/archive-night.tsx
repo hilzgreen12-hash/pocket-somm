@@ -161,7 +161,9 @@ export default function ArchiveNightScreen() {
   async function pickFromLibrary() {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
-      if (result.canceled || !result.assets.length) return;
+      // Cancelling the "upload instead" picker should leave the flow, not drop
+      // the user onto the live camera behind it.
+      if (result.canceled || !result.assets.length) { if (params.upload === '1') router.back(); return; }
       setImageUri(result.assets[0].uri);
       setStage('preview');
     } catch (err) {
@@ -629,7 +631,10 @@ export default function ArchiveNightScreen() {
       ) : null}
 
       {stage === 'capture' ? (
-        !permission ? (
+        // "Upload instead" opens the gallery only — never the live camera.
+        params.upload === '1' ? (
+          <View style={styles.cameraWrap} />
+        ) : !permission ? (
           <View style={styles.cameraWrap} />
         ) : !permission.granted ? (
           <PermissionScreen onRequest={requestPermission} hideBack />
