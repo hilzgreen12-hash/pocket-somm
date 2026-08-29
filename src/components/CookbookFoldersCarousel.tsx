@@ -36,7 +36,7 @@ export function CookbookFoldersCarousel() {
           {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
         </Text>
       </View>
-      <Text style={styles.filterHint}>Swipe to view and add folders →</Text>
+      <Text style={styles.filterHint}>Listed by recently added · Swipe to add and view folders →</Text>
 
       {/* Folders as boxes — mirrors the Cellar storage / Review carousels. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
@@ -66,8 +66,10 @@ const styles = StyleSheet.create({
   // border + radius, just larger given the 22px title font) instead of an
   // underlined link.
   titleBubbleWrap: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.md },
-  titleBubble: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
+  // Gold-outlined bubble; title matches the Cellar "Your Wines At Home" size (20)
+  // and reads gold.
+  titleBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
+  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, textAlign: 'center' },
   // Two-line intro beneath the title (Cormorant, matching the tab blurbs).
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },

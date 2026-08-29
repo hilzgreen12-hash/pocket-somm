@@ -326,29 +326,6 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
                   align={wine.label_image_path ? 'left' : 'center'}
                   size="lg"
                 />
-                {/* Editable date · location stamp, in gold. Both are always
-                    editable here (no "Edit" step) — a cellar wine is already
-                    confirmed, so the only things to capture on a review are when
-                    and where you drank it. */}
-                <View style={[styles.stampEdit, wine.label_image_path ? null : styles.stampEditCenter]}>
-                  <TextInput
-                    style={styles.stampDateInput}
-                    value={reviewDate}
-                    onChangeText={(t) => { setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)); setSaved(false); }}
-                    placeholder="YYYY-MM-DD"
-                    placeholderTextColor={colors.textSubtle}
-                    keyboardType="numbers-and-punctuation"
-                    maxLength={10}
-                  />
-                  <Text style={styles.stampSep}>·</Text>
-                  <TextInput
-                    style={styles.stampLocInput}
-                    value={locName}
-                    onChangeText={(v) => { setLocName(v); setSaved(false); }}
-                    placeholder="Where you drank it"
-                    placeholderTextColor={colors.textSubtle}
-                  />
-                </View>
               </View>
             </View>
 
@@ -366,12 +343,13 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               onReview={(v) => { setReviewNote(v); setSaved(false); }}
               personalNotes={personalNotes}
               onPersonalNotes={(v) => { setPersonalNotes(v); setSaved(false); }}
-              showPersonalNotes={false}
+              date={reviewDate}
+              onDate={(t) => { setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)); setSaved(false); }}
               city={locCity}
               onCity={(v) => { setLocCity(v); setSaved(false); }}
               locationName={locName}
               onLocationName={(v) => { setLocName(v); setSaved(false); }}
-              showLocation={false}
+              showLocation
               drinkingWindow={drinkingWindow}
               onDrinkingWindow={(v) => { setDrinkingWindow(v); setSaved(false); }}
               saving={saving || updateWine.isPending}

@@ -1021,7 +1021,7 @@ export default function FullCellarListScreen() {
               >
                 <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} />
                 <View style={styles.rowMain}>
-                  <Text style={styles.rowName} numberOfLines={1}>
+                  <Text style={styles.rowName}>
                     {w.is_favourite ? <Text style={styles.rowStar}>★ </Text> : null}
                     {headerLine}
                   </Text>

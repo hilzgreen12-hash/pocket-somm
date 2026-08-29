@@ -59,7 +59,7 @@ export default function ScanTab() {
 
       <View style={styles.section}>
         <Text style={styles.topBlurb}>
-          Your wine and restaurant reviews live here — restaurants you record and wines picked from their lists appear automatically — plus Vinster's Review of You.
+          Your Wine and Restaurant reviews live here. Restaurants you save and bottles picked from their lists appear in these tabs automatically.
         </Text>
       </View>
 
@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   // "Vinster's Review of You" section header + the "Your Personality Sketch"
   // sub-heading with its "what's this?" link.
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Elegant Cormorant, matching the Review header blurb above. Extra bottom
   // margin gives the alter-ego carousel room to breathe beneath it.
   sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },

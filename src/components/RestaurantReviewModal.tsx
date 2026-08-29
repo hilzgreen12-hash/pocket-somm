@@ -672,14 +672,17 @@ export function RestaurantReviewModal({
                   </TouchableOpacity>
                 </>
               ) : (
-                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.()} activeOpacity={0.85}>
-                  <Text style={styles.photoBannerAddIcon}>＋</Text>
-                  <Text style={styles.photoBannerAddText}>Add a photo of the night</Text>
-                </TouchableOpacity>
+                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.()} activeOpacity={0.85} />
               )}
               {/* Overlaid identity — always editable, anchored to the bottom.
-                  Location · date share one line beneath the name. */}
+                  A "+ Add Photo" gold link sits above the name when there's no
+                  photo yet. Location · date share one line beneath the name. */}
               <View style={styles.photoBannerText} pointerEvents="box-none">
+                {!restaurantPhotoPath ? (
+                  <TouchableOpacity onPress={() => onAddPhoto?.()} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+                    <Text style={styles.addPhotoLink}>+ Add Photo</Text>
+                  </TouchableOpacity>
+                ) : null}
                 <TextInput
                   style={styles.bannerNameInput}
                   value={restaurantName}
@@ -1033,6 +1036,7 @@ const styles = StyleSheet.create({
   photoChangeText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: '#fff', letterSpacing: 0.3 },
   // Overlaid, editable identity anchored to the bottom of the banner.
   photoBannerText: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.md },
+  addPhotoLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   bannerNameInput: { fontFamily: fonts.headingBold, fontSize: 28, color: '#fff', letterSpacing: 0.3, paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
   bannerMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
   bannerMetaInput: { flexShrink: 1, fontFamily: fonts.headingItalic, fontSize: 15, color: 'rgba(255,255,255,0.92)', paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
