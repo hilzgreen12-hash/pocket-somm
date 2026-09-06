@@ -23,6 +23,45 @@ export async function fetchPricing(
   }
 }
 
+// One row of the "Vintage & Market Comparison" table — a single vintage's
+// Wine-Searcher critic score and market price (in the user's currency).
+export interface VintageComparisonRow {
+  vintage: number;
+  score: number | null;
+  price: number | null;
+}
+
+// Build a wine's per-vintage Wine-Searcher table (score + price) by probing a
+// window of recent vintages through the existing pricing proxy — which caches
+// each (wine, vintage), so a re-open is instant. Only EXACT-vintage listings are
+// kept (the all-vintage average fallback is filtered out) so every row is real
+// data for that year. Generated on request, since it's N live lookups.
+export async function fetchVintageComparison(
+  queryName: string,
+  currency: string,
+  scannedVintage: number | null,
+): Promise<VintageComparisonRow[]> {
+  const nowYear = new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = nowYear - 1; y >= nowYear - 12; y--) years.push(y);
+  if (scannedVintage && Number.isFinite(scannedVintage) && !years.includes(scannedVintage)) years.push(scannedVintage);
+  const rows: VintageComparisonRow[] = [];
+  // Small batches keep the Wine-Searcher request rate modest (the proxy handles
+  // its own rate-limit retries).
+  const BATCH = 3;
+  for (let i = 0; i < years.length; i += BATCH) {
+    const batch = years.slice(i, i + BATCH);
+    const results = await Promise.all(batch.map(async (y) => {
+      const p = await fetchPricing(queryName, y, currency);
+      const exactHit = p.matched !== false && p.priceScope !== 'all-vintage' && (p.averageMarketPrice != null || p.criticScore != null);
+      return exactHit ? { vintage: y, score: p.criticScore ?? null, price: p.averageMarketPrice ?? null } : null;
+    }));
+    for (const r of results) if (r) rows.push(r);
+  }
+  rows.sort((a, b) => b.vintage - a.vintage);
+  return rows;
+}
+
 // Combined valuation for the wine card: real Wine-Searcher market data when
 // the wine matches, with the Claude estimate as fallback. The critic score is
 // always a Vinster score — but anchored to Wine-Searcher's ws-score (the

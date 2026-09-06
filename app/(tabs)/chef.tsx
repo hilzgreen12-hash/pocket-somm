@@ -138,7 +138,7 @@ export default function ChefTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Big "Chef" tab title — header, Cormorant.
-  appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // "Your Cookbook" header — matches Cellar / Review section headers.

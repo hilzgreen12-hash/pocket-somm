@@ -73,6 +73,8 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
   }
 
   return (
+    <>
+    <Text style={styles.hint}>Listed by recency · Swipe to view all →</Text>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {hasSketches ? (
         sketches.map((s: any) => {
@@ -107,15 +109,21 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
       <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
       <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
     </ScrollView>
+    </>
   );
 }
 
 const styles = StyleSheet.create({
+  // "Listed by recency · Swipe to view all →" hint above the carousel (matches
+  // the Cookbook / storage carousels).
+  hint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
   // Real sketch card — title then date beneath. Elegant (Cormorant) type to
   // match the Review header. Same footprint as the Cellar / Cookbook chips.
   // Deliberately a touch larger than the Cellar/Cookbook chips (190×134 vs
   // 152×108), with bigger type, as these alter-ego cards are the hero here.
+  // Sage-green cards with a black outline (match the Cookbook / storage cards);
+  // black title, dark-green date.
   card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },

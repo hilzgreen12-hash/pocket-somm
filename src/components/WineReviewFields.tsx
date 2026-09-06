@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import { MicButton } from './MicButton';
+import { DateInput } from './DateInput';
 import { showAlert } from './AppAlert';
 import { formatCurrency } from '../constants/currency';
 import { colors, spacing } from '../constants/theme';
@@ -122,14 +123,12 @@ export function WineReviewFields({
       {date != null && onDate ? (
         <>
           <Text style={styles.fieldLabel}>Date</Text>
-          <TextInput
+          <DateInput
             style={[styles.locInput, styles.dateInput]}
-            value={date}
-            onChangeText={(t) => onDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-            placeholder="YYYY-MM-DD"
+            valueIso={date}
+            onChangeIso={onDate}
+            currency={currency}
             placeholderTextColor={colors.textMuted}
-            keyboardType="numbers-and-punctuation"
-            maxLength={10}
           />
         </>
       ) : null}

@@ -27,7 +27,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useRackStore } from '../../src/stores/rackStore';
 import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
-import { fetchPricing, generateWineIntel } from '../../src/services/pricing';
+import { fetchPricing, generateWineIntel, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
@@ -171,6 +171,12 @@ export default function LabelResultsScreen() {
   // Vinster's Note + Vinster's Map are collapsible, both reduced by default.
   const [noteExpanded, setNoteExpanded] = useState(false);
   const [mapExpanded, setMapExpanded] = useState(false);
+  // Vinster's Vintage & Market Comparison — a third collapsible; its Wine-Searcher
+  // per-vintage table is generated on first expand (N live lookups) and cached.
+  const [vintagesExpanded, setVintagesExpanded] = useState(false);
+  const [vintageRows, setVintageRows] = useState<VintageComparisonRow[] | null>(null);
+  const [vintagesLoading, setVintagesLoading] = useState(false);
+  const vintagesTriedRef = useRef(false);
   // Vintage prompt — shown when the scan couldn't read a vintage, so the user
   // enters it (or confirms NV) rather than the intel silently assuming non-vintage.
   const [vintagePromptOpen, setVintagePromptOpen] = useState(false);
@@ -216,6 +222,10 @@ export default function LabelResultsScreen() {
       // New wine → re-map the producer range for it.
       producerRangeTriedRef.current = false;
       setProducerRange(null);
+      // New wine → the vintage-comparison table must regenerate for it.
+      vintagesTriedRef.current = false;
+      setVintageRows(null);
+      setVintagesExpanded(false);
       // (Label Library retired — scanned labels are no longer saved to a library;
       // the user saves the wine to Your Wine Reviews from the intel card instead.)
     } catch {
@@ -304,6 +314,9 @@ export default function LabelResultsScreen() {
       // Re-map the producer range for the (possibly corrected) producer.
       producerRangeTriedRef.current = false;
       setProducerRange(null);
+      vintagesTriedRef.current = false;
+      setVintageRows(null);
+      setVintagesExpanded(false);
       setAwaitingConfirm(false);
     } catch {
       showAlert({ title: 'Could not get intel', body: 'Please try again.' });
@@ -823,14 +836,13 @@ export default function LabelResultsScreen() {
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
           ) : null}
-          {/* Only confident label info — producer, grape, region, vintage. The
-              cuvée/wine name is deliberately left OUT here (it's what's being
-              confirmed below), so we never assert an uncertain bottling. */}
+          {/* Full identity reference — producer, wine name, vintage, region,
+              grape — so the user has the complete wine to check against while
+              confirming (this is the key reference on the page). */}
           <View style={styles.headerText}>
-            {/* Wine name deliberately omitted — it's what's being confirmed below.
-                Line 1 is Producer · Vintage (white); Region + Grape in gold. */}
             <WineIdentityHeader
-              producer={wine.producer || wine.wineName}
+              producer={wine.producer}
+              wineName={wine.wineName}
               vintage={wine.vintage}
               region={wine.region}
               grape={wine.grape}
@@ -1562,6 +1574,49 @@ export default function LabelResultsScreen() {
 
   const windowM = windowMeta(intel.drinkingWindowStatus);
 
+  // The three headline stats are tappable — each opens a short "why" popup.
+  function openScoreInfo() {
+    const body = intel.criticScoreNote?.trim()
+      || "Vinster's score distils critic consensus and Wine-Searcher's aggregate rating for this wine into a single 100-point mark.";
+    showAlert({ title: 'How Vinster scored this', body });
+  }
+  function openValueInfo() {
+    let body: string;
+    if (intel.valueSource === 'wine-searcher') {
+      body = intel.estimatedValueLow != null && intel.estimatedValueHigh != null && intel.estimatedValueLow !== intel.estimatedValueHigh
+        ? `Wine-Searcher values range from ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage).' : '.'}`
+        : `Wine-Searcher's live market value${intel.priceScope === 'all-vintage' ? ', averaged across all vintages (no price for this exact vintage).' : ' for this wine.'}`;
+    } else if (intel.valueSource === 'vinster' && intel.estimatedValue != null) {
+      body = "This value is Vinster's own estimate — there's no Wine-Searcher price for this exact wine.";
+    } else {
+      body = "There's no Wine-Searcher price for this wine.";
+    }
+    showAlert({ title: 'Where this value comes from', body });
+  }
+  function openWindowInfo() {
+    const status = windowMeta(intel.drinkingWindowStatus).text;
+    const yrs = intel.drinkingWindowFrom && intel.drinkingWindowTo ? `\n\n${intel.drinkingWindowFrom} – ${intel.drinkingWindowTo}` : '';
+    showAlert({ title: 'Drinking Window', body: `Drinking Window: ${status}${yrs}` });
+  }
+
+  // Vinster's Vintage & Market Comparison — generate the Wine-Searcher per-vintage
+  // table on first expand (N live lookups; cached after so re-opening is instant).
+  function toggleVintages() {
+    const opening = !vintagesExpanded;
+    setNoteExpanded(false); setMapExpanded(false);
+    setVintagesExpanded(opening);
+    if (opening && !vintagesTriedRef.current && wine) {
+      vintagesTriedRef.current = true;
+      setVintagesLoading(true);
+      const queryName = [wine.producer, wine.wineName].filter(Boolean).join(' ').trim() || (wine.wineName ?? '');
+      const scanned = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : NaN;
+      fetchVintageComparison(queryName, userCurrency, Number.isFinite(scanned) ? scanned : null)
+        .then((rows) => setVintageRows(rows))
+        .catch(() => setVintageRows([]))
+        .finally(() => setVintagesLoading(false));
+    }
+  }
+
   // Dive Deeper works pre-save: the wine-knowledge screen falls back to query
   // params when the path id matches no cellar row (so we pass a placeholder id
   // + the wine fields). It just won't cache, which is fine for a preview.
@@ -1677,6 +1732,36 @@ export default function LabelResultsScreen() {
       ) : null}
 
       <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
+
+      {/* Gold stats bar directly under the title (Wine Intel only). Three tappable
+          figures — Score · Value · Drinking Window (XX/100 · £XX · XXXX - XXXX) —
+          each opening a short "why" popup. No labels: the figures speak for
+          themselves and the popups explain them. */}
+      {!isAddFlow ? (
+        <>
+        <View style={styles.statBarRule} />
+        <View style={styles.statBar}>
+          <TouchableOpacity style={styles.statBarItem} onPress={openScoreInfo} disabled={intel.criticScore == null} activeOpacity={0.7}>
+            <Text style={[styles.statBarValueGold, intel.criticScore == null && styles.statBarValueMuted]}>
+              {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.statBarSepGold}>·</Text>
+          <TouchableOpacity style={styles.statBarItem} onPress={openValueInfo} disabled={intel.estimatedValue == null} activeOpacity={0.7}>
+            <Text style={[styles.statBarValueGold, intel.estimatedValue == null && styles.statBarValueMuted]}>
+              {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
+            </Text>
+          </TouchableOpacity>
+          <Text style={styles.statBarSepGold}>·</Text>
+          <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown'} activeOpacity={0.7}>
+            <Text style={[styles.statBarValueGold, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
+              {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom} - ${intel.drinkingWindowTo}` : '—'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <View style={styles.statBarRule} />
+        </>
+      ) : null}
 
       {/* Header block: the wine-card row + the "Not this wine?" link both sit
           ABOVE the separator line (the block's bottom border). */}
@@ -1815,53 +1900,6 @@ export default function LabelResultsScreen() {
           generated later, only from Generate Wine Intel). */}
       {!isAddFlow && (
         <>
-          {/* The three headline numbers as a single inline stats bar:
-              Score · Value · Drinking Window → XX/100 · £XX · XXXX/XXXX.
-              The value's source/estimate context lives in the note below. */}
-          <View style={styles.statBar}>
-            <View style={styles.statBarItem}>
-              <Text style={[styles.statBarValue, intel.criticScore == null && styles.statBarValueMuted]}>
-                {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
-              </Text>
-              <Text style={styles.statBarLabel}>Score</Text>
-            </View>
-            <Text style={styles.statBarSep}>·</Text>
-            <View style={styles.statBarItem}>
-              <Text style={[styles.statBarValue, intel.estimatedValue != null ? styles.estimatedValueGold : styles.statBarValueMuted]}>
-                {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
-              </Text>
-              <Text style={styles.statBarLabel}>Value</Text>
-            </View>
-            <Text style={styles.statBarSep}>·</Text>
-            <View style={styles.statBarItem}>
-              <Text style={[styles.statBarValue, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
-                {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom}/${intel.drinkingWindowTo}` : '—'}
-              </Text>
-              <Text style={styles.statBarLabel}>Drinking Window</Text>
-            </View>
-          </View>
-
-          {/* Honest market-value context. Wine-Searcher gives one global average
-              (converted to the user's currency); when it has no listing for the
-              exact vintage the proxy already falls back to the all-vintage
-              average — say so rather than passing it off as the exact vintage.
-              When there's no live price at all, state it plainly. */}
-          {intel.valueSource === 'wine-searcher' ? (
-            <Text style={styles.marketNote}>
-              {intel.estimatedValueLow != null && intel.estimatedValueHigh != null && intel.estimatedValueLow !== intel.estimatedValueHigh
-                ? `Wine-Searcher values range from ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage)' : ''}`
-                : `Wine-Searcher market value${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage)' : ''}`}
-            </Text>
-          ) : intel.valueSource === 'vinster' && intel.estimatedValue != null ? (
-            <Text style={styles.marketNote}>
-              Value and score here are Vinster's estimate — there is no Wine-Searcher price for this exact wine
-            </Text>
-          ) : (
-            <Text style={styles.marketNote}>
-              There is no price on Wine-Searcher for this wine
-            </Text>
-          )}
-
           {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
               one above the other with no separator between them; the section's
               bottom border is the only separator (it sits below the Map, before
@@ -1885,6 +1923,45 @@ export default function LabelResultsScreen() {
               </Text>
             ) : null}
           </View>
+
+          {/* Vinster's Vintage & Market Comparison — a third collapsible with a
+              chevron matching the Note/Map above. On first expand it generates a
+              Wine-Searcher per-vintage table (aggregate critic score + market
+              price). Intel view only — it needs live lookups. */}
+          {isIntelOnlyFlow ? (
+            <View style={styles.vintageSection}>
+              <TouchableOpacity style={styles.vintageHeadingRow} onPress={toggleVintages} activeOpacity={0.7}>
+                <Text style={styles.mapTitle}>Vinster's Vintage &amp; Market Comparison</Text>
+                <Text style={styles.mapChevron}>{vintagesExpanded ? '⌃' : '⌄'}</Text>
+              </TouchableOpacity>
+              {vintagesExpanded ? (
+                vintagesLoading ? (
+                  <View style={styles.vintageLoading}>
+                    <ActivityIndicator color={colors.gold} />
+                    <Text style={styles.vintageLoadingText}>Checking Wine-Searcher across vintages…</Text>
+                  </View>
+                ) : vintageRows && vintageRows.length > 0 ? (
+                  <View style={styles.vintageTable}>
+                    <View style={[styles.vintageRow, styles.vintageHeadRow]}>
+                      <Text style={[styles.vintageCell, styles.vintageColYear, styles.vintageHeadCell]}>Vintage</Text>
+                      <Text style={[styles.vintageCell, styles.vintageColScore, styles.vintageHeadCell]}>Score</Text>
+                      <Text style={[styles.vintageCell, styles.vintageColPrice, styles.vintageHeadCell]}>Price</Text>
+                    </View>
+                    {vintageRows.map((r) => (
+                      <View key={r.vintage} style={[styles.vintageRow, String(r.vintage) === (wine.vintage ?? '') && styles.vintageRowThis]}>
+                        <Text style={[styles.vintageCell, styles.vintageColYear]}>{r.vintage}</Text>
+                        <Text style={[styles.vintageCell, styles.vintageColScore]}>{r.score != null ? `${r.score}/100` : '—'}</Text>
+                        <Text style={[styles.vintageCell, styles.vintageColPrice]}>{r.price != null ? formatCurrency(r.price, userCurrency, { decimals: 0 }) : '—'}</Text>
+                      </View>
+                    ))}
+                    <Text style={styles.vintageFootnote}>Wine-Searcher market value and aggregate critic score, by vintage.</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.vintageEmpty}>Wine-Searcher has no per-vintage listings for this wine.</Text>
+                )
+              ) : null}
+            </View>
+          ) : null}
 
           {/* The Inside Line — the "sommelier best friend" verdict: how this
               vintage actually fared and how this producer stacked up against its
@@ -2533,7 +2610,9 @@ const styles = StyleSheet.create({
   // Vinster's Note + Map combined block — tighter than a full section, with a
   // single bottom border (the separator before The Inside Line) and no divider
   // between the note and the map.
-  noteMapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Note/Map + the Vintage & Market Comparison read as one group — no separator
+  // line between them (the comparison's own bottom border closes the group).
+  noteMapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
   // Vinster's Note beside Vinster's Map — centred as a pair with an indent
   // between them; text baselines aligned so both titles sit on one line.
   noteMapHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', gap: spacing.xl, flexWrap: 'wrap' },
@@ -2543,13 +2622,34 @@ const styles = StyleSheet.create({
   // note when it's expanded instead of behind a link.
   noteExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
-  // Inline headline stats bar: Score · Value · Drinking Window.
-  statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
+  // Inline headline stats bar: Score · Value · Drinking Window, bracketed by
+  // full-width rules top and bottom (matches the app's other stats bars).
+  statBarRule: { height: 1, backgroundColor: colors.border },
+  statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
   statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   statBarValueMuted: { color: colors.textMuted, fontFamily: fonts.bodySemibold },
   statBarLabel: { fontSize: 10, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: 4, textAlign: 'center' },
   statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
+  // Gold, label-less headline stats bar under the title — tappable figures.
+  statBarValueGold: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
+  statBarSepGold: { fontSize: 16, color: colors.gold, opacity: 0.6 },
+  // Vinster's Vintage & Market Comparison — collapsible section + its table.
+  vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
+  vintageLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingTop: spacing.md },
+  vintageLoadingText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted },
+  vintageEmpty: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingTop: spacing.md },
+  vintageTable: { marginTop: spacing.md },
+  vintageRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border },
+  vintageHeadRow: { borderBottomColor: colors.gold },
+  vintageRowThis: { backgroundColor: 'rgba(224,184,74,0.10)' },
+  vintageCell: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text },
+  vintageHeadCell: { fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', fontSize: 11, letterSpacing: 0.6 },
+  vintageColYear: { flex: 1 },
+  vintageColScore: { flex: 1, textAlign: 'center' },
+  vintageColPrice: { flex: 1, textAlign: 'right' },
+  vintageFootnote: { fontSize: 11, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.sm, textAlign: 'center' },
   // Compact 2-column stat grid mirroring the cellar wine card.
   statsGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
   statCell: { width: '50%', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm },

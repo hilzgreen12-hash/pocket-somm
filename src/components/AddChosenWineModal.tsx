@@ -9,6 +9,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { showAlert } from './AppAlert';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { LabelThumb } from './LabelThumb';
+import { DateInput } from './DateInput';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
 import { WineReviewFields } from './WineReviewFields';
@@ -106,6 +107,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   // unifies that with the prop-driven confirmed identity.
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
   const showCard = confirmedIdentity || identityConfirmed;
+  // A wine picked from the predictive search: Vinster has filled the identity,
+  // so we show the wine name large across the screen and ask ONLY for the
+  // vintage — the producer/name/region inputs (and the review fields below) stay
+  // hidden until the wine is confirmed. Makes it clear the pick was applied.
+  const [searchPicked, setSearchPicked] = useState(false);
   // After a predictive-search pick fills a long producer/name, single-line
   // inputs scroll to the END. Setting the selection to the start (once) snaps
   // them back so the value reads from its beginning; cleared on first focus/edit.
@@ -176,6 +182,14 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     setIdentityConfirmed(true);
   }
 
+  // "Choose a different wine" from the search-picked vintage prompt — clear the
+  // filled identity and return to the search bar.
+  function changeWine() {
+    setSearchPicked(false);
+    setProducer(''); setWineName(''); setRegion(''); setStyle(''); setVintage('');
+    if (saved) setSaved(false);
+  }
+
   // Generate an Estimated Value on demand from the current identity fields.
   // Held locally and written onto the row when the review is saved.
   async function fetchEstimate() {
@@ -218,7 +232,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       // wine from the Label Library), falling back to today. Still editable.
       setReviewDate((initial?.date && /^\d{4}-\d{2}-\d{2}$/.test(initial.date)) ? initial.date : new Date().toISOString().split('T')[0]);
       setStyle(''); setEditImageUri(null); setIdentityEditOpen(false);
-      setIdentityConfirmed(false); setJustFilled(false);
+      setIdentityConfirmed(false); setJustFilled(false); setSearchPicked(false);
       setEstimatedValue(null); setEstimatedValueAt(null); setEstimating(false);
       // Prefill the city from GPS for a fresh review.
       captureCity().then((c) => { if (c) setLocCity((cur) => cur || c); });
@@ -470,60 +484,93 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     setWineName(r.wineName ?? '');
                     setRegion(r.region ?? '');
                     if (r.style) setStyle(r.style);
-                    // Snap the just-filled single-line inputs back to their start
-                    // so a long name reads from the beginning, not its tail.
+                    // A search pick fills the identity — collapse to the "name +
+                    // vintage only" prompt so it's clear Vinster filled it in.
+                    setSearchPicked(true);
                     setJustFilled(true);
                     if (saved) setSaved(false);
                   }} />
                 ) : null}
 
-                {/* Scanned / uploaded label sits to the left of the identity fields,
-                    mirroring a cellar wine card. */}
-                <View style={labelImageUri ? styles.identityRow : undefined}>
-                  {labelImageUri ? (
-                    <TouchableOpacity onPress={() => setLabelViewerOpen(true)} activeOpacity={0.85}>
-                      <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
-                    </TouchableOpacity>
-                  ) : null}
-                  {/* Identity fields as inline, borderless text (not boxed inputs)
-                      so they read like the wine's own line — producer, name,
-                      vintage, region, sitting to the right of the larger label. */}
-                  <View style={labelImageUri ? styles.identityFields : undefined}>
-                    <TextInput style={styles.inputInline} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
-                    <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name (optional)" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
+                {searchPicked ? (
+                  // A wine was picked from the search bar: show its name on a line
+                  // below the search bar, then an "Add Vintage" prompt with a
+                  // single field. The rest of the identity fields stay hidden.
+                  <>
+                    <Text style={styles.pickedNameLine}>{[producer, wineName].filter(Boolean).join(' ') || 'Selected wine'}</Text>
+                    <Text style={styles.pickedVintageLabel}>Add Vintage</Text>
                     <TextInput
-                      style={styles.inputInline}
+                      style={styles.pickedVintageInput}
                       value={vintage}
-                      onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
-                      placeholder="Vintage"
+                      onChangeText={edited((t: string) => setVintage(t.replace(/[^0-9A-Za-z]/g, '').slice(0, 7)))}
+                      placeholder="e.g. 2019 or NV"
                       placeholderTextColor={colors.textMuted}
-                      keyboardType="numeric"
-                      maxLength={4}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      maxLength={7}
+                      returnKeyType="done"
+                      onSubmitEditing={confirmIdentity}
                     />
-                    <TextInput style={styles.inputInline} value={region} onChangeText={edited(setRegion)} placeholder="Region" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
-                  </View>
-                </View>
+                    <TouchableOpacity style={styles.confirmIdentityBtn} onPress={confirmIdentity} activeOpacity={0.85}>
+                      <Text style={styles.confirmIdentityText}>✓  Confirm Wine</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={changeWine} activeOpacity={0.7} style={styles.changeWineRow}>
+                      <Text style={styles.changeWineLink}>Choose a different wine</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    {/* Scanned / uploaded label sits to the left of the identity
+                        fields, mirroring a cellar wine card. */}
+                    <View style={labelImageUri ? styles.identityRow : undefined}>
+                      {labelImageUri ? (
+                        <TouchableOpacity onPress={() => setLabelViewerOpen(true)} activeOpacity={0.85}>
+                          <Image source={{ uri: labelImageUri }} style={styles.identityThumb} resizeMode="cover" />
+                        </TouchableOpacity>
+                      ) : null}
+                      {/* Identity fields as inline, borderless text (not boxed
+                          inputs) so they read like the wine's own line. */}
+                      <View style={labelImageUri ? styles.identityFields : undefined}>
+                        <TextInput style={styles.inputInline} value={producer} onChangeText={edited(setProducer)} placeholder="Producer" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
+                        <TextInput style={styles.inputInline} value={wineName} onChangeText={edited(setWineName)} placeholder="Wine name (optional)" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
+                        <TextInput
+                          style={styles.inputInline}
+                          value={vintage}
+                          onChangeText={edited((text: string) => setVintage(text.replace(/[^0-9]/g, '').slice(0, 4)))}
+                          placeholder="Vintage"
+                          placeholderTextColor={colors.textMuted}
+                          keyboardType="numeric"
+                          maxLength={4}
+                        />
+                        <TextInput style={styles.inputInline} value={region} onChangeText={edited(setRegion)} placeholder="Region" placeholderTextColor={colors.textMuted} selection={justFilled ? { start: 0, end: 0 } : undefined} onFocus={() => setJustFilled(false)} />
+                      </View>
+                    </View>
 
-                {/* Reached via scan/upload — let the user redo a bad read. */}
-                {onScanAgain && labelImageUri ? (
-                  <TouchableOpacity onPress={onScanAgain} activeOpacity={0.7} style={styles.scanAgainRow}>
-                    <Text style={styles.scanAgainLink}>Scan again</Text>
-                  </TouchableOpacity>
-                ) : null}
+                    {/* Reached via scan/upload — let the user redo a bad read. */}
+                    {onScanAgain && labelImageUri ? (
+                      <TouchableOpacity onPress={onScanAgain} activeOpacity={0.7} style={styles.scanAgainRow}>
+                        <Text style={styles.scanAgainLink}>Scan again</Text>
+                      </TouchableOpacity>
+                    ) : null}
 
-                {/* Confirm the wine (manual entry) → collapse these fields into the
-                    review card. Prompts for a vintage if one's missing. */}
-                {!labelImageUri ? (
-                  <TouchableOpacity style={styles.confirmIdentityBtn} onPress={confirmIdentity} activeOpacity={0.85}>
-                    <Text style={styles.confirmIdentityText}>✓  Confirm Wine</Text>
-                  </TouchableOpacity>
-                ) : null}
+                    {/* Confirm the wine (manual entry) → collapse into the review
+                        card. Prompts for a vintage if one's missing. */}
+                    {!labelImageUri ? (
+                      <TouchableOpacity style={styles.confirmIdentityBtn} onPress={confirmIdentity} activeOpacity={0.85}>
+                        <Text style={styles.confirmIdentityText}>✓  Confirm Wine</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </>
+                )}
 
                 <View style={styles.divider} />
               </>
             )}
 
-            {/* Shared review card — identical to every other review surface. */}
+            {/* Shared review card — identical to every other review surface.
+                Hidden during the search-picked "add the vintage" step so only
+                the vintage prompt shows; it returns once the wine is confirmed. */}
+            {searchPicked && !showCard ? null : (
             <WineReviewFields
               score={userScore}
               onScore={edited(setUserScore)}
@@ -554,6 +601,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               savedLabel="Review Saved"
               goldSave
             />
+            )}
           </KeyboardAwareScrollView>
         </View>
         {findingLabel ? (
@@ -599,7 +647,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 <TextInput style={styles.editInput} value={locCity} onChangeText={edited(setLocCity)} placeholder="City" placeholderTextColor={colors.textSubtle} />
 
                 <Text style={styles.editLabel}>Date</Text>
-                <TextInput style={styles.editInput} value={reviewDate} onChangeText={edited((t: string) => setReviewDate(t.replace(/[^0-9-]/g, '').slice(0, 10)))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" maxLength={10} />
+                <DateInput style={styles.editInput} valueIso={reviewDate} onChangeIso={edited(setReviewDate)} currency={currency} placeholderTextColor={colors.textSubtle} />
 
                 <Text style={styles.editLabel}>Photo</Text>
                 <View style={styles.editThumbRow}>
@@ -655,6 +703,18 @@ const styles = StyleSheet.create({
   // Inline, borderless identity fields — read like the wine's own line, with a
   // faint underline to hint they're editable (vs the clunky boxed inputs).
   inputInline: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.sm },
+  // Search-picked: the filled wine name on a line below the search bar, then an
+  // "Add Vintage" prompt with a single vintage input.
+  pickedNameLine: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, marginTop: spacing.md, letterSpacing: 0.3 },
+  pickedVintageLabel: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginTop: spacing.md, marginBottom: spacing.sm, letterSpacing: 0.5 },
+  pickedVintageInput: {
+    borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+    paddingVertical: spacing.sm, paddingHorizontal: spacing.md, fontSize: 18,
+    fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface,
+    marginBottom: spacing.md,
+  },
+  changeWineRow: { alignItems: 'center', paddingVertical: spacing.sm },
+  changeWineLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
   // "Scan again" — gold link, shown when the review was reached via scan/upload.
   scanAgainRow: { alignItems: 'center', paddingVertical: spacing.sm },
   scanAgainLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },

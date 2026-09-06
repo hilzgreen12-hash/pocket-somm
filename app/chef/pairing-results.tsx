@@ -45,12 +45,25 @@ function CellarResults({ recommendations, wines, onSelect }: {
         const subtitle = subtitleParts.length > 0 ? `From your cellar · ${subtitleParts.join(' · ')}` : 'From your cellar';
         return (
           <View key={rec.cellarWineId} style={styles.card}>
-            <Text style={styles.cardWine}>{rec.wineName}</Text>
+            {/* Tap the wine name to open its card — Wine Intel + details. */}
+            <TouchableOpacity onPress={() => wine && router.push(`/cellar/${wine.id}` as any)} disabled={!wine} activeOpacity={0.7}>
+              <View style={styles.cardWineRow}>
+                <Text style={styles.cardWine}>{rec.wineName}</Text>
+                {wine ? <Text style={styles.cardWineChevron}>›</Text> : null}
+              </View>
+            </TouchableOpacity>
             <Text style={styles.cardSubtitle}>{subtitle}</Text>
             <Text style={styles.cardBody}>{rec.rationale}</Text>
 
             <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Serving tip</Text>
             <Text style={styles.cardItem}>{rec.servingTip}</Text>
+
+            {/* A cellar wine — jump to it in Your Cellar / Home Storage. */}
+            {wine ? (
+              <TouchableOpacity onPress={() => router.push(`/cellar/${wine.id}` as any)} activeOpacity={0.7}>
+                <Text style={styles.cellarViewLink}>View in Your Cellar · Home Storage →</Text>
+              </TouchableOpacity>
+            ) : null}
 
             <TouchableOpacity
               onPress={() => wine && onSelect(wine, rec.wineName)}
@@ -423,6 +436,10 @@ const styles = StyleSheet.create({
   summary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
   cardWine: { fontSize: 16, fontFamily: fonts.bodyBold, color: colors.text },
+  // Tappable wine name → its card (Wine Intel); a gold chevron signals it opens.
+  cardWineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  cardWineChevron: { fontSize: 20, color: colors.gold, fontFamily: fonts.bodyBold, marginTop: -2 },
+  cellarViewLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm },
   cardSubtitle: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2 },
   cardBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   cardSection: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },

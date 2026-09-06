@@ -6,6 +6,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as Haptics from 'expo-haptics';
 import { PermissionScreen } from '../../src/components/scan/PermissionScreen';
+import { DateInput } from '../../src/components/DateInput';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { fetchCellarLocations, removeWineFromFilter } from '../../src/api/customFilters';
 import { useCellar } from '../../src/hooks/useCellar';
@@ -802,14 +803,11 @@ export default function ArchiveNightScreen() {
               {/* Date · City · Venue — a stats bar directly beneath the title,
                   above the photo. Editable; all three required to save. */}
               <View style={styles.stampRow}>
-                <TextInput
+                <DateInput
                   style={styles.stampText}
-                  value={stampDate}
-                  onChangeText={(t) => setStampDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-                  placeholder="YYYY-MM-DD"
+                  valueIso={stampDate}
+                  onChangeIso={setStampDate}
                   placeholderTextColor={colors.textMuted}
-                  keyboardType="numbers-and-punctuation"
-                  maxLength={10}
                 />
                 <Text style={styles.stampSep}>·</Text>
                 <TextInput
@@ -927,14 +925,11 @@ export default function ArchiveNightScreen() {
               Please input the {[missingFields.date && 'date', missingFields.location && 'city', missingFields.venue && 'venue'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}
             </Text>
             {missingFields.date ? (
-              <TextInput
+              <DateInput
                 style={styles.promptInput}
-                value={stampDate}
-                onChangeText={(t) => setStampDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-                placeholder="Date (YYYY-MM-DD)"
+                valueIso={stampDate}
+                onChangeIso={setStampDate}
                 placeholderTextColor={colors.textMuted}
-                keyboardType="numbers-and-punctuation"
-                maxLength={10}
                 autoFocus
               />
             ) : null}

@@ -589,7 +589,15 @@ export default function FullCellarListScreen() {
       case 'critic_asc':  return (a.critic_score ?? Infinity) - (b.critic_score ?? Infinity);
       case 'your_desc':   return (b.review_score ?? -1) - (a.review_score ?? -1);
       case 'your_asc':    return (a.review_score ?? Infinity) - (b.review_score ?? Infinity);
-      default:            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      default: {
+        // "Recent" in the Archive view = most recently ARCHIVED (a full archive
+        // updates the existing row, so its created_at stays old and it would
+        // otherwise sort into the middle). Elsewhere = most recently added.
+        const at = new Date((isArchiveView ? a.archived_at : null) ?? a.created_at).getTime();
+        const bt = new Date((isArchiveView ? b.archived_at : null) ?? b.created_at).getTime();
+        if (bt !== at) return bt - at;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      }
     }
   });
 
@@ -795,6 +803,7 @@ export default function FullCellarListScreen() {
 
   return (
     <View style={styles.container}>
+      <View style={styles.headerBand}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
@@ -822,7 +831,8 @@ export default function FullCellarListScreen() {
 
       {/* Title sits on its own line, brought down below the back / Add / Export
           row so it doesn't crowd the top of the screen. */}
-      <Text style={styles.title}>{isArchiveView ? 'Your Archive' : 'Full Cellar List'}</Text>
+      <Text style={styles.title}>{isArchiveView ? 'Your Cellar Archive' : 'Full Cellar List'}</Text>
+      </View>
 
       {/* Transient "added" toast — auto-fades, no action to dismiss. */}
       {showAddedToast && (
@@ -836,10 +846,6 @@ export default function FullCellarListScreen() {
         <View style={styles.shareCardWrap} pointerEvents="none">
           <CellarListShareCard ref={shareListRef} {...listSharePayload} />
         </View>
-      )}
-
-      {session && !isArchiveView && (
-        <Text style={styles.listHint}>Long hold a wine in your list to move or edit it</Text>
       )}
 
       {!session ? (
@@ -894,7 +900,7 @@ export default function FullCellarListScreen() {
         {!isArchiveView && (
           <TouchableOpacity style={[styles.filterChip, locationFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('location')}>
             <View style={styles.filterChipHeadingRow}>
-              <Text style={styles.filterChipLabel}>Location</Text>
+              <Text style={[styles.filterChipLabel, locationFilter !== 'All' && styles.filterChipTextOn]}>Location</Text>
               <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
             </View>
             <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
@@ -903,7 +909,7 @@ export default function FullCellarListScreen() {
         {!isArchiveView && (
           <TouchableOpacity style={[styles.filterChip, maturityFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('maturity')}>
             <View style={styles.filterChipHeadingRow}>
-              <Text style={styles.filterChipLabel}>Maturity</Text>
+              <Text style={[styles.filterChipLabel, maturityFilter !== 'All' && styles.filterChipTextOn]}>Maturity</Text>
               <Text style={styles.filterChipChevron}>{openDropdown === 'maturity' ? '▴' : '▾'}</Text>
             </View>
             <Text style={[styles.filterChipValue, maturityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{maturityLabel}</Text>
@@ -911,35 +917,35 @@ export default function FullCellarListScreen() {
         )}
         <TouchableOpacity style={[styles.filterChip, scoreActive && styles.sortChip]} onPress={() => setOpenDropdown('score')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Score</Text>
+            <Text style={[styles.filterChipLabel, scoreActive && styles.filterChipTextOn]}>Score</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'score' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, scoreActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{scoreLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Price</Text>
+            <Text style={[styles.filterChipLabel, priceActive && styles.filterChipTextOn]}>Price</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'price' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, favouriteFilter !== 'all' && styles.sortChip]} onPress={() => setOpenDropdown('favourite')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Favourites</Text>
+            <Text style={[styles.filterChipLabel, favouriteFilter !== 'all' && styles.filterChipTextOn]}>Favourites</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, favouriteFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, countryFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('country')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Country</Text>
+            <Text style={[styles.filterChipLabel, countryFilter !== 'All' && styles.filterChipTextOn]}>Country</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'country' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, countryFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{countryFilter === 'All' ? 'All' : countryFilter}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, colourFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('colour')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={styles.filterChipLabel}>Colour</Text>
+            <Text style={[styles.filterChipLabel, colourFilter !== 'All' && styles.filterChipTextOn]}>Colour</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'colour' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, colourFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{colourFilter === 'All' ? 'All' : colourFilter}</Text>
@@ -1026,6 +1032,9 @@ export default function FullCellarListScreen() {
                     {headerLine}
                   </Text>
                   {subParts.length > 0 && <Text style={styles.rowDetail} numberOfLines={1}>{subParts.join(' · ')}</Text>}
+                  {isArchiveView && w.archived_at ? (
+                    <Text style={styles.rowArchivedDate}>Archived {new Date(w.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</Text>
+                  ) : null}
                 </View>
                 <View style={styles.rowRight}>
                   {/* When sorting by Your Score, show the user's own score (white)
@@ -1283,6 +1292,8 @@ export default function FullCellarListScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
+  // Terracotta header band (lighter than the buttons) with cream fonts.
+  headerBand: {},
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
   // Inter — back/nav link (gold, to match the rest of the app)
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
@@ -1303,8 +1314,12 @@ const styles = StyleSheet.create({
   // Inter — body (processing status)
   scanningText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   // Cormorant — page header
-  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Stats bar — green outline + light-green fill (matches the "upload instead"
+  // banner on the Scan tab), distinct from the terracotta separator lines.
+  // Stats BAR — full-width, with a green rule top and bottom running edge to
+  // edge (light-green fill between), the stat text centred.
+  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   // Inter — summary read-out
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   missingIntelBtn: { marginTop: 4 },
@@ -1317,8 +1332,13 @@ const styles = StyleSheet.create({
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   listScroll: { flex: 1 },
   filterRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
+  // Filter chips — terracotta fill with cream text (a shaded bubble), distinct
+  // from the cream page. Active chips get a green outline (sortChip).
+  // Filters — green-tint fill + green outline + green text; ACTIVE (sortChip)
+  // swaps to a terracotta fill with cream text.
   filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   sortChip: { borderColor: colors.gold },
+  filterChipTextOn: { color: colors.gold },
   // Inter — chip label
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
   // Inter — chip value read-out
@@ -1367,11 +1387,12 @@ const styles = StyleSheet.create({
   rowStar: { color: colors.gold, fontSize: 16 },
   // Inter — wine detail caption
   rowDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
+  rowArchivedDate: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 3, letterSpacing: 0.2 },
   rowRight: { alignItems: 'flex-end', gap: 2 },
   // Inter — score value
   rowScore: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.gold },
   // User's own review score — white, shown when sorting by Your Score.
-  rowScoreUser: { fontSize: 13, fontFamily: fonts.bodyBold, color: '#FFFFFF' },
+  rowScoreUser: { fontSize: 13, fontFamily: fonts.bodyBold, color: colors.text },
   // Inter — value read-out
   rowValue: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.text },
   // Inter — quantity caption

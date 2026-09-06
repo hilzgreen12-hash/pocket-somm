@@ -6,7 +6,7 @@ import { useKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { useLabelStore } from '../../src/stores/labelStore';
-import { generatePairings, searchLabelImages, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, type WineCandidate, type WineSearchResult } from '../../src/api/label';
+import { generatePairings, searchLabelImages, fetchWineCandidates, searchWines, prepareImageBase64, scanLabel, candidateKey, type WineCandidate, type WineSearchResult } from '../../src/api/label';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { wineNameKey } from '../../src/utils/wineIdentity';
@@ -170,7 +170,12 @@ export default function LabelConfirmScreen() {
       const list = await fetchWineCandidates({ producer, region, wineName, vintage });
       if (list.length > 0) {
         setCandidates(list);
-        setCandidatesOpen(true);
+        // Only auto-surface the picker when there's a GENUINELY different
+        // bottling to offer — never when the sole match is the exact wine
+        // already filled in. A manual tap always opens (the user asked to see).
+        const hasAlt = list.some((c) => candidateKey(c.wineName ?? '') !== candidateKey(wineName));
+        if (!auto || hasAlt) setCandidatesOpen(true);
+        else setCandidatesOpen(false);
       } else if (!auto) {
         setCandidatesOpen(false);
         showAlert({ title: 'No bottlings found', body: `Vinster couldn't list other wines for ${producer.trim()}. Edit the fields directly instead.` });
@@ -192,6 +197,31 @@ export default function LabelConfirmScreen() {
     void loadCandidates(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wineDetails?.confidence, isManual]);
+
+  // Silently probe for alternative bottlings on label-derived flows so the
+  // "similar bottlings" link only appears when Vinster actually has OTHER wines
+  // to suggest — not when the sole match is the exact wine already filled in.
+  // (Low-confidence reads use the auto path above, which opens the picker.)
+  const probedRef = useRef(false);
+  useEffect(() => {
+    if (isManual || probedRef.current) return;
+    if (wineDetails?.confidence === 'low') return;
+    if (!producer.trim()) return;
+    probedRef.current = true;
+    let active = true;
+    (async () => {
+      try {
+        const list = await fetchWineCandidates({ producer, region, wineName, vintage });
+        if (active) setCandidates(list);
+      } catch { /* silent — the link simply stays hidden */ }
+    })();
+    return () => { active = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isManual, producer, wineDetails?.confidence]);
+
+  // Candidates that are a DIFFERENT wine to the one already entered. The
+  // "similar bottlings" link only shows when at least one exists.
+  const hasAlternativeBottlings = candidates.some((c) => candidateKey(c.wineName ?? '') !== candidateKey(wineName));
 
   // Apply a picked bottling: the producer stays, the cuvée (and region / style
   // when the candidate carries them) fill in. The user still Confirms after.
@@ -642,8 +672,13 @@ export default function LabelConfirmScreen() {
       {/* Bottling picker — sits directly under the blurb so a misread cuvée can
           be fixed before touching the fields. Label-derived flows only (manual
           entry has the predictive search below instead). */}
-      {!isManual ? (
-        <TouchableOpacity style={styles.candLink} onPress={() => loadCandidates(false)} disabled={loadingCandidates} activeOpacity={0.7}>
+      {!isManual && (loadingCandidates || hasAlternativeBottlings) ? (
+        <TouchableOpacity
+          style={styles.candLink}
+          onPress={() => { if (candidates.length > 0) { setSelectedCand(null); setCandidatesOpen(true); } else { void loadCandidates(false); } }}
+          disabled={loadingCandidates}
+          activeOpacity={0.7}
+        >
           <Text style={styles.candLinkText}>
             {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Vinster detects similar bottlings — select the correct one by tapping this link.'}
           </Text>

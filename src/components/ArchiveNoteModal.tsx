@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Modal, View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+import { DateInput } from './DateInput';
 
 interface Props {
   visible: boolean;
@@ -60,14 +61,11 @@ export function ArchiveNoteModal({ visible, title, body, busy, confirmLabel = 'S
           ) : null}
 
           <Text style={styles.label}>Date removed</Text>
-          <TextInput
+          <DateInput
             style={styles.input}
-            value={date}
-            onChangeText={(t) => setDate(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-            placeholder="YYYY-MM-DD"
+            valueIso={date}
+            onChangeIso={setDate}
             placeholderTextColor={colors.textMuted}
-            keyboardType="numbers-and-punctuation"
-            maxLength={10}
           />
 
           <Text style={styles.label}>Note (optional)</Text>

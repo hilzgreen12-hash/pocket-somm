@@ -74,7 +74,7 @@ ${catalogBlock}
 
 If the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then give that producer's core range so the user can see WHERE this wine sits within it.
 
-List the REAL, DISTINCT wines this producer is known to make — be THOROUGH and include their WHOLE core range (up to 8), from entry level to flagship, not just the scanned one. Even when the scanned wine is a specific or prestige bottling, you MUST still list the producer's OTHER core wines — above all their standard / entry bottling. A well-known estate's core lineup is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño AND the aged Selección de Añada, plus the sweet Sol de Señoráns; Krug makes Grande Cuvée, Rosé, Vintage, Clos du Mesnil, Clos d'Ambonnay, Collection). Order them STRICTLY by real-world PRESTIGE / price, entry-level first, the rarest/most-expensive flagship last.
+List the REAL, DISTINCT wines this producer is known to make — be THOROUGH and include their WHOLE core range (up to 12), from entry level to flagship, not just the scanned one. Even when the scanned wine is a specific or prestige bottling, you MUST still list the producer's OTHER core wines — above all their standard / entry bottling. A well-known estate's core lineup is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño AND the aged Selección de Añada, plus the sweet Sol de Señoráns; Krug makes Grande Cuvée, Rosé, Vintage, Clos du Mesnil, Clos d'Ambonnay, Collection). Order them STRICTLY by real-world PRESTIGE / price, entry-level first, the rarest/most-expensive flagship last.
 
 ACCURACY IS CRITICAL — a wrong lineup is worse than a short one:
 - SAME ESTATE ONLY: list ONLY wines made by THIS exact château / domaine / estate. Do NOT pull in wines from a SIBLING or affiliated estate under the same ownership group, even when the names are similar or they share an appellation — that is a serious, common error. Example: Château Haut-Brion's range is its red Grand Vin, Le Clarence de Haut-Brion (second red), Château Haut-Brion Blanc, and La Clarté de Haut-Brion (second white). It must NOT include Château La Mission Haut-Brion or its white "Laville Haut-Brion" — those belong to a DIFFERENT château (same owner, Domaine Clarence Dillon, but a separate estate). Likewise never merge a négociant's or group's other brands into one estate's range.
@@ -127,7 +127,7 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
         isThis: w?.isThis === true,
       }))
       .filter((w: RangeWine) => w.wineName)
-      .slice(0, 8);
+      .slice(0, 12);
 
     // Guarantee exactly one flagged wine: if Claude flagged none (or several),
     // keep the first flag and clear the rest; if none, leave unflagged rather

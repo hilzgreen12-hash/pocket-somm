@@ -25,12 +25,11 @@ export function CookbookFoldersCarousel() {
       {/* Header + stats bar — copied from the Your Cookbook landing page. The
           title is a white bubble that links into the cookbook — larger than the
           pairing bubbles above it (same 22px title font). */}
-      <View style={styles.titleBubbleWrap}>
-        <TouchableOpacity onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7} style={styles.titleBubble}>
-          <Text style={styles.title}>Your Cookbook</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.cookbookTitle}>Your Cookbook</Text>
       <Text style={styles.blurb}>Recipes you generate can be saved and organised here. Create folders and record your pairing notes.</Text>
+      <TouchableOpacity onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7} style={styles.viewLinkRow}>
+        <Text style={styles.viewLink}>View Your Cookbook →</Text>
+      </TouchableOpacity>
       <View style={styles.summaryRow}>
         <Text style={styles.summaryText}>
           {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
@@ -65,20 +64,23 @@ const styles = StyleSheet.create({
   // Title now sits in a white bubble (matching the pairing bubbles' white
   // border + radius, just larger given the 22px title font) instead of an
   // underlined link.
-  titleBubbleWrap: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.md },
-  // Gold-outlined bubble; title matches the Cellar "Your Wines At Home" size (20)
-  // and reads gold.
-  titleBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, textAlign: 'center' },
-  // Two-line intro beneath the title (Cormorant, matching the tab blurbs).
-  blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.text, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
-  summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },
+  // "Your Cookbook" plain title (terracotta), the blurb, then a "View Your
+  // Cookbook →" link line, then the stats bar and carousel.
+  cookbookTitle: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
+  blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  viewLinkRow: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.xs },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  // Stats bar — green outline + light-green fill (matches the "upload instead"
+  // banner on the Scan tab), distinct from the terracotta separator lines.
+  // Stats BAR — full-width, green rule top and bottom running edge to edge.
+  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 
   // Box tiles — matched to the Cellar storage carousel (HomeStorageSection).
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingVertical: spacing.md },
-  card: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
+  // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
+  card: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between' },
   cardType: { fontSize: 11, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   cardName: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   cardCount: { fontSize: 13, fontFamily: fonts.headingRegular, color: colors.textMuted },

@@ -127,7 +127,7 @@ export default function CellarTab() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Big "Cellar" tab title.
-  title: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  title: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // Side cells balance the centred title: an empty spacer on the left, the
   // "+ Import" link on the right, both the same width so "Cellar" stays centred.

@@ -254,8 +254,10 @@ export default function ChosenWinesScreen() {
   const pendingAssignRef = useRef<string | null>(null);
 
   // Cellar wines that have ANY user-supplied review content count as a
-  // "cellar review".
-  const cellarReviews = cellarWines.filter((w) =>
+  // "cellar review". Archived bottles are included too — a review added from an
+  // archived wine card must still surface in Your Wine Reviews, not vanish
+  // because the bottle left the live cellar.
+  const cellarReviews = [...cellarWines, ...archivedWines].filter((w) =>
     (w.user_notes && w.user_notes.trim().length > 0) ||
     w.review_score != null ||
     (w.review_location && w.review_location.trim().length > 0) ||
@@ -437,7 +439,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   // Broader "arrived via a deep link to a specific wine's review" flag — also
   // covers the cellar-review links (used by the Lineup wine list). Any of these
@@ -1184,7 +1186,22 @@ export default function ChosenWinesScreen() {
         visible={!!editingCellarWine}
         editLatest={editingCellarLatest}
         onClose={() => { setEditingCellarWine(null); const back = returnToDetailRef.current; returnToDetailRef.current = null; if (back) setDetailItem(back); else if (cameViaLink) returnToLibrary(); }}
-        onSaved={() => { setEditingCellarWine(null); returnToDetailRef.current = null; if (cameViaLink) returnToLibrary(); }}
+        onSaved={() => {
+          setEditingCellarWine(null);
+          returnToDetailRef.current = null;
+          // Saved from an archived wine card: confirm it landed in Your Wine
+          // Reviews, then send the user back to the archived wine card (backTo).
+          if (params.savedToast) {
+            const name = decodeURIComponent(params.savedToast);
+            showAlert({
+              title: 'Review Saved',
+              body: `Your review of ${name} has been saved to Your Wine Reviews.`,
+              buttons: [{ text: 'OK', onPress: () => returnToLibrary() }],
+            });
+          } else if (cameViaLink) {
+            returnToLibrary();
+          }
+        }}
       />
 
       <AddChosenWineModal
@@ -1365,7 +1382,7 @@ export default function ChosenWinesScreen() {
               <Text style={styles.chooserBtnText}>Upload A Wine Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseManual} activeOpacity={0.85}>
-              <Text style={styles.chooserBtnText}>Manual Input</Text>
+              <Text style={styles.chooserBtnText}>Search/Manual Input</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseCellar} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Select from Cellar</Text>

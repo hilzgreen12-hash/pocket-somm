@@ -24,7 +24,41 @@ export async function prepareImageBase64(uri: string): Promise<string> {
 
 export async function scanLabel(base64Image: string): Promise<WineDetails> {
   const data = await invokeFunction('scan-label', { base64Image }) as WineDetails;
-  return data;
+  return reconcileScannedIdentity(data);
+}
+
+// The vision model sometimes reads a famous fantasy-named cuvée (Palladius,
+// Sassicaia, Columella…) as the PRODUCER, leaving the real estate off — so the
+// intel title and "producer range" then read "Palladius" instead of "Sadie
+// Family". When the scanned "producer" is actually a known CUVÉE in Vinster's
+// catalogue, swap it back: adopt the catalogue's real producer and set the cuvée
+// as the wine name. Best-effort — any lookup failure returns the scan untouched.
+async function reconcileScannedIdentity(data: WineDetails): Promise<WineDetails> {
+  try {
+    const scannedProducer = (data.producer ?? '').trim();
+    const scannedName = (data.wineName ?? '').trim();
+    if (scannedProducer.length < 3) return data;
+    const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+    const np = norm(scannedProducer);
+    // Only when we DON'T already have a distinct producer + cuvée pair — i.e. the
+    // wine name is missing or just repeats the "producer".
+    if (scannedName && norm(scannedName) !== np) return data;
+    const matches = await searchWines(scannedProducer);
+    // A catalogue row whose CUVÉE equals the scanned "producer", under a genuinely
+    // different producer — that's the misread we want to correct.
+    const hit = matches.find((m) => m.wineName && norm(m.wineName) === np && norm(m.producer) !== np);
+    if (!hit) return data;
+    return {
+      ...data,
+      producer: hit.producer,
+      wineName: hit.wineName,
+      region: (data.region ?? '').trim() || hit.region || data.region,
+      grape: (data.grape ?? '').trim() || hit.grape || data.grape,
+      style: (data.style ?? '').trim() || hit.style || data.style,
+    };
+  } catch {
+    return data;
+  }
 }
 
 export interface WineSearchResult {
@@ -77,7 +111,7 @@ export interface WineCandidate {
 // Cuvée…), "Clos" (part of real appellation names like Clos de Vougeot) and
 // Burgundy "Grand Cru" (an appellation tier) intact — those mark real, distinct
 // wines that must stay separate.
-function candidateKey(name: string): string {
+export function candidateKey(name: string): string {
   return (name ?? '')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .toLowerCase()

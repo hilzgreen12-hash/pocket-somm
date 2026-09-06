@@ -188,12 +188,11 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
 
       {hasStorage && (
         <>
-          {/* Faded rule between the blurb and the stats bar. */}
-          <View style={styles.fadedRule} />
+          {/* Stats bar — green outline + light-green fill (matches the other
+              inverted pages), not bracketing rules. */}
           <Text style={styles.stats}>
             {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
           </Text>
-          <View style={styles.fadedRule} />
           {/* Directly above the carousel, left-indented: adding is via the
               carousel's "+ Add" card — swipe right to reach it. */}
           <Text style={styles.swipeHint}>Swipe Right to view and add locations →</Text>
@@ -277,10 +276,13 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
 
 const styles = StyleSheet.create({
   // Matches "Vinster's Review of You" on the Review tab.
-  sectionHeader: { fontFamily: fontsSpectral.headingSemibold, fontSize: 20, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sectionHeader: { fontFamily: fontsSpectral.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Elegant Cormorant, matching the Cellar header/blurb above.
-  intro: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.text, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  stats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginBottom: spacing.xs },
+  intro: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  // Stats bar — green outline + light-green fill (matches the "upload instead"
+  // banner and the other inverted pages).
+  // Stats BAR — full-width, green rule top and bottom running edge to edge.
+  stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Full-width faded separators framing the stats bar.
   fadedRule: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   // Left-indented italic hint pointing to the carousel's "+ Add" card, sitting
@@ -291,7 +293,8 @@ const styles = StyleSheet.create({
   // The swipe hint sits directly above, so no extra top gap here.
   carouselScroll: { marginTop: 0 },
   carousel: { paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.md },
-  storageCard: { width: 152, height: 108, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'space-between', backgroundColor: colors.surface },
+  // Sage-green cards with a black outline; dark-green eyebrow + count, black name.
+  storageCard: { width: 152, height: 108, borderRadius: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.md, justifyContent: 'space-between' },
   storageCardType: { fontSize: 11, fontFamily: fontsSpectral.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.6 },
   storageCardName: { fontSize: 16, fontFamily: fontsSpectral.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.4 },
   storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted },

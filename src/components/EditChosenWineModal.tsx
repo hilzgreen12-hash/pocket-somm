@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router } from 'expo-router';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { LabelThumb } from './LabelThumb';
+import { DateInput } from './DateInput';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { AddPhotoThumb } from './AddPhotoThumb';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
@@ -602,7 +603,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               <TextInput style={styles.editInput} value={editCity} onChangeText={setEditCity} placeholder="City" placeholderTextColor={colors.textSubtle} />
 
               <Text style={styles.editLabel}>Date</Text>
-              <TextInput style={styles.editInput} value={editDate} onChangeText={(t) => setEditDate(t.replace(/[^0-9-]/g, '').slice(0, 10))} placeholder="YYYY-MM-DD" placeholderTextColor={colors.textSubtle} keyboardType="numbers-and-punctuation" maxLength={10} />
+              <DateInput style={styles.editInput} valueIso={editDate} onChangeIso={setEditDate} currency={currency} placeholderTextColor={colors.textSubtle} />
 
               <Text style={styles.editLabel}>Photo</Text>
               <View style={styles.editThumbRow}>

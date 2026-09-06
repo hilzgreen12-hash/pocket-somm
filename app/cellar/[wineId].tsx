@@ -6,6 +6,7 @@ import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
+import { DateInput } from '../../src/components/DateInput';
 import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -1335,6 +1336,13 @@ export default function CellarWineDetail() {
     });
   }
 
+  // From an archived wine card, the review flow should return the user back
+  // HERE (backTo) with a "saved to Your Wine Reviews" confirmation, rather than
+  // stranding them on the reviews list.
+  const archiveReviewReturn = isArchived
+    ? `&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}&savedToast=${encodeURIComponent([wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ') || wine.wine_name || 'this wine')}`
+    : '';
+
   return (
     <KeyboardAwareScrollView
       style={styles.container}
@@ -1729,7 +1737,7 @@ export default function CellarWineDetail() {
               Reviews (the single home for every review); no in-card expand, so
               reviews never live separately on the wine card. */}
           <View style={styles.vinsterHeaderRow}>
-            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}` as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}` as any)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
               <Text style={styles.vinsterReviewTitle}>Your Review</Text>
               <Ionicons name="chevron-forward-outline" size={16} color={colors.gold} />
             </TouchableOpacity>
@@ -1737,7 +1745,7 @@ export default function CellarWineDetail() {
           {/* Collapsed summary under the header — also opens the card. Adding a
               review jumps straight to the review input in Your Wine Reviews. */}
           {(wine.review_score != null || wine.review_note || wine.review_location || wine.review_date || wine.user_drinking_window) ? (
-            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}` as any)} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReview=${wine.id}${archiveReviewReturn}` as any)} activeOpacity={0.7}>
               <Text style={styles.reviewScoreLine} numberOfLines={1}>
                 {wine.review_score != null ? <Text style={styles.reviewScoreValue}>{wine.review_score}/100</Text> : null}
                 {wine.review_score != null && wine.review_date ? <Text style={styles.reviewScoreDash}> – </Text> : null}
@@ -1749,7 +1757,7 @@ export default function CellarWineDetail() {
               </Text>
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReviewInput=${wine.id}` as any)} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => router.push(`/wines/chosen?openCellarReviewInput=${wine.id}${archiveReviewReturn}` as any)} activeOpacity={0.7}>
               <Text style={styles.addReviewLink}>+ Add Review</Text>
             </TouchableOpacity>
           )}
@@ -2081,11 +2089,10 @@ export default function CellarWineDetail() {
             )}
 
             <Text style={styles.fieldLabel}>Date removed</Text>
-            <TextInput
+            <DateInput
               style={styles.input}
-              value={removeDate}
-              onChangeText={setRemoveDate}
-              placeholder="YYYY-MM-DD"
+              valueIso={removeDate}
+              onChangeIso={setRemoveDate}
               placeholderTextColor={colors.textMuted}
             />
 

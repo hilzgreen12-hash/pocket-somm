@@ -438,13 +438,28 @@ export default function RackGridScreen() {
   // when a Racks route actually exists in the stack, otherwise plain back().
   function handleBack() {
     const state = navigation.getState?.();
-    const hasRacks = state?.routes?.some((r) => r.name === 'cellar/racks') ?? false;
+    const routes = state?.routes ?? [];
+    const hasRacks = routes.some((r) => r.name === 'cellar/racks');
     if (hasRacks) {
+      // A Racks page sits below us — collapse everything (rack copies + any
+      // scanner screens) back onto it in one hop.
       router.dismissTo('/cellar/racks');
-    } else if (router.canGoBack()) {
-      router.back();
-    } else {
+      return;
+    }
+    // Reached the rack directly (no Racks page in the stack). Repeated
+    // add/archive cycles stack several IDENTICAL copies of this rack screen —
+    // each placement does a router.replace back to the rack after pushing the
+    // camera, netting one extra layer per bottle. A single back() would just
+    // reveal the copy underneath, so Back looks dead and the user is trapped.
+    // Pop ALL the stacked copies of this screen at once so Back always leaves.
+    const topName = routes.length ? routes[routes.length - 1].name : undefined;
+    let sameTop = 0;
+    for (let i = routes.length - 1; i >= 0 && routes[i].name === topName; i--) sameTop++;
+    if (sameTop >= routes.length || !router.canGoBack()) {
+      // Nothing but rack copies below (or nothing to pop) — leave to the Cellar tab.
       router.replace('/(tabs)/cellar');
+    } else {
+      router.dismiss(sameTop);
     }
   }
 
@@ -930,7 +945,7 @@ export default function RackGridScreen() {
     });
     buttons.push({ text: 'Cancel', style: 'cancel' });
     showAlert({
-      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
+      title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
       body: 'What would you like to do?',
       buttons,
     });
@@ -1074,7 +1089,7 @@ export default function RackGridScreen() {
   function openWineListMenu(wine: CellarWine) {
     const qty = wine.quantity ?? 1;
     showAlert({
-      title: wine.wine_name + (wine.vintage ? ` ${wine.vintage}` : ''),
+      title: wineHeaderLine(wine.producer, wine.wine_name, wine.vintage) || wine.wine_name,
       body: 'What would you like to do?',
       buttons: [
         { text: 'View Wine Intel', onPress: () => router.push(`/cellar/${wine.id}?from=rack` as any) },

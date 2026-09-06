@@ -559,7 +559,7 @@ const styles = StyleSheet.create({
   // Compact header — mirrors the other tab pages (Vinster mark top-left via
   // VinsterHeader, big centred title, blurb beneath).
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
-  appName: { fontSize: 42, fontFamily: fonts.headingSemibold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: spacing.lg },
   // Rule between the intro blurb and the 2×2 grid.
   blurbSeparator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.xl },
@@ -567,7 +567,7 @@ const styles = StyleSheet.create({
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
-  tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden' },
+  tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   // Fixed line box so every tile's icon occupies the SAME vertical space — the
   // search vs camera glyphs have different metrics, which pushed the Search a
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
   // Fixed two-line height so every tile's blurb occupies the same space — a
   // one-line blurb (Scan a Lineup) would otherwise shift its title down out of
   // line with the two-line tiles beside it. Font is +1pt (14) per request.
-  tileDesc: { fontFamily: fonts.headingItalic, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 18, minHeight: 36 },
+  tileDesc: { fontFamily: fonts.headingSemibold, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 18, minHeight: 36 },
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
   tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
 

@@ -22,6 +22,7 @@ import type { ChosenWine } from '../types/wine';
 import { publishRestaurantSessionToCommunity } from '../services/communityPublish';
 import { StarRating } from './StarRating';
 import { LabelThumb } from './LabelThumb';
+import { DateInput } from './DateInput';
 import { RestaurantReviewShareCard } from './RestaurantReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../constants/share';
 import { COMMUNITY_ENABLED } from '../constants/features';
@@ -701,14 +702,11 @@ export function RestaurantReviewModal({
                   {capturedAt != null ? (
                     <>
                       <Text style={styles.bannerMetaDot}>·</Text>
-                      <TextInput
+                      <DateInput
                         style={[styles.bannerMetaInput, styles.bannerDateInput]}
-                        value={dateValue}
-                        onChangeText={(t) => setDateValue(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-                        placeholder="YYYY-MM-DD"
+                        valueIso={dateValue}
+                        onChangeIso={setDateValue}
                         placeholderTextColor="rgba(255,255,255,0.55)"
-                        keyboardType="numbers-and-punctuation"
-                        maxLength={10}
                       />
                     </>
                   ) : date ? (

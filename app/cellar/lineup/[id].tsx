@@ -12,6 +12,7 @@ import { useScanHistory } from '../../../src/hooks/useScanHistory';
 import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
 import { matchLineupToCellar } from '../../../src/services/archiveNight';
 import { wineNameKey } from '../../../src/utils/wineIdentity';
+import { DateInput } from '../../../src/components/DateInput';
 import { labelSignedUrl } from '../../../src/api/labelPhotos';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
@@ -105,7 +106,7 @@ export default function LineupDetailScreen() {
     // A non-empty but malformed date must not silently save nothing — tell the
     // user rather than closing as if it worked. (Empty = leave the date as-is.)
     if (ymd && !valid) {
-      showAlert({ title: 'Check the date', body: 'Enter the date as YYYY-MM-DD (e.g. 2026-08-02).' });
+      showAlert({ title: 'Check the date', body: 'Please enter a valid date.' });
       return;
     }
     setSavingStamp(true);
@@ -546,14 +547,11 @@ export default function LineupDetailScreen() {
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
             <Text style={styles.stampTitle}>Date & location</Text>
             <Text style={styles.stampFieldLabel}>Date</Text>
-            <TextInput
+            <DateInput
               style={styles.stampInput}
-              value={dateDraft}
-              onChangeText={(t) => setDateDraft(t.replace(/[^0-9-]/g, '').slice(0, 10))}
-              placeholder="YYYY-MM-DD"
+              valueIso={dateDraft}
+              onChangeIso={setDateDraft}
               placeholderTextColor={colors.textMuted}
-              keyboardType="numbers-and-punctuation"
-              maxLength={10}
             />
             <Text style={styles.stampFieldLabel}>Location</Text>
             <TextInput
