@@ -680,7 +680,7 @@ export default function LabelConfirmScreen() {
           activeOpacity={0.7}
         >
           <Text style={styles.candLinkText}>
-            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Vinster detects similar bottlings — select the correct one by tapping this link.'}
+            {loadingCandidates && !candidatesOpen ? 'Finding bottlings…' : 'Vinster detects similar wines — tap to view and select'}
           </Text>
         </TouchableOpacity>
       ) : null}

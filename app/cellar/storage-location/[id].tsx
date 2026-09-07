@@ -139,6 +139,11 @@ export default function StorageLocationScreen() {
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
+  // Prev / next Alt Cellar for the header carousel arrows (mirrors the rack /
+  // fridge headers), so locations scroll like the other storage units.
+  const locIndex = allLocations.findIndex((l) => l.id === id);
+  const prevLoc = locIndex > 0 ? allLocations[locIndex - 1] : null;
+  const nextLoc = locIndex >= 0 && locIndex < allLocations.length - 1 ? allLocations[locIndex + 1] : null;
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [moveModal, setMoveModal] = useState<{ wine: CellarWine; currentName: string; max: number } | null>(null);
   const [moveQty, setMoveQty] = useState('');
@@ -257,6 +262,36 @@ export default function StorageLocationScreen() {
   const caseCount = cases.length;
   const looseBottles = wines.filter((w) => !w.case_id).reduce((s, w) => s + (w.quantity ?? 0), 0);
   const totalBottles = wines.reduce((s, w) => s + (w.quantity ?? 0), 0);
+
+  // Bottles moved here (e.g. by Voice Command) that haven't been filed yet.
+  const awaitingWines = wines.filter((w) => w.awaiting_placement);
+  const awaitingBottles = awaitingWines.reduce((s, w) => s + (w.quantity ?? 0), 0);
+
+  // Place an awaiting bottle into a case here, or "ignore" it (an alt cellar
+  // doesn't require placement, so a bottle can simply live loose here).
+  async function placeAwaiting(w: CellarWine, caseId: string | null) {
+    try {
+      if (caseId) await assignWineToCase(w.id, caseId);
+      await updateCellarWine(w.id, { awaiting_placement: false, awaiting_placement_unit_id: null });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+    } catch (err) {
+      showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+  function openPlaceAwaiting(w: CellarWine) {
+    const label = wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'This wine');
+    showAlert({
+      title: 'Where should this go?',
+      body: `${label} was moved here and is awaiting placement. File it into a case, or leave it loose in ${location?.name ?? 'this cellar'}.`,
+      buttons: [
+        ...cases.map((c) => ({ text: `Into ${c.name}`, onPress: () => void placeAwaiting(w, c.id) })),
+        { text: 'Leave loose (ignore)', onPress: () => void placeAwaiting(w, null) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
 
   // All add paths file the saved wine into THIS location (context=add-location,
   // pendingStorageLocationId set). A "case" is just a wine with a higher quantity.
@@ -804,9 +839,17 @@ export default function StorageLocationScreen() {
         <TouchableOpacity onPress={handleBack}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={{ flex: 1 }} onLongPress={handleLongPressHeader} delayLongPress={400} activeOpacity={1}>
-          <Text style={styles.title} numberOfLines={1}>{location.name}</Text>
-        </TouchableOpacity>
+        <View style={styles.titleNav}>
+          <TouchableOpacity onPress={() => prevLoc && router.replace(`/cellar/storage-location/${prevLoc.id}` as any)} disabled={!prevLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Previous location">
+            <Text style={[styles.navArrow, !prevLoc && styles.navArrowDisabled]}>‹</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={{ flexShrink: 1 }} onLongPress={handleLongPressHeader} delayLongPress={400} activeOpacity={1}>
+            <Text style={styles.title} numberOfLines={1}>{location.name}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => nextLoc && router.replace(`/cellar/storage-location/${nextLoc.id}` as any)} disabled={!nextLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Next location">
+            <Text style={[styles.navArrow, !nextLoc && styles.navArrowDisabled]}>›</Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.headerActions}>
           <TouchableOpacity onPress={handleEditImage} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
             <Text style={styles.headerLink}>Edit Image</Text>
@@ -829,6 +872,20 @@ export default function StorageLocationScreen() {
         <Text style={styles.statsBar}>
           {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
+
+        {/* Bottles moved here (e.g. by Voice Command) that haven't been filed —
+            shown in yellow at the top; long-press to place them or leave loose. */}
+        {awaitingBottles > 0 ? (
+          <>
+            <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
+            {awaitingWines.map((w) => (
+              <TouchableOpacity key={w.id} style={styles.awaitingRow} onLongPress={() => openPlaceAwaiting(w)} onPress={() => openPlaceAwaiting(w)} delayLongPress={400} activeOpacity={0.7}>
+                <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
+                <Text style={styles.awaitingHint}>Long-press to place, or leave loose →</Text>
+              </TouchableOpacity>
+            ))}
+          </>
+        ) : null}
 
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
@@ -1184,10 +1241,14 @@ export default function StorageLocationScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
-  header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold },
-  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  // Matches the rack / fridge headers (size, weight, spacing) + carousel arrows.
+  title: { flexShrink: 1, fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
+  navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
   headerActions: { alignItems: 'flex-end', gap: 4 },
   headerLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   // Portrait photo, ~2/3 the old footprint, centred.
@@ -1195,6 +1256,11 @@ const styles = StyleSheet.create({
   sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
   // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
   statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
+  // "Awaiting placement" banner + yellow rows (moved-here, not yet filed).
+  awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, paddingHorizontal: spacing.xl },
+  awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
+  awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+  awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   // "+ Add Wine" — its own centred line below the stats bar (moved out of the
   // cramped top-right header stack).
   // "+ Add Wine" — stats-bar format (yellow full-width rules), below the header.

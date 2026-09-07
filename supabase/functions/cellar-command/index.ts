@@ -18,6 +18,9 @@ interface CmdWine {
   storageLocationName?: string | null;
 }
 interface CmdLocation { id: string; name: string; isExternal?: boolean }
+// Racks, fridges and bins — the placement units a bottle can be moved into
+// (all wine_racks rows). Distinct from Alt Cellars (CmdLocation).
+interface CmdUnit { id: string; name: string; type?: string }
 
 function wineLine(w: CmdWine, i: number): string {
   const bits = [w.producer, w.wineName, w.vintage].filter(Boolean).join(' ');
@@ -32,13 +35,16 @@ function wineLine(w: CmdWine, i: number): string {
 // The action is chosen by the user in the app BEFORE dictating, so we only ask
 // the model to resolve the specifics (which wine / where / how many) against the
 // real cellar. Keeping the verb out of the model's hands makes this reliable.
-function buildPrompt(action: string, transcript: string, wines: CmdWine[], locations: CmdLocation[]): string {
+function buildPrompt(action: string, transcript: string, wines: CmdWine[], locations: CmdLocation[], units: CmdUnit[]): string {
   const wineBlock = wines.length
     ? wines.map(wineLine).join('\n')
     : '(the cellar is empty)';
   const locBlock = locations.length
     ? locations.map((l) => `- [id: ${l.id}] ${l.name}${l.isExternal ? ' (offsite)' : ''}`).join('\n')
-    : '(no storage locations defined)';
+    : '(none)';
+  const unitBlock = units.length
+    ? units.map((u) => `- [id: ${u.id}] ${u.name} (${u.type ?? 'rack'})`).join('\n')
+    : '(none)';
 
   const common = `You resolve a spoken cellar command into a structured action.
 
@@ -48,16 +54,20 @@ Their spoken words: "${transcript}"
 Their cellar wines:
 ${wineBlock}
 
-Their storage locations:
+Their storage locations (Alt Cellars):
 ${locBlock}
+
+Their placement units (racks, fridges, bins):
+${unitBlock}
 
 Match the spoken wine to ONE wine id from the list above using producer, wine name, vintage and region. Speech is imperfect — allow for mishearings and partial names (e.g. "the Barolo", "the Produttori"). If several wines match equally well, list their ids in "candidates" and set needs to "wine". If nothing plausibly matches, set needs to "wine" with empty candidates.`;
 
   let task = '';
   if (action === 'move') {
-    task = `Also match the destination to ONE storage location id. If no location clearly matches, set needs to "location".
+    task = `Match the DESTINATION the user named to ONE place — either a storage location (Alt Cellar) OR a placement unit (rack / fridge / bin). Set "locationId" when it is a storage location, or "unitId" when it is a rack/fridge/bin — never both. A source they mention ("from the small rack") is context only; resolve the DESTINATION ("to my wine fridge"). If no destination clearly matches either list, set needs to "location".
+Also parse how many bottles to move from the words ("3 bottles", "a bottle", "all of them") — null means all bottles of that wine.
 Return JSON:
-{"wineId": "<id or null>", "locationId": "<id or null>", "quantity": null, "add": null, "candidates": ["<id>", ...], "needs": "wine" | "location" | null, "message": "<one short sentence describing what you understood, e.g. 'Move Produttori del Barolo 2019 to The Fridge.'>"}`;
+{"wineId": "<id or null>", "locationId": "<id or null>", "unitId": "<id or null>", "quantity": <integer or null>, "add": null, "candidates": ["<id>", ...], "needs": "wine" | "location" | null, "message": "<one short sentence describing what you understood, e.g. 'Move 3 bottles of Château d'Yquem to your wine fridge.'>"}`;
   } else if (action === 'archive') {
     task = `Parse how many bottles to archive from the words ("two bottles", "a bottle", "all of them"). Use null to mean all bottles of that wine.
 Return JSON:
@@ -78,7 +88,7 @@ Deno.serve(async (req) => {
     const limited = await checkRateLimit(req, 'cellar-command', HOURLY_LIMIT, DAILY_LIMIT);
     if (limited) return limited;
 
-    const { action, transcript, wines, locations } = await req.json();
+    const { action, transcript, wines, locations, units } = await req.json();
 
     if (typeof transcript !== 'string' || !transcript.trim()) {
       return new Response(JSON.stringify({ error: 'transcript required' }), {
@@ -91,7 +101,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const prompt = buildPrompt(action, transcript, wines ?? [], locations ?? []);
+    const prompt = buildPrompt(action, transcript, wines ?? [], locations ?? [], units ?? []);
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-6',

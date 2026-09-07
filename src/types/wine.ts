@@ -277,6 +277,13 @@ export interface CellarWine {
   // any. Count-based (the row's quantity is how many bottles are in the cell).
   // Optional/nullable — non-bin wines have none.
   bin_cell_id?: string | null;
+  // Migration 100. True when the bottle was moved here (e.g. by Voice Command)
+  // but not yet filed into its real slot/cell/case — shown distinctly until
+  // placed. awaiting_placement_unit_id is the target rack/fridge/bin (a
+  // wine_racks row) when the destination is one; null for an alt-cellar
+  // destination (which uses storage_location_id and can be "ignored").
+  awaiting_placement?: boolean;
+  awaiting_placement_unit_id?: string | null;
   user_notes: string | null;
   // Migration 084. The Cellar Note — a short (≤50 char) private note shown ONLY
   // on the wine card, never in Your Wine Reviews or the review card. Distinct

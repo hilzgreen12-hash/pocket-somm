@@ -5,8 +5,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MicButton } from './MicButton';
 import { useAuth } from '../hooks/useAuth';
 import { useCellar } from '../hooks/useCellar';
-import { fetchStorageLocations, assignWineToStorageLocation } from '../api/storageLocations';
+import { fetchStorageLocations } from '../api/storageLocations';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
+import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
@@ -30,6 +31,14 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
+  // Placement units a voice move can target — racks & fridges (both wine_racks
+  // rows). Bins are excluded for now (their screen doesn't yet surface
+  // awaiting-placement bottles, so a moved bottle would be invisible there).
+  const { data: units = [] } = useQuery({
+    queryKey: ['racks', userId],
+    queryFn: () => getRacks(userId!),
+    enabled: !!userId,
+  });
 
   const [phase, setPhase] = useState<Phase>('speak');
   const [action, setAction] = useState<CellarCommandAction>('move');
@@ -48,6 +57,8 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
 
   const chosenWine = wines.find((w) => w.id === chosenWineId);
   const targetLocation = locations.find((l) => l.id === result?.locationId);
+  const targetUnit = units.find((u) => u.id === result?.unitId);
+  const destName = targetUnit?.name ?? targetLocation?.name ?? null;
 
   function reset() {
     setPhase('speak');
@@ -70,7 +81,7 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     setAction(act);
     setPhase('parsing');
     try {
-      const res = await parseCellarCommand(act, transcript, wines, locations);
+      const res = await parseCellarCommand(act, transcript, wines, locations, units);
       setResult(res);
 
       // move / archive both need a resolved wine
@@ -79,7 +90,8 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
         setPhase('need');
         return;
       }
-      if (action === 'move' && (!res.locationId || res.needs === 'location')) {
+      // A move needs a destination — either an Alt Cellar or a rack/fridge/bin.
+      if (act === 'move' && (res.needs === 'location' || (!res.locationId && !res.unitId))) {
         setPhase('need');
         return;
       }
@@ -95,21 +107,48 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     setExecuting(true);
     try {
       if (action === 'move') {
-        if (!result?.locationId) return;
+        if (!result?.locationId && !result?.unitId) return;
+        const count = Math.min(chosenWine.quantity, Math.max(1, result?.quantity ?? chosenWine.quantity));
+        const whole = count >= chosenWine.quantity;
         const fromName = chosenWine.storage_location_id
           ? (locations.find((l) => l.id === chosenWine.storage_location_id)?.name ?? 'your cellar')
           : 'your cellar';
-        const toName = targetLocation?.name ?? 'its new location';
-        await assignWineToStorageLocation(chosenWine.id, result.locationId);
+        const toName = destName ?? 'its new location';
+        // A rack/fridge/bin destination flags the bottle "awaiting placement" in
+        // that unit (no slot yet); an Alt Cellar keeps storage_location_id and
+        // is flagged awaiting placement too (the user can "ignore" it there).
+        const destFields = result?.unitId
+          ? { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: true, awaiting_placement_unit_id: result.unitId }
+          : { storage_location_id: result!.locationId, case_id: null, bin_cell_id: null, awaiting_placement: true, awaiting_placement_unit_id: null };
+
+        if (whole) {
+          await clearWineFromRacks(chosenWine.id);
+          await updateCellarWine(chosenWine.id, destFields);
+        } else {
+          // Partial move: free that many source slots, decrement the source, and
+          // clone a destination row carrying the moved bottles (awaiting placement).
+          await removeSlotsForWine(chosenWine.id, count);
+          await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
+          const { id, created_at, updated_at, ...rest } = chosenWine;
+          await addCellarWine({ ...rest, quantity: count, is_wishlist: false, ...destFields });
+        }
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
         qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+        qc.invalidateQueries({ queryKey: ['racks', userId] });
+        qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+        qc.invalidateQueries({ queryKey: ['bins', userId] });
+        const viewRoute = result?.unitId
+          ? `/cellar/rack/${result.unitId}`
+          : `/cellar/storage-location/${result!.locationId}`;
         setSuccess({
           action: 'move',
           wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
           meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
-          detail: `from ${fromName} to ${toName}`,
+          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} · from ${fromName} to ${toName} — awaiting placement`,
           viewLabel: `View in ${toName}`,
-          viewRoute: `/cellar/storage-location/${result.locationId}`,
+          viewRoute,
         });
       } else {
         // archive — mirror the Chef pairing "Select & Archive" flow so the
@@ -146,11 +185,12 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     }
   }
 
-  // The confirm sentence for move / archive.
+  // The confirm sentence for move / archive — always states the bottle count.
   function confirmText(): string {
-    if (action === 'move') return `Move ${wineLabel(chosenWine)} to ${targetLocation?.name ?? 'the chosen location'}?`;
     const count = Math.min(chosenWine?.quantity ?? 1, Math.max(1, result?.quantity ?? (chosenWine?.quantity ?? 1)));
-    return `Archive ${count} ${count === 1 ? 'bottle' : 'bottles'} of ${wineLabel(chosenWine)}?`;
+    const bottles = `${count} ${count === 1 ? 'bottle' : 'bottles'}`;
+    if (action === 'move') return `Move ${bottles} of ${wineLabel(chosenWine)} to ${destName ?? 'the chosen location'}?`;
+    return `Archive ${bottles} of ${wineLabel(chosenWine)}?`;
   }
 
   const candidateWines = (result?.candidates ?? []).map((id) => wines.find((w) => w.id === id)).filter(Boolean) as CellarWine[];

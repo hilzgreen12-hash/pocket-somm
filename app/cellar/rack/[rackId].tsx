@@ -494,6 +494,18 @@ export default function RackGridScreen() {
   // Total bottles = occupied slots (each slot is one bottle).
   const rackBottleCount = useMemo(() => winesInRack.reduce((sum, w) => sum + w.count, 0), [winesInRack]);
 
+  // Bottles moved into THIS rack (e.g. by Voice Command) that have no slot yet.
+  const awaitingWines = useMemo(() => wines.filter((w) => w.awaiting_placement_unit_id === rackId), [wines, rackId]);
+  const awaitingBottles = awaitingWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+
+  // Long-press an awaiting bottle → enter placement mode; the next slot tapped
+  // files it (runPlacement clears the awaiting flag).
+  function startPlaceAwaiting(w: typeof wines[number]) {
+    setPendingWineId(w.id);
+    setPendingAddMode(false);
+    showAlert({ title: `Place ${w.wine_name || w.producer || 'this bottle'}`, body: 'Tap the slot in the grid where this bottle actually sits.' });
+  }
+
   // Order for the filter wine-picker: wines already in the filter (when the
   // editor opened) first, then the rest — each group keeps the recency order
   // of winesInRack. Uses the open-time snapshot so rows don't reshuffle as the
@@ -854,6 +866,11 @@ export default function RackGridScreen() {
       await assignSlots(rackId, freeSlots, at.wineId);
 
       const wine = wines.find((w) => w.id === at.wineId);
+      // A voice-moved bottle "awaiting placement" in this rack is now filed —
+      // clear the flag so it drops out of the awaiting list.
+      if (wine?.awaiting_placement) {
+        await updateWine.mutateAsync({ id: wine.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } });
+      }
       if (pendingAddMode && wine) {
         // "+ Add bottles" flow — the wine already exists with N bottles,
         // we're adding M more. Increment quantity by the placed count.
@@ -1490,6 +1507,20 @@ export default function RackGridScreen() {
       <Text style={styles.rackSummary}>
         {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
       </Text>
+
+      {/* Bottles moved into this rack (e.g. by Voice Command) with no slot yet —
+          yellow at the top; long-press then tap a slot to file them. */}
+      {awaitingBottles > 0 ? (
+        <View style={styles.awaitingBlock}>
+          <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
+          {awaitingWines.map((w) => (
+            <TouchableOpacity key={w.id} style={styles.awaitingRow} onLongPress={() => startPlaceAwaiting(w)} onPress={() => startPlaceAwaiting(w)} delayLongPress={400} activeOpacity={0.7}>
+              <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
+              <Text style={styles.awaitingHint}>Long-press, then tap a slot to place →</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {winesInRack.length > 0 && (
@@ -2287,6 +2318,12 @@ const styles = StyleSheet.create({
   slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
   // Stats bar — full-width yellow (gold) rules top and bottom, edge to edge.
   rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingVertical: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
+  // "Awaiting placement" banner + yellow rows (moved here, no slot yet).
+  awaitingBlock: { paddingTop: spacing.sm },
+  awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl },
+  awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
+  awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+  awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
   multiBar: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },
