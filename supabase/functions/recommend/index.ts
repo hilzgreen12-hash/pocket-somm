@@ -103,6 +103,11 @@ VINTAGE ASSESSMENT RULES:
 - E.g. 2011 was poor in Burgundy (both red and white) but fine in parts of Italy.
 - Include the vintage context clearly in the vintageAssessment notes.
 
+MISSING VINTAGE (CRITICAL — DO NOT INVENT):
+- A blank/absent vintage on a restaurant list almost always means the restaurant simply OMITTED the year — it does NOT mean the wine is non-vintage (NV). Restaurants leave vintages off all the time.
+- NEVER label a wine "NV" or invent a "blend of multiple vintages / house style" rationale just because the year is missing. Only treat a wine as genuinely non-vintage when its STYLE is inherently non-vintage AND no year is given — e.g. most Champagne "Brut" / "Brut Réserve" with no year, basic non-vintage sparkling, most sherry, tawny port, cream/solera wines. A still red/white Burgundy, Bordeaux, Barolo, Rioja, etc. with a missing year is a VINTAGED wine whose year the list didn't print — treat it as such, not as NV.
+- When the year is missing on a wine that is NOT inherently non-vintage: set vintage to null, and in vintageAssessment.notes state plainly that the vintage isn't listed, then give the honest, hedged reason it can still be recommended — e.g. "The vintage isn't shown on the list, but a recent release of this appellation will be drinking well; if it's more than ~3 years old it should be showing lovely secondary complexity." Do not fabricate a specific year or a specific vintage character you cannot know.
+
 PRICING — READ-ONLY, NEVER OUTPUT:
 Each wine in the provided list includes its real menu price, read from the diner's actual menu. Use those real prices to apply the budget rule and to reason about value for money. You must NOT output, restate, alter, or invent any price or currency. Vinster shows the diner the real menu price taken from the list itself, and compares it against live market data — the price is real data and is never authored by you. Your job is to select and analyse the real wines exactly as they exist on the list.
 
