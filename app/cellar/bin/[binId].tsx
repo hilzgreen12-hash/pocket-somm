@@ -7,6 +7,7 @@ import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, rem
 import { RenameModal } from '../../../src/components/RenameModal';
 import { updateCellarWine, archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
+import { useCellar } from '../../../src/hooks/useCellar';
 import { showAlert } from '../../../src/components/AppAlert';
 import { bottleSizeLabel } from '../../../src/components/BottleSizePicker';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
@@ -56,6 +57,10 @@ export default function BinDetailScreen() {
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
   const [movingWine, setMovingWine] = useState<{ id: string; name: string } | null>(null);
+  // Bottles moved into THIS bin (e.g. by Voice Command) that have no cell yet.
+  const { wines: allWines } = useCellar();
+  const awaitingWines = useMemo(() => allWines.filter((w) => w.awaiting_placement_unit_id === binId), [allWines, binId]);
+  const awaitingBottles = awaitingWines.reduce((s, w) => s + (w.quantity ?? 0), 0);
 
   // Bespoke filters live in the same custom_filters table as racks, scoped to
   // this bin's id (a bin is a wine_racks row), so the +Add flow just works.
@@ -201,8 +206,11 @@ export default function BinDetailScreen() {
   async function placeMoving(cell: BinCell) {
     if (!movingWine) return;
     try {
-      await updateCellarWine(movingWine.id, { bin_cell_id: cell.id });
+      // Setting a cell also clears any awaiting-placement flag (the bottle is
+      // now filed), so it drops out of the awaiting list.
+      await updateCellarWine(movingWine.id, { bin_cell_id: cell.id, awaiting_placement: false, awaiting_placement_unit_id: null });
       invalidate();
+      qc.invalidateQueries({ queryKey: ['cellar'] });
       setMovingWine(null);
     } catch (err) {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -382,6 +390,19 @@ export default function BinDetailScreen() {
           <Text style={styles.statsLine1}>{diamonds} {diamonds === 1 ? 'Diamond' : 'Diamonds'} · {halfDiamonds} Half {halfDiamonds === 1 ? 'Diamond' : 'Diamonds'}</Text>
           <Text style={styles.statsLine2}>{entries.length} {entries.length === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalCapacity} Slots</Text>
           <Text style={styles.hint}>Short tap an area to add wine or view contents. Long hold to Empty or Edit.</Text>
+          {/* Bottles moved into this bin (e.g. by Voice Command) with no cell
+              yet — yellow at the top; long-press then tap a diamond to file. */}
+          {awaitingBottles > 0 && !movingWine ? (
+            <View style={styles.awaitingBlock}>
+              <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
+              {awaitingWines.map((w) => (
+                <TouchableOpacity key={w.id} style={styles.awaitingRow} onLongPress={() => setMovingWine({ id: w.id, name: w.wine_name })} onPress={() => setMovingWine({ id: w.id, name: w.wine_name })} delayLongPress={400} activeOpacity={0.7}>
+                  <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
+                  <Text style={styles.awaitingHint}>Long-press, then tap a diamond to place →</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          ) : null}
           {movingWine ? (
             <View style={styles.movingBanner}>
               <Text style={styles.movingBannerText} numberOfLines={2}>Moving {movingWine.name} — tap a diamond to file it there.</Text>
@@ -577,6 +598,12 @@ const styles = StyleSheet.create({
   statsLine2: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: 2 },
   hint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', marginTop: 6, marginBottom: spacing.md, lineHeight: 19, paddingHorizontal: spacing.xl },
   movingBanner: { marginHorizontal: spacing.xl, marginBottom: spacing.sm, padding: spacing.md, borderRadius: 10, backgroundColor: 'rgba(212,176,96,0.14)', borderWidth: 1, borderColor: colors.gold, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.md },
+  // "Awaiting placement" banner + yellow rows (moved here, no cell yet).
+  awaitingBlock: { paddingTop: spacing.xs },
+  awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl },
+  awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
+  awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
+  awaitingHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   movingBannerText: { flex: 1, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text },
   movingCancel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   filterRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, gap: spacing.sm, paddingBottom: spacing.sm },

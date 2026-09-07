@@ -4,6 +4,7 @@ import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
 import { supabase } from './supabase';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
+import { bordeauxGrowthFor } from '../constants/bordeauxClassification';
 
 // All edge calls go through invokeResilient, which attaches the user's JWT (via
 // the supabase client), applies a per-call timeout, and retries transport
@@ -34,31 +35,49 @@ export async function scanLabel(base64Image: string): Promise<WineDetails> {
 // catalogue, swap it back: adopt the catalogue's real producer and set the cuvée
 // as the wine name. Best-effort — any lookup failure returns the scan untouched.
 async function reconcileScannedIdentity(data: WineDetails): Promise<WineDetails> {
+  let result = data;
   try {
     const scannedProducer = (data.producer ?? '').trim();
     const scannedName = (data.wineName ?? '').trim();
-    if (scannedProducer.length < 3) return data;
     const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
     const np = norm(scannedProducer);
     // Only when we DON'T already have a distinct producer + cuvée pair — i.e. the
     // wine name is missing or just repeats the "producer".
-    if (scannedName && norm(scannedName) !== np) return data;
-    const matches = await searchWines(scannedProducer);
-    // A catalogue row whose CUVÉE equals the scanned "producer", under a genuinely
-    // different producer — that's the misread we want to correct.
-    const hit = matches.find((m) => m.wineName && norm(m.wineName) === np && norm(m.producer) !== np);
-    if (!hit) return data;
-    return {
-      ...data,
-      producer: hit.producer,
-      wineName: hit.wineName,
-      region: (data.region ?? '').trim() || hit.region || data.region,
-      grape: (data.grape ?? '').trim() || hit.grape || data.grape,
-      style: (data.style ?? '').trim() || hit.style || data.style,
-    };
+    if (scannedProducer.length >= 3 && (!scannedName || norm(scannedName) === np)) {
+      const matches = await searchWines(scannedProducer);
+      // A catalogue row whose CUVÉE equals the scanned "producer", under a genuinely
+      // different producer — that's the misread we want to correct.
+      const hit = matches.find((m) => m.wineName && norm(m.wineName) === np && norm(m.producer) !== np);
+      if (hit) {
+        result = {
+          ...data,
+          producer: hit.producer,
+          wineName: hit.wineName,
+          region: (data.region ?? '').trim() || hit.region || data.region,
+          grape: (data.grape ?? '').trim() || hit.grape || data.grape,
+          style: (data.style ?? '').trim() || hit.style || data.style,
+        };
+      }
+    }
   } catch {
-    return data;
+    /* leave result as the raw scan */
   }
+  return applyBordeauxGrowth(result);
+}
+
+// A classified Bordeaux château rarely prints its growth on the label, so the
+// scan leaves the wine name blank. When the estate is a known classified growth
+// and no distinct cuvée was read, fill the wine name with the classification
+// (e.g. "Château Batailley" → wine name "Cinquième Cru Classé").
+function applyBordeauxGrowth(d: WineDetails): WineDetails {
+  const producer = (d.producer ?? '').trim();
+  const name = (d.wineName ?? '').trim();
+  if (!producer) return d;
+  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\bchateau\b/g, ' ').replace(/\s+/g, ' ').trim();
+  // Don't overwrite a genuine cuvée name (one that isn't just the producer again).
+  if (name && norm(name) !== norm(producer)) return d;
+  const growth = bordeauxGrowthFor(producer);
+  return growth ? { ...d, wineName: growth } : d;
 }
 
 export interface WineSearchResult {

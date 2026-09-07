@@ -498,12 +498,12 @@ export default function RackGridScreen() {
   const awaitingWines = useMemo(() => wines.filter((w) => w.awaiting_placement_unit_id === rackId), [wines, rackId]);
   const awaitingBottles = awaitingWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
 
-  // Long-press an awaiting bottle → enter placement mode; the next slot tapped
-  // files it (runPlacement clears the awaiting flag).
+  // Long-press an awaiting bottle → enter placement mode. Setting the pending
+  // wine surfaces the existing brown/yellow "Tap an empty slot to place …"
+  // banner; the next slot tapped files it (runPlacement clears the flag).
   function startPlaceAwaiting(w: typeof wines[number]) {
     setPendingWineId(w.id);
     setPendingAddMode(false);
-    showAlert({ title: `Place ${w.wine_name || w.producer || 'this bottle'}`, body: 'Tap the slot in the grid where this bottle actually sits.' });
   }
 
   // Order for the filter wine-picker: wines already in the filter (when the

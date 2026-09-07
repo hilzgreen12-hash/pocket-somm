@@ -8,6 +8,7 @@ import { useCellar } from '../hooks/useCellar';
 import { fetchStorageLocations } from '../api/storageLocations';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
+import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
@@ -31,12 +32,12 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
-  // Placement units a voice move can target — racks & fridges (both wine_racks
-  // rows). Bins are excluded for now (their screen doesn't yet surface
-  // awaiting-placement bottles, so a moved bottle would be invisible there).
+  // Placement units a voice move can target — racks & fridges plus bins (all
+  // wine_racks rows). Each destination screen surfaces awaiting-placement
+  // bottles so a moved bottle is never invisible.
   const { data: units = [] } = useQuery({
-    queryKey: ['racks', userId],
-    queryFn: () => getRacks(userId!),
+    queryKey: ['placement-units', userId],
+    queryFn: async () => [...(await getRacks(userId!)), ...(await getBins(userId!))],
     enabled: !!userId,
   });
 
@@ -140,7 +141,7 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['bins', userId] });
         const viewRoute = result?.unitId
-          ? `/cellar/rack/${result.unitId}`
+          ? (targetUnit?.storage_type === 'bin' ? `/cellar/bin/${result.unitId}` : `/cellar/rack/${result.unitId}`)
           : `/cellar/storage-location/${result!.locationId}`;
         setSuccess({
           action: 'move',
