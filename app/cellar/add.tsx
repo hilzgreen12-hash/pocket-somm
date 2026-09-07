@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator, Keyboard } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -19,11 +19,14 @@ export default function AddWineScreen() {
   const { setPendingWineId } = useRackStore();
   const userCurrency = preferences?.defaultCurrency ?? 'GBP';
 
-  const [wineName, setWineName] = useState('');
-  const [producer, setProducer] = useState('');
-  const [region, setRegion] = useState('');
-  const [vintage, setVintage] = useState('');
-  const [quantity, setQuantity] = useState('1');
+  // Prefill fields when arriving from a voice "Add Bottles" command — the user
+  // still reviews and taps Save, so this screen stays the confirm step.
+  const params = useLocalSearchParams<{ producer?: string; wineName?: string; vintage?: string; region?: string; quantity?: string; storageLocationId?: string }>();
+  const [wineName, setWineName] = useState(params.wineName ?? '');
+  const [producer, setProducer] = useState(params.producer ?? '');
+  const [region, setRegion] = useState(params.region ?? '');
+  const [vintage, setVintage] = useState(params.vintage ?? '');
+  const [quantity, setQuantity] = useState(params.quantity ?? '1');
   const [bottleSizeMl, setBottleSizeMl] = useState(750);
   const [purchasePrice, setPurchasePrice] = useState('');
   const [saving, setSaving] = useState(false);
@@ -55,6 +58,7 @@ export default function AddWineScreen() {
         vintage: vintage.trim() || null,
         quantity: parseInt(quantity) || 1,
         storage_location: null,
+        storage_location_id: params.storageLocationId ?? null,
         date_received: new Date().toISOString().split('T')[0],
         critic_score: null,
         drinking_window_from: null,

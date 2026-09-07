@@ -50,30 +50,28 @@ export default function WineArchiveScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Your Wine Archive</Text>
+        <Text style={styles.title}>Your Cellar Archive</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <ScrollView contentContainerStyle={{ paddingTop: spacing.xl, paddingBottom: 60 }}>
-        {/* Your Cellar Archive — plain title, blurb, stats bar, then a bubble
-            button "View Cellar Archive" through to the archived bottles. */}
-        <Text style={styles.sectionHeader}>Your Cellar Archive</Text>
+        {/* Your Cellar Archive — mirrors Pair's Your Cookbook: the page header is
+            the title, then the blurb, a "View Your Cellar Archive →" link, and
+            the stats bar. */}
         <Text style={styles.blurb}>Bottles you've moved out of your cellar live here. You can still add reviews and cellar notes for the wines in your archive.</Text>
+        <TouchableOpacity onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7} style={styles.viewLinkRow}>
+          <Text style={styles.viewLink}>View Your Cellar Archive →</Text>
+        </TouchableOpacity>
         <Text style={styles.stats}>
           {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>
-        <View style={styles.archiveBubbleWrap}>
-          <TouchableOpacity onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.8} style={styles.archiveBubble}>
-            <Text style={styles.archiveBubbleText}>View Cellar Archive</Text>
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.sepShort} />
 
-        {/* Your Lineups — a sub-header (not a bubble), its blurb, the stats bar
-            bracketed by full-width rules, then the thumbnail carousel with a
-            swipe hint above it. */}
-        <Text style={styles.sectionHeader}>Your Lineups</Text>
+        {/* Archive a Night Lineups — a sub-header (not a bubble), its blurb, the
+            stats bar bracketed by full-width rules, then the thumbnail carousel
+            with a swipe hint above it. */}
+        <Text style={styles.sectionHeader}>Archive a Night Lineups</Text>
         <Text style={styles.blurb}>Your vinous exploits save here automatically from Scan a Lineup, or add Lineups directly. This archive is a diary of your best wine memories.</Text>
         <Text style={styles.stats}>
           {lineups.length} {lineups.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
@@ -104,14 +102,10 @@ const styles = StyleSheet.create({
   back: { width: 40, fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
 
-  // Your Cellar Archive — a white-bubble button matching the Cookbook title.
-  // Gold "View Cellar Archive →" link beneath the Cellar Archive stats bar.
-  viewLinkRow: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: spacing.xs },
+  // Gold "View Your Cellar Archive →" link beneath the blurb (matches the
+  // Cookbook's "View Your Cookbook →" link).
+  viewLinkRow: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.xs },
   viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  // Your Cellar Archive — white-bubble button (the way through to the archive).
-  archiveBubbleWrap: { alignItems: 'center', paddingTop: spacing.sm, paddingBottom: spacing.md },
-  archiveBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingHorizontal: spacing.xl, paddingVertical: spacing.sm },
-  archiveBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5, textAlign: 'center' },
 
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 

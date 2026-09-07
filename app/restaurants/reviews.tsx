@@ -840,6 +840,12 @@ export default function RestaurantReviewsScreen() {
                         <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
                       ) : null}
                     </View>
+                    {/* Yellow "Awaiting Review" note for a restaurant captured from a
+                        List scan that carries no rating or note yet — mirrors the
+                        wine review page. */}
+                    {!restaurantReviewed(item) && (
+                      <Text style={styles.awaitingReviewNote}>Awaiting Review</Text>
+                    )}
                     {hasAnyRating && (
                       <View style={styles.ratingGrid}>
                         {item.ratingFood != null && (
@@ -1154,6 +1160,9 @@ const styles = StyleSheet.create({
   // "Restaurants awaiting review" list rows.
   awaitingEmpty: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
   awaitingRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
+  // Yellow "Awaiting Review" note on an un-reviewed restaurant entry — matches
+  // reviewStatsLine on Your Wine Reviews.
+  awaitingReviewNote: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
   awaitingName: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   awaitingMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
   sectionDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.xs },

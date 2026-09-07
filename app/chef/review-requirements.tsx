@@ -8,6 +8,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { useLabelStore } from '../../src/stores/labelStore';
+import { useChefLabelHistory } from '../../src/hooks/useChefHistory';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCellar } from '../../src/hooks/useCellar';
 import { generatePairings, prepareImageBase64, scanLabel } from '../../src/api/label';
@@ -43,9 +44,28 @@ export default function ReviewRequirementsScreen() {
   // When the user arrived from the cellar wine card, thread the source
   // through to /chef/results so its Back button can route home properly.
   const resultsQuery = isFromCellar && wineId ? `?from=cellar&wineId=${wineId}` : '';
-  const { wineDetailsConfirmed, setPairings, setError, setFilters, setImage, setWineDetails, setWineDetailsConfirmed } = useLabelStore();
+  const { wineDetailsConfirmed, pairings, setPairings, setError, setFilters, setImage, setWineDetails, setWineDetailsConfirmed } = useLabelStore();
+  const { sessions: labelSessions } = useChefLabelHistory();
   const { preferences } = usePreferences();
   const { wines } = useCellar();
+
+  // "View Last Result" — reopen the current in-memory recipe result if there is
+  // one, otherwise the most recent saved label scan. Mirrors the Pair tab.
+  function handleViewLastResult() {
+    if (wineDetailsConfirmed && pairings.length) {
+      router.push('/chef/results');
+      return;
+    }
+    const last = labelSessions[0];
+    if (!last) {
+      showAlert({ title: 'No previous search', body: 'Once you save a label scan to your archive, you can come back here to revisit it.' });
+      return;
+    }
+    router.push({
+      pathname: '/chef/results',
+      params: { fromHistory: 'true', sessionId: last.id, savedAt: last.saved_at, city: last.city ?? '' },
+    });
+  }
 
   const [dietary, setDietary] = useState<string>('None');
   const [allergy, setAllergy] = useState<string>('None');
@@ -353,6 +373,10 @@ export default function ReviewRequirementsScreen() {
         </TouchableOpacity>
       )}
 
+      <TouchableOpacity style={styles.lastResultBtn} onPress={handleViewLastResult}>
+        <Text style={styles.lastResultBtnText}>View Last Result</Text>
+      </TouchableOpacity>
+
       <Modal visible={!!activeDropdown} transparent animationType="fade" onRequestClose={() => setOpenDropdown(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setOpenDropdown(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
@@ -474,12 +498,17 @@ const styles = StyleSheet.create({
   select: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: 10, backgroundColor: colors.surface, marginBottom: spacing.md },
   selectValue: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, flex: 1 },
   selectArrow: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.gold, marginLeft: spacing.sm },
-  continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', marginTop: spacing.xs },
+  // Primary buttons share the Find Pairing footprint (radius 12, padding sm,
+  // full width) so Choose Your Wine / Get Pairings / View Last Result all match.
+  continueButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.xs },
   buttonDisabled: { opacity: 0.6 },
   continueButtonText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   // "Choose Your Wine" — the single white primary button (Mode B).
-  chooseWineButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.sm },
-  chooseWineButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 16, letterSpacing: 0.3 },
+  chooseWineButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
+  chooseWineButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, letterSpacing: 0.3 },
+  // Yellow "View Last Result" bubble — same footprint, gold outline + text.
+  lastResultBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
+  lastResultBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   // Rows inside the "Choose Your Wine" chooser popup.
   chooserOption: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
   chooserOptionText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },

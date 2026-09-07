@@ -8,6 +8,7 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HomeStorageSection } from '../../src/components/HomeStorageSection';
+import { CellarCommandModal } from '../../src/components/CellarCommandModal';
 
 const CELLAR_HELP = `Your cellar, brought to life. Scan a label — or add a bottle by hand — and Vinster fills in the details for you: critic scores, tasting notes, drinking windows, and what each bottle is worth today.
 
@@ -22,6 +23,7 @@ export default function CellarTab() {
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
 
   function requireAuth(action: () => void) {
@@ -83,9 +85,15 @@ export default function CellarTab() {
       <View style={styles.titleRow}>
         <View style={styles.titleSide} />
         <HelpTitle label="Cellar" title="How Cellar works" body={CELLAR_HELP} textStyle={styles.title} />
-        <TouchableOpacity style={styles.titleSide} onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.importLink}>+ Import</Text>
-        </TouchableOpacity>
+        {/* Voice Command (yellow) stacked above + Import. */}
+        <View style={styles.titleSide}>
+          <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 6, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={styles.voiceLink} numberOfLines={1}>Voice Command</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 6, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.importRow}>
+            <Text style={styles.importLink}>+ Import</Text>
+          </TouchableOpacity>
+        </View>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
@@ -112,6 +120,8 @@ export default function CellarTab() {
 
       {/* "Archive a Lineup" and "Your Lineups" now live on the Scan tab. */}
 
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+
       <SignInPromptModal
         visible={signInPromptVisible}
         onDismiss={dismissSignInPrompt}
@@ -131,7 +141,9 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // Side cells balance the centred title: an empty spacer on the left, the
   // "+ Import" link on the right, both the same width so "Cellar" stays centred.
-  titleSide: { width: 72, justifyContent: 'center' },
+  titleSide: { width: 96, justifyContent: 'center', alignItems: 'flex-end' },
+  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'right' },
+  importRow: { marginTop: 4 },
   importLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").

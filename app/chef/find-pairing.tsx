@@ -14,6 +14,7 @@ import { usePreferences } from '../../src/hooks/usePreferences';
 import { useAuth } from '../../src/hooks/useAuth';
 import { findFoodWinePairing } from '../../src/api/label';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation } from '../../src/stores/foodPairingStore';
+import { useChefPairingHistory } from '../../src/hooks/useChefHistory';
 import { WINE_REGIONS } from '../../src/constants/wineRegions';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -23,7 +24,8 @@ export default function FindPairingScreen() {
   const { session } = useAuth();
   const { wines } = useCellar();
   const { preferences: savedPreferences } = usePreferences();
-  const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget } = useFoodPairingStore();
+  const { setCellarResult, setGeneralResult, setDish, setMode, setStylePreference: storeStyle, setBudget: storeBudget, generalResult, cellarResult } = useFoodPairingStore();
+  const { sessions: pairingSessions } = useChefPairingHistory();
 
   const [dish, setDishLocal] = useState('');
   // Multi-select preference bubbles (mirror the You → Your Preferences page):
@@ -36,6 +38,28 @@ export default function FindPairingScreen() {
   const [budget, setBudget] = useState<number | null>(savedPreferences?.defaultBudget ?? null);
   const [mode, setModeLocal] = useState<'cellar' | 'general'>('cellar');
   const [loading, setLoading] = useState(false);
+
+  // "View Last Result" — reopen the current in-memory pairing if there is one,
+  // otherwise the most recent saved pairing. Mirrors the Pair tab's long-press.
+  function handleViewLastResult() {
+    if (generalResult || cellarResult) {
+      router.push('/chef/pairing-results');
+      return;
+    }
+    const last = pairingSessions[0];
+    if (!last) {
+      showAlert({ title: 'No previous search', body: 'Once you save a wine pairing to your archive, you can come back here to revisit it.' });
+      return;
+    }
+    setDish(last.dish);
+    setMode(last.mode);
+    if (last.mode === 'cellar') setCellarResult(last.cellar_result ?? []);
+    else setGeneralResult(last.general_result ?? [], last.general_summary ?? undefined);
+    router.push({
+      pathname: '/chef/pairing-results',
+      params: { fromHistory: 'true', savedAt: last.saved_at, city: last.city ?? '' },
+    });
+  }
 
   // Jump to the wine-preferences editor and back. Pushed (not replaced) so the
   // editor's Back returns here with this form's state intact.
@@ -227,7 +251,7 @@ export default function FindPairingScreen() {
           onPress={() => setModeLocal('cellar')}
         >
           <Text style={[styles.toggleText, mode === 'cellar' && styles.toggleTextActive]}>From My Cellar</Text>
-          <Text style={[styles.toggleSub, mode === 'cellar' && styles.toggleSubActive]}>{wines.length} {wines.length === 1 ? 'bottle' : 'bottles'}</Text>
+          <Text style={[styles.toggleSub, mode === 'cellar' && styles.toggleSubActive]}>{wines.length} {wines.length === 1 ? 'Wine' : 'Wines'}</Text>
         </TouchableOpacity>
 
         <View style={styles.toggleDivider} />
@@ -243,6 +267,10 @@ export default function FindPairingScreen() {
 
       <TouchableOpacity style={styles.button} onPress={() => handleFind()}>
         <Text style={styles.buttonText}>Find Pairing</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity style={styles.lastResultBtn} onPress={handleViewLastResult}>
+        <Text style={styles.lastResultBtnText}>View Last Result</Text>
       </TouchableOpacity>
 
       <SignInPromptModal
@@ -356,4 +384,8 @@ const styles = StyleSheet.create({
   styleBtnTextActive: { color: colors.gold },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
+  // Yellow "View Last Result" bubble beneath Find Pairing — same footprint as the
+  // Find Pairing button, gold outline + text.
+  lastResultBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
+  lastResultBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
 });

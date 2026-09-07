@@ -37,42 +37,38 @@ function CellarResults({ recommendations, wines, onSelect }: {
   wines: ReturnType<typeof useCellar>['wines'];
   onSelect: (wine: CellarWine, recName: string) => void;
 }) {
+  // Only show recommendations that still map to a real cellar wine — the model
+  // occasionally emits a "placeholder" filler rec when it can't field three
+  // genuine matches, which used to render as a dead "no longer in your cellar"
+  // card. Drop those rather than surface them.
+  const live = recommendations.filter((rec) => wines.some((w) => w.id === rec.cellarWineId));
   return (
     <>
-      {recommendations.map((rec) => {
-        const wine = wines.find((w) => w.id === rec.cellarWineId);
-        const subtitleParts = [wine?.vintage, wine?.region].filter(Boolean);
-        const subtitle = subtitleParts.length > 0 ? `From your cellar · ${subtitleParts.join(' · ')}` : 'From your cellar';
+      {live.map((rec) => {
+        const wine = wines.find((w) => w.id === rec.cellarWineId)!;
+        const subtitle = [wine.vintage, wine.region].filter(Boolean).join(' · ');
         return (
           <View key={rec.cellarWineId} style={styles.card}>
             {/* Tap the wine name to open its card — Wine Intel + details. */}
-            <TouchableOpacity onPress={() => wine && router.push(`/cellar/${wine.id}` as any)} disabled={!wine} activeOpacity={0.7}>
+            <TouchableOpacity onPress={() => router.push(`/cellar/${wine.id}` as any)} activeOpacity={0.7}>
               <View style={styles.cardWineRow}>
                 <Text style={styles.cardWine}>{rec.wineName}</Text>
-                {wine ? <Text style={styles.cardWineChevron}>›</Text> : null}
+                <Text style={styles.cardWineChevron}>›</Text>
               </View>
             </TouchableOpacity>
-            <Text style={styles.cardSubtitle}>{subtitle}</Text>
+            {subtitle ? <Text style={styles.cardSubtitle}>{subtitle}</Text> : null}
             <Text style={styles.cardBody}>{rec.rationale}</Text>
 
             <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Serving tip</Text>
             <Text style={styles.cardItem}>{rec.servingTip}</Text>
 
-            {/* A cellar wine — jump to it in Your Cellar / Home Storage. */}
-            {wine ? (
-              <TouchableOpacity onPress={() => router.push(`/cellar/${wine.id}` as any)} activeOpacity={0.7}>
-                <Text style={styles.cellarViewLink}>View in Your Cellar · Home Storage →</Text>
-              </TouchableOpacity>
-            ) : null}
+            {/* Jump to the wine in Your Cellar / Home Storage. */}
+            <TouchableOpacity onPress={() => router.push(`/cellar/${wine.id}` as any)} activeOpacity={0.8} style={styles.cardBtn}>
+              <Text style={styles.cardBtnText}>View in Your Cellar · Home Storage</Text>
+            </TouchableOpacity>
 
-            <TouchableOpacity
-              onPress={() => wine && onSelect(wine, rec.wineName)}
-              activeOpacity={0.7}
-              disabled={!wine}
-            >
-              <Text style={[styles.cardLink, !wine && styles.cardLinkMuted]}>
-                {wine ? 'Select This Wine' : 'No longer in your cellar'}
-              </Text>
+            <TouchableOpacity onPress={() => onSelect(wine, rec.wineName)} activeOpacity={0.8} style={styles.cardBtn}>
+              <Text style={styles.cardBtnText}>Select and Archive This Wine</Text>
             </TouchableOpacity>
           </View>
         );
@@ -306,8 +302,16 @@ export default function PairingResultsScreen() {
       <View ref={shareRef} collapsable={false} style={styles.shareArea}>
         <Text style={styles.pageTitle}>Pairing to a Recipe</Text>
 
+        {(stampDate || stampLocation) && (
+          <View style={styles.stampRow}>
+            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
+            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+          </View>
+        )}
+
         <View style={styles.header}>
           <Text style={styles.headerLine}>Your Brief</Text>
+          <Text style={styles.briefMode}>{mode === 'cellar' ? 'Select from Cellar' : 'Select from Market'}</Text>
           <Text style={styles.dish}>{titleCase(dish)}</Text>
           {mode === 'general' && wines.length > 0 && (
             <TouchableOpacity onPress={handleShowCellarOptions} activeOpacity={0.7}>
@@ -316,15 +320,8 @@ export default function PairingResultsScreen() {
           )}
         </View>
 
-        {(stampDate || stampLocation) && (
-          <View style={styles.stampRow}>
-            {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
-            {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
-          </View>
-        )}
-
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{mode === 'cellar' ? 'From Your Cellar' : 'Style Recommendations'}</Text>
+          {mode === 'general' && <Text style={styles.sectionTitle}>Style Recommendations</Text>}
           {mode === 'cellar' && cellarResult && (
             <CellarResults recommendations={cellarResult} wines={wines} onSelect={openSelect} />
           )}
@@ -420,9 +417,12 @@ const styles = StyleSheet.create({
   stampDate: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 1 },
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   // Page title — matches "Pairing to a Wine" on the sibling results page.
-  pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, paddingTop: spacing.xs, marginBottom: spacing.md },
+  pageTitle: { fontSize: 26, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, paddingTop: spacing.xs, marginBottom: spacing.md },
   header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: 'center' },
   headerLine: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
+  // "Select from Cellar" / "Select from Market" — the source line of the brief,
+  // sits between "Your Brief" and the dish.
+  briefMode: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs, textAlign: 'center' },
   // The dish text is the user's free-form brief — promote it from a
   // 15pt subline to the visual headline of the page (was previously
   // dominated by "Your Pairing" at 20pt bold). Now reads as a proper
@@ -439,7 +439,10 @@ const styles = StyleSheet.create({
   // Tappable wine name → its card (Wine Intel); a gold chevron signals it opens.
   cardWineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
   cardWineChevron: { fontSize: 20, color: colors.gold, fontFamily: fonts.bodyBold, marginTop: -2 },
-  cellarViewLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, textDecorationLine: 'underline', marginTop: spacing.sm },
+  // Gold-outline bubble buttons inside each cellar card (View in Your Cellar,
+  // Select and Archive This Wine).
+  cardBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
+  cardBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
   cardSubtitle: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2 },
   cardBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   cardSection: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
@@ -447,8 +450,6 @@ const styles = StyleSheet.create({
   bandRow: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.sm, marginBottom: 6 },
   bandSymbol: { fontFamily: fonts.bodyBold, fontSize: 16, color: colors.gold, minWidth: 40, letterSpacing: 1 },
   bandRegion: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, lineHeight: 20 },
-  cardLink: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
-  cardLinkMuted: { color: colors.textMuted },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   modalSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   modalTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
