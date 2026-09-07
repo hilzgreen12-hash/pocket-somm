@@ -17,6 +17,7 @@ import { fromChosenGroup, fromCellar } from '../../src/utils/reviewModel';
 import { byRecency, entriesOf, flatMirror } from '../../src/utils/cellarReview';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
+import { SearchProgress } from '../../src/components/SearchProgress';
 import { showAlert } from '../../src/components/AppAlert';
 import { ShareIcon } from '../../src/components/ShareIcon';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
@@ -1494,12 +1495,17 @@ export default function ChosenWinesScreen() {
         onClose={() => setExpandedThumb(null)}
       />
 
-{/* Fullscreen overlay while the chosen photo is being read. Sits
-          above the screen so the user can't tap "+ Add" again mid-scan. */}
+{/* Fullscreen overlay while the chosen photo is being read — the standard
+          Vinster percentage-bar loader (not a bare spinner on a black scrim),
+          sitting above the screen so the user can't tap "+ Add" again mid-scan. */}
       {uploading ? (
-        <View style={styles.uploadingOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.uploadingText}>Reading the label…</Text>
+        <View style={StyleSheet.absoluteFill} pointerEvents="auto">
+          <SearchProgress
+            title="Reading the label…"
+            subtitle="Vinster needs a few seconds"
+            body="Vinster is reading your wine label and gathering the details."
+            durationMs={15000}
+          />
         </View>
       ) : null}
 

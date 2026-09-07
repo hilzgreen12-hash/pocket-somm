@@ -89,6 +89,9 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   const [drinkingWindow, setDrinkingWindow] = useState('');
   const [isFavourite, setIsFavourite] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Tracks whether the user has typed/picked anything not yet saved, so backing
+  // out of a half-written review prompts to save rather than losing it silently.
+  const [dirty, setDirty] = useState(false);
   // Estimated Value — generated on demand (Wine-Searcher-first) and persisted
   // onto the new review row when it's saved.
   const [estimatedValue, setEstimatedValue] = useState<number | null>(null);
@@ -182,14 +185,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     setIdentityConfirmed(true);
   }
 
-  // "Choose a different wine" from the search-picked vintage prompt — clear the
-  // filled identity and return to the search bar.
-  function changeWine() {
-    setSearchPicked(false);
-    setProducer(''); setWineName(''); setRegion(''); setStyle(''); setVintage('');
-    if (saved) setSaved(false);
-  }
-
   // Generate an Estimated Value on demand from the current identity fields.
   // Held locally and written onto the row when the review is saved.
   async function fetchEstimate() {
@@ -227,7 +222,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       // Carry the scanned/stored menu price through so the user doesn't have to
       // re-enter it when reviewing a restaurant wine after the fact.
       setListPrice(initial?.listPrice != null ? String(initial.listPrice) : '');
-      setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false);
+      setUserScore(null); setDrinkingWindow(''); setIsFavourite(false); setSaved(false); setDirty(false);
       // Default the review date to when the label was scanned (e.g. reviewing a
       // wine from the Label Library), falling back to today. Still editable.
       setReviewDate((initial?.date && /^\d{4}-\d{2}-\d{2}$/.test(initial.date)) ? initial.date : new Date().toISOString().split('T')[0]);
@@ -387,19 +382,39 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
     }
   }
 
-  // Clear the "saved" state whenever the user edits a field again.
+  // Clear the "saved" state whenever the user edits a field again, and mark the
+  // review dirty so backing out prompts to save.
   function edited<T>(setter: (v: T) => void) {
-    return (v: T) => { setter(v); if (saved) setSaved(false); };
+    return (v: T) => { setter(v); setDirty(true); if (saved) setSaved(false); };
+  }
+
+  // Guard against silently losing an in-progress review (the reported bug: a
+  // half-written review vanished after leaving the page). If anything's been
+  // entered and not saved, confirm on Back.
+  function handleBack() {
+    if (dirty && !saved) {
+      showAlert({
+        title: 'Save this review?',
+        body: "You've started a review but haven't saved it. Save it so you can finish later, or discard it?",
+        buttons: [
+          { text: 'Save', onPress: () => { void handleSave(); } },
+          { text: 'Discard', style: 'destructive', onPress: onClose },
+          { text: 'Keep editing', style: 'cancel' },
+        ],
+      });
+      return;
+    }
+    onClose();
   }
 
   // No presentationStyle on the Modal: it's iOS-only and forces a black modal
   // window on Android during the slide-in ("screen turns black while loading").
   // Not transparent, so iOS already presents full-screen by default.
   return (
-    <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" onRequestClose={handleBack}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          <TouchableOpacity style={styles.backBtn} onPress={onClose} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.backBtn} onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
             <Text accessibilityLabel="Back" style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
           {/* Header favourite star — hidden on the review-card layout, where the
@@ -488,6 +503,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     // vintage only" prompt so it's clear Vinster filled it in.
                     setSearchPicked(true);
                     setJustFilled(true);
+                    setDirty(true);
                     if (saved) setSaved(false);
                   }} />
                 ) : null}
@@ -498,28 +514,31 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   // single field. The rest of the identity fields stay hidden.
                   <>
                     <Text style={styles.pickedNameLine}>{[producer, wineName].filter(Boolean).join(' ') || 'Selected wine'}</Text>
-                    <Text style={styles.pickedVintageLabel}>Add Vintage</Text>
-                    <TextInput
-                      style={styles.pickedVintageInput}
-                      value={vintage}
-                      onChangeText={edited((t: string) => setVintage(t.replace(/[^0-9A-Za-z]/g, '').slice(0, 7)))}
-                      placeholder="e.g. 2019 or NV"
-                      placeholderTextColor={colors.textMuted}
-                      autoCapitalize="characters"
-                      autoCorrect={false}
-                      maxLength={7}
-                      returnKeyType="done"
-                      onSubmitEditing={confirmIdentity}
-                    />
+                    <View style={styles.pickedVintageRow}>
+                      <Text style={styles.pickedVintageLabel}>Add Vintage:</Text>
+                      <TextInput
+                        style={styles.pickedVintageInput}
+                        value={vintage}
+                        onChangeText={edited((t: string) => setVintage(t.replace(/[^0-9A-Za-z]/g, '').slice(0, 7)))}
+                        placeholder="e.g. 2019 or NV"
+                        placeholderTextColor={colors.textMuted}
+                        autoCapitalize="characters"
+                        autoCorrect={false}
+                        maxLength={7}
+                        returnKeyType="done"
+                        onSubmitEditing={confirmIdentity}
+                      />
+                    </View>
                     <TouchableOpacity style={styles.confirmIdentityBtn} onPress={confirmIdentity} activeOpacity={0.85}>
                       <Text style={styles.confirmIdentityText}>✓  Confirm Wine</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={changeWine} activeOpacity={0.7} style={styles.changeWineRow}>
-                      <Text style={styles.changeWineLink}>Choose a different wine</Text>
                     </TouchableOpacity>
                   </>
                 ) : (
                   <>
+                    {/* Manual entry — a gold prompt matching "Search your wine",
+                        sitting above the identity fields. */}
+                    {!labelImageUri ? <Text style={styles.inputYourWineLabel}>Or, Input your wine</Text> : null}
+
                     {/* Scanned / uploaded label sits to the left of the identity
                         fields, mirroring a cellar wine card. */}
                     <View style={labelImageUri ? styles.identityRow : undefined}>
@@ -703,18 +722,19 @@ const styles = StyleSheet.create({
   // Inline, borderless identity fields — read like the wine's own line, with a
   // faint underline to hint they're editable (vs the clunky boxed inputs).
   inputInline: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: colors.border, marginBottom: spacing.sm },
-  // Search-picked: the filled wine name on a line below the search bar, then an
-  // "Add Vintage" prompt with a single vintage input.
-  pickedNameLine: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, marginTop: spacing.md, letterSpacing: 0.3 },
-  pickedVintageLabel: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, marginTop: spacing.md, marginBottom: spacing.sm, letterSpacing: 0.5 },
+  // Search-picked: the filled wine name on a line below the search bar (prominent),
+  // then a compact inline "Add Vintage:" prompt with the input on the same line.
+  pickedNameLine: { fontFamily: fonts.headingSemibold, fontSize: 19.5, color: colors.text, marginTop: spacing.md, letterSpacing: 0.3 },
+  pickedVintageRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, marginTop: spacing.sm, marginBottom: spacing.md },
+  pickedVintageLabel: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.5 },
   pickedVintageInput: {
-    borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+    flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10,
     paddingVertical: spacing.sm, paddingHorizontal: spacing.md, fontSize: 18,
     fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface,
-    marginBottom: spacing.md,
   },
-  changeWineRow: { alignItems: 'center', paddingVertical: spacing.sm },
-  changeWineLink: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, textDecorationLine: 'underline' },
+  // "Or, Input your wine" — gold prompt above the manual identity fields, styled
+  // to match WineSearchInput's "Search your wine" label.
+  inputYourWineLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: spacing.md, marginBottom: spacing.sm, textTransform: 'uppercase', letterSpacing: 0.5 },
   // "Scan again" — gold link, shown when the review was reached via scan/upload.
   scanAgainRow: { alignItems: 'center', paddingVertical: spacing.sm },
   scanAgainLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },

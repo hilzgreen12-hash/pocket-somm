@@ -103,7 +103,6 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
           )}
         </View>
       ) : null}
-      <Text style={styles.hint}>Pick a match to fill the details below, or just type them in yourself.</Text>
     </View>
   );
 }

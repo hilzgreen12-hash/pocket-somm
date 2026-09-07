@@ -1314,7 +1314,7 @@ const styles = StyleSheet.create({
   // Inter — body (processing status)
   scanningText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   // Cormorant — page header
-  title: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  title: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.lg },
   // Stats bar — green outline + light-green fill (matches the "upload instead"
   // banner on the Scan tab), distinct from the terracotta separator lines.
   // Stats BAR — full-width, with a green rule top and bottom running edge to

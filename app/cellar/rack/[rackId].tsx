@@ -1432,11 +1432,6 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Gold tally — distinct wines, total bottles, and total slot capacity. */}
-      <Text style={styles.rackSummary}>
-        {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
-      </Text>
-
       {/* STATIC header (outside the scroll view). When an Add Multiples / Add
           More flow is active, its bar sits here in place of the instructions so
           it never overlays the grid below; only the filters + grid scroll. */}
@@ -1471,11 +1466,11 @@ export default function RackGridScreen() {
       ) : (
         <>
           <View style={styles.rackHintBlock}>
-            <Text style={styles.rackHintBullet}>•  Add Single Bottles & View Wine Intel with a Short Press</Text>
-            <Text style={styles.rackHintBullet}>•  Add Multiples of the same wine with a Long Press</Text>
-            <Text style={styles.rackHintBullet}>•  Edit a Slot with a Long Press</Text>
-            <Text style={styles.rackHintBullet}>•  Pinch Rack to Zoom</Text>
-            <Text style={styles.rackHintBullet}>•  Add up to six different bottles at a time with <Text style={styles.rackHintLink} onPress={startLineup}>Add a Lineup</Text></Text>
+            <Text style={styles.rackHintBullet}>•  Short Press a slot: Add a bottle</Text>
+            <Text style={styles.rackHintBullet}>•  Short press a thumbnail: Wine Intel</Text>
+            <Text style={styles.rackHintBullet}>•  Long Press a slot: Add same-wine multiples</Text>
+            <Text style={styles.rackHintBullet}>•  Long Press a thumbnail: Edit</Text>
+            <Text style={styles.rackHintBullet}>•  Add A Lineup: Up to 6 different bottles <Text style={styles.rackHintLink} onPress={startLineup}>Here</Text></Text>
           </View>
           {lineupSetup && (
             <View style={styles.lineupPrompt}>
@@ -1490,11 +1485,15 @@ export default function RackGridScreen() {
         </>
       )}
 
+      {/* Gold tally — sits above the filters with full-width yellow top/bottom
+          rules (moved down from directly under the header). */}
+      <Text style={styles.rackSummary}>
+        {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
+      </Text>
+
       <KeyboardAwareScrollView contentContainerStyle={{ paddingTop: spacing.md, paddingBottom: 60 }} bottomOffset={24} scrollEnabled={!isZoomed}>
         {winesInRack.length > 0 && (
           <>
-            {/* Separator between the instructions and the filters. */}
-            <View style={styles.rackHintDivider} />
             {/* Filter carousel — mirrors the Full Cellar List chips. List opens
                 the rack's bottle list, Maturity highlights by drinking readiness,
                 each saved custom filter is its own chip, and + Add creates one. */}
@@ -2130,9 +2129,11 @@ const styles = StyleSheet.create({
   slotUploadingText: { fontFamily: fonts.bodyItalic, fontSize: 15, color: '#FFFFFF' },
   // Active "Add a Lineup" prompt — a single gold line beneath the blurb (not a
   // top banner). Tapping a slot fulfils it; a small Cancel backs out.
-  lineupPrompt: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
-  lineupPromptText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, lineHeight: 21 },
-  lineupPromptCancel: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted, textDecorationLine: 'underline', marginTop: spacing.xs },
+  // "Add a Lineup" prompt — the brown/yellow instruction bubble shared with the
+  // home-storage features (gold outline + gold-tint fill over the terracotta).
+  lineupPrompt: { marginHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.14)' },
+  lineupPromptText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, lineHeight: 21 },
+  lineupPromptCancel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginTop: spacing.sm },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — back/nav link
@@ -2284,7 +2285,8 @@ const styles = StyleSheet.create({
   // Inter — slot plus glyph
   slotPlus: { fontSize: 16, color: 'rgba(87,47,43,0.40)', fontFamily: fonts.bodyRegular },
   slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
-  rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingTop: spacing.sm },
+  // Stats bar — full-width yellow (gold) rules top and bottom, edge to edge.
+  rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingVertical: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
   slotMultiSelected: { borderColor: colors.gold, borderWidth: 2, backgroundColor: 'rgba(224,184,74,0.28)' },
   multiBar: { paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm },
   multiBarInner: { backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.md, gap: spacing.sm, shadowColor: '#000', shadowOpacity: 0.3, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 6 },

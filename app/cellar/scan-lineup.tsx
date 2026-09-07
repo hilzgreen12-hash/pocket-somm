@@ -17,7 +17,7 @@ import { detectLineup, prepareImageBase64, scanLabel, type DetectedBottle } from
 import { assignSlots, getRackSlots } from '../../src/api/racks';
 import { findCellarWineByIdentity } from '../../src/api/cellar';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
-import { wineNameKey } from '../../src/utils/wineIdentity';
+import { wineNameKey, looseWineMatch } from '../../src/utils/wineIdentity';
 import { BottleSizePicker, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import type { CellarWine } from '../../src/types/wine';
 import { showAlert } from '../../src/components/AppAlert';
@@ -376,6 +376,34 @@ export default function ScanLineupScreen() {
     }) ?? null;
   }
 
+  // Fallback for OCR / word-order / grape-placement variance that the exact
+  // wineNameKey misses — e.g. "Iron Kasteelsig" (grape Syrah) vs "Iron Syrah
+  // Kasteelsig". Same producer+name+grape token SUBSET, same vintage.
+  function findFuzzyCellarMatch(b: DetectedBottle): CellarWine | null {
+    return cellarWines.find((w) => looseWineMatch(
+      { producer: w.producer, wineName: w.wine_name, grape: w.grape_variety, vintage: w.vintage },
+      { producer: b.producer, wineName: b.wineName, grape: (b as any).grape ?? null, vintage: b.vintage },
+    )) ?? null;
+  }
+
+  // A lineup bottle matched a wine already in this cellar — ask (per bottle)
+  // whether to add to that listing or keep it as a separate entry, rather than
+  // merging silently (which would wrongly collapse a fuzzy false match).
+  function askMergeChoice(b: DetectedBottle, match: CellarWine): Promise<'merge' | 'separate'> {
+    const existingLabel = [match.producer, match.wine_name, match.vintage].filter(Boolean).join(' ');
+    const incomingLabel = [b.producer, b.wineName, b.vintage].filter(Boolean).join(' ') || 'this bottle';
+    return new Promise((resolve) => {
+      showAlert({
+        title: 'Already in this cellar',
+        body: `You already have ${existingLabel}. Add ${incomingLabel} to that listing, or keep it as a separate entry?`,
+        buttons: [
+          { text: 'Add to that listing', onPress: () => resolve('merge') },
+          { text: 'Keep separate', onPress: () => resolve('separate') },
+        ],
+      });
+    });
+  }
+
   // Rack-placement: place each kept bottle into consecutive free slots from the
   // chosen start, in the chosen orientation. A wine already in the cellar has
   // these bottles added to its count (reusing its line); a new wine is created
@@ -429,9 +457,14 @@ export default function ScanLineupScreen() {
         // Already in the cellar? Add these bottles to that line's count and
         // reuse it (no duplicate line). Check the live cache first, then the DB
         // directly — so a momentarily-stale cache can't slip a duplicate through.
-        const match = findCellarMatch(b) ?? await findCellarWineByIdentity(userId, { producer: b.producer, wineName: b.wineName, vintage: b.vintage });
+        let match = findCellarMatch(b) ?? await findCellarWineByIdentity(userId, { producer: b.producer, wineName: b.wineName, vintage: b.vintage });
+        // Exact key missed it? Try the looser subset match before creating a
+        // duplicate row (the reported Mullineux Iron Syrah case).
+        if (!match) match = findFuzzyCellarMatch(b);
+        // When a match is found, ASK per bottle — never merge silently.
+        const reusedExisting = match ? (await askMergeChoice(b, match)) === 'merge' : false;
         let targetId: string;
-        if (match) {
+        if (match && reusedExisting) {
           targetId = match.id;
           const addedSoFar = bumps.get(match.id) ?? 0;
           bumps.set(match.id, addedSoFar + slots.length);
@@ -475,7 +508,7 @@ export default function ScanLineupScreen() {
             const path = await uploadLabelImage(userId, b.overrideImageUri, targetId);
             await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
           } catch { /* non-fatal — placed without the re-scanned photo */ }
-        } else if (!match?.label_image_path && b.box && imageUri && imgDims) {
+        } else if ((!reusedExisting || !match?.label_image_path) && b.box && imageUri && imgDims) {
           try {
             const { x, y, w, h } = b.box;
             // Pad the (tight, label-focused) box a little so the thumbnail keeps

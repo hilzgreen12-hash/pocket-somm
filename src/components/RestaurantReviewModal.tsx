@@ -158,10 +158,13 @@ export function RestaurantReviewModal({
   dirtyRef.current = currentSnap !== savedSnapRef.current;
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
+  // Set true only when the user explicitly chooses "Discard" in the Back popup,
+  // so the unmount safety-net below doesn't silently re-save what they discarded.
+  const discardRef = useRef(false);
 
   useEffect(() => {
     return () => {
-      if (!dirtyRef.current || !sessionIdRef.current) return;
+      if (discardRef.current || !dirtyRef.current || !sessionIdRef.current) return;
       // Fire-and-forget: the component is unmounting so we can't await. The
       // scan-archive invalidation refreshes the list and the re-opened review
       // form (via the ?openSession deep link) with the saved note + ratings.
@@ -526,18 +529,26 @@ export function RestaurantReviewModal({
     }
   }
 
-  // Leaving via the back arrow (or Android hardware back). Unsaved edits are
-  // SAVED silently rather than discarded — handleSave persists and calls
-  // onSaved, which closes and, for a manual draft, marks it saved so the parent
-  // doesn't delete it. An untouched form just closes: onClose lets the parent
-  // drop a blank manual draft so empty rows don't pile up.
-  async function handleBack() {
+  // Leaving via the back arrow (or Android hardware back). If there are unsaved
+  // edits, ask rather than losing them silently — matching the wine-review flow.
+  // "Save" persists (onSaved closes); "Discard" flags discardRef so the unmount
+  // safety-net won't re-save, then closes; "Keep editing" stays. An untouched
+  // form just closes (the parent drops a blank manual draft).
+  function handleBack() {
     Keyboard.dismiss();
     if (dirtyRef.current && sessionId) {
-      await handleSave();
-    } else {
-      onClose();
+      showAlert({
+        title: 'Save this review?',
+        body: "You've started a review but haven't saved it. Save it so you can finish later, or discard it?",
+        buttons: [
+          { text: 'Save', onPress: () => { void handleSave(); } },
+          { text: 'Discard', style: 'destructive', onPress: () => { discardRef.current = true; onClose(); } },
+          { text: 'Keep editing', style: 'cancel' },
+        ],
+      });
+      return;
     }
+    onClose();
   }
 
   async function handleShareToCommunity() {

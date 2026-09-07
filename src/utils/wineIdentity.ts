@@ -57,3 +57,32 @@ export function wineNameKey(producer: string | null | undefined, wineName: strin
   const tokens = norm(`${producer ?? ''} ${wineName ?? ''}`).split(' ').filter((t) => t && !ARTICLES.has(t));
   return Array.from(new Set(tokens)).sort().join(' ');
 }
+
+// Significant-word token set across the supplied fields (producer, wine name,
+// grape…). 3+ chars so short connectors don't count; articles dropped.
+function identityTokens(...parts: (string | number | null | undefined)[]): Set<string> {
+  const joined = parts.filter((p) => p != null && p !== '').map(String).join(' ');
+  return new Set(norm(joined).split(' ').filter((t) => t.length >= 3 && !ARTICLES.has(t)));
+}
+
+// LOOSER identity match, used only as a FALLBACK after wineNameKey exact fails.
+// The same wine scanned twice often splits producer/name/grape differently — one
+// row folds the grape into the name ("Iron Syrah Kasteelsig"), another keeps it
+// as a separate field ("Iron Kasteelsig" + grape Syrah). We treat them as the
+// same wine when the (normalised) vintage matches AND one side's significant
+// words are a SUBSET of the other's, tokenising producer + name + grape. The
+// smaller set must have ≥2 tokens so a lone shared grape word can't false-match.
+export function looseWineMatch(
+  a: { producer?: string | null; wineName?: string | null; grape?: string | null; vintage?: string | number | null },
+  b: { producer?: string | null; wineName?: string | null; grape?: string | null; vintage?: string | number | null },
+): boolean {
+  const av = String(a.vintage ?? '').trim().toLowerCase();
+  const bv = String(b.vintage ?? '').trim().toLowerCase();
+  if (!av || av !== bv) return false;
+  const at = identityTokens(a.producer, a.wineName, a.grape);
+  const bt = identityTokens(b.producer, b.wineName, b.grape);
+  if (at.size < 2 || bt.size < 2) return false;
+  const [small, big] = at.size <= bt.size ? [at, bt] : [bt, at];
+  for (const t of small) if (!big.has(t)) return false;
+  return true;
+}
