@@ -14,11 +14,6 @@ import { fonts } from '../constants/fonts';
 
 type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'success' | 'error';
 
-const ACTIONS: { key: CellarCommandAction; label: string; prompt: string; example: string }[] = [
-  { key: 'move', label: 'Move bottles from one storage location to another', prompt: 'Say the wine and where to move it.', example: '"Move the Produttori Barolo to the fridge."' },
-  { key: 'archive', label: 'Archive Bottles', prompt: 'Say the wine, and how many bottles.', example: '"Archive two bottles of the Chablis."' },
-  { key: 'add', label: 'Add Bottles', prompt: 'Say the wine, the vintage, and how many.', example: '"Add six bottles of Produttori del Barolo 2019."' },
-];
 
 function wineLabel(w: CellarWine | undefined): string {
   if (!w) return 'this wine';
@@ -36,24 +31,30 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     enabled: !!userId,
   });
 
-  const [phase, setPhase] = useState<Phase>('choose');
+  const [phase, setPhase] = useState<Phase>('speak');
   const [action, setAction] = useState<CellarCommandAction>('move');
   const [transcript, setTranscript] = useState('');
   const [result, setResult] = useState<CellarCommandResult | null>(null);
   const [chosenWineId, setChosenWineId] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
-  const [successMsg, setSuccessMsg] = useState('');
+  const [success, setSuccess] = useState<{
+    action: 'move' | 'archive';
+    wine: string;        // producer + name
+    meta: string;        // region · vintage
+    detail: string;      // "from X to Y" (move) / "N bottles archived" (archive)
+    viewLabel: string;   // "View in <destination>"
+    viewRoute: string;
+  } | null>(null);
 
-  const actionMeta = ACTIONS.find((a) => a.key === action)!;
   const chosenWine = wines.find((w) => w.id === chosenWineId);
   const targetLocation = locations.find((l) => l.id === result?.locationId);
 
   function reset() {
-    setPhase('choose');
+    setPhase('speak');
     setTranscript('');
     setResult(null);
     setChosenWineId(null);
-    setSuccessMsg('');
+    setSuccess(null);
   }
 
   function handleClose() {
@@ -61,40 +62,16 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     onClose();
   }
 
-  function pickAction(a: CellarCommandAction) {
-    setAction(a);
-    setTranscript('');
-    setResult(null);
-    setChosenWineId(null);
-    setPhase('speak');
-  }
-
-  function routeToAdd(res: CellarCommandResult) {
-    const p = res.add;
-    const q = new URLSearchParams();
-    if (p?.producer) q.set('producer', p.producer);
-    if (p?.wineName) q.set('wineName', p.wineName);
-    if (p?.vintage) q.set('vintage', String(p.vintage));
-    if (p?.region) q.set('region', p.region);
-    if (res.quantity) q.set('quantity', String(res.quantity));
-    if (res.locationId) q.set('storageLocationId', res.locationId);
-    handleClose();
-    router.push(`/cellar/add?${q.toString()}` as any);
-  }
-
   async function runParse() {
     if (!transcript.trim()) return;
+    // Free-form command: infer the verb from the words (archive vs move) rather
+    // than making the user pick it up front.
+    const act: CellarCommandAction = /\barchiv/i.test(transcript) ? 'archive' : 'move';
+    setAction(act);
     setPhase('parsing');
     try {
-      const res = await parseCellarCommand(action, transcript, wines, locations);
+      const res = await parseCellarCommand(act, transcript, wines, locations);
       setResult(res);
-
-      if (action === 'add') {
-        const named = res.add && (res.add.wineName || res.add.producer);
-        if (!named || res.needs === 'wine') { setPhase('need'); return; }
-        routeToAdd(res);
-        return;
-      }
 
       // move / archive both need a resolved wine
       if (!res.wineId || res.needs === 'wine') {
@@ -119,10 +96,21 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     try {
       if (action === 'move') {
         if (!result?.locationId) return;
+        const fromName = chosenWine.storage_location_id
+          ? (locations.find((l) => l.id === chosenWine.storage_location_id)?.name ?? 'your cellar')
+          : 'your cellar';
+        const toName = targetLocation?.name ?? 'its new location';
         await assignWineToStorageLocation(chosenWine.id, result.locationId);
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
         qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
-        setSuccessMsg(`Moved ${wineLabel(chosenWine)} to ${targetLocation?.name ?? 'its new home'}.`);
+        setSuccess({
+          action: 'move',
+          wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
+          meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
+          detail: `from ${fromName} to ${toName}`,
+          viewLabel: `View in ${toName}`,
+          viewRoute: `/cellar/storage-location/${result.locationId}`,
+        });
       } else {
         // archive — mirror the Chef pairing "Select & Archive" flow so the
         // removal log and archive stats stay consistent.
@@ -141,7 +129,14 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
         qc.invalidateQueries({ queryKey: ['cellar-removals', chosenWine.id] });
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
-        setSuccessMsg(`Archived ${count} ${count === 1 ? 'bottle' : 'bottles'} of ${wineLabel(chosenWine)}.`);
+        setSuccess({
+          action: 'archive',
+          wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
+          meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
+          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} moved to Your Cellar Archive`,
+          viewLabel: 'View in Your Cellar Archive',
+          viewRoute: '/cellar/list?archived=1',
+        });
       }
       setPhase('success');
     } catch {
@@ -164,22 +159,10 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     <Modal visible={visible} transparent animationType="fade" onRequestClose={handleClose}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          {phase === 'choose' && (
-            <>
-              <Text style={styles.title}>What would you like to do?</Text>
-              {ACTIONS.map((a) => (
-                <TouchableOpacity key={a.key} style={styles.choiceBtn} onPress={() => pickAction(a.key)} activeOpacity={0.8}>
-                  <Text style={styles.choiceText}>{a.label}</Text>
-                </TouchableOpacity>
-              ))}
-              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
-            </>
-          )}
-
           {phase === 'speak' && (
             <>
-              <Text style={styles.title}>{actionMeta.prompt}</Text>
-              <Text style={styles.example}>{actionMeta.example}</Text>
+              <Text style={styles.title}>Tap the mic and give your command…</Text>
+              <Text style={styles.example}>e.g. “Move 3 bottles of d’Yquem from the small rack to my wine fridge”</Text>
               <View style={styles.micRow}>
                 <MicButton value={transcript} onChangeText={setTranscript} onClear={() => setTranscript('')} />
               </View>
@@ -192,7 +175,7 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
               >
                 <Text style={styles.primaryBtnText}>Continue</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setPhase('choose')} style={styles.cancelRow}><Text style={styles.cancelText}>Back</Text></TouchableOpacity>
+              <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Close</Text></TouchableOpacity>
             </>
           )}
 
@@ -247,13 +230,18 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
             </>
           )}
 
-          {phase === 'success' && (
-            <View style={styles.centerBlock}>
-              <Text style={styles.tick}>✓</Text>
-              <Text style={styles.confirmBody}>{successMsg}</Text>
-              <TouchableOpacity style={styles.primaryBtn} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another command</Text></TouchableOpacity>
+          {phase === 'success' && success && (
+            <>
+              <Text style={styles.successAction}>{success.action === 'archive' ? 'Archived' : 'Moved'}</Text>
+              <Text style={styles.successWine}>{success.wine}</Text>
+              {success.meta ? <Text style={styles.successMeta}>{success.meta}</Text> : null}
+              <Text style={styles.successDetail}>{success.detail}</Text>
+              <TouchableOpacity onPress={() => { handleClose(); router.push(success.viewRoute as any); }} activeOpacity={0.7} style={styles.viewLinkRow}>
+                <Text style={styles.viewLink}>{success.viewLabel} →</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.primaryBtn, styles.successBtn]} onPress={reset} activeOpacity={0.8}><Text style={styles.primaryBtnText}>Another Command</Text></TouchableOpacity>
               <TouchableOpacity onPress={handleClose} style={styles.cancelRow}><Text style={styles.cancelText}>Done</Text></TouchableOpacity>
-            </View>
+            </>
           )}
         </View>
       </View>
@@ -267,8 +255,6 @@ const styles = StyleSheet.create({
   title: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
   example: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.md },
   // Chooser buttons.
-  choiceBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  choiceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', textAlign: 'center' },
   micRow: { alignItems: 'center', marginBottom: spacing.md },
   transcript: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg, minHeight: 44 },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
@@ -282,5 +268,14 @@ const styles = StyleSheet.create({
   pickRow: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },
   pickRegion: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  tick: { fontFamily: fonts.headingBold, fontSize: 52, color: colors.gold, textAlign: 'center' },
+  // Success popup — "Moved"/"Archived" header, the wine, its region · vintage,
+  // the from→to (or count) detail, then a "View in <destination>" link.
+  successAction: { fontFamily: fonts.headingBold, fontSize: 24, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.sm },
+  successWine: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, textAlign: 'center', marginBottom: 2 },
+  successMeta: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
+  successDetail: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.md },
+  viewLinkRow: { alignItems: 'center', paddingVertical: spacing.sm, marginBottom: spacing.sm },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // Enlarged so "Another Command" isn't cramped.
+  successBtn: { paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
 });

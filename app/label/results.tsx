@@ -1733,35 +1733,9 @@ export default function LabelResultsScreen() {
 
       <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
-      {/* Gold stats bar directly under the title (Wine Intel only). Three tappable
-          figures — Score · Value · Drinking Window (XX/100 · £XX · XXXX - XXXX) —
-          each opening a short "why" popup. No labels: the figures speak for
-          themselves and the popups explain them. */}
-      {!isAddFlow ? (
-        <>
-        <View style={styles.statBarRule} />
-        <View style={styles.statBar}>
-          <TouchableOpacity style={styles.statBarItem} onPress={openScoreInfo} disabled={intel.criticScore == null} activeOpacity={0.7}>
-            <Text style={[styles.statBarValueGold, intel.criticScore == null && styles.statBarValueMuted]}>
-              {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.statBarSepGold}>·</Text>
-          <TouchableOpacity style={styles.statBarItem} onPress={openValueInfo} disabled={intel.estimatedValue == null} activeOpacity={0.7}>
-            <Text style={[styles.statBarValueGold, intel.estimatedValue == null && styles.statBarValueMuted]}>
-              {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.statBarSepGold}>·</Text>
-          <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown'} activeOpacity={0.7}>
-            <Text style={[styles.statBarValueGold, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
-              {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom} - ${intel.drinkingWindowTo}` : '—'}
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.statBarRule} />
-        </>
-      ) : null}
+      {/* One separator line beneath the title. The stats bar itself now sits
+          lower — below the wine identity, just above Vinster's Note / Map. */}
+      {!isAddFlow ? <View style={styles.titleRule} /> : null}
 
       {/* Header block: the wine-card row + the "Not this wine?" link both sit
           ABOVE the separator line (the block's bottom border). */}
@@ -1900,6 +1874,33 @@ export default function LabelResultsScreen() {
           generated later, only from Generate Wine Intel). */}
       {!isAddFlow && (
         <>
+          {/* Gold stats bar — moved here, beneath the wine identity and above
+              Vinster's Note / Map. Full-width yellow rules top and bottom (the
+              bottom rule is the separator above the Note/Map section). Three
+              tappable figures — Score · Value · Drinking Window — each opening a
+              short "why" popup. */}
+          <View style={styles.statBarRule} />
+          <View style={styles.statBar}>
+            <TouchableOpacity style={styles.statBarItem} onPress={openScoreInfo} disabled={intel.criticScore == null} activeOpacity={0.7}>
+              <Text style={[styles.statBarValueGold, intel.criticScore == null && styles.statBarValueMuted]}>
+                {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.statBarSepGold}>·</Text>
+            <TouchableOpacity style={styles.statBarItem} onPress={openValueInfo} disabled={intel.estimatedValue == null} activeOpacity={0.7}>
+              <Text style={[styles.statBarValueGold, intel.estimatedValue == null && styles.statBarValueMuted]}>
+                {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.statBarSepGold}>·</Text>
+            <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown'} activeOpacity={0.7}>
+              <Text style={[styles.statBarValueGold, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
+                {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom} - ${intel.drinkingWindowTo}` : '—'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.statBarRule} />
+
           {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
               one above the other with no separator between them; the section's
               bottom border is the only separator (it sits below the Map, before
@@ -2563,9 +2564,9 @@ const styles = StyleSheet.create({
   reReadOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   reReadText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF' },
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
-  // The separator line lives on the block wrapper so the "Not this wine?" link
-  // sits ABOVE it; the header row itself carries no border.
-  headerBlock: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  // No bottom border now — the stats bar (moved below this block) provides the
+  // separator above Vinster's Note / Map.
+  headerBlock: {},
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.sm },
   heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginRight: spacing.md },
   headerText: { flex: 1 },
@@ -2624,7 +2625,10 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
   // Inline headline stats bar: Score · Value · Drinking Window, bracketed by
   // full-width rules top and bottom (matches the app's other stats bars).
-  statBarRule: { height: 1, backgroundColor: colors.border },
+  // Full-width yellow (gold) rules bracketing the stats bar, edge to edge.
+  statBarRule: { height: 1, backgroundColor: colors.gold },
+  // Subtle separator directly beneath the "Wine Intel" title.
+  titleRule: { height: 1, backgroundColor: colors.border },
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
   statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },

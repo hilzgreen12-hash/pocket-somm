@@ -73,7 +73,7 @@ export default function StorageLocationScreen() {
   const { session } = useAuth();
   const userId = session?.user.id;
   const navigation = useNavigation();
-  const { setPendingStorageLocationId, setPendingCaseId } = useRackStore();
+  const { setPendingStorageLocationId, setPendingCaseId, setPendingWineId, setPendingAddMode } = useRackStore();
   const { setImage, setWineDetails } = useLabelStore();
   const [search, setSearch] = useState('');
   const [maturity, setMaturity] = useState('');
@@ -598,17 +598,33 @@ export default function StorageLocationScreen() {
     });
   }
 
+  // Send this wine to a rack/fridge — a rack needs a physical slot, so we route
+  // to the rack screen in placement mode (mirrors the wine card's placeInRack).
+  function moveToRack(w: CellarWine, rackId: string) {
+    setPendingWineId(w.id);
+    setPendingAddMode(true);
+    router.push(`/cellar/rack/${rackId}` as any);
+  }
+
   function openMoveToDifferentLocation(w: CellarWine) {
-    const others = allLocations.filter((l) => l.id !== id);
-    if (!others.length) {
-      showAlert({ title: 'No other locations', body: 'You have no other home storage locations to move this into yet.' });
+    // Destinations are every OTHER home-storage place: racks & fridges (which
+    // need slot placement) plus other Alt Cellars (a direct storage_location_id
+    // assignment). Previously only Alt Cellars were offered, so a user whose
+    // only other storage was a rack saw a wrong "No other locations".
+    const otherLocations = allLocations.filter((l) => l.id !== id);
+    if (racks.length === 0 && otherLocations.length === 0) {
+      showAlert({ title: 'No other locations', body: 'You have no other racks, fridges or home storage locations to move this into yet.' });
       return;
     }
     showAlert({
       title: 'Move to which location?',
       buttons: [
-        ...others.map((l) => ({
-          text: l.name,
+        ...racks.map((r) => ({
+          text: `${r.name} (${r.storage_type === 'fridge' ? 'fridge' : 'rack'})`,
+          onPress: () => moveToRack(w, r.id),
+        })),
+        ...otherLocations.map((l) => ({
+          text: `${l.name} (home storage)`,
           onPress: () => runSingle('Moved', w.id, async (wid) => {
             await clearWineFromRacks(wid);
             await assignWineToCase(wid, null);
@@ -799,22 +815,20 @@ export default function StorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {/* Layout: header, stats bar, the "+ Add Wine" line, a separator line,
-            the (landscape) photo, then filters/search/list (no line between the
-            photo and the filters). */}
-        <Text style={styles.statsBar}>
-          {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'} · {totalBottles} Total {totalBottles === 1 ? 'Bottle' : 'Bottles'}
-        </Text>
-
+        {/* Layout: header (+ its separator), the "+ Add Wine" stats bar, the
+            (landscape) photo (no line above it), then the counts stats bar,
+            then filters/search/list. */}
         <TouchableOpacity onPress={openAddWine} style={styles.addWineRow} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
           <Text style={styles.addWineText}>+ Add Wine</Text>
         </TouchableOpacity>
 
-        <View style={styles.sectionLine} />
-
         {photoUrl ? (
           <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
         ) : null}
+
+        <Text style={styles.statsBar}>
+          {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'}
+        </Text>
 
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
@@ -1179,10 +1193,12 @@ const styles = StyleSheet.create({
   // Portrait photo, ~2/3 the old footprint, centred.
   areaPhoto: { alignSelf: 'center', width: '85%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface, marginVertical: spacing.md },
   sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
-  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingTop: spacing.lg, paddingBottom: spacing.sm, paddingHorizontal: spacing.xl },
+  // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
+  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
   // "+ Add Wine" — its own centred line below the stats bar (moved out of the
   // cramped top-right header stack).
-  addWineRow: { alignItems: 'center', paddingBottom: spacing.md },
+  // "+ Add Wine" — stats-bar format (yellow full-width rules), below the header.
+  addWineRow: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
   addWineText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },

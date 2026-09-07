@@ -422,7 +422,7 @@ export default function ScanLandingScreen() {
             <Text style={styles.vintageWine} numberOfLines={2}>
               {vintageWine ? formatWineTitle({ producer: vintageWine.producer, wineName: vintageWine.wineName, region: vintageWine.region }) : ''}
             </Text>
-            <Text style={styles.vintageTitle}>What's the Vintage?</Text>
+            <Text style={styles.vintageTitle}>Input Vintage</Text>
             <TextInput
               style={styles.vintageInput}
               value={vintageDraft}
@@ -603,8 +603,10 @@ const styles = StyleSheet.create({
   // "What's the Vintage?" prompt.
   vintageOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   vintageSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%' },
-  vintageWine: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
-  vintageTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
+  // Wine name — now the white header (matches how "What's the Vintage?" used to
+  // read), with "Input Vintage" as a gold-italic subtitle beneath it.
+  vintageWine: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  vintageTitle: { fontFamily: fonts.headingItalic, fontSize: 16, color: colors.gold, textAlign: 'center', marginBottom: spacing.md },
   vintageInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlign: 'center', marginBottom: spacing.md },
   vintageBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   vintageBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },

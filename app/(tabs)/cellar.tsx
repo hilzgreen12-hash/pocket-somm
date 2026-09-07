@@ -82,18 +82,18 @@ export default function CellarTab() {
 
       <VinsterHeader />
 
+      {/* Voice Command on its own line across the top so the full label always
+          shows (it was truncating to "Voice Comma…" in the title row). */}
+      <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
+        <Text style={styles.voiceLink}>Voice Command</Text>
+      </TouchableOpacity>
+
       <View style={styles.titleRow}>
         <View style={styles.titleSide} />
         <HelpTitle label="Cellar" title="How Cellar works" body={CELLAR_HELP} textStyle={styles.title} />
-        {/* Voice Command (yellow) stacked above + Import. */}
-        <View style={styles.titleSide}>
-          <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 6, left: 8, right: 8 }} activeOpacity={0.7}>
-            <Text style={styles.voiceLink} numberOfLines={1}>Voice Command</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 6, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.importRow}>
-            <Text style={styles.importLink}>+ Import</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.titleSide} onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.importLink}>+ Import</Text>
+        </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
@@ -141,9 +141,10 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // Side cells balance the centred title: an empty spacer on the left, the
   // "+ Import" link on the right, both the same width so "Cellar" stays centred.
-  titleSide: { width: 96, justifyContent: 'center', alignItems: 'flex-end' },
-  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'right' },
-  importRow: { marginTop: 4 },
+  titleSide: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },
+  // Voice Command — its own line at the top, right-aligned, gold heading font.
+  voiceRow: { alignSelf: 'stretch', alignItems: 'flex-end', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  voiceLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   importLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").
