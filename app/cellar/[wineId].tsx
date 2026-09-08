@@ -674,6 +674,22 @@ export default function CellarWineDetail() {
     }
   }
 
+  // Delete the cellar note outright (clears the field, closes the sheet).
+  async function handleDeleteCellarNote() {
+    Keyboard.dismiss();
+    setSavingNote(true);
+    try {
+      await updateWine.mutateAsync({ id: wine!.id, updates: { cellar_note: null } });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      setNoteText('');
+      setCellarNoteOpen(false);
+    } catch {
+      showAlert({ title: 'Error', body: 'Could not delete note.' });
+    } finally {
+      setSavingNote(false);
+    }
+  }
+
   async function handleArchiveWine() {
     const count = parseInt(removeCount) || 0;
     if (count < 1) {
@@ -1785,7 +1801,7 @@ export default function CellarWineDetail() {
               </TouchableOpacity>
             </>
           ) : !cellarNoteExpanded && wine.cellar_note ? (
-            <Text style={styles.reviewScoreLine} numberOfLines={1}>{wine.cellar_note}</Text>
+            <Text style={styles.cellarNotePreview} numberOfLines={1}>{wine.cellar_note}</Text>
           ) : !cellarNoteExpanded && !wine.cellar_note ? (
             <TouchableOpacity onPress={openCellarNote} activeOpacity={0.7}>
               <Text style={styles.addReviewLink}>+ Add Cellar Note</Text>
@@ -2217,7 +2233,12 @@ export default function CellarWineDetail() {
           <View style={styles.cnSheet}>
             <View style={styles.cnHeaderRow}>
               <Text style={styles.cnTitle}>Cellar Note</Text>
-              <MicButton value={noteText} onChangeText={(t) => setNoteText(t.slice(0, 100))} onClear={() => setNoteText('')} />
+              <View style={styles.cnHeaderRight}>
+                <MicButton value={noteText} onChangeText={(t) => setNoteText(t.slice(0, 100))} onClear={() => setNoteText('')} />
+                <TouchableOpacity onPress={() => setCellarNoteOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
+                  <Text style={styles.cnCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <Text style={styles.cnBody}>A short private note, shown only here on the wine card — 100 characters or less.</Text>
             <TextInput
@@ -2234,9 +2255,11 @@ export default function CellarWineDetail() {
             <TouchableOpacity style={styles.cnSaveBtn} onPress={handleSaveCellarNote} disabled={savingNote} activeOpacity={0.85}>
               <Text style={styles.cnSaveText}>{savingNote ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.cnCancel} onPress={() => setCellarNoteOpen(false)}>
-              <Text style={styles.cnCancelText}>Cancel</Text>
-            </TouchableOpacity>
+            {wine.cellar_note ? (
+              <TouchableOpacity style={styles.cnCancel} onPress={handleDeleteCellarNote} disabled={savingNote}>
+                <Text style={styles.cnDeleteText}>Delete Note</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -2596,6 +2619,9 @@ const styles = StyleSheet.create({
   },
   // Collapsed "Your Review" summary line: score in gold, then the date.
   reviewScoreLine: { marginTop: 2 },
+  // Collapsed cellar-note preview — keep the app font/colour (not the default
+  // black system font) so it matches how it reads when expanded.
+  cellarNotePreview: { marginTop: 2, fontFamily: fonts.bodyItalic, fontSize: 13, color: 'rgba(255,255,255,0.8)' },
   reviewScoreValue: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   reviewScoreDash: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
   reviewScoreDate: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.textMuted },
@@ -2607,6 +2633,9 @@ const styles = StyleSheet.create({
   cnOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: spacing.xl },
   cnSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl },
   cnHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cnHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  cnCloseText: { fontFamily: fonts.bodyRegular, fontSize: 20, color: colors.textMuted },
+  cnDeleteText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.error },
   cnTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text },
   cnBody: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs, marginBottom: spacing.md },
   cnInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, backgroundColor: colors.surface, minHeight: 52, textAlignVertical: 'top' },

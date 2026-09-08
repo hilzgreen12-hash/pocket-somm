@@ -90,7 +90,9 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh, backTo, via, confirm, labelId } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string }>();
+  const { context, fresh, backTo, via, confirm, labelId, confirmed } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string; confirmed?: string }>();
+  // A caller (e.g. a lineup wine) that KNOWS the identity — never disambiguate.
+  const identityConfirmed = confirmed === '1';
   const isUploadFlow = via === 'upload';
   const isWishlistFlow = context === 'wishlist';
   // Entered from Your Wine Reviews "+ Add" — the only intent is to capture
@@ -161,7 +163,7 @@ export default function LabelResultsScreen() {
   // camera.tsx routes here with confirm=1 and no intel yet. We show typo/OCR-
   // tolerant matches and only generate the card once the user picks or confirms
   // their read — so Vinster never builds a card for a misread/fictional wine.
-  const [awaitingConfirm, setAwaitingConfirm] = useState(confirm === '1');
+  const [awaitingConfirm, setAwaitingConfirm] = useState(confirm === '1' && !identityConfirmed);
   const [confirmOptions, setConfirmOptions] = useState<WineCandidate[]>([]);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
@@ -242,7 +244,7 @@ export default function LabelResultsScreen() {
     // be off, so we let the user pick the right bottling. When VIEWING a saved
     // label's intel (Label Library, restaurants, lineup — no fresh=1), the wine
     // is already confirmed; the "Which wine is this?" prompt must not appear.
-    if (fresh !== '1' || awaitingConfirm) return;
+    if (identityConfirmed || fresh !== '1' || awaitingConfirm) return;
     // Offer disambiguation whenever Wine-Searcher couldn't verify the wine — the
     // score/value are then Vinster estimates, and the label reading may be off
     // (a missed cuvée). A verified real record means no need to ask.
@@ -1695,7 +1697,9 @@ export default function LabelResultsScreen() {
   // label store (it's what this card renders), so from=cellar ("bottle known")
   // generates pairings straight away without needing a cellar wine id.
   function handleChefPairing() {
-    router.push('/chef/review-requirements?from=cellar');
+    // backTo=intel threads through to the recipe results screen so its Back pops
+    // straight back to THIS Wine Intel card, not out to the Pair tab.
+    router.push('/chef/review-requirements?from=cellar&backTo=intel');
   }
 
   return (
@@ -2637,7 +2641,7 @@ const styles = StyleSheet.create({
   statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
   // Gold, label-less headline stats bar under the title — tappable figures.
   statBarValueGold: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-  statBarSepGold: { fontSize: 16, color: colors.gold, opacity: 0.6 },
+  statBarSepGold: { fontSize: 22, color: colors.gold, opacity: 0.6 },
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
   vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },

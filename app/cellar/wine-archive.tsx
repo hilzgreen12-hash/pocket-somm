@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Image, ActivityIndicator } from 'react-native';
 import { router } from 'expo-router';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useArchive } from '../../src/hooks/useCellar';
-import { listLineupArchives, lineupSignedUrl, type LineupArchive } from '../../src/api/lineups';
+import { listLineupArchives, lineupSignedUrl, deleteLineupArchive, type LineupArchive } from '../../src/api/lineups';
+import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
-import { fonts } from '../../src/constants/fonts';
+import { fonts, fontsSpectral } from '../../src/constants/fonts';
 
 // One lineup in the carousel — a large thumbnail with a date · location stamp.
 function LineupCard({ item }: { item: LineupArchive }) {
   const [url, setUrl] = useState<string | null>(null);
+  const qc = useQueryClient();
   useEffect(() => {
     let active = true;
     lineupSignedUrl(item.image_path).then((u) => { if (active) setUrl(u); });
@@ -18,8 +20,26 @@ function LineupCard({ item }: { item: LineupArchive }) {
   }, [item.image_path]);
   const date = new Date(item.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   const place = (item.venue || item.city || '').trim();
+  // Long-hold to permanently delete this lineup (photo + notes + wines).
+  function confirmDelete() {
+    showAlert({
+      title: 'Delete this lineup?',
+      body: `${item.name?.trim() || date}${place ? ` · ${place}` : ''} — this permanently removes the photo, note and wines. This can't be undone.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await deleteLineupArchive(item.id);
+            qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+          } catch (err) {
+            showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+          }
+        } },
+      ],
+    });
+  }
   return (
-    <TouchableOpacity style={styles.card} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} activeOpacity={0.85}>
+    <TouchableOpacity style={styles.card} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onLongPress={confirmDelete} delayLongPress={450} activeOpacity={0.85}>
       <View style={styles.cardImageWrap}>
         {url ? <Image source={{ uri: url }} style={styles.cardImage} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} />}
       </View>
@@ -59,12 +79,14 @@ export default function WineArchiveScreen() {
             the title, then the blurb, a "View Your Cellar Archive →" link, and
             the stats bar. */}
         <Text style={styles.blurb}>Bottles you've moved out of your cellar live here. You can still add reviews and cellar notes for the wines in your archive.</Text>
-        <TouchableOpacity onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7} style={styles.viewLinkRow}>
-          <Text style={styles.viewLink}>View Your Cellar Archive →</Text>
-        </TouchableOpacity>
-        <Text style={styles.stats}>
-          {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
-        </Text>
+        <View style={styles.statsBox}>
+          <Text style={styles.statsText}>
+            {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
+          </Text>
+          <TouchableOpacity onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={styles.viewLink}>View Your Cellar Archive →</Text>
+          </TouchableOpacity>
+        </View>
 
         <View style={styles.sepShort} />
 
@@ -107,12 +129,17 @@ const styles = StyleSheet.create({
   viewLinkRow: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.xs },
   viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
 
-  blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  // Matches the "Your Wines At Home" intro on the Cellar tab (Spectral, 17).
+  blurb: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
   // Stats bar — green outline + light-green fill bubble (matches the other pages).
   // Stats BAR — full-width, green rule top and bottom running edge to edge.
   stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  // Cellar Archive stats bar: the counts with the "View …" link stacked inside
+  // the same top/bottom borders, just beneath the counts.
+  statsBox: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
+  statsText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
 
   // Full-bleed rules bracket each stats bar; the short indented rule divides the

@@ -7,15 +7,18 @@ import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, updateLineupStamp, setLineupWines, setLineupRestaurant, type LineupWine } from '../../../src/api/lineups';
+import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
+import * as ImagePicker from 'expo-image-picker';
+import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
 import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
-import { matchLineupToCellar } from '../../../src/services/archiveNight';
+import { matchLineupToCellar, archiveBottles } from '../../../src/services/archiveNight';
 import { wineNameKey } from '../../../src/utils/wineIdentity';
 import { DateInput } from '../../../src/components/DateInput';
 import { labelSignedUrl } from '../../../src/api/labelPhotos';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
+import { LabelPhotoViewer } from '../../../src/components/LabelPhotoViewer';
 import { Ionicons } from '@expo/vector-icons';
 import { MicButton } from '../../../src/components/MicButton';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -51,6 +54,12 @@ export default function LineupDetailScreen() {
   const backToLineup = `&backTo=${encodeURIComponent(`/cellar/lineup/${id}`)}`;
 
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [zoomOpen, setZoomOpen] = useState(false);
+  const [replacingPhoto, setReplacingPhoto] = useState(false);
+  // Editable lineup name (tap the title). Falls back to "Your Lineup".
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameDraft, setNameDraft] = useState('');
+  const [savingName, setSavingName] = useState(false);
   const [note, setNote] = useState('');
   const [savingNote, setSavingNote] = useState(false);
   // The note reads as plain text once saved; editing opens a popup with the
@@ -70,6 +79,26 @@ export default function LineupDetailScreen() {
       lineupSignedUrl(lineup.image_path).then(setPhotoUrl);
     }
   }, [lineup]);
+
+  function openNameEdit() {
+    if (!lineup) return;
+    setNameDraft(lineup.name ?? '');
+    setNameOpen(true);
+  }
+  async function saveName() {
+    if (!lineup || savingName) return;
+    setSavingName(true);
+    try {
+      await setLineupName(lineup.id, nameDraft);
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+      setNameOpen(false);
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setSavingName(false);
+    }
+  }
 
   async function saveVenue() {
     if (!lineup) return;
@@ -218,7 +247,9 @@ export default function LineupDetailScreen() {
       ls.setWineDetailsConfirmed(details as any);
       ls.setIntelligence(intel);
       useLastIntelStore.getState().setLast(details as any, intel);
-      router.push(`/label/results?context=intel${backToLineup}` as any);
+      // confirmed=1: this wine is already established in the lineup — the intel
+      // screen must NOT ask "which wine is this?".
+      router.push(`/label/results?context=intel&confirmed=1${backToLineup}` as any);
     } catch (err) {
       showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
@@ -304,11 +335,59 @@ export default function LineupDetailScreen() {
       qc.invalidateQueries({ queryKey: ['lineup', id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
       setConfirmWines(null);
+      // These were drunk that night — offer to archive the ones still live in
+      // the cellar so they don't linger as "in cellar".
+      const drunk = kept.filter((w) => w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id));
+      if (drunk.length) promptArchiveDrunk(drunk);
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingWines(false);
     }
+  }
+
+  // Archive the cellar bottle(s) behind a lineup wine — moves them from the live
+  // cellar into the archive, dated to the night (mirrors Archive a Night).
+  async function archiveCellarBottles(list: LineupWine[]): Promise<void> {
+    if (!lineup) return;
+    const day = (lineup.archived_at ?? '').split('T')[0] || new Date().toISOString().split('T')[0];
+    for (const w of list) {
+      const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
+      if (cw) await archiveBottles(cw, Math.min(w.count ?? 1, cw.quantity ?? 1), day);
+    }
+    qc.invalidateQueries({ queryKey: ['cellar', session?.user.id] });
+    qc.invalidateQueries({ queryKey: ['cellar-archive', session?.user.id] });
+    qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+    qc.invalidateQueries({ queryKey: ['rack-slots'] });
+  }
+
+  // Prompt (after Identify) to archive the cellar bottles that were drunk.
+  function promptArchiveDrunk(list: LineupWine[]) {
+    const n = list.reduce((s, w) => s + (w.count ?? 1), 0);
+    showAlert({
+      title: 'You drank these — archive them?',
+      body: `${n} ${n === 1 ? 'bottle is' : 'bottles are'} from your cellar. Move ${n === 1 ? 'it' : 'them'} into your archive now?`,
+      buttons: [
+        { text: 'Not now', style: 'cancel' },
+        { text: 'Archive', onPress: () => { archiveCellarBottles(list).catch((err) => showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' })); } },
+      ],
+    });
+  }
+
+  // "Archive from cellar" on a single lineup wine row.
+  function archiveOneLineupWine(w: LineupWine) {
+    const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
+    if (!cw) return;
+    const label = wineHeaderLine(cw.producer, cw.wine_name, cw.vintage) || cw.wine_name;
+    const n = Math.min(w.count ?? 1, cw.quantity ?? 1);
+    showAlert({
+      title: 'Archive from your cellar?',
+      body: `Move ${n} ${n === 1 ? 'bottle' : 'bottles'} of ${label} from your cellar into your archive?`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Archive', onPress: () => { archiveCellarBottles([w]).catch((err) => showAlert({ title: 'Could not archive', body: err instanceof Error ? err.message : 'Please try again.' })); } },
+      ],
+    });
   }
 
 
@@ -336,6 +415,25 @@ export default function LineupDetailScreen() {
       showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  // Replace the lineup photo — pick from the library, upload, repoint image_path.
+  async function changeLineupPhoto() {
+    if (!lineup || !session?.user.id || replacingPhoto) return;
+    if (!(await ensureMediaPermission('library'))) return;
+    const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (res.canceled || !res.assets?.[0]) return;
+    setReplacingPhoto(true);
+    try {
+      const path = await replaceLineupImage(session.user.id, lineup.id, res.assets[0].uri);
+      setPhotoUrl(await lineupSignedUrl(path));
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+    } catch (err) {
+      showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setReplacingPhoto(false);
     }
   }
 
@@ -419,25 +517,27 @@ export default function LineupDetailScreen() {
             <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Export'}</Text>
           </TouchableOpacity>
         </View>
-        {/* Screen title. */}
-        <Text style={styles.headerTitle}>Your Lineup</Text>
+        {/* Screen title — tap to rename this lineup. */}
+        <TouchableOpacity onPress={openNameEdit} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
+          <Text style={styles.headerTitle} numberOfLines={1}>{lineup.name?.trim() || 'Your Lineup'}</Text>
+        </TouchableOpacity>
         {/* Date · City below the title (tap to edit date/city). */}
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}</Text>
         </TouchableOpacity>
-        {/* Venue — in white, beneath the date/city; a pin + inline input the user
-            fills, saved on blur/submit. */}
+        {/* Venue — a single centred input beneath the date/location (no pin icon);
+            saved on blur/submit. Shows "Input Venue" when empty. */}
         <View style={styles.venueRow}>
-          <Ionicons name="location-outline" size={16} color={colors.text} />
           <TextInput
             style={styles.venueInput}
             value={venue}
             onChangeText={setVenue}
             onEndEditing={saveVenue}
             onSubmitEditing={saveVenue}
-            placeholder="Venue"
+            placeholder="Input Venue"
             placeholderTextColor={colors.textMuted}
             returnKeyType="done"
+            textAlign="center"
           />
         </View>
         {/* Once linked, the row becomes a link straight to the matched
@@ -464,10 +564,20 @@ export default function LineupDetailScreen() {
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled">
           <View style={styles.photoWrap}>
-            {photoUrl ? <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" /> : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
-            <TouchableOpacity style={styles.favStar} onPress={toggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-              <Text style={[styles.favStarText, fav && styles.favStarActive]}>{fav ? '★' : '☆'}</Text>
-            </TouchableOpacity>
+            {photoUrl ? (
+              <TouchableOpacity activeOpacity={0.9} onPress={() => setZoomOpen(true)}>
+                <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" />
+              </TouchableOpacity>
+            ) : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
+            <View style={styles.photoBadges}>
+              {/* Change photo — upload a new image to replace this lineup's. */}
+              <TouchableOpacity style={styles.photoBadge} onPress={changeLineupPhoto} disabled={replacingPhoto} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} accessibilityLabel="Change photo">
+                {replacingPhoto ? <ActivityIndicator size="small" color={colors.gold} /> : <Ionicons name="camera" size={18} color={colors.gold} />}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.photoBadge} onPress={toggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+                <Text style={[styles.favStarText, fav && styles.favStarActive]}>{fav ? '★' : '☆'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Note — reads as plain text once saved; "Edit" reopens the input in a
@@ -531,6 +641,15 @@ export default function LineupDetailScreen() {
                       <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>View Wine Intel</Text>
                       </TouchableOpacity>
+                      {/* A cellar bottle you drank but haven't archived — archive it here. */}
+                      {w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id) ? (
+                        <>
+                          <Text style={styles.tagDot}>·</Text>
+                          <TouchableOpacity onPress={() => archiveOneLineupWine(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Text style={styles.viewLink}>Archive from Cellar</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -574,7 +693,12 @@ export default function LineupDetailScreen() {
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
             <View style={styles.dictateRowFlush}>
               <Text style={styles.stampTitle}>Your note</Text>
-              <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} />
+              <View style={styles.noteHeaderRight}>
+                <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} />
+                <TouchableOpacity onPress={() => setNoteEditorOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
+                  <Text style={styles.closeX}>✕</Text>
+                </TouchableOpacity>
+              </View>
             </View>
             <TextInput
               style={styles.noteEditorInput}
@@ -677,6 +801,36 @@ export default function LineupDetailScreen() {
         </View>
       </Modal>
 
+      {/* Rename this lineup. */}
+      <Modal visible={nameOpen} transparent animationType="fade" onRequestClose={() => setNameOpen(false)}>
+        <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setNameOpen(false)}>
+          <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
+            <View style={styles.dictateRowFlush}>
+              <Text style={styles.stampTitle}>Name this lineup</Text>
+              <TouchableOpacity onPress={() => setNameOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
+                <Text style={styles.closeX}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <TextInput
+              style={styles.stampInput}
+              value={nameDraft}
+              onChangeText={(t) => setNameDraft(t.slice(0, 60))}
+              placeholder="e.g. Birthday at The Ledbury"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={saveName}
+            />
+            <TouchableOpacity style={[styles.stampSaveBtn, savingName && { opacity: 0.5 }]} onPress={saveName} disabled={savingName} activeOpacity={0.85}>
+              <Text style={styles.stampSaveText}>{savingName ? 'Saving…' : 'Save'}</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Full-screen zoomable viewer for the lineup photo. */}
+      <LabelPhotoViewer visible={zoomOpen} uri={photoUrl} onClose={() => setZoomOpen(false)} contain />
+
       {/* Off-screen share card. */}
       {shareData ? (
         <View style={styles.offscreen} pointerEvents="none">
@@ -685,9 +839,13 @@ export default function LineupDetailScreen() {
       ) : null}
 
       {genIntel ? (
-        <View style={styles.intelOverlay} pointerEvents="auto">
-          <ActivityIndicator size="large" color={colors.gold} />
-          <Text style={styles.intelOverlayText}>Loading wine intel…</Text>
+        <View style={StyleSheet.absoluteFill}>
+          <SearchProgress
+            title="Loading wine intel…"
+            subtitle="Vinster needs a few seconds"
+            body="Vinster is pulling together this wine's scores, value and drinking window."
+            durationMs={20000}
+          />
         </View>
       ) : null}
     </View>
@@ -704,8 +862,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   headerTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.lg },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
-  venueRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: spacing.xs, paddingHorizontal: spacing.xl },
-  venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, minWidth: 120, textAlign: 'center', paddingVertical: 2 },
+  venueRow: { alignItems: 'center', marginTop: spacing.xs, paddingHorizontal: spacing.xl },
+  venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, textAlign: 'center', paddingVertical: 2, alignSelf: 'stretch' },
   matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
   matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
@@ -718,7 +876,9 @@ const styles = StyleSheet.create({
   shareText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
   photo: { width: '92%', height: 420, borderRadius: 14, backgroundColor: colors.surface },
-  favStar: { position: 'absolute', top: spacing.lg, right: '8%', backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, paddingHorizontal: 8, paddingVertical: 2 },
+  // Camera (change photo) + favourite star, clustered top-right on the photo.
+  photoBadges: { position: 'absolute', top: spacing.lg, right: '8%', flexDirection: 'row', gap: spacing.sm },
+  photoBadge: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   favStarText: { fontSize: 22, color: '#FFFFFF' },
   favStarActive: { color: colors.gold },
   stampEditHint: { fontSize: 13, color: colors.textMuted },
@@ -744,10 +904,14 @@ const styles = StyleSheet.create({
   confirmCancelText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
-  sectionLabel: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  // Section headers — yellow, all-caps, matching the stats-bar type.
+  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm },
   noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  noteHeadLabel: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.text },
+  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
+  noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },
   noteText: { paddingHorizontal: spacing.xl, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
   addNoteLink: { paddingHorizontal: spacing.xl, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   noteEditorInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 100, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },

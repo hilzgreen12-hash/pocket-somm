@@ -2248,7 +2248,7 @@ const styles = StyleSheet.create({
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // Top-right header "Edit" link — opens the rack-management modal, consistent
   // with the +Add / Edit affordances elsewhere. minWidth balances the back arrow.
-  headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', minWidth: 40 },
+  headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', width: 50 },
   editActionBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
   // Cormorant — button text
   editActionBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
@@ -2317,7 +2317,7 @@ const styles = StyleSheet.create({
   slotPlus: { fontSize: 16, color: 'rgba(87,47,43,0.40)', fontFamily: fonts.bodyRegular },
   slotPlusSelected: { color: colors.gold, fontFamily: fonts.headingBold },
   // Stats bar — full-width yellow (gold) rules top and bottom, edge to edge.
-  rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingVertical: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
+  rackSummary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', paddingVertical: spacing.sm, marginTop: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   // "Awaiting placement" banner + yellow rows (moved here, no slot yet).
   awaitingBlock: { paddingTop: spacing.sm },
   awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl },

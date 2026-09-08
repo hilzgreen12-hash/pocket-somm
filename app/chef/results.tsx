@@ -40,10 +40,10 @@ function PairingCard({
           lives there, not on this thumbnail). */}
       <TouchableOpacity activeOpacity={0.8} onPress={onViewFull}>
         <Text style={styles.dishName}>{pairing.dishName}</Text>
+        <Text style={styles.tapHint}>View Full Recipe →</Text>
         <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
         <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
         <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
-        <Text style={styles.tapHint}>Tap for the full recipe →</Text>
       </TouchableOpacity>
 
       {/* Quick Save to Cookbook — the MAIN button. Saved recipes land in the
@@ -59,7 +59,7 @@ function PairingCard({
         ) : (
           <TouchableOpacity style={styles.cardSaveButton} onPress={onSave} disabled={saveState === 'saving'} activeOpacity={0.8}>
             <Text style={styles.cardSaveButtonText}>
-              {saveState === 'saving' ? 'Saving…' : 'Quick Save to Cookbook'}
+              {saveState === 'saving' ? 'Saving…' : 'Save to Cookbook'}
             </Text>
           </TouchableOpacity>
         )
@@ -155,14 +155,22 @@ function buildBriefSummary(filters: Record<string, any> | null | undefined): str
   if (filters.servings) prefs.push(`${filters.servings} ${Number(filters.servings) === 1 ? 'person' : 'people'}`);
   if (filters.difficulty) prefs.push(`${String(filters.difficulty)} difficulty`);
   if (filters.timeConsideration) prefs.push(String(filters.timeConsideration));
-  const list = prefs.map((p) => p.trim()).filter(Boolean).join(', ');
-  const concerns = typeof filters.specificConcerns === 'string' ? filters.specificConcerns.trim() : '';
+  // An email address occasionally sits in a saved profile field (a custom
+  // allergy/dietary note, specific concerns, etc.). Never surface it in the
+  // Brief — drop any token that is one, and scrub it from the free text.
+  const EMAIL = /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/;
+  const list = prefs.map((p) => p.trim()).filter(Boolean).filter((p) => !EMAIL.test(p)).join(', ');
+  const concerns = (typeof filters.specificConcerns === 'string' ? filters.specificConcerns : '')
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\s+([.,—-])/g, '$1')
+    .trim();
   const combined = [list, concerns].filter(Boolean).join(' — ');
   return combined || null;
 }
 
 export default function ChefResultsScreen() {
-  const { fromHistory, sessionId, savedAt, city, from, wineId } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; savedAt?: string; city?: string; from?: string; wineId?: string }>();
+  const { fromHistory, sessionId, savedAt, city, from, wineId, backTo } = useLocalSearchParams<{ fromHistory?: string; sessionId?: string; savedAt?: string; city?: string; from?: string; wineId?: string; backTo?: string }>();
   const isFromHistory = fromHistory === 'true';
   const isFromCellar = from === 'cellar' && !!wineId;
   const { wineDetailsConfirmed, pairings: freshPairings, filters, reset, setPairings, setError } = useLabelStore();
@@ -456,12 +464,15 @@ export default function ChefResultsScreen() {
       <TouchableOpacity
         onPress={() => {
           // Back routing depends on where the user came from:
+          //  - "View Last Result" from a form (backTo) → just pop back to it,
+          //    NOT the cookbook (even though it's flagged fromHistory).
           //  - Cellar wine card → land back on that wine.
           //  - Cookbook entry (fromHistory) → land back on the cookbook
           //    so the user keeps their place in the list rather than
           //    being kicked all the way to the Chef tab.
           //  - Fresh result from a label scan → Chef tab.
-          if (isFromCellar) router.replace(`/cellar/${wineId}` as any);
+          if (backTo) router.back();
+          else if (isFromCellar) router.replace(`/cellar/${wineId}` as any);
           else if (isFromHistory) router.replace('/chef/archive');
           else router.replace('/(tabs)/chef');
         }}
@@ -470,23 +481,22 @@ export default function ChefResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
-      <Text style={styles.pageTitle}>Pairing to a Wine</Text>
-
-      {/* Your Brief — the wine and the preferences behind these recipes.
-          Hidden for cookbook entries (the saved-recipe card carries its own
-          recipe-name-first layout with the wine as subhead). */}
-      {!isFromHistory && (
-        <View style={styles.freshHeader}>
-          <Text style={styles.briefLabel}>Your Brief</Text>
-          <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${regionWithCountry(wine.region)}` : ''}</Text>
-          {briefSummary ? <Text style={styles.briefSummary}>{briefSummary}</Text> : null}
-        </View>
-      )}
-
+      {/* Date (and location) at the top, mirroring the wine-pairing page. */}
       {(stampDate || stampLocation) && (
         <View style={styles.stampRow}>
           {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
           {stampLocation ? <Text style={styles.stampLocation}>{stampLocation}</Text> : null}
+        </View>
+      )}
+
+      {/* Your Recipe Brief — the wine and the preferences behind these recipes.
+          Hidden for cookbook entries (the saved-recipe card carries its own
+          recipe-name-first layout with the wine as subhead). */}
+      {!isFromHistory && (
+        <View style={styles.freshHeader}>
+          <Text style={styles.briefLabel}>Your Recipe Brief</Text>
+          <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${regionWithCountry(wine.region)}` : ''}</Text>
+          {briefSummary ? <Text style={styles.briefSummary}>{briefSummary}</Text> : null}
         </View>
       )}
 
@@ -676,7 +686,7 @@ const styles = StyleSheet.create({
   pairingNotes: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },
   // Quick Save shown as a centred link above the main View Full Recipe button.
-  tapHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
+  tapHint: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: 4, marginBottom: spacing.xs, textAlign: 'center', letterSpacing: 0.3 },
   recipe: { marginTop: spacing.md, paddingTop: spacing.md, borderTopWidth: 1, borderTopColor: colors.border },
   cardSaveButton: { marginTop: spacing.md, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   cardSaveButtonDisabled: { opacity: 0.6 },

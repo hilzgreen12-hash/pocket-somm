@@ -707,15 +707,18 @@ export default function RestaurantReviewsScreen() {
           <Text style={styles.emptyBody}>After scanning a wine list, add the restaurant name on the results page and tap "Review this restaurant" — your visits will appear here so you can capture the food, atmosphere and service.</Text>
         </View>
       ) : (
+        <>
+        {/* Header + stats bar stay fixed; only the filters / search / list below
+            scroll. */}
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryText}>
+            {sorted.length} {sorted.length === 1 ? 'Restaurant' : 'Restaurants'} · {reviewedCount} {reviewedCount === 1 ? 'Review' : 'Reviews'}
+          </Text>
+          <TouchableOpacity onPress={() => setAwaitingOpen(true)} disabled={awaitingRestaurants.length === 0} activeOpacity={0.7}>
+            <Text style={[styles.summaryLink, awaitingRestaurants.length === 0 && { opacity: 0.5 }]}>View Restaurants Awaiting Review</Text>
+          </TouchableOpacity>
+        </View>
         <ScrollView contentContainerStyle={{ paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
-          <View style={styles.summaryRow}>
-            <Text style={styles.summaryText}>
-              {sorted.length} {sorted.length === 1 ? 'Restaurant' : 'Restaurants'} · {reviewedCount} {reviewedCount === 1 ? 'Review' : 'Reviews'}
-            </Text>
-            <TouchableOpacity onPress={() => setAwaitingOpen(true)} disabled={awaitingRestaurants.length === 0} activeOpacity={0.7}>
-              <Text style={[styles.summaryLink, awaitingRestaurants.length === 0 && { opacity: 0.5 }]}>View Restaurants Awaiting Review</Text>
-            </TouchableOpacity>
-          </View>
           <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
@@ -887,6 +890,7 @@ export default function RestaurantReviewsScreen() {
             })
           )}
         </ScrollView>
+        </>
       )}
 
       {editing && (

@@ -33,7 +33,7 @@ type DropdownField = 'dietary' | 'allergy' | 'course' | 'difficulty' | 'time' | 
 
 export default function ReviewRequirementsScreen() {
   useKeepAwake();
-  const { from, wineId } = useLocalSearchParams<{ from?: string; wineId?: string }>();
+  const { from, wineId, backTo } = useLocalSearchParams<{ from?: string; wineId?: string; backTo?: string }>();
   // Two entry modes:
   //  - from === 'cellar': the bottle is already known (came from a cellar
   //    wine card). We generate pairings immediately ("Get Pairings").
@@ -43,7 +43,13 @@ export default function ReviewRequirementsScreen() {
   const isFromCellar = from === 'cellar';
   // When the user arrived from the cellar wine card, thread the source
   // through to /chef/results so its Back button can route home properly.
-  const resultsQuery = isFromCellar && wineId ? `?from=cellar&wineId=${wineId}` : '';
+  const resultsQuery = (() => {
+    const p = new URLSearchParams();
+    if (isFromCellar && wineId) { p.set('from', 'cellar'); p.set('wineId', wineId); }
+    if (backTo) p.set('backTo', backTo); // pop back to the Wine Intel card, not the Pair tab
+    const s = p.toString();
+    return s ? `?${s}` : '';
+  })();
   const { wineDetailsConfirmed, pairings, setPairings, setError, setFilters, setImage, setWineDetails, setWineDetailsConfirmed } = useLabelStore();
   const { sessions: labelSessions } = useChefLabelHistory();
   const { preferences } = usePreferences();
@@ -52,8 +58,10 @@ export default function ReviewRequirementsScreen() {
   // "View Last Result" — reopen the current in-memory recipe result if there is
   // one, otherwise the most recent saved label scan. Mirrors the Pair tab.
   function handleViewLastResult() {
+    // backTo: 'requirements' tells the results screen to simply pop back HERE on
+    // Back, rather than detouring to the Cookbook (the fromHistory default).
     if (wineDetailsConfirmed && pairings.length) {
-      router.push('/chef/results');
+      router.push({ pathname: '/chef/results', params: { backTo: 'requirements' } });
       return;
     }
     const last = labelSessions[0];
@@ -63,7 +71,7 @@ export default function ReviewRequirementsScreen() {
     }
     router.push({
       pathname: '/chef/results',
-      params: { fromHistory: 'true', sessionId: last.id, savedAt: last.saved_at, city: last.city ?? '' },
+      params: { fromHistory: 'true', sessionId: last.id, savedAt: last.saved_at, city: last.city ?? '', backTo: 'requirements' },
     });
   }
 
@@ -286,7 +294,7 @@ export default function ReviewRequirementsScreen() {
       {/* Standard header bar (matches Find a Wine Pairing): Back / 20pt
           centred title / spacer, with the blurb beneath at 16pt italic. */}
       <View style={styles.headerBar}>
-        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ width: 44 }}>
           <Text accessibilityLabel="Back" style={[styles.backTopText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Recipe Requirements</Text>
@@ -483,7 +491,7 @@ export default function ReviewRequirementsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  content: { paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: 48 },
+  content: { paddingTop: 76, paddingHorizontal: spacing.xl, paddingBottom: 48 },
   headerBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.border, marginTop: spacing.xs, marginBottom: spacing.md },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.8 },

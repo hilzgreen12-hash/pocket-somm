@@ -378,7 +378,7 @@ export default function ScanLandingScreen() {
             <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Lineup</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Archive a Night / Add to your collection</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Archive a Night{'\n'}Add to your collection</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={handleUploadLineup} activeOpacity={0.7}>
             <Feather name="upload" size={11} color={colors.gold} />

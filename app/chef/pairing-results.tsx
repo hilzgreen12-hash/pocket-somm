@@ -203,6 +203,9 @@ export default function PairingResultsScreen() {
   // results page.
   const [selecting, setSelecting] = useState<{ wine: CellarWine; recName: string } | null>(null);
   const [bottleCount, setBottleCount] = useState('1');
+  // Cellar Note carried onto the archived bottle — prefilled "Opened with <the
+  // recipe> · <date>" so the archive records why/when it was opened.
+  const [cellarNote, setCellarNote] = useState('');
   const [archiving, setArchiving] = useState(false);
   const [archivedSuccess, setArchivedSuccess] = useState<{ count: number; recName: string } | null>(null);
 
@@ -221,12 +224,15 @@ export default function PairingResultsScreen() {
   function openSelect(wine: CellarWine, recName: string) {
     setSelecting({ wine, recName });
     setBottleCount('1');
+    const today = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+    setCellarNote(`Opened with ${titleCase(dish)} · ${today}`);
     setArchivedSuccess(null);
   }
 
   function closeSelect() {
     setSelecting(null);
     setBottleCount('1');
+    setCellarNote('');
     setArchivedSuccess(null);
   }
 
@@ -248,12 +254,14 @@ export default function PairingResultsScreen() {
         note: 'Selected for a Chef pairing',
       });
 
+      const note = cellarNote.trim() || null;
       if (count >= wine.quantity) {
         // Archive the row directly with the actual count removed so the
         // Bottles in My Archive stat sums correctly.
         await updateCellarWine(wine.id, {
           quantity: count,
           archived_at: removedAt,
+          cellar_note: note,
         });
       } else {
         // Decrement the live row and clone an archived row carrying the
@@ -265,6 +273,7 @@ export default function PairingResultsScreen() {
           quantity: count,
           archived_at: removedAt,
           is_wishlist: false,
+          cellar_note: note,
         });
       }
 
@@ -300,8 +309,6 @@ export default function PairingResultsScreen() {
       </TouchableOpacity>
 
       <View ref={shareRef} collapsable={false} style={styles.shareArea}>
-        <Text style={styles.pageTitle}>Pairing to a Recipe</Text>
-
         {(stampDate || stampLocation) && (
           <View style={styles.stampRow}>
             {stampDate ? <Text style={styles.stampDate}>{stampDate}</Text> : null}
@@ -310,7 +317,7 @@ export default function PairingResultsScreen() {
         )}
 
         <View style={styles.header}>
-          <Text style={styles.headerLine}>Your Brief</Text>
+          <Text style={styles.headerLine}>Your Wine Pairing Brief</Text>
           <Text style={styles.briefMode}>{mode === 'cellar' ? 'Select from Cellar' : 'Select from Market'}</Text>
           <Text style={styles.dish}>{titleCase(dish)}</Text>
           {mode === 'general' && wines.length > 0 && (
@@ -375,6 +382,17 @@ export default function PairingResultsScreen() {
                 <Text style={styles.fieldHint}>
                   {selecting.wine.quantity} in cellar
                 </Text>
+
+                <Text style={styles.fieldLabel}>Cellar Note</Text>
+                <TextInput
+                  style={[styles.input, styles.noteInput]}
+                  value={cellarNote}
+                  onChangeText={setCellarNote}
+                  placeholder="e.g. Opened with Coq au Vin"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                />
+                <Text style={styles.fieldHint}>Saved to this wine's card in your archive.</Text>
 
                 <TouchableOpacity
                   style={[styles.archiveBtn, archiving && styles.btnDisabled]}
@@ -456,6 +474,8 @@ const styles = StyleSheet.create({
   modalBody: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.lg },
   fieldLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 6 },
   input: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, backgroundColor: colors.surface },
+  // Cellar Note input — regular weight, taller, top-aligned for the note text.
+  noteInput: { fontFamily: fonts.bodyRegular, fontSize: 15, minHeight: 46, textAlignVertical: 'top', marginTop: 4 },
   fieldHint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, marginBottom: spacing.lg, textAlign: 'right' },
   archiveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   archiveBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },

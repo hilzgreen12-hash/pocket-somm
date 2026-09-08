@@ -34,6 +34,8 @@ export interface LineupArchive {
   restaurant_session_id: string | null;
   // Migration 086 — free-text venue / place name (distinct from city).
   venue: string | null;
+  // Migration 101 — optional user-given lineup title (falls back to "Your Lineup").
+  name?: string | null;
 }
 
 function base64ToBytes(base64: string): Uint8Array {
@@ -98,6 +100,24 @@ export async function saveLineupArchive(
   return row as LineupArchive;
 }
 
+// Replace a lineup's photo — upload a new image and repoint image_path.
+export async function replaceLineupImage(userId: string, id: string, localUri: string): Promise<string> {
+  const processed = await manipulateAsync(localUri, [{ resize: { width: 1200 } }], {
+    compress: 0.7, format: SaveFormat.JPEG, base64: true,
+  });
+  if (!processed.base64) throw new Error('Image processing returned no data');
+  const key = `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  const path = `${userId}/lineups/${key}.jpg`;
+  const bytes = base64ToBytes(processed.base64);
+  const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
+    contentType: 'image/jpeg', upsert: true,
+  });
+  if (upErr) throw upErr;
+  const { error } = await supabase.from('lineup_archives').update({ image_path: path }).eq('id', id);
+  if (error) throw error;
+  return path;
+}
+
 export async function listLineupArchives(userId: string): Promise<LineupArchive[]> {
   const { data, error } = await supabase
     .from('lineup_archives')
@@ -112,6 +132,13 @@ export async function getLineupArchive(id: string): Promise<LineupArchive | null
   const { data, error } = await supabase.from('lineup_archives').select('*').eq('id', id).maybeSingle();
   if (error) throw error;
   return (data as LineupArchive) ?? null;
+}
+
+// Set (or clear) the user-given lineup title. Blank stores null → "Your Lineup".
+export async function setLineupName(id: string, name: string | null): Promise<void> {
+  const clean = name?.trim() ? name.trim() : null;
+  const { error } = await supabase.from('lineup_archives').update({ name: clean }).eq('id', id);
+  if (error) throw error;
 }
 
 export async function setLineupFavourite(id: string, isFavourite: boolean): Promise<void> {

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Modal } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
@@ -836,7 +837,7 @@ export default function StorageLocationScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={handleBack}>
+        <TouchableOpacity onPress={handleBack} style={styles.headerSide} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
         <View style={styles.titleNav}>
@@ -850,11 +851,10 @@ export default function StorageLocationScreen() {
             <Text style={[styles.navArrow, !nextLoc && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
         </View>
-        <View style={styles.headerActions}>
-          <TouchableOpacity onPress={handleEditImage} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Text style={styles.headerLink}>Edit Image</Text>
-          </TouchableOpacity>
-        </View>
+        {/* Right spacer matches the back button width so the title is truly
+            screen-centred. Editing the photo now happens via the camera badge
+            on the image itself. */}
+        <View style={styles.headerSide} />
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
@@ -866,8 +866,19 @@ export default function StorageLocationScreen() {
         </TouchableOpacity>
 
         {photoUrl ? (
-          <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
-        ) : null}
+          <View style={styles.photoWrap}>
+            <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
+            {/* Camera badge — tap to change the photo (replaces the header link). */}
+            <TouchableOpacity style={styles.photoEditBadge} onPress={handleEditImage} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
+              <Ionicons name="camera" size={18} color={colors.gold} />
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity style={styles.photoAdd} onPress={handleEditImage} activeOpacity={0.8}>
+            <Ionicons name="camera-outline" size={26} color={colors.gold} />
+            <Text style={styles.photoAddText}>Add a photo</Text>
+          </TouchableOpacity>
+        )}
 
         <Text style={styles.statsBar}>
           {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'}
@@ -1243,6 +1254,8 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
+  // Equal-width side cells so the flex-1 titleNav is truly screen-centred.
+  headerSide: { width: 44, justifyContent: 'center' },
   backLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold },
   // Matches the rack / fridge headers (size, weight, spacing) + carousel arrows.
   title: { flexShrink: 1, fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
@@ -1252,10 +1265,15 @@ const styles = StyleSheet.create({
   headerActions: { alignItems: 'flex-end', gap: 4 },
   headerLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   // Portrait photo, ~2/3 the old footprint, centred.
-  areaPhoto: { alignSelf: 'center', width: '85%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface, marginVertical: spacing.md },
+  // ~15% smaller than before (85% → 72%). The camera badge sits in its corner.
+  photoWrap: { alignSelf: 'center', width: '72%', marginVertical: spacing.md },
+  areaPhoto: { width: '100%', aspectRatio: 4 / 3, borderRadius: 14, backgroundColor: colors.surface },
+  photoEditBadge: { position: 'absolute', top: 8, right: 8, width: 34, height: 34, borderRadius: 17, backgroundColor: 'rgba(0,0,0,0.55)', borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
+  photoAdd: { alignSelf: 'center', width: '72%', aspectRatio: 4 / 3, borderRadius: 14, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginVertical: spacing.md },
+  photoAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
   // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
-  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
+  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, marginBottom: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   // "Awaiting placement" banner + yellow rows (moved-here, not yet filed).
   awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, paddingHorizontal: spacing.xl },
   awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
@@ -1264,7 +1282,7 @@ const styles = StyleSheet.create({
   // "+ Add Wine" — its own centred line below the stats bar (moved out of the
   // cramped top-right header stack).
   // "+ Add Wine" — stats-bar format (yellow full-width rules), below the header.
-  addWineRow: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.gold, borderBottomColor: colors.gold },
+  addWineRow: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   addWineText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
