@@ -1307,18 +1307,6 @@ export default function CellarWineDetail() {
     return `${n} ${n === 1 ? 'bottle' : 'bottles'}`;
   }
 
-  async function handleToggleFavourite() {
-    if (!wine) return;
-    try {
-      await updateWine.mutateAsync({
-        id: wine.id,
-        updates: { is_favourite: !wine.is_favourite },
-      });
-    } catch {
-      showAlert({ title: 'Could not update', body: 'Please try again.' });
-    }
-  }
-
   // Wishlist-only delete. Confirms first, then removes the wishlist row
   // and routes back to the Wish List. Reuses the justDeleted toast +
   // auto-navigate pattern used by the cellar hard-delete above.
@@ -1388,13 +1376,6 @@ export default function CellarWineDetail() {
               {sharingIntel ? 'Preparing…' : 'Export'}
             </Text>
           </TouchableOpacity>
-          {!isArchived ? (
-            <TouchableOpacity onPress={handleToggleFavourite} hitSlop={{ top: 6, bottom: 10, left: 12, right: 12 }}>
-              <Text style={[styles.favouriteStar, wine.is_favourite && styles.favouriteStarActive]}>
-                {wine.is_favourite ? '★' : '☆'}
-              </Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       </View>
 
@@ -1705,7 +1686,10 @@ export default function CellarWineDetail() {
           ))}
           {wineStorageLocation && (
             <TouchableOpacity onPress={() => router.push(`/cellar/storage-location/${wineStorageLocation.id}` as any)}>
-              <Text style={styles.statAction}>In {wineStorageLocation.name}{wineCase ? ` - ${wineCase.name}` : ''} →</Text>
+              {/* A location-filed row holds its full quantity there — placement is
+                  mutually exclusive with racks/bins — so show that bottle count,
+                  matching the rack lines above. */}
+              <Text style={styles.statAction}>{wine.quantity} bottle{wine.quantity === 1 ? '' : 's'} in {wineStorageLocation.name}{wineCase ? ` - ${wineCase.name}` : ''} →</Text>
             </TouchableOpacity>
           )}
           {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !wine?.bin_cell_id && !isArchived && !isWishlist && (
@@ -2332,9 +2316,9 @@ const styles = StyleSheet.create({
   candRowText: { flex: 1 },
   candItemName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
   candItemMeta: { fontFamily: fonts.bodyRegular, fontSize: 12, color: colors.textMuted, marginTop: 2 },
-  candConfirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  candConfirmBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   candConfirmBtnDisabled: { opacity: 0.4 },
-  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.background },
+  candConfirmText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   candCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   candCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
   // Non-standard bottle format line under the grape (e.g. "150cl bottle").

@@ -7,7 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
-import { getLineupArchive, lineupSignedUrl, setLineupNote, setLineupFavourite, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
+import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
@@ -19,6 +19,7 @@ import { labelSignedUrl } from '../../../src/api/labelPhotos';
 import { File, Paths } from 'expo-file-system';
 import { LineupShareCard } from '../../../src/components/LineupShareCard';
 import { LabelPhotoViewer } from '../../../src/components/LabelPhotoViewer';
+import { withBordeauxInfo } from '../../../src/constants/bordeauxClassification';
 import { Ionicons } from '@expo/vector-icons';
 import { MicButton } from '../../../src/components/MicButton';
 import { showAlert } from '../../../src/components/AppAlert';
@@ -66,7 +67,6 @@ export default function LineupDetailScreen() {
   // input, and saving converts it back to text.
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
-  const [fav, setFav] = useState(false);
   // Free-text venue (restaurant / bar / home), edited inline via the pin field.
   const [venue, setVenue] = useState('');
   const hydrated = useRef(false);
@@ -75,7 +75,6 @@ export default function LineupDetailScreen() {
       hydrated.current = true;
       setNote(lineup.note ?? '');
       setVenue(lineup.venue ?? '');
-      setFav(lineup.is_favourite);
       lineupSignedUrl(lineup.image_path).then(setPhotoUrl);
     }
   }, [lineup]);
@@ -224,12 +223,14 @@ export default function LineupDetailScreen() {
   // View Wine Intel → generate on demand and open the intel card. Lineup wines
   // have no label photo, so clear the shared image (avoids showing a stale one).
   async function viewLineupWineIntel(w: LineupWine) {
-    const details = {
+    // Fill classification + appellation for a classified Bordeaux château so the
+    // intel card is complete even though the lineup carried neither.
+    const details = withBordeauxInfo({
       producer: w.producer ?? '',
       region: '',
       wineName: w.wine_name || null,
       vintage: w.vintage != null ? String(w.vintage) : 'NV',
-    };
+    });
     setGenIntel(true);
     try {
       const intel = await generateWineIntel(details as any, currency);
@@ -437,16 +438,6 @@ export default function LineupDetailScreen() {
     }
   }
 
-  async function toggleFav() {
-    if (!lineup) return;
-    const next = !fav;
-    setFav(next);
-    try {
-      await setLineupFavourite(lineup.id, next);
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
-    } catch { setFav(!next); }
-  }
-
   async function handleShare() {
     if (!lineup || sharing) return;
     setSharing(true);
@@ -573,9 +564,6 @@ export default function LineupDetailScreen() {
               {/* Change photo — upload a new image to replace this lineup's. */}
               <TouchableOpacity style={styles.photoBadge} onPress={changeLineupPhoto} disabled={replacingPhoto} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} accessibilityLabel="Change photo">
                 {replacingPhoto ? <ActivityIndicator size="small" color={colors.gold} /> : <Ionicons name="camera" size={18} color={colors.gold} />}
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.photoBadge} onPress={toggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-                <Text style={[styles.favStarText, fav && styles.favStarActive]}>{fav ? '★' : '☆'}</Text>
               </TouchableOpacity>
             </View>
           </View>

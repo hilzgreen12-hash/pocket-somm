@@ -661,9 +661,6 @@ export function RestaurantReviewModal({
               <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 6, left: 10, right: 10 }} activeOpacity={0.7}>
                 <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Export'}</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 6, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
-                <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
-              </TouchableOpacity>
             </View>
           </View>
 

@@ -16,12 +16,15 @@ export const VINSTERS_NOTE_EXPLAINER =
 export function VinstersNoteHeading({ expanded, onToggle, hideExplainerLink }: { expanded?: boolean; onToggle?: () => void; hideExplainerLink?: boolean }) {
   return (
     <View style={styles.row}>
-      <Text style={styles.title}>Vinster's Tasting Note</Text>
       {onToggle ? (
-        <TouchableOpacity onPress={onToggle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        // The whole title + chevron toggles the note, not just the chevron.
+        <TouchableOpacity onPress={onToggle} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={styles.titleToggle} activeOpacity={0.7}>
+          <Text style={styles.title}>Vinster's Tasting Note</Text>
           <Text style={styles.chevron}>{expanded ? '⌃' : '⌄'}</Text>
         </TouchableOpacity>
-      ) : null}
+      ) : (
+        <Text style={styles.title}>Vinster's Tasting Note</Text>
+      )}
       {!hideExplainerLink ? (
         <TouchableOpacity
           onPress={() => showAlert({ title: "Vinster's Tasting Note", body: VINSTERS_NOTE_EXPLAINER })}
@@ -36,6 +39,7 @@ export function VinstersNoteHeading({ expanded, onToggle, hideExplainerLink }: {
 
 const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs, marginBottom: spacing.sm },
+  titleToggle: { flexDirection: 'row', alignItems: 'baseline', gap: spacing.xs },
   title: { fontSize: 17, fontFamily: fonts.headingBold, color: colors.text },
   chevron: { fontSize: 15, color: colors.gold, fontFamily: fonts.bodySemibold },
   whatsThis: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, textDecorationLine: 'underline' },

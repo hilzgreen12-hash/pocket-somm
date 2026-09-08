@@ -1,6 +1,7 @@
 import { fetchWinePrice } from '../api/wine-searcher';
 import { getWineIntelligence } from '../api/label';
 import { wineQueryName } from '../utils/wineIdentity';
+import { withBordeauxInfo } from '../constants/bordeauxClassification';
 import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
 export async function fetchPricing(
@@ -148,9 +149,12 @@ export async function valueWine(
 // the real WS market price + WS-anchored score + grape gap-fill merged in.
 // fetchPricing already returns prices in the user's currency (proxy converts).
 export async function generateWineIntel(
-  wine: WineDetailsComplete,
+  wineIn: WineDetailsComplete,
   currency: string = 'GBP',
 ): Promise<WineIntelligence> {
+  // Classified Bordeaux: fill classification (wine name) + appellation (region)
+  // when blank, so intel is complete on EVERY path (scan, lineup, search…).
+  const wine = withBordeauxInfo(wineIn);
   const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 

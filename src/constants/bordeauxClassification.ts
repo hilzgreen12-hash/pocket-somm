@@ -1,61 +1,74 @@
 // Bordeaux classified-growth lookup.
 //
-// Classified Bordeaux châteaux rarely print their classification on the label,
-// so a scan returns the château name with an EMPTY cuvée/wine name. For these
-// estates the classification IS effectively the wine's name ("Château Batailley
-// Cinquième Cru Classé"), so we fill it in when the scan left it blank.
+// Classified Bordeaux châteaux rarely print their classification (or even the
+// appellation) on the label, so an identified wine can be missing both. For
+// these estates the classification IS effectively the wine's name ("Château
+// Batailley 5ème Cru Classé"), and the appellation is fixed, so we fill both in
+// when they're blank — on EVERY path that builds a wine identity, not just a
+// fresh scan (see withBordeauxInfo).
 //
 // Coverage: the STABLE historical classifications — the 1855 Médoc (61 growths,
 // unchanged since Mouton's 1973 promotion), the 1855 Sauternes & Barsac, and the
 // Graves / Pessac-Léognan Crus Classés (1959). Saint-Émilion is deliberately
-// excluded here (its list is revised roughly every decade). Extend as needed.
+// excluded (its list is revised roughly every decade). Extend as needed.
 
-const P1 = 'Premier Cru Classé';
-const P2 = 'Deuxième Cru Classé';
-const P3 = 'Troisième Cru Classé';
-const P4 = 'Quatrième Cru Classé';
-const P5 = 'Cinquième Cru Classé';
+// Numeric French classification labels (per the user's house style).
+const P1 = '1er Cru Classé';
+const P2 = '2ème Cru Classé';
+const P3 = '3ème Cru Classé';
+const P4 = '4ème Cru Classé';
+const P5 = '5ème Cru Classé';
 const GRAVES = 'Cru Classé de Graves';
-const S_SUP = 'Premier Cru Supérieur';
-const S1 = 'Premier Cru';
-const S2 = 'Deuxième Cru';
+const S_SUP = '1er Cru Supérieur';
+const S1 = '1er Cru';
+const S2 = '2ème Cru';
 
-// Canonical château → classification. Keys are matched after normBdx() (accent-
-// and "château"-insensitive), so spellings like "Château Léoville Barton" and
-// "Leoville Barton" both resolve.
-const RAW: Record<string, string> = {
+// Appellations.
+const PAU = 'Pauillac, Bordeaux';
+const MAR = 'Margaux, Bordeaux';
+const STJ = 'Saint-Julien, Bordeaux';
+const STE = 'Saint-Estèphe, Bordeaux';
+const HM = 'Haut-Médoc, Bordeaux';
+const PL = 'Pessac-Léognan, Bordeaux';
+const SAU = 'Sauternes, Bordeaux';
+const BAR = 'Barsac, Bordeaux';
+
+// Canonical château → [classification, appellation]. Keys are matched after
+// normBdx() (accent- and "château"-insensitive), so "Château Léoville Barton"
+// and "Leoville Barton" both resolve.
+const RAW: Record<string, [string, string]> = {
   // --- 1855 Médoc — Premiers Crus ---
-  'Lafite Rothschild': P1, 'Latour': P1, 'Margaux': P1, 'Haut-Brion': P1, 'Mouton Rothschild': P1,
+  'Lafite Rothschild': [P1, PAU], 'Latour': [P1, PAU], 'Margaux': [P1, MAR], 'Haut-Brion': [P1, PL], 'Mouton Rothschild': [P1, PAU],
   // --- Deuxièmes ---
-  'Rauzan-Ségla': P2, 'Rauzan-Gassies': P2, 'Léoville Las Cases': P2, 'Léoville Poyferré': P2,
-  'Léoville Barton': P2, 'Durfort-Vivens': P2, 'Gruaud Larose': P2, 'Lascombes': P2,
-  'Brane-Cantenac': P2, 'Pichon Longueville Baron': P2, 'Pichon Baron': P2,
-  'Pichon Longueville Comtesse de Lalande': P2, 'Ducru-Beaucaillou': P2, "Cos d'Estournel": P2, 'Montrose': P2,
+  'Rauzan-Ségla': [P2, MAR], 'Rauzan-Gassies': [P2, MAR], 'Léoville Las Cases': [P2, STJ], 'Léoville Poyferré': [P2, STJ],
+  'Léoville Barton': [P2, STJ], 'Durfort-Vivens': [P2, MAR], 'Gruaud Larose': [P2, STJ], 'Lascombes': [P2, MAR],
+  'Brane-Cantenac': [P2, MAR], 'Pichon Longueville Baron': [P2, PAU], 'Pichon Baron': [P2, PAU],
+  'Pichon Longueville Comtesse de Lalande': [P2, PAU], 'Ducru-Beaucaillou': [P2, STJ], "Cos d'Estournel": [P2, STE], 'Montrose': [P2, STE],
   // --- Troisièmes ---
-  'Kirwan': P3, "d'Issan": P3, 'Lagrange': P3, 'Langoa Barton': P3, 'Giscours': P3,
-  'Malescot St-Exupéry': P3, 'Boyd-Cantenac': P3, 'Cantenac Brown': P3, 'Palmer': P3, 'La Lagune': P3,
-  'Desmirail': P3, 'Calon-Ségur': P3, 'Ferrière': P3, "Marquis d'Alesme Becker": P3,
+  'Kirwan': [P3, MAR], "d'Issan": [P3, MAR], 'Lagrange': [P3, STJ], 'Langoa Barton': [P3, STJ], 'Giscours': [P3, MAR],
+  'Malescot St-Exupéry': [P3, MAR], 'Boyd-Cantenac': [P3, MAR], 'Cantenac Brown': [P3, MAR], 'Palmer': [P3, MAR], 'La Lagune': [P3, HM],
+  'Desmirail': [P3, MAR], 'Calon-Ségur': [P3, STE], 'Ferrière': [P3, MAR], "Marquis d'Alesme Becker": [P3, MAR],
   // --- Quatrièmes ---
-  'Saint-Pierre': P4, 'Talbot': P4, 'Branaire-Ducru': P4, 'Duhart-Milon': P4, 'Pouget': P4,
-  'La Tour Carnet': P4, 'Lafon-Rochet': P4, 'Beychevelle': P4, 'Prieuré-Lichine': P4, 'Marquis de Terme': P4,
+  'Saint-Pierre': [P4, STJ], 'Talbot': [P4, STJ], 'Branaire-Ducru': [P4, STJ], 'Duhart-Milon': [P4, PAU], 'Pouget': [P4, MAR],
+  'La Tour Carnet': [P4, HM], 'Lafon-Rochet': [P4, STE], 'Beychevelle': [P4, STJ], 'Prieuré-Lichine': [P4, MAR], 'Marquis de Terme': [P4, MAR],
   // --- Cinquièmes ---
-  'Pontet-Canet': P5, 'Batailley': P5, 'Haut-Batailley': P5, 'Grand-Puy-Lacoste': P5, 'Grand-Puy-Ducasse': P5,
-  'Lynch-Bages': P5, 'Lynch-Moussas': P5, 'Dauzac': P5, "d'Armailhac": P5, 'du Tertre': P5,
-  'Haut-Bages Libéral': P5, 'Pédesclaux': P5, 'Belgrave': P5, 'de Camensac': P5, 'Cos Labory': P5,
-  'Clerc Milon': P5, 'Croizet-Bages': P5, 'Cantemerle': P5,
+  'Pontet-Canet': [P5, PAU], 'Batailley': [P5, PAU], 'Haut-Batailley': [P5, PAU], 'Grand-Puy-Lacoste': [P5, PAU], 'Grand-Puy-Ducasse': [P5, PAU],
+  'Lynch-Bages': [P5, PAU], 'Lynch-Moussas': [P5, PAU], 'Dauzac': [P5, MAR], "d'Armailhac": [P5, PAU], 'du Tertre': [P5, MAR],
+  'Haut-Bages Libéral': [P5, PAU], 'Pédesclaux': [P5, PAU], 'Belgrave': [P5, HM], 'de Camensac': [P5, HM], 'Cos Labory': [P5, STE],
+  'Clerc Milon': [P5, PAU], 'Croizet-Bages': [P5, PAU], 'Cantemerle': [P5, HM],
   // --- 1855 Sauternes & Barsac ---
-  "d'Yquem": S_SUP,
-  'La Tour Blanche': S1, 'Lafaurie-Peyraguey': S1, 'Clos Haut-Peyraguey': S1, 'de Rayne Vigneau': S1,
-  'Suduiraut': S1, 'Coutet': S1, 'Climens': S1, 'Guiraud': S1, 'Rieussec': S1, 'Rabaud-Promis': S1,
-  'Sigalas Rabaud': S1,
-  'de Myrat': S2, 'Doisy Daëne': S2, 'Doisy-Dubroca': S2, 'Doisy-Védrines': S2, "d'Arche": S2,
-  'Filhot': S2, 'Broustet': S2, 'Nairac': S2, 'Caillou': S2, 'Suau': S2, 'de Malle': S2,
-  'Romer du Hayot': S2, 'Lamothe': S2, 'Lamothe-Guignard': S2,
+  "d'Yquem": [S_SUP, SAU],
+  'La Tour Blanche': [S1, SAU], 'Lafaurie-Peyraguey': [S1, SAU], 'Clos Haut-Peyraguey': [S1, SAU], 'de Rayne Vigneau': [S1, SAU],
+  'Suduiraut': [S1, SAU], 'Coutet': [S1, BAR], 'Climens': [S1, BAR], 'Guiraud': [S1, SAU], 'Rieussec': [S1, SAU], 'Rabaud-Promis': [S1, SAU],
+  'Sigalas Rabaud': [S1, SAU],
+  'de Myrat': [S2, BAR], 'Doisy Daëne': [S2, BAR], 'Doisy-Dubroca': [S2, BAR], 'Doisy-Védrines': [S2, BAR], "d'Arche": [S2, SAU],
+  'Filhot': [S2, SAU], 'Broustet': [S2, BAR], 'Nairac': [S2, BAR], 'Caillou': [S2, BAR], 'Suau': [S2, BAR], 'de Malle': [S2, SAU],
+  'Romer du Hayot': [S2, SAU], 'Lamothe': [S2, SAU], 'Lamothe-Guignard': [S2, SAU],
   // --- Graves / Pessac-Léognan Crus Classés (1959) ---
-  'Bouscaut': GRAVES, 'Carbonnieux': GRAVES, 'Domaine de Chevalier': GRAVES, 'de Fieuzal': GRAVES,
-  'Haut-Bailly': GRAVES, 'Latour-Martillac': GRAVES, 'Malartic-Lagravière': GRAVES,
-  'La Mission Haut-Brion': GRAVES, 'Olivier': GRAVES, 'Pape Clément': GRAVES, 'Smith Haut Lafitte': GRAVES,
-  'La Tour Haut-Brion': GRAVES, 'Couhins': GRAVES, 'Couhins-Lurton': GRAVES,
+  'Bouscaut': [GRAVES, PL], 'Carbonnieux': [GRAVES, PL], 'Domaine de Chevalier': [GRAVES, PL], 'de Fieuzal': [GRAVES, PL],
+  'Haut-Bailly': [GRAVES, PL], 'Latour-Martillac': [GRAVES, PL], 'Malartic-Lagravière': [GRAVES, PL],
+  'La Mission Haut-Brion': [GRAVES, PL], 'Olivier': [GRAVES, PL], 'Pape Clément': [GRAVES, PL], 'Smith Haut Lafitte': [GRAVES, PL],
+  'La Tour Haut-Brion': [GRAVES, PL], 'Couhins': [GRAVES, PL], 'Couhins-Lurton': [GRAVES, PL],
 };
 
 function normBdx(s: string | null | undefined): string {
@@ -68,13 +81,34 @@ function normBdx(s: string | null | undefined): string {
     .trim();
 }
 
-const BY_KEY: Record<string, string> = {};
-for (const [name, cls] of Object.entries(RAW)) BY_KEY[normBdx(name)] = cls;
+const BY_KEY: Record<string, { classification: string; appellation: string }> = {};
+for (const [name, [c, a]] of Object.entries(RAW)) BY_KEY[normBdx(name)] = { classification: c, appellation: a };
 
-// The classification for a Bordeaux château, or null if it isn't a classified
-// growth we know. Only meaningful when the scan left the wine name blank.
-export function bordeauxGrowthFor(producer: string | null | undefined): string | null {
+// Classification + appellation for a Bordeaux château, or null if unknown.
+export function bordeauxInfoFor(producer: string | null | undefined): { classification: string; appellation: string } | null {
   const key = normBdx(producer);
   if (!key) return null;
   return BY_KEY[key] ?? null;
+}
+
+// Back-compat: classification only.
+export function bordeauxGrowthFor(producer: string | null | undefined): string | null {
+  return bordeauxInfoFor(producer)?.classification ?? null;
+}
+
+// Fill in the classification (as the wine name) and the appellation (as the
+// region) for a known classified Bordeaux château, WITHOUT overwriting a genuine
+// cuvée name or an already-known region. Generic over any identity shape that
+// carries producer / wineName / region, so it runs on every intel path.
+export function withBordeauxInfo<T extends { producer?: string | null; wineName?: string | null; region?: string | null }>(d: T): T {
+  const info = bordeauxInfoFor(d.producer);
+  if (!info) return d;
+  const name = (d.wineName ?? '').trim();
+  const nameIsJustProducer = !name || normBdx(name) === normBdx(d.producer);
+  const region = (d.region ?? '').trim();
+  return {
+    ...d,
+    wineName: nameIsJustProducer ? info.classification : d.wineName,
+    region: region || info.appellation,
+  };
 }

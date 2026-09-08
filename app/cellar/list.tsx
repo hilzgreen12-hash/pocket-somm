@@ -82,13 +82,7 @@ const MATURITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'declining', label: 'In Decline' },
 ];
 
-type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | 'favourite' | null;
-
-type FavouriteFilter = 'all' | 'favourites';
-const FAVOURITE_OPTIONS: { value: FavouriteFilter; label: string }[] = [
-  { value: 'all', label: 'All wines' },
-  { value: 'favourites', label: 'Favourites only' },
-];
+type FilterField = 'location' | 'country' | 'colour' | 'maturity' | 'price' | 'score' | null;
 
 // Live cellar vs archived. Archived wines are viewed ONLY in the dedicated
 // Cellar Archive (this same screen opened with ?archived=1); the Full Cellar
@@ -463,7 +457,6 @@ export default function FullCellarListScreen() {
   const [colourFilter, setColourFilter] = useState<string>('All');       // 'All' | 'Red' | 'White' | 'Sparkling' | 'Other'
   const [maturityFilter, setMaturityFilter] = useState<string>('All');   // 'All' | 'too_young' | 'approaching' | 'peak' | 'declining'
   const [sortMode, setSortMode] = useState<SortMode>('recent');
-  const [favouriteFilter, setFavouriteFilter] = useState<FavouriteFilter>('all');
   // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
   // to archived wines only and hides the Archived filter chip so nothing
   // outside the archive can ever show.
@@ -567,7 +560,6 @@ export default function FullCellarListScreen() {
     if (countryFilter !== 'All' && inferCountry(w.region) !== countryFilter) return false;
     if (colourFilter !== 'All' && wineStyle(w) !== colourFilter) return false;
     if (maturityFilter !== 'All' && effectiveMaturity(w) !== maturityFilter) return false;
-    if (favouriteFilter === 'favourites' && !w.is_favourite) return false;
     if (q) {
       const hay = foldAccents([w.producer, w.wine_name, w.region, w.grape_variety, w.vintage]
         .filter(Boolean)
@@ -637,7 +629,6 @@ export default function FullCellarListScreen() {
     if (countryFilter !== 'All') bits.push(countryFilter);
     if (colourFilter !== 'All') bits.push(colourFilter);
     if (maturityFilter !== 'All') bits.push(MATURITY_OPTIONS.find((m) => m.value === maturityFilter)?.label ?? maturityFilter);
-    if (favouriteFilter === 'favourites') bits.push('Favourites');
     const filterSummary = bits.length ? bits.join(' · ') : null;
     const title = isArchiveView ? 'My Archive' : 'My Cellar';
 
@@ -684,7 +675,7 @@ export default function FullCellarListScreen() {
       return next.size === prev.size ? prev : next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locationFilter, countryFilter, colourFilter, maturityFilter, favouriteFilter, archivedFilter, search, selectMode]);
+  }, [locationFilter, countryFilter, colourFilter, maturityFilter, archivedFilter, search, selectMode]);
 
   // Location dropdown: All · each rack/fridge · each custom location · Not in a
   // rack · "+ Add Location" (an action, handled specially in onSelect).
@@ -721,7 +712,6 @@ export default function FullCellarListScreen() {
   const scoreActive = SCORE_SORTS.includes(sortMode);
   const priceLabel = priceActive ? (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
   const scoreLabel = scoreActive ? (SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
-  const favouriteLabel = FAVOURITE_OPTIONS.find((o) => o.value === favouriteFilter)?.label ?? 'All wines';
   const maturityLabel = maturityFilter === 'All' ? 'All' : (MATURITY_OPTIONS.find((o) => o.value === maturityFilter)?.label ?? 'All');
   // Current ordering, shown in the hint above the filters. Dynamic so it stays
   // accurate when the user switches to a Price/Score sort.
@@ -778,14 +768,6 @@ export default function FullCellarListScreen() {
         options: [{ value: 'recent', label: 'Recently added (default)' }, ...SCORE_SORT_OPTIONS],
         selected: sortMode,
         onSelect: (v) => setSortMode(v as SortMode),
-      };
-    }
-    if (field === 'favourite') {
-      return {
-        title: 'Favourites',
-        options: FAVOURITE_OPTIONS.map((o) => ({ value: o.value, label: o.label })),
-        selected: favouriteFilter,
-        onSelect: (v) => setFavouriteFilter(v as FavouriteFilter),
       };
     }
     return null;
@@ -929,13 +911,6 @@ export default function FullCellarListScreen() {
           </View>
           <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.filterChip, favouriteFilter !== 'all' && styles.sortChip]} onPress={() => setOpenDropdown('favourite')}>
-          <View style={styles.filterChipHeadingRow}>
-            <Text style={[styles.filterChipLabel, favouriteFilter !== 'all' && styles.filterChipTextOn]}>Favourites</Text>
-            <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
-          </View>
-          <Text style={[styles.filterChipValue, favouriteFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
-        </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, countryFilter !== 'All' && styles.sortChip]} onPress={() => setOpenDropdown('country')}>
           <View style={styles.filterChipHeadingRow}>
             <Text style={[styles.filterChipLabel, countryFilter !== 'All' && styles.filterChipTextOn]}>Country</Text>
@@ -1028,7 +1003,6 @@ export default function FullCellarListScreen() {
                 <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} />
                 <View style={styles.rowMain}>
                   <Text style={styles.rowName}>
-                    {w.is_favourite ? <Text style={styles.rowStar}>★ </Text> : null}
                     {headerLine}
                   </Text>
                   {subParts.length > 0 && <Text style={styles.rowDetail} numberOfLines={1}>{subParts.join(' · ')}</Text>}

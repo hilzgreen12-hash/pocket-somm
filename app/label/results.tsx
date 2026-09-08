@@ -33,6 +33,7 @@ import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareIm
 import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { formatWineTitle } from '../../src/utils/wineTitle';
+import { regionWithCountry } from '../../src/utils/wineOrigin';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -630,6 +631,29 @@ export default function LabelResultsScreen() {
     queryFn: () => fetchStorageLocationCases(pendingStorageLocationId!),
     enabled: !!pendingStorageLocationId && context === 'add-location',
   });
+
+  // Default name for a whole-wine case (OWC / Non-OWC): the wine itself —
+  // producer · name · region · vintage as one line, e.g. "Château Petrus
+  // Pomerol 2008". When the location already holds a case of the same wine, the
+  // new one is numbered ("No2 …") so identical cases stay distinguishable. The
+  // user can still edit it. Mixed cases are named by the user instead.
+  function autoCaseName(): string {
+    const base = [
+      wine.producer,
+      wine.wineName && wine.wineName.trim() && wine.wineName.trim() !== (wine.producer ?? '').trim() ? wine.wineName : null,
+      wine.region,
+      wine.vintage,
+    ]
+      .map((s) => (s == null ? '' : String(s).trim()))
+      .filter((s) => s.length > 0)
+      .join(' ');
+    if (!base) return '';
+    // Count existing whole-wine cases of this same base (ignoring any "NoN "
+    // prefix already applied), so the next one continues the numbering.
+    const stripNo = (s: string) => s.trim().replace(/^no\s*\d+\s+/i, '').toLowerCase();
+    const dupes = locationCases.filter((c) => c.kind !== 'mixed' && stripNo(c.name) === base.toLowerCase()).length;
+    return dupes >= 1 ? `No${dupes + 1} ${base}` : base;
+  }
 
   // Across-all-racks placement map, so the duplicate prompt can tell the user
   // *where* their existing bottles already sit (e.g. "in your Kitchen rack").
@@ -1571,7 +1595,13 @@ export default function LabelResultsScreen() {
         : openField === 'count'
           ? Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1, onSelect: () => setBottleCount(i + 1) }))
           : openField === 'packaging'
-            ? PACKAGING.map((p) => ({ label: p.label, value: p.k, onSelect: () => setStorageKind(p.k) }))
+            ? PACKAGING.map((p) => ({ label: p.label, value: p.k, onSelect: () => {
+                setStorageKind(p.k);
+                // Whole-wine cases auto-name after the wine (editable); mixed
+                // cases are named by the user; loose needs no case name.
+                if (p.k === 'owc' || p.k === 'non_owc') setCaseName(autoCaseName());
+                else setCaseName('');
+              } }))
             : [];
 
   const windowM = windowMeta(intel.drinkingWindowStatus);
@@ -2252,7 +2282,8 @@ export default function LabelResultsScreen() {
         <KeyboardAvoidingView behavior="padding" style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>{context === 'add-location' ? 'Add to Location' : 'Add to Cellar'}</Text>
-            <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
+            {/* Full identity — producer · wine name · appellation/region, country · vintage. */}
+            <Text style={styles.modalWine}>{formatWineTitle({ producer: wine.producer, wineName: wine.wineName, region: regionWithCountry(wine.region), vintage: wine.vintage })}</Text>
 
             {/* Came in from a tapped empty slot — ask how many bottles and
                 which way they run so the placement maps to real slots. The
@@ -2427,10 +2458,17 @@ export default function LabelResultsScreen() {
                 )}
 
                 <Text style={styles.modalLabel}>Number of bottles</Text>
-                <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('count')} activeOpacity={0.7}>
-                  <Text style={styles.fieldSelectValue}>{bottleCount}</Text>
-                  <Text style={styles.fieldSelectArrow}>▾</Text>
-                </TouchableOpacity>
+                <TextInput
+                  style={styles.countInput}
+                  value={bottleCount ? String(bottleCount) : ''}
+                  onChangeText={(t) => {
+                    const n = parseInt(t.replace(/[^0-9]/g, ''), 10);
+                    setBottleCount(Number.isNaN(n) ? 0 : n);
+                  }}
+                  placeholder="1"
+                  placeholderTextColor={colors.textSubtle}
+                  keyboardType="number-pad"
+                />
 
                 {pendingCaseId ? (
                   <Text style={styles.caseAddingNote}>Adding to your open case.</Text>
@@ -2630,7 +2668,8 @@ const styles = StyleSheet.create({
   // Inline headline stats bar: Score · Value · Drinking Window, bracketed by
   // full-width rules top and bottom (matches the app's other stats bars).
   // Full-width yellow (gold) rules bracketing the stats bar, edge to edge.
-  statBarRule: { height: 1, backgroundColor: colors.gold },
+  // Faded gold rule top & bottom of the stats bar (matches the app's stats bars).
+  statBarRule: { height: 1, backgroundColor: colors.divider },
   // Subtle separator directly beneath the "Wine Intel" title.
   titleRule: { height: 1, backgroundColor: colors.border },
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.sm },
@@ -2641,7 +2680,7 @@ const styles = StyleSheet.create({
   statBarSep: { fontSize: 18, color: colors.border, marginBottom: 16 },
   // Gold, label-less headline stats bar under the title — tappable figures.
   statBarValueGold: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
-  statBarSepGold: { fontSize: 22, color: colors.gold, opacity: 0.6 },
+  statBarSepGold: { fontSize: 26, color: colors.gold, opacity: 0.75 },
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
   vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },

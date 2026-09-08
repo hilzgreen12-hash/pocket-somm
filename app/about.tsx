@@ -17,36 +17,40 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
-    title: 'How Review Works',
-    body: 'Point your camera at a restaurant wine list or upload a photo. Vinster reads the list using AI-powered optical character recognition, then scores every wine against your preferences — wine type, style, budget, and food pairing — before surfacing your best match. You can also scan a wine label for deep intel. From your results you can save a review of the wine you chose and of the restaurant you dined at — and Your Wine Reviews and Your Restaurant Reviews both live on the Review tab for you to revisit any time.',
+    title: 'How Scan Works',
+    body: 'Scan is your way in — and Vinster\'s home tab. Point the camera at a single wine label (or upload a photo) for instant Wine Intel: critic scores, tasting notes, drinking windows, and what the bottle is worth today — then save it straight to your reviews or your cellar. Scan a restaurant wine list and Vinster reads it with AI-powered optical character recognition, scores every wine against your preferences — wine type, style, budget, and food pairing — and surfaces your best match. Scan a lineup to add several bottles to your cellar at once, or to archive a night you\'ve drunk. No label to hand? Search a Wine finds the bottle in Vinster\'s catalogue, or you can type the details in yourself.',
     subsections: [
       {
         title: 'How Recommendations Are Scored',
-        body: 'Wines are ranked in this order:\n\n1. Average critic score, sourced via deep AI from respected global wine critics, calculated and delivered — wines below 85 are filtered out\n2. Vintage quality for the specific appellation\n3. Value for money vs. market price\n4. Application of your profile preferences, the more you input the more tailored the results',
+        body: 'When Vinster scores a wine list, wines are ranked in this order:\n\n1. Average critic score, sourced via deep AI from respected global wine critics, calculated and delivered — wines below 85 are filtered out\n2. Vintage quality for the specific appellation\n3. Value for money vs. market price\n4. Application of your saved preferences — the more you input, the more tailored the results',
       },
     ],
+  },
+  {
+    title: 'How Review Works',
+    body: 'The Review tab is your record of everything you\'ve tasted. Every wine you pick from a restaurant\'s list and every restaurant you dine at is saved here automatically — as Your Wine Reviews and Your Restaurant Reviews — for you to rate and revisit any time. You can also add a wine or restaurant review by hand with + Add.',
   },
   {
     title: 'How Pair Works',
-    body: 'Two ways to pair: start with a wine and Vinster generates three chef-inspired dishes crafted to its flavour profile — each with a full recipe; or start with a recipe and Vinster finds the wine to match. Either flow applies any dietary needs or preferences set in your profile, and you can keep the recipes you love in Your Cookbook.',
+    body: 'Two ways to pair. Start with a wine and Vinster generates original, chef-inspired dishes crafted to its flavour profile — each with a full recipe; or start with a recipe and Vinster finds the wine to match, from your cellar or beyond. Either flow works around the dietary needs and preferences you set on the You tab (or adjust per search), and you can keep the recipes and pairing notes you love in Your Cookbook.',
   },
   {
     title: 'How Cellar Works',
-    body: 'Scan a label or enter a wine manually to add it to your cellar. Vinster pulls in critic scores, drinking windows, grape variety, and tasting notes from a deep AI knowledge base — so every bottle you add is enriched on the spot.\n\nBeyond tracking what you own, the Cellar gives you:\n\n• A visual storage layout — map your bottles to virtual racks that mirror your real cellar\n• A Wish List for bottles you want to buy\n• Cellar Statistics — total bottles, total estimated value, condition breakdown, top regions, style breakdown\n• A per-bottle purchase price log alongside Vinster\'s estimated current value\n• Personal notes and your own tasting reviews per bottle\n• An archive for bottles you\'ve drunk, gifted, or otherwise removed — with the date and a note on each\n• Drinking-window alerts so you always open a bottle at the right time',
+    body: 'Scan a label or enter a wine by hand to add it to your cellar, and Vinster fills in the details on the spot — critic scores, drinking windows, grape variety, tasting notes, and what each bottle is worth today.\n\nBeyond tracking what you own, the Cellar gives you:\n\n• Your Wines At Home — virtual racks and fridges that mirror your real storage, so you always know where a bottle lives\n• Your Cellar Statistics — total bottles, what you paid versus what your cellar is worth today, and breakdowns by region and style\n• A per-bottle purchase price alongside Vinster\'s estimated current value\n• Personal notes and your own tasting reviews per bottle — dictated hands-free with Voice Command if you like\n• Your Wine Archive for bottles you\'ve drunk, gifted, or otherwise removed — with the date and a note on each\n• Drinking-window guidance so you always open a bottle at the right time',
     subsections: [
       {
-        title: 'How The Rack Works',
-        body: 'Tap an empty slot in the rack to add a wine, tap a wine in the list to highlight its position in the rack. Short press a wine in the rack to see its notes, long press it to move or delete the bottle.',
+        title: 'How Your Wines At Home Works',
+        body: 'Set up racks and fridges under Your Wines At Home to mirror your real storage. Map each bottle to a slot so you can see at a glance where it lives, tap a bottle to view its notes, and move or remove it as you work your way through the cellar.',
       },
     ],
   },
   {
-    title: 'Personality Sketches',
-    body: 'Vinster watches how you drink and what you eat, then sketches witty character profiles for you — separate Wine and Foodie personalities drawn from your scans, cellar, ratings, saved recipes, and preferences. Share them with friends, post them to the Vinster community, or watch them evolve as your tastes broaden. Every sketch Vinster has ever drawn for you lives in your personality archive.',
+    title: 'Vinster\'s Review of You',
+    body: 'As you scan, cellar, rate, and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that grows and shifts as your palate broadens. You\'ll find it on the Review tab under "Vinster\'s Review of You": read it, share it with friends or the Vinster community, and browse every sketch Vinster has ever drawn for you.',
   },
   {
     title: 'Your Preferences',
-    body: 'The settings you save in your Profile are used as default parameters across Review and Pair as you generate recommendations. You can override your preferences on each specific search you generate in Review or Pair, depending on one-off requirements.',
+    body: 'The wine and recipe preferences you save on the You tab — Your Wine Preferences and Your Recipe Requirements — are used as the default parameters across Scan and Pair whenever Vinster generates a recommendation. You can override them on any individual search, depending on your one-off requirements.',
   },
   {
     title: 'Privacy & Data',

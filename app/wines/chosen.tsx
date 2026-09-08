@@ -208,12 +208,10 @@ export default function ChosenWinesScreen() {
   // Which collection to show. Wish List is gone from this screen — reviews are
   // restaurant, cellar, or other only. Drives the centred collection selector.
   type TypeFilter = 'all' | 'cellar' | 'restaurant' | 'other';
-  type FilterField = 'sort' | 'type' | 'month' | 'location' | 'favourite' | null;
+  type FilterField = 'sort' | 'type' | 'month' | null;
   const [sortMode, setSortMode] = useState<SortMode>('recent');
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [monthFilter, setMonthFilter] = useState<string>('all');
-  const [locationFilter, setLocationFilter] = useState<string>('All');
-  const [favouriteFilter, setFavouriteFilter] = useState<'all' | 'fav'>('all');
   // Toggled by tapping "X Wines awaiting your review" in the header — shows only
   // the not-yet-reviewed picks; tap again to clear.
   const [awaitingOnly, setAwaitingOnly] = useState(false);
@@ -657,6 +655,26 @@ export default function ChosenWinesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chosenWines, cellarReviews]);
 
+  // A reviewed wine the user also OWNS (its identity matches a bottle in the
+  // cellar) was drunk from the cellar — so it belongs to the Cellar collection
+  // even when it was reviewed as a restaurant (Winelist) or Other pick.
+  const cellarIdentityKeys = useMemo(
+    () => new Set(cellarWines.map((w) => wineIdentityKey(w.producer, w.wine_name, w.vintage))),
+    [cellarWines],
+  );
+  // Which collection a review belongs to: its source (restaurant = Winelist,
+  // cellar, other), except an owned wine is always Cellar (see above).
+  function collectionOf(
+    producer: string | null | undefined,
+    wineName: string | null | undefined,
+    vintage: string | number | null | undefined,
+    source: 'restaurant' | 'other' | 'cellar',
+  ): TypeFilter {
+    if (source === 'cellar') return 'cellar';
+    if (cellarIdentityKeys.has(wineIdentityKey(producer, wineName, vintage))) return 'cellar';
+    return source;
+  }
+
   // Apply filters. Search is applied last so the chips still own the
   // visible "shape" — typing a query just narrows whatever filters
   // are on, matching Full Cellar List's behaviour.
@@ -666,15 +684,13 @@ export default function ChosenWinesScreen() {
     // date); the header's "X awaiting" toggle narrows to only them.
     if (!isShownReview(it)) return false;
     if (awaitingOnly && !isAwaitingItem(it)) return false;
-    // Collection selector: All shows everything; otherwise a single source. The
-    // three collections map straight onto item.source (restaurant / cellar /
-    // other) now that they're distinct slices.
-    if (typeFilter !== 'all' && it.source !== typeFilter) return false;
+    // Collection: All shows everything; otherwise a single collection. Maps onto
+    // item.source (restaurant = Winelist / cellar / other), except an owned wine
+    // always counts as Cellar (see collectionOf).
+    if (typeFilter !== 'all' && collectionOf(it.wine.producer, it.wine.wine_name, it.wine.vintage, it.source) !== typeFilter) return false;
     // Bespoke Other filter — only bites while the Other collection is active.
     if (typeFilter === 'other' && tagFilter !== 'all' && !(tagAssign[it.wine.id] ?? []).includes(tagFilter)) return false;
     if (monthFilter !== 'all' && monthKey(it.date) !== monthFilter) return false;
-    if (locationFilter !== 'All' && cityKey(cityFor(it)) !== cityKey(locationFilter)) return false;
-    if (favouriteFilter === 'fav' && !(it.wine as { is_favourite?: boolean }).is_favourite) return false;
     if (activeCustomId) {
       const f = customFilters.find((cf) => cf.id === activeCustomId);
       if (!(f?.itemIds ?? []).includes(it.wine.id)) return false;
@@ -769,20 +785,23 @@ export default function ChosenWinesScreen() {
     { value: 'score-desc', label: 'Descending score' },
     { value: 'score-asc',  label: 'Ascending score' },
   ];
-  // Collection — the centred selector above the filters. Restaurant / Cellar /
-  // Other are distinct slices mapped onto item.source; Wish List is no longer
-  // part of Wine Reviews.
+  // Collection — a filter-carousel chip. Winelist (restaurant-list picks),
+  // Cellar (owned wines, incl. cellar bottles drunk out) and Other are distinct
+  // slices mapped onto item.source; Wish List is no longer part of Wine Reviews.
   const COLLECTION_OPTIONS: { value: TypeFilter; label: string }[] = [
     { value: 'all',        label: 'All Wine Reviews' },
-    { value: 'restaurant', label: 'Restaurant Wine Reviews' },
-    { value: 'cellar',     label: 'Cellar Wine Reviews' },
-    { value: 'other',      label: 'Other Wine Reviews' },
+    { value: 'restaurant', label: 'Winelist Wines' },
+    { value: 'cellar',     label: 'Cellar Wines' },
+    { value: 'other',      label: 'Other Wines' },
   ];
   const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added (default)';
   const collectionLabel = COLLECTION_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Wine Reviews';
+  // Short value for the narrow Collection chip — the dropdown carries the full
+  // "… Wines" labels.
+  const collectionChipLabel = typeFilter === 'all' ? 'All'
+    : typeFilter === 'restaurant' ? 'Winelist'
+    : typeFilter === 'cellar' ? 'Cellar' : 'Other';
   const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'Any';
-  const locationLabel = locationFilter === 'All' ? 'All' : locationFilter;
-  const favouriteLabel = favouriteFilter === 'fav' ? 'Favourites' : 'All';
 
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
@@ -794,20 +813,6 @@ export default function ChosenWinesScreen() {
       selected: monthFilter,
       onSelect: setMonthFilter,
     };
-    if (field === 'favourite') return {
-      title: 'Favourites',
-      options: [{ value: 'all', label: 'All reviews' }, { value: 'fav', label: 'View Favourites' }],
-      selected: favouriteFilter,
-      onSelect: (v) => setFavouriteFilter(v as 'all' | 'fav'),
-    };
-    if (field === 'location') {
-      return {
-        title: 'Filter by city',
-        options: availableCities.map((c) => ({ value: c, label: c === 'All' ? 'All cities' : c })),
-        selected: locationFilter,
-        onSelect: setLocationFilter,
-      };
-    }
     return null;
   }
   const activeDropdown = dropdownConfig(openDropdown);
@@ -1573,7 +1578,7 @@ export default function ChosenWinesScreen() {
                 // Total awaiting in the current collection (independent of the
                 // toggle, so the label stays stable when tapped).
                 const a = awaitingReview.filter((w) =>
-                  typeFilter === 'all' || (w.source === 'other' ? 'other' : 'restaurant') === typeFilter,
+                  typeFilter === 'all' || collectionOf(w.producer, w.wine_name, w.vintage, w.source) === typeFilter,
                 ).length;
                 return (
                   <>
@@ -1589,14 +1594,6 @@ export default function ChosenWinesScreen() {
             </Text>
           </View>
 
-          {/* Collection selector — centred, gold, with a chevron. Tapping it
-              opens the same 'type' dropdown (All / Restaurant / Cellar / Other
-              Wine Reviews) that the old Collection chip used to. */}
-          <TouchableOpacity style={styles.collectionHeader} onPress={() => setOpenDropdown('type')} activeOpacity={0.7}>
-            <Text style={styles.collectionHeaderText}>{collectionLabel}</Text>
-            <Text style={styles.collectionChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
-          </TouchableOpacity>
-
           {/* Bespoke Other filters — create named tags (e.g. "BBR Tasting") and
               file Other reviews under them (long-press a review → "Add to a
               filter"). Only shown while the Other collection is selected. */}
@@ -1607,6 +1604,13 @@ export default function ChosenWinesScreen() {
             style={styles.filterScroll}
             contentContainerStyle={styles.filterRow}
           >
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
+              <View style={styles.filterChipHeadingRow}>
+                <Text style={styles.filterChipLabel}>Collection</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
+              </View>
+              <Text style={[styles.filterChipValue, typeFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{collectionChipLabel}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={[styles.filterChip, styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Your Score</Text>
@@ -1620,20 +1624,6 @@ export default function ChosenWinesScreen() {
                 <Text style={styles.filterChipChevron}>{openDropdown === 'month' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, monthFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{monthLabel(monthFilter)}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('favourite')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Favourites</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'favourite' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, favouriteFilter === 'fav' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{favouriteLabel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>City</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={styles.filterChipValue} numberOfLines={1} ellipsizeMode="tail">{locationLabel}</Text>
             </TouchableOpacity>
             {customFilters.map((f) => {
               const active = activeCustomId === f.id;
@@ -1733,25 +1723,6 @@ export default function ChosenWinesScreen() {
                           })}
                         />
                       )}
-                      {/* Favourite star — always visible in the thumbnail's
-                          top-right; a subtle outline when off, gold ★ when on.
-                          Tapping toggles it without opening the review. */}
-                      {(() => {
-                        const fav = !!(item.wine as { is_favourite?: boolean }).is_favourite;
-                        return (
-                          <TouchableOpacity
-                            style={styles.reviewFavStar}
-                            onPress={() => {
-                              if (isChosen) setFavourite.mutate({ id: w.id, isFavourite: !fav });
-                              else updateWine.mutate({ id: w.id, updates: { is_favourite: !fav } });
-                            }}
-                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            activeOpacity={0.7}
-                          >
-                            <Text style={[styles.reviewFavStarText, !fav && styles.reviewFavStarTextOff]}>{fav ? '★' : '☆'}</Text>
-                          </TouchableOpacity>
-                        );
-                      })()}
                     </View>
                     <View style={styles.cardCompactBody}>
                       {/* Producer · Name · Vintage (white). No score here. */}

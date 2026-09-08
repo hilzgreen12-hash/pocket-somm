@@ -8,7 +8,7 @@ import { captureRef } from 'react-native-view-shot';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
-import { listLineupArchives, lineupSignedUrl, setLineupFavourite, setLineupNote, saveLineupArchive, deleteLineupArchive, type LineupArchive } from '../../src/api/lineups';
+import { listLineupArchives, lineupSignedUrl, setLineupNote, saveLineupArchive, deleteLineupArchive, type LineupArchive } from '../../src/api/lineups';
 import { MicButton } from '../../src/components/MicButton';
 import { LineupShareCard } from '../../src/components/LineupShareCard';
 import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
@@ -20,11 +20,6 @@ import type { LibraryFilter } from '../../src/api/libraryFilters';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
-
-const FAV_OPTIONS = [
-  { value: 'all', label: 'All lineups' },
-  { value: 'fav', label: 'Favourites only' },
-];
 
 function monthKey(iso: string): string {
   return new Date(iso).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
@@ -40,7 +35,7 @@ function lineupBottleTotal(l: LineupArchive): number {
   return l.bottle_count ?? 0;
 }
 
-function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onToggleFav: () => void; onLongPress: () => void }) {
+function LineupTile({ item, size, onPress, onLongPress }: { item: LineupArchive; size: number; onPress: () => void; onLongPress: () => void }) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
@@ -57,12 +52,9 @@ function LineupTile({ item, size, onPress, onToggleFav, onLongPress }: { item: L
              : <ActivityIndicator color={colors.gold} />}
       </View>
       <View style={styles.rowBody}>
-        {/* Date · location stamp on the left, favourite star at the far right. */}
+        {/* Date · location stamp. */}
         <View style={styles.rowStampRow}>
           <Text style={[styles.rowStamp, { flex: 1 }]} numberOfLines={1}>{date}{item.city ? ` · ${item.city}` : ''}</Text>
-          <TouchableOpacity onPress={onToggleFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-            <Text style={[styles.favStarText, item.is_favourite && styles.favStarActive]}>{item.is_favourite ? '★' : '☆'}</Text>
-          </TouchableOpacity>
         </View>
         {item.venue ? <Text style={styles.rowVenue} numberOfLines={1}>{item.venue}</Text> : null}
         {item.note ? <Text style={styles.rowNote} numberOfLines={2}>{item.note}</Text> : null}
@@ -83,10 +75,9 @@ export default function LineupLibraryScreen() {
     enabled: !!userId,
   });
 
-  const [favFilter, setFavFilter] = useState<'all' | 'fav'>('all');
   const [cityFilter, setCityFilter] = useState<string>('All');
   const [monthFilter, setMonthFilter] = useState<string>('All');
-  const [openDropdown, setOpenDropdown] = useState<'fav' | 'city' | 'month' | null>(null);
+  const [openDropdown, setOpenDropdown] = useState<'city' | 'month' | null>(null);
 
   // "+ Add" a lineup straight from a photo — no cellar match, no bottle count,
   // just the picture. Once saved it behaves exactly like an Archive-a-Night
@@ -146,7 +137,6 @@ export default function LineupLibraryScreen() {
 
   const filtered = useMemo(() => {
     let list = lineups;
-    if (favFilter === 'fav') list = list.filter((l) => l.is_favourite);
     if (cityFilter !== 'All') list = list.filter((l) => cityKey(l.city) === cityKey(cityFilter));
     if (monthFilter !== 'All') list = list.filter((l) => monthKey(l.archived_at) === monthFilter);
     if (activeCustomId) {
@@ -155,7 +145,7 @@ export default function LineupLibraryScreen() {
       list = list.filter((l) => ids.has(l.id));
     }
     return list;
-  }, [lineups, favFilter, cityFilter, monthFilter, activeCustomId, customFilters]);
+  }, [lineups, cityFilter, monthFilter, activeCustomId, customFilters]);
 
   function applyCustom(id: string) {
     setActiveCustomId((prev) => (prev === id ? null : id));
@@ -198,15 +188,6 @@ export default function LineupLibraryScreen() {
     label: new Date(l.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }),
     sublabel: l.bottle_count ? `${l.bottle_count} bottle${l.bottle_count === 1 ? '' : 's'}` : undefined,
   })), [lineups]);
-
-  async function toggleFav(item: LineupArchive) {
-    try {
-      await setLineupFavourite(item.id, !item.is_favourite);
-      qc.invalidateQueries({ queryKey: ['lineup-archives', userId] });
-    } catch (err) {
-      showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
 
   // Long-press a tile to delete the lineup (photo + record).
   function confirmDeleteLineup(item: LineupArchive) {
@@ -311,13 +292,10 @@ export default function LineupLibraryScreen() {
   const gap = spacing.md;
   const tileWidth = (width - spacing.xl * 2 - gap * (cols - 1)) / cols;
 
-  const favLabel = FAV_OPTIONS.find((o) => o.value === favFilter)?.label ?? 'All lineups';
   const cityLabel = cityFilter === 'All' ? 'All cities' : cityFilter;
   const monthLabel = monthFilter === 'All' ? 'All dates' : monthFilter;
 
-  const dropdown = openDropdown === 'fav'
-    ? { title: 'Favourites', options: FAV_OPTIONS, selected: favFilter, onSelect: (v: string) => setFavFilter(v as 'all' | 'fav') }
-    : openDropdown === 'city'
+  const dropdown = openDropdown === 'city'
     ? { title: 'City', options: cityOptions, selected: cityFilter, onSelect: (v: string) => setCityFilter(v) }
     : openDropdown === 'month'
     ? { title: 'Date', options: monthOptions, selected: monthFilter, onSelect: (v: string) => setMonthFilter(v) }
@@ -396,13 +374,6 @@ export default function LineupLibraryScreen() {
               </View>
               <Text style={[styles.filterChipValue, cityFilter !== 'All' && { color: colors.gold }]} numberOfLines={1}>{cityLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.filterChip, favFilter !== 'all' && styles.filterChipActive]} onPress={() => setOpenDropdown('fav')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Favourites</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'fav' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, favFilter !== 'all' && { color: colors.gold }]} numberOfLines={1}>{favLabel}</Text>
-            </TouchableOpacity>
             {customFilters.map((f) => (
               <TouchableOpacity
                 key={f.id}
@@ -428,7 +399,7 @@ export default function LineupLibraryScreen() {
           ) : (
             <ScrollView contentContainerStyle={styles.listContent}>
               {filtered.map((item) => (
-                <LineupTile key={item.id} item={item} size={104} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onToggleFav={() => toggleFav(item)} onLongPress={() => confirmDeleteLineup(item)} />
+                <LineupTile key={item.id} item={item} size={104} onPress={() => router.push(`/cellar/lineup/${item.id}` as any)} onLongPress={() => confirmDeleteLineup(item)} />
               ))}
             </ScrollView>
           )}

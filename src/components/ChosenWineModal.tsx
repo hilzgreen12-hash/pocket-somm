@@ -315,15 +315,6 @@ export function ChosenWineModal({ wine, visible, scanSessionId, initialRestauran
             <Text accessibilityLabel="Back" style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.favouriteBtn}
-            onPress={() => setIsFavourite((v) => !v)}
-            hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
-          </TouchableOpacity>
-
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
 
             <WineIdentityHeader

@@ -4,7 +4,7 @@ import { invokeResilient, isNetworkError } from './invokeResilient';
 import { streamPairings } from './pairingsStream';
 import { supabase } from './supabase';
 import type { WineDetails, WineIntelligence, Pairing, WineDetailsComplete, DietaryFilters } from '../types/wine';
-import { bordeauxGrowthFor } from '../constants/bordeauxClassification';
+import { withBordeauxInfo } from '../constants/bordeauxClassification';
 
 // All edge calls go through invokeResilient, which attaches the user's JWT (via
 // the supabase client), applies a per-call timeout, and retries transport
@@ -62,22 +62,9 @@ async function reconcileScannedIdentity(data: WineDetails): Promise<WineDetails>
   } catch {
     /* leave result as the raw scan */
   }
-  return applyBordeauxGrowth(result);
-}
-
-// A classified Bordeaux château rarely prints its growth on the label, so the
-// scan leaves the wine name blank. When the estate is a known classified growth
-// and no distinct cuvée was read, fill the wine name with the classification
-// (e.g. "Château Batailley" → wine name "Cinquième Cru Classé").
-function applyBordeauxGrowth(d: WineDetails): WineDetails {
-  const producer = (d.producer ?? '').trim();
-  const name = (d.wineName ?? '').trim();
-  if (!producer) return d;
-  const norm = (s: string) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, ' ').replace(/\bchateau\b/g, ' ').replace(/\s+/g, ' ').trim();
-  // Don't overwrite a genuine cuvée name (one that isn't just the producer again).
-  if (name && norm(name) !== norm(producer)) return d;
-  const growth = bordeauxGrowthFor(producer);
-  return growth ? { ...d, wineName: growth } : d;
+  // Classified Bordeaux: fill the classification (wine name) + appellation
+  // (region) when blank. Shared with the non-scan intel paths (see generateWineIntel).
+  return withBordeauxInfo(result);
 }
 
 export interface WineSearchResult {

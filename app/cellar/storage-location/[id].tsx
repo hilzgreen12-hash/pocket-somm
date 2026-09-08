@@ -12,6 +12,7 @@ import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } 
 import { clearWineFromRacks, removeSlotsForWine, getSlotAssignments } from '../../../src/api/racks';
 import { fetchStorageLocations } from '../../../src/api/storageLocations';
 import { useRacks } from '../../../src/hooks/useRacks';
+import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { PackagingPrompt } from '../../../src/components/PackagingPrompt';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
@@ -140,11 +141,12 @@ export default function StorageLocationScreen() {
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
-  // Prev / next Alt Cellar for the header carousel arrows (mirrors the rack /
-  // fridge headers), so locations scroll like the other storage units.
-  const locIndex = allLocations.findIndex((l) => l.id === id);
-  const prevLoc = locIndex > 0 ? allLocations[locIndex - 1] : null;
-  const nextLoc = locIndex >= 0 && locIndex < allLocations.length - 1 ? allLocations[locIndex + 1] : null;
+  // Header carousel arrows hop across ALL home storage (racks → bins → Alt
+  // Cellars) in the same order as the "Your Wines at Home" carousel — not just
+  // between Alt Cellars.
+  const storageNav = useStorageLocationNav();
+  const prevLoc = storageNav.prev(id);
+  const nextLoc = storageNav.next(id);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [moveModal, setMoveModal] = useState<{ wine: CellarWine; currentName: string; max: number } | null>(null);
   const [moveQty, setMoveQty] = useState('');
@@ -841,13 +843,13 @@ export default function StorageLocationScreen() {
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
         <View style={styles.titleNav}>
-          <TouchableOpacity onPress={() => prevLoc && router.replace(`/cellar/storage-location/${prevLoc.id}` as any)} disabled={!prevLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Previous location">
+          <TouchableOpacity onPress={() => prevLoc && router.replace(prevLoc.route as any)} disabled={!prevLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Previous storage location">
             <Text style={[styles.navArrow, !prevLoc && styles.navArrowDisabled]}>‹</Text>
           </TouchableOpacity>
           <TouchableOpacity style={{ flexShrink: 1 }} onLongPress={handleLongPressHeader} delayLongPress={400} activeOpacity={1}>
             <Text style={styles.title} numberOfLines={1}>{location.name}</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => nextLoc && router.replace(`/cellar/storage-location/${nextLoc.id}` as any)} disabled={!nextLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Next location">
+          <TouchableOpacity onPress={() => nextLoc && router.replace(nextLoc.route as any)} disabled={!nextLoc} hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }} accessibilityLabel="Next storage location">
             <Text style={[styles.navArrow, !nextLoc && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
         </View>
@@ -1189,7 +1191,7 @@ export default function StorageLocationScreen() {
               })}
             </ScrollView>
             <TouchableOpacity style={[styles.caseModalSave, savingFilter && { opacity: 0.5 }]} onPress={saveFilter} disabled={savingFilter} activeOpacity={0.85}>
-              {savingFilter ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.caseModalSaveText}>{editingFilterId ? 'Save Filter' : 'Create Filter'}</Text>}
+              {savingFilter ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.caseModalSaveText}>{editingFilterId ? 'Save Filter' : 'Create Filter'}</Text>}
             </TouchableOpacity>
             <TouchableOpacity style={styles.caseModalCancel} onPress={() => setFilterModalOpen(false)}>
               <Text style={styles.caseModalCancelText}>Cancel</Text>
@@ -1346,8 +1348,8 @@ const styles = StyleSheet.create({
   caseModalInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   caseModalNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   caseModalNoteInput: { flex: 1, minHeight: 44, textAlignVertical: 'top' },
-  caseModalSave: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
-  caseModalSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.surface },
+  caseModalSave: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },
+  caseModalSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   addQtyRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xl, marginTop: spacing.md },
   addQtyBtn: { width: 46, height: 46, borderRadius: 23, borderWidth: 1, borderColor: colors.gold, alignItems: 'center', justifyContent: 'center' },
   addQtyBtnText: { fontSize: 26, fontFamily: fonts.bodyRegular, color: colors.gold },

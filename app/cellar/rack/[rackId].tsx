@@ -8,6 +8,7 @@ import { useLocalSearchParams, router, useNavigation } from 'expo-router';
 import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { useRack, useRacks } from '../../../src/hooks/useRacks';
+import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { useRackStore } from '../../../src/stores/rackStore';
 import { useLineupStore } from '../../../src/stores/lineupStore';
 import { useCellar } from '../../../src/hooks/useCellar';
@@ -249,9 +250,11 @@ export default function RackGridScreen() {
   // inner vertical ScrollView still gets its turn. Tap-targets on the
   // arrow row provide a fallback for wide racks whose horizontal grid
   // scroll competes with the gesture, and for accessibility.
-  const currentIndex = racks.findIndex((r) => r.id === rackId);
-  const prevRack = currentIndex > 0 ? racks[currentIndex - 1] : null;
-  const nextRack = currentIndex >= 0 && currentIndex < racks.length - 1 ? racks[currentIndex + 1] : null;
+  // Navigate across ALL home storage (racks → bins → Alt Cellars) in the same
+  // order as the "Your Wines at Home" carousel, not just racks/fridges.
+  const storageNav = useStorageLocationNav();
+  const prevRack = storageNav.prev(rackId);
+  const nextRack = storageNav.next(rackId);
   // Clear search + highlight when the user swipes to another rack so
   // they don't carry over a stale query from the previous one.
   useEffect(() => {
@@ -317,9 +320,9 @@ export default function RackGridScreen() {
         .runOnJS(true)
         .onEnd((e) => {
           if (e.translationX < -80 && nextRack) {
-            router.replace(`/cellar/rack/${nextRack.id}` as any);
+            router.replace(nextRack.route as any);
           } else if (e.translationX > 80 && prevRack) {
-            router.replace(`/cellar/rack/${prevRack.id}` as any);
+            router.replace(prevRack.route as any);
           }
         }),
     [prevRack?.id, nextRack?.id, isZoomed],
@@ -1424,19 +1427,19 @@ export default function RackGridScreen() {
         </TouchableOpacity>
         <View style={styles.titleNav}>
           <TouchableOpacity
-            onPress={() => prevRack && router.replace(`/cellar/rack/${prevRack.id}` as any)}
+            onPress={() => prevRack && router.replace(prevRack.route as any)}
             disabled={!prevRack}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 6 }}
-            accessibilityLabel="Previous rack"
+            accessibilityLabel="Previous storage location"
           >
             <Text style={[styles.navArrow, !prevRack && styles.navArrowDisabled]}>‹</Text>
           </TouchableOpacity>
           <Text style={styles.title} numberOfLines={1}>{rack.name}</Text>
           <TouchableOpacity
-            onPress={() => nextRack && router.replace(`/cellar/rack/${nextRack.id}` as any)}
+            onPress={() => nextRack && router.replace(nextRack.route as any)}
             disabled={!nextRack}
             hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }}
-            accessibilityLabel="Next rack"
+            accessibilityLabel="Next storage location"
           >
             <Text style={[styles.navArrow, !nextRack && styles.navArrowDisabled]}>›</Text>
           </TouchableOpacity>
@@ -1456,7 +1459,7 @@ export default function RackGridScreen() {
         <View style={styles.multiBar}>
           <View style={styles.multiBarInner}>
             <Text style={styles.multiBarHeader}>Add Multiples of the same wine</Text>
-            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional horizontal slots to fill</Text>
+            <Text style={styles.multiBarText}>{multiSlots.size} {multiSlots.size === 1 ? 'slot' : 'slots'} selected — tap additional slots to fill</Text>
             <TouchableOpacity style={[styles.multiBarPlace, styles.multiBarPlaceFull]} onPress={placeIntoSelected} activeOpacity={0.8}>
               <Text style={styles.multiBarPlaceText}>Confirm Slots & Add Image</Text>
             </TouchableOpacity>
@@ -1586,6 +1589,14 @@ export default function RackGridScreen() {
                   );
                 })}
               </View>
+            )}
+
+            {/* A maturity is selected but nothing in this rack matches — say so,
+                otherwise the grid just shows no highlights, which reads as broken. */}
+            {maturityHighlight !== '' && highlightedIds.size === 0 && (
+              <Text style={styles.maturityNoMatch}>
+                No Matches — no bottles here are {MATURITY_OPTIONS.find((o) => o.value === maturityHighlight)?.label ?? 'that maturity'}.
+              </Text>
             )}
 
             {/* Search bar — subtle (background-toned), sits below the carousel. */}
@@ -2070,7 +2081,7 @@ export default function RackGridScreen() {
                   }}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.editActionBtnTextDanger}>Delete {StorageNoun}</Text>
+                  <Text style={[styles.editActionBtnText, styles.editActionBtnTextDanger]}>Delete {StorageNoun}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={closeEdit} style={styles.placeCancel}>
                   <Text style={styles.placeCancelText}>Close</Text>
@@ -2191,6 +2202,7 @@ const styles = StyleSheet.create({
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold },
   // Maturity (readiness) dropdown panel.
+  maturityNoMatch: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
   maturityDropdown: { marginHorizontal: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, backgroundColor: colors.surface, overflow: 'hidden' },
   maturityOption: { paddingVertical: spacing.sm, paddingHorizontal: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   maturityOptionActive: { backgroundColor: 'rgba(212,176,96,0.12)' },
@@ -2332,10 +2344,10 @@ const styles = StyleSheet.create({
   multiBarBtns: { flexDirection: 'row', gap: spacing.sm },
   multiBarCancel: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   multiBarCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
-  multiBarPlace: { flex: 2, backgroundColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  multiBarPlace: { flex: 2, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
   // Full-width primary button (stacked layout, not the side-by-side row).
   multiBarPlaceFull: { flex: undefined, alignSelf: 'stretch' },
-  multiBarPlaceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.surface },
+  multiBarPlaceText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Small centred "Cancel" link below the primary button.
   multiBarCancelLink: { alignItems: 'center', paddingTop: 2 },
   multiBarCancelLinkText: { fontFamily: fonts.bodyRegular, fontSize: 13, color: colors.textMuted },

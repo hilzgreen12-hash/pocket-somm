@@ -23,6 +23,7 @@ import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { scanHistoryKey } from '../../src/hooks/useScanHistory';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { colors, spacing } from '../../src/constants/theme';
+import { withBordeauxInfo } from '../../src/constants/bordeauxClassification';
 import { fonts } from '../../src/constants/fonts';
 
 // Module-level so it survives the Scan tab unmounting/remounting on navigation:
@@ -196,7 +197,7 @@ export default function ScanLandingScreen() {
     if (!wine) return;
     setVintageWine(null);
     resetLabelStore();
-    const confirmed: WineDetailsComplete = {
+    const confirmed: WineDetailsComplete = withBordeauxInfo({
       producer: wine.producer,
       region: wine.region ?? '',
       wineName: wine.wineName,
@@ -205,7 +206,7 @@ export default function ScanLandingScreen() {
       grape: wine.grape ?? null,
       bottleSizeMl: null,
       quantity: 1,
-    };
+    });
     setWineDetailsConfirmed(confirmed);
     setGeneratingIntel(true);
     try {
@@ -217,7 +218,9 @@ export default function ScanLandingScreen() {
       setIntelligence(intel);
       useLastIntelStore.getState().setLast(confirmed, intel);
       setGeneratingIntel(false);
-      router.push(`/label/results?context=intel&fresh=1&backTo=${encodeURIComponent('/(tabs)')}`);
+      // confirmed=1: the user already picked this exact wine from the search
+      // list, so the intel screen must NOT re-ask "which wine is this?".
+      router.push(`/label/results?context=intel&fresh=1&confirmed=1&backTo=${encodeURIComponent('/(tabs)')}`);
     } catch (err) {
       setGeneratingIntel(false);
       setError(err instanceof Error ? err.message : 'Failed to generate intel');

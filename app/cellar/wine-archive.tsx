@@ -127,7 +127,8 @@ const styles = StyleSheet.create({
   // Gold "View Your Cellar Archive →" link beneath the blurb (matches the
   // Cookbook's "View Your Cookbook →" link).
   viewLinkRow: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.xs },
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  // Sized to match the "Your Cellar Archive" page title (22), kept gold.
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold, letterSpacing: 0.3 },
 
   // Matches the "Your Wines At Home" intro on the Cellar tab (Spectral, 17).
   blurb: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },

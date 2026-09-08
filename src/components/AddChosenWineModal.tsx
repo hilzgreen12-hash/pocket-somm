@@ -417,15 +417,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
           <TouchableOpacity style={styles.backBtn} onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
             <Text accessibilityLabel="Back" style={styles.backBtnText}>←</Text>
           </TouchableOpacity>
-          {/* Header favourite star — hidden on the review-card layout, where the
-              star is stacked BELOW the top-right "Edit" (with a gap) so the two
-              never overlap. Shown here for manual entry and add-to-review. */}
-          {!(showCard && !addToGroupId) ? (
-            <TouchableOpacity style={styles.favouriteBtn} onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-              <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
-            </TouchableOpacity>
-          ) : null}
-
           <KeyboardAwareScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="always" bottomOffset={24}>
             {showCard ? (
               // Review CARD — the wine is confirmed (from Your Label Library, or
@@ -439,9 +430,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   <View style={styles.cardTopRow}>
                     <TouchableOpacity onPress={() => setIdentityEditOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
                       <Text style={styles.topEditText}>Edit</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={() => setIsFavourite((v) => !v)} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
-                      <Text style={[styles.favouriteStar, isFavourite && styles.favouriteStarActive]}>{isFavourite ? '★' : '☆'}</Text>
                     </TouchableOpacity>
                   </View>
                 )}

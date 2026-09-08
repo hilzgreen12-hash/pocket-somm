@@ -4,6 +4,7 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, removeWineFromCell, binCellLabels, binDiamondCount } from '../../../src/api/bins';
+import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { RenameModal } from '../../../src/components/RenameModal';
 import { updateCellarWine, archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
@@ -77,6 +78,12 @@ export default function BinDetailScreen() {
     enabled: !!userId,
   });
   const bin = bins.find((b) => b.id === binId);
+
+  // Header ‹ › hop across ALL home storage (racks → bins → Alt Cellars) in the
+  // same order as the "Your Wines at Home" carousel — not just other bins.
+  const storageNav = useStorageLocationNav();
+  const prevLoc = storageNav.prev(binId);
+  const nextLoc = storageNav.next(binId);
 
   const { data: cells = [], isLoading } = useQuery({
     queryKey: ['bin-cells', binId],
@@ -373,8 +380,24 @@ export default function BinDetailScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={styles.back}>←</Text>
         </TouchableOpacity>
-        <View style={styles.titleWrap}>
+        <View style={styles.titleNav}>
+          <TouchableOpacity
+            onPress={() => prevLoc && router.replace(prevLoc.route as any)}
+            disabled={!prevLoc}
+            hitSlop={{ top: 12, bottom: 12, left: 12, right: 6 }}
+            accessibilityLabel="Previous storage location"
+          >
+            <Text style={[styles.navArrow, !prevLoc && styles.navArrowDisabled]}>‹</Text>
+          </TouchableOpacity>
           <Text style={styles.title} numberOfLines={1}>{bin?.name ?? 'Bin'}</Text>
+          <TouchableOpacity
+            onPress={() => nextLoc && router.replace(nextLoc.route as any)}
+            disabled={!nextLoc}
+            hitSlop={{ top: 12, bottom: 12, left: 6, right: 12 }}
+            accessibilityLabel="Next storage location"
+          >
+            <Text style={[styles.navArrow, !nextLoc && styles.navArrowDisabled]}>›</Text>
+          </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={openBinEdit} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
           <Text style={styles.headerEdit}>Edit</Text>
@@ -593,8 +616,11 @@ const styles = StyleSheet.create({
   // Equal-width back / Edit so the flex-1 title is truly screen-centred.
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 50 },
   headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', width: 50 },
-  titleWrap: { flex: 1 },
-  title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
+  // Centred nav cluster: ‹ bin name › — gold arrows hop across all home storage.
+  titleNav: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  navArrow: { fontSize: 26, fontFamily: fonts.headingSemibold, color: colors.gold, paddingHorizontal: 2 },
+  navArrowDisabled: { color: 'rgba(224,184,74,0.25)' },
+  title: { flexShrink: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   statsLine1: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: spacing.lg },
   statsLine2: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginTop: 2 },
   hint: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', marginTop: 6, marginBottom: spacing.md, lineHeight: 19, paddingHorizontal: spacing.xl },
