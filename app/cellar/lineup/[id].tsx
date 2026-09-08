@@ -565,7 +565,7 @@ export default function LineupDetailScreen() {
         <ScrollView contentContainerStyle={{ paddingBottom: 90 }} keyboardShouldPersistTaps="handled">
           <View style={styles.photoWrap}>
             {photoUrl ? (
-              <TouchableOpacity activeOpacity={0.9} onPress={() => setZoomOpen(true)}>
+              <TouchableOpacity style={styles.photoTouch} activeOpacity={0.9} onPress={() => setZoomOpen(true)}>
                 <Image source={{ uri: photoUrl }} style={styles.photo} resizeMode="contain" />
               </TouchableOpacity>
             ) : <ActivityIndicator color={colors.gold} style={{ marginVertical: 40 }} />}
@@ -875,7 +875,10 @@ const styles = StyleSheet.create({
   headerStamp: { fontSize: 17, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center' },
   shareText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   photoWrap: { alignItems: 'center', paddingTop: spacing.md },
-  photo: { width: '92%', height: 420, borderRadius: 14, backgroundColor: colors.surface },
+  // The touchable owns the 92% width; the image fills it (a percentage width on
+  // the image alone collapses to 0 inside an auto-width touchable).
+  photoTouch: { width: '92%' },
+  photo: { width: '100%', height: 420, borderRadius: 14, backgroundColor: colors.surface },
   // Camera (change photo) + favourite star, clustered top-right on the photo.
   photoBadges: { position: 'absolute', top: spacing.lg, right: '8%', flexDirection: 'row', gap: spacing.sm },
   photoBadge: { backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
