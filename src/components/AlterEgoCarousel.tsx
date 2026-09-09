@@ -74,7 +74,6 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
 
   return (
     <>
-    <Text style={styles.hint}>Listed by recency · Swipe to view all →</Text>
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {hasSketches ? (
         sketches.map((s: any) => {
@@ -109,6 +108,7 @@ export function AlterEgoCarousel({ requireAccount }: { requireAccount: (action: 
       <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
       <View style={styles.futureCard}><Text style={styles.futureText}>Future Alter Ego's Appear Here</Text></View>
     </ScrollView>
+    <Text style={styles.hint}>Listed by recency · Swipe to view all →</Text>
     </>
   );
 }
