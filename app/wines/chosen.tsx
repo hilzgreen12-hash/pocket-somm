@@ -438,7 +438,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string; fromIntel?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   // Broader "arrived via a deep link to a specific wine's review" flag — also
   // covers the cellar-review links (used by the Lineup wine list). Any of these
@@ -1225,6 +1225,9 @@ export default function ChosenWinesScreen() {
         onSaved={() => {
           const init = addInitial;
           setAddOpen(false); setAddInitial(null); setPendingReviewLabelUri(null); setAddConfirmed(false); setAddLabelPath(null); setAddToGroupId(null);
+          // Came from a Wine Intel card → return straight back to that card
+          // (via backTo), not the Your Wine Reviews list.
+          if (params.fromIntel === '1') { returnToLibrary(); return; }
           // Came via a Label-Library link → show this wine's review detail card.
           if (cameViaLabelLink) { void openSavedReviewDetail({ producer: init?.producer, wineName: init?.wineName, vintage: init?.vintage }); }
         }}
@@ -1606,12 +1609,12 @@ export default function ChosenWinesScreen() {
             style={styles.filterScroll}
             contentContainerStyle={styles.filterRow}
           >
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('month')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Collection</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Month</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'month' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, typeFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{collectionChipLabel}</Text>
+              <Text style={[styles.filterChipValue, monthFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{monthLabel(monthFilter)}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={[styles.filterChip, styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
               <View style={styles.filterChipHeadingRow}>
@@ -1620,12 +1623,12 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, yourScoreLabel !== 'Any' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('month')}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Month</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'month' ? '▴' : '▾'}</Text>
+                <Text style={styles.filterChipLabel}>Collection</Text>
+                <Text style={styles.filterChipChevron}>{openDropdown === 'type' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, monthFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{monthLabel(monthFilter)}</Text>
+              <Text style={[styles.filterChipValue, typeFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{collectionChipLabel}</Text>
             </TouchableOpacity>
             {customFilters.map((f) => {
               const active = activeCustomId === f.id;
@@ -1872,7 +1875,9 @@ const styles = StyleSheet.create({
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },
   emptyBody: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 22 },
-  cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md },
+  // Review bubbles — brown (colors.surface), matching Your Restaurant Reviews
+  // and the carousel cards elsewhere.
+  cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
   // When a review has a label photo it sits as a small framed thumbnail to the
   // left of the text (like a cellar wine card); text-only otherwise.
   cardCompactOuter: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },

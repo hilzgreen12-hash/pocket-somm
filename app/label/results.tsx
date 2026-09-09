@@ -1693,6 +1693,10 @@ export default function LabelResultsScreen() {
             // Carry the scanned label into the +Add review as a local uri to
             // upload on save (slu = seed label uri, read from the label store).
             if (imageUri) qs.set('slu', '1');
+            // Return straight to THIS intel card (not the Your Wine Reviews
+            // list) when the review is saved, discarded, or backed out of.
+            qs.set('backTo', '/label/results');
+            qs.set('fromIntel', '1');
             router.push(`/wines/chosen?${qs.toString()}` as any);
           },
         },
@@ -1954,11 +1958,11 @@ export default function LabelResultsScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-          <View style={styles.statBarRule} />
-          {/* Affordance: the three stats are tappable (each opens a "how Vinster
-              worked it out" popup). Static stat bars elsewhere omit this caption,
-              so the bar's format stays identical app-wide. */}
+          {/* Affordance INSIDE the bar — below the stats, above the lower rule.
+              Each stat is tappable (opens a "how Vinster worked it out" popup);
+              static bars elsewhere omit this caption. */}
           <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out →</Text>
+          <View style={styles.statBarRule} />
 
           {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
               one above the other with no separator between them; the section's
@@ -2702,7 +2706,7 @@ const styles = StyleSheet.create({
   statBarRule: { height: 1, backgroundColor: colors.divider },
   // Subtle separator directly beneath the "Wine Intel" title.
   titleRule: { height: 1, backgroundColor: colors.border },
-  statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md, gap: spacing.sm },
+  statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
   statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
   statBarValueMuted: { color: colors.textMuted, fontFamily: fonts.bodySemibold },
@@ -2713,7 +2717,7 @@ const styles = StyleSheet.create({
   statBarSepGold: { fontSize: 26, color: colors.gold, opacity: 0.75 },
   // Caption that marks the stat bar as tappable (Option A). Only on interactive
   // bars — static bars app-wide omit it, keeping the bar's format identical.
-  statBarHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.gold, opacity: 0.85, textAlign: 'center', marginTop: spacing.sm },
+  statBarHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.gold, opacity: 0.85, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
   vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },

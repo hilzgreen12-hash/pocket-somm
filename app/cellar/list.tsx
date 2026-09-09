@@ -756,7 +756,7 @@ export default function FullCellarListScreen() {
     }
     if (field === 'price') {
       return {
-        title: 'Sort by Price',
+        title: 'Sort by Value',
         options: [{ value: 'recent', label: 'Recently added (default)' }, ...PRICE_SORT_OPTIONS],
         selected: sortMode,
         onSelect: (v) => setSortMode(v as SortMode),
@@ -906,7 +906,7 @@ export default function FullCellarListScreen() {
         </TouchableOpacity>
         <TouchableOpacity style={[styles.filterChip, priceActive && styles.sortChip]} onPress={() => setOpenDropdown('price')}>
           <View style={styles.filterChipHeadingRow}>
-            <Text style={[styles.filterChipLabel, priceActive && styles.filterChipTextOn]}>Price</Text>
+            <Text style={[styles.filterChipLabel, priceActive && styles.filterChipTextOn]}>Value</Text>
             <Text style={styles.filterChipChevron}>{openDropdown === 'price' ? '▴' : '▾'}</Text>
           </View>
           <Text style={[styles.filterChipValue, priceActive && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{priceLabel}</Text>

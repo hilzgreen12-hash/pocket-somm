@@ -200,6 +200,12 @@ export default function LineupDetailScreen() {
     setNoMatchDismissed(true);
     setRestaurantPickerOpen(false);
   }
+  // Remove the match and bring the "Match to a review?" question back.
+  async function unmatchLineup() {
+    try { await AsyncStorage.removeItem(noMatchKey); } catch { /* non-fatal */ }
+    setNoMatchDismissed(false);
+    await matchRestaurant(null);
+  }
 
   // Restaurant reviews filtered by the picker's search box.
   const filteredRestaurants = restaurantArchive.filter((a) => {
@@ -569,16 +575,18 @@ export default function LineupDetailScreen() {
             restaurant review card (long-press to re-match); otherwise it opens
             the picker to match this lineup to a review. */}
         {matchedRestaurant ? (
-          <TouchableOpacity
-            style={styles.matchRow}
-            onPress={() => router.push(`/restaurants/reviews?openSession=${matchedRestaurant.id}` as any)}
-            onLongPress={() => setRestaurantPickerOpen(true)}
-            delayLongPress={400}
-            activeOpacity={0.7}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-          >
-            <Text style={styles.matchLink} numberOfLines={1}>View Your Matched Restaurant Review</Text>
-          </TouchableOpacity>
+          <View style={styles.matchRowInline}>
+            <TouchableOpacity
+              onPress={() => router.push(`/restaurants/reviews?openSession=${matchedRestaurant.id}` as any)}
+              activeOpacity={0.7}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Text style={styles.matchLink} numberOfLines={1}>View Your Matched Restaurant Review</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={unmatchLineup} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+              <Text style={styles.unmatchLink}>(unmatch)</Text>
+            </TouchableOpacity>
+          </View>
         ) : noMatchDismissed ? null : (
           <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
             <Text style={styles.matchLink} numberOfLines={2}>Match this lineup to a restaurant review?</Text>
@@ -916,7 +924,10 @@ const styles = StyleSheet.create({
   // Subtle "Done" beneath the venue while editing — confirm + dismiss keyboard.
   venueDone: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 4 },
   matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
+  // Matched state: "View …" link with a yellow underlined "(unmatch)" beside it.
+  matchRowInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, marginTop: spacing.sm },
   matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
+  unmatchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
   pickerOption: { paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickerOptionText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text },

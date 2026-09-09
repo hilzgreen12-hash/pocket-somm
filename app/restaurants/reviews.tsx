@@ -48,7 +48,7 @@ type RatingFilter = 'all' | '5' | '4plus' | '3plus';
 // 'toreview' = a restaurant added from a List result that has no ratings or
 // note yet; 'reviewed' = it carries review content.
 type ReviewStatusFilter = 'all' | 'toreview' | 'reviewed';
-type FilterField = 'date' | 'location' | 'rating' | null;
+type FilterField = 'date' | 'rating' | null;
 
 // Year-month key + label for the Date filter — one entry per month that
 // has a review, e.g. "June 2026".
@@ -216,7 +216,6 @@ export default function RestaurantReviewsScreen() {
   const [editWineIdentity, setEditWineIdentity] = useState(false);
   const [search, setSearch] = useState('');
   const [dateFilter, setDateFilter] = useState<string>('all');         // 'all' | 'YYYY-MM'
-  const [locationFilter, setLocationFilter] = useState<string>('All'); // 'All' | city | 'Unrecorded'
   const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
   const [bottlePicksOpen, setBottlePicksOpen] = useState(false);
@@ -532,11 +531,6 @@ export default function RestaurantReviewsScreen() {
         );
         if (!nameHit && !cityHit && !pickHit) return false;
       }
-      if (locationFilter !== 'All') {
-        const c = normaliseCity(item.city);
-        if (locationFilter === 'Unrecorded') { if (c) return false; }
-        else if (cityKey(c) !== cityKey(locationFilter)) return false;
-      }
       if (ratingFilter !== 'all') {
         const r = item.ratingOverall;
         if (r == null) return false;
@@ -550,7 +544,7 @@ export default function RestaurantReviewsScreen() {
       }
       return true;
     });
-  }, [reviewed, search, chosenWines, dateFilter, locationFilter, ratingFilter, activeCustomId, customFilters]);
+  }, [reviewed, search, chosenWines, dateFilter, ratingFilter, activeCustomId, customFilters]);
 
   // Restaurants awaiting review — a name captured from a List scan with no
   // ratings or note yet. Drives the summary link + its modal.
@@ -619,19 +613,10 @@ export default function RestaurantReviewsScreen() {
 
   // Chip value labels.
   const dateChipLabel = dateFilter === 'all' ? 'All' : (availableMonths.find((m) => m.value === dateFilter)?.label ?? 'All');
-  const locationChipLabel = locationFilter === 'All' ? 'All' : locationFilter;
   const ratingChipLabel = ratingFilter === 'all' ? 'Any' : ratingFilter === '5' ? '5★' : ratingFilter === '4plus' ? '4★+' : '3★+';
 
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'date') return { title: 'Filter by month', options: [{ value: 'all', label: 'All' }, ...availableMonths], selected: dateFilter, onSelect: setDateFilter };
-    if (field === 'location') {
-      const opts = [
-        { value: 'All', label: 'All cities' },
-        ...availableLocations.cities.map((c) => ({ value: c, label: c })),
-        ...(availableLocations.hasUnrecorded ? [{ value: 'Unrecorded', label: 'Unrecorded' }] : []),
-      ];
-      return { title: 'Filter by city', options: opts, selected: locationFilter, onSelect: setLocationFilter };
-    }
     if (field === 'rating') return {
       title: 'Filter by rating',
       options: [
@@ -711,7 +696,7 @@ export default function RestaurantReviewsScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
               <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>Date</Text>
+                <Text style={styles.filterChipLabel}>Month</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'date' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, dateFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{dateChipLabel}</Text>
@@ -722,13 +707,6 @@ export default function RestaurantReviewsScreen() {
                 <Text style={styles.filterChipChevron}>{openDropdown === 'rating' ? '▴' : '▾'}</Text>
               </View>
               <Text style={[styles.filterChipValue, ratingFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{ratingChipLabel}</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('location')}>
-              <View style={styles.filterChipHeadingRow}>
-                <Text style={styles.filterChipLabel}>City</Text>
-                <Text style={styles.filterChipChevron}>{openDropdown === 'location' ? '▴' : '▾'}</Text>
-              </View>
-              <Text style={[styles.filterChipValue, locationFilter !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{locationChipLabel}</Text>
             </TouchableOpacity>
             {customFilters.map((f) => (
               <TouchableOpacity
@@ -832,40 +810,11 @@ export default function RestaurantReviewsScreen() {
                     {!restaurantReviewed(item) && (
                       <Text style={styles.awaitingReviewNote}>Awaiting Review</Text>
                     )}
-                    {hasAnyRating && (
-                      <View style={styles.ratingGrid}>
-                        {item.ratingFood != null && (
-                          <View style={styles.ratingCell}>
-                            <Text style={styles.ratingCellLabel}>Food</Text>
-                            <StarRating value={item.ratingFood} size={11} readonly />
-                          </View>
-                        )}
-                        {item.ratingService != null && (
-                          <View style={styles.ratingCell}>
-                            <Text style={styles.ratingCellLabel}>Service</Text>
-                            <StarRating value={item.ratingService} size={11} readonly />
-                          </View>
-                        )}
-                        {item.ratingAtmosphere != null && (
-                          <View style={styles.ratingCell}>
-                            <Text style={styles.ratingCellLabel}>Atmosphere</Text>
-                            <StarRating value={item.ratingAtmosphere} size={11} readonly />
-                          </View>
-                        )}
-                        {item.ratingWineList != null && (
-                          <View style={styles.ratingCell}>
-                            <Text style={styles.ratingCellLabel}>Wine list</Text>
-                            <StarRating value={item.ratingWineList} size={11} readonly />
-                          </View>
-                        )}
-                        {item.ratingValue != null && (
-                          <View style={styles.ratingCell}>
-                            <Text style={styles.ratingCellLabel}>Value</Text>
-                            <StarRating value={item.ratingValue} size={11} readonly />
-                          </View>
-                        )}
-                      </View>
-                    )}
+                    {/* First line of the review, in place of the detailed rating
+                        grid — the overall star rating already sits by the name. */}
+                    {item.restaurantNote?.trim() ? (
+                      <Text style={styles.reviewSnippet} numberOfLines={1} ellipsizeMode="tail">{item.restaurantNote.trim()}</Text>
+                    ) : null}
                   </TouchableOpacity>
                   </View>
                 </View>
@@ -1113,7 +1062,10 @@ const styles = StyleSheet.create({
   // Photo-of-the-night thumbnail + header, side by side.
   headerWithThumb: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
   headerTextCol: { flex: 1 },
-  restaurantThumb: { width: 54, height: 54 },
+  // Larger portrait thumbnail, matching Your Wine Reviews (100×130).
+  restaurantThumb: { width: 100, height: 130 },
+  // First line of the review, shown in place of the rating grid.
+  reviewSnippet: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: 6 },
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   notePreview: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
   ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },

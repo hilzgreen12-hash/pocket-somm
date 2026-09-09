@@ -2323,7 +2323,8 @@ const styles = StyleSheet.create({
   titleEditSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   titleEditHeading: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   photoSaving: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: spacing.sm },
-  detailThumb: { width: 60, height: 76 },
+  // Match the Wine Intel card's label image (larger, 3:4 portrait).
+  detailThumb: { width: 120, height: 160 },
   // Inter — wine card name (card content, not a page header)
   headerLine: { fontSize: 22, fontFamily: fonts.bodyBold, color: colors.text, lineHeight: 28 },
   // Inter — region caption

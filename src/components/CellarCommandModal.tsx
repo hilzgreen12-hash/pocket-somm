@@ -312,7 +312,8 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
         <View style={styles.sheet}>
           {phase === 'speak' && (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-              <Text style={styles.introText}>Vinster has been trained in four voice commands: it can move wines between storage locations, move bottles to your archive, add bottles of wine to your cellar list for you to place into storage locations later, and advise which wine from your cellar you should open tonight based on your mood (recipe and wine pairings are still best advised using the functions in the Pair tab). Give us a try…</Text>
+              <Text style={styles.voiceHeader}>Voice Command</Text>
+              <Text style={styles.introText}>Vinster has been trained in four voice commands: Move wines between storage locations, archive bottles or add them to your cellar list for you to place into a specific location later, or ask Vinster to recommend wines to drink based on your mood and occasion.</Text>
 
               <View style={styles.modalDivider} />
 
@@ -417,6 +418,7 @@ const styles = StyleSheet.create({
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   title: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
   // Intro paragraph atop the speak screen — the four commands, one sentence.
+  voiceHeader: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.md },
   introText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
   modalDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   micRow: { alignItems: 'center', marginBottom: spacing.md },
@@ -425,8 +427,8 @@ const styles = StyleSheet.create({
   inputText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
   inputPlaceholder: { color: colors.textSubtle },
   // Suggested commands — white italic, quoted.
-  suggestions: { gap: spacing.xs, marginBottom: spacing.lg },
-  suggestion: { fontFamily: fonts.bodyItalic, fontSize: 14, color: '#FFFFFF', textAlign: 'center', lineHeight: 20 },
+  suggestions: { gap: spacing.sm, marginBottom: spacing.lg },
+  suggestion: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   btnDisabled: { opacity: 0.5 },

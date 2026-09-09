@@ -64,7 +64,9 @@ const styles = StyleSheet.create({
   card: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', alignItems: 'center', gap: spacing.xs, backgroundColor: colors.surface },
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
-  comingCard: { width: 190, height: 134, borderWidth: 1, borderColor: '#6B4A32', borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: '#3A2A20' },
+  // On-brand brown (matches a populated Vinster's Review of You entry) rather
+  // than the old near-black placeholder.
+  comingCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
   comingTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 23 },
   comingSub: { fontSize: 14, fontFamily: fonts.headingItalic, color: 'rgba(232,214,184,0.8)', lineHeight: 18 },
   futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },

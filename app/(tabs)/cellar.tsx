@@ -143,7 +143,8 @@ const styles = StyleSheet.create({
   titleSide: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },
   // Voice Command — its own line at the top, right-aligned, gold heading font.
   voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
-  voiceLink: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, textDecorationLine: 'underline' },
+  // Matches the "Your Wines At Home" stats-bar words: uppercase gold, bodySemibold.
+  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   importLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").

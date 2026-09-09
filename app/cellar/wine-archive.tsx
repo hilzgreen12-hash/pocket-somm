@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
   // Cookbook's "View Your Cookbook →" link).
   viewLinkRow: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.xs },
   // Sized to match the "Your Cellar Archive" page title (22), kept gold.
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold, letterSpacing: 0.3 },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 21, color: colors.gold, letterSpacing: 0.3 },
 
   // Matches the "Your Wines At Home" intro on the Cellar tab (Spectral, 17).
   blurb: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
@@ -140,7 +140,8 @@ const styles = StyleSheet.create({
   stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Cellar Archive stats bar: the counts with the "View …" link stacked inside
   // the same top/bottom borders, just beneath the counts.
-  statsBox: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
+  // No top rule; a single faded-yellow separator line below (not a boxed bar).
+  statsBox: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
   statsText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
 

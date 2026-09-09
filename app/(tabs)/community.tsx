@@ -88,7 +88,7 @@ export default function CommunityTab() {
       {/* Other Features Arriving Soon — the community-sharing features, shown
           faded as unbuilt (Wine / Restaurant community feeds, Connections). */}
       <View style={styles.section}>
-        <Text style={styles.sectionHeader}>Other Features Arriving Soon</Text>
+        <Text style={styles.sectionHeader}>Community Features Arriving Soon</Text>
         <TouchableOpacity style={[styles.button, styles.buttonSoon]} disabled activeOpacity={1}>
           <Text style={styles.buttonText}>Wine Reviews</Text>
         </TouchableOpacity>
@@ -124,11 +124,12 @@ const styles = StyleSheet.create({
   // Section headers ("The Journal", "Other Features Arriving Soon") — match the
   // 22pt white headers on the other tabs (Your Wines At Home, Review of You).
   sectionHeader: { fontSize: 22, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  journalBlurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 21 },
+  journalBlurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
   journalEmail: { color: colors.gold, textDecorationLine: 'underline' },
-  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
+  // Sized to match the Pair-tab buttons (slimmer vertical padding).
+  button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
-  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   // "Arriving soon" bubbles are faded to read as unbuilt.
   buttonSoon: { opacity: 0.5 },
 });

@@ -68,10 +68,11 @@ const styles = StyleSheet.create({
   // Cookbook →" link line, then the stats bar and carousel.
   cookbookTitle: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 24, color: colors.gold, letterSpacing: 0.3 },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold, letterSpacing: 0.3 },
   // Stats bar — the "View Your Cookbook" link sits above the recipe · folder
   // count (mirrors Your Cellar Archive), between full-width gold rules.
-  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', gap: spacing.xs, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
+  // No top rule; a single faded-yellow separator line below (not a boxed bar).
+  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.divider },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 

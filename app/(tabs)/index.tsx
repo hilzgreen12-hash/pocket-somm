@@ -565,7 +565,7 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: spacing.lg },
   // Rule between the intro blurb and the 2×2 grid.
-  blurbSeparator: { height: 1, backgroundColor: colors.border, marginBottom: spacing.xl },
+  blurbSeparator: { height: 1, backgroundColor: colors.divider, marginBottom: spacing.xl },
 
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.
