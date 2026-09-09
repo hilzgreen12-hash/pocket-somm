@@ -15,7 +15,8 @@ import { useCellar } from '../../../src/hooks/useCellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
-import { fetchStorageLocations } from '../../../src/api/storageLocations';
+import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
+import { getBins } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
@@ -125,6 +126,14 @@ export default function RackGridScreen() {
     queryFn: () => fetchStorageLocations(session!.user.id),
     enabled: !!session?.user.id,
   });
+  // Bins, so the move menu can offer them as destinations too.
+  const { data: allBins = [] } = useQuery({
+    queryKey: ['bins', session?.user.id],
+    queryFn: () => getBins(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+  // "Move to a Cellar or Bin" destination picker (Alt Cellars + bins).
+  const [locBinPicker, setLocBinPicker] = useState<{ wineId: string; wineName: string } | null>(null);
   const [rackMove, setRackMove] = useState<{ wine: CellarWine; currentName: string; max: number; rid: string; row: number; col: number } | null>(null);
   const [rackMoveQty, setRackMoveQty] = useState('');
   // "Delete Wine (Permanent)" on a multi-bottle wine → ask how many (or Delete All).
@@ -501,12 +510,25 @@ export default function RackGridScreen() {
   const awaitingWines = useMemo(() => wines.filter((w) => w.awaiting_placement_unit_id === rackId), [wines, rackId]);
   const awaitingBottles = awaitingWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
 
-  // Long-press an awaiting bottle → enter placement mode. Setting the pending
-  // wine surfaces the existing brown/yellow "Tap an empty slot to place …"
-  // banner; the next slot tapped files it (runPlacement clears the flag).
-  function startPlaceAwaiting(w: typeof wines[number]) {
-    setPendingWineId(w.id);
-    setPendingAddMode(false);
+  // Bottles awaiting a slot are placed ONE at a time — each tapped empty slot
+  // takes the next bottle, and the awaiting flag clears only once every bottle
+  // of the wine has a slot. No "how many?" prompt, no second instruction bubble.
+  const slotsForWine = (wineId: string) => Object.values(slotMap).filter((s) => (s as { cellar_wine_id?: string } | undefined)?.cellar_wine_id === wineId).length;
+  async function placeAwaitingBottle(w: typeof wines[number], row: number, col: number) {
+    try {
+      await assignSlot(rackId, row, col, w.id);
+      const placedNow = slotsForWine(w.id) + 1;
+      if (placedNow >= (w.quantity ?? 1)) {
+        await updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } });
+      }
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      const remaining = Math.max(0, (w.quantity ?? 1) - placedNow);
+      setSavedMsg(remaining > 0 ? `Bottle placed — ${remaining} to go` : 'Bottle placed');
+    } catch (err) {
+      showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   // Order for the filter wine-picker: wines already in the filter (when the
@@ -557,7 +579,7 @@ export default function RackGridScreen() {
   // Long-press a slot: an occupied slot opens its action sheet (add-more /
   // move / archive); an empty slot starts (or extends) a multi-slot selection.
   function onLongPressSlot(row: number, col: number) {
-    if (lineupSetup || moving) return;
+    if (lineupSetup || moving || awaitingBottles > 0) return;
     const slot = slotMap[`${row},${col}`];
     if (slot?.cellar_wine_id) { pickUpSlot(row, col); return; }
     setMultiSlots((prev) => {
@@ -652,6 +674,13 @@ export default function RackGridScreen() {
         return;
       }
       handleDrop(row, col);
+      return;
+    }
+    // Bottles awaiting a slot lock the grid to placement: an empty slot takes
+    // the next bottle (one at a time); occupied slots do nothing until done.
+    if (awaitingBottles > 0) {
+      if (slotMap[`${row},${col}`]) return;
+      void placeAwaitingBottle(awaitingWines[0], row, col);
       return;
     }
     const slot = slotMap[`${row},${col}`];
@@ -788,6 +817,40 @@ export default function RackGridScreen() {
       showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setRackMove(null); setPendingSlot(null); setPendingSlots(null);
+    }
+  }
+
+  // Move a placed wine OUT of the rack grid into an Alt Cellar (loose) — clears
+  // its slots and files it in the location. All bottles go together.
+  async function moveWineToLocation(wineId: string, locId: string) {
+    try {
+      await clearWineFromRacks(wineId);
+      await updateWine.mutateAsync({ id: wineId, updates: { storage_location_id: locId, bin_cell_id: null, case_id: null, awaiting_placement: false, awaiting_placement_unit_id: null } });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      setLocBinPicker(null);
+      setSavedMsg('Wine moved to your cellar');
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Move a placed wine into a bin: clear its slots, flag it as awaiting a cell in
+  // that bin, then open the bin so the user taps a diamond to drop it.
+  async function moveWineToBin(wineId: string, binId: string) {
+    try {
+      await clearWineFromRacks(wineId);
+      await updateWine.mutateAsync({ id: wineId, updates: { storage_location_id: null, bin_cell_id: null, case_id: null, awaiting_placement: true, awaiting_placement_unit_id: binId } });
+      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['bins'] });
+      setLocBinPicker(null);
+      router.push(`/cellar/bin/${binId}` as any);
+    } catch (err) {
+      showAlert({ title: 'Could not move', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
 
@@ -942,6 +1005,12 @@ export default function RackGridScreen() {
         onPress: () => {
           setPendingMove({ sourceRackId: rackId, row, col, wineId, wineName: wine.wine_name });
         },
+      },
+      {
+        // Move OUT of the slot grid entirely — into an Alt Cellar (loose) or a
+        // bin. Racks, fridges, bins and Alt Cellars are all valid destinations.
+        text: 'Move to a Cellar or Bin',
+        onPress: () => setLocBinPicker({ wineId, wineName: wine.wine_name }),
       },
       {
         // Quick amend of the wine's identity (name / vintage / style).
@@ -1511,17 +1580,20 @@ export default function RackGridScreen() {
         {winesInRack.length} {winesInRack.length === 1 ? 'Wine' : 'Wines'} · {rackBottleCount} {rackBottleCount === 1 ? 'Bottle' : 'Bottles'} · {totalSlots} {totalSlots === 1 ? 'Slot' : 'Slots'}
       </Text>
 
-      {/* Bottles moved into this rack (e.g. by Voice Command) with no slot yet —
-          yellow at the top; long-press then tap a slot to file them. */}
+      {/* Bottles moved into this rack (e.g. by Voice Command) with no slot yet.
+          One non-interactive instruction bubble per wine — the user simply taps
+          an empty slot to file the next bottle. No long-press, no second bubble. */}
       {awaitingBottles > 0 ? (
         <View style={styles.awaitingBlock}>
-          <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
-          {awaitingWines.map((w) => (
-            <TouchableOpacity key={w.id} style={styles.awaitingRow} onLongPress={() => startPlaceAwaiting(w)} onPress={() => startPlaceAwaiting(w)} delayLongPress={400} activeOpacity={0.7}>
-              <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
-              <Text style={styles.awaitingHint}>Long-press, then tap a slot to place →</Text>
-            </TouchableOpacity>
-          ))}
+          {awaitingWines.map((w) => {
+            const remaining = Math.max(1, (w.quantity ?? 1) - slotsForWine(w.id));
+            return (
+              <View key={w.id} style={styles.awaitingRow}>
+                <Text style={styles.awaitingWine} numberOfLines={2}>Tap an empty slot to place {wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
+                {remaining > 1 ? <Text style={styles.awaitingHint}>{remaining} bottles to place — one slot at a time</Text> : null}
+              </View>
+            );
+          })}
         </View>
       ) : null}
 
@@ -1789,6 +1861,38 @@ export default function RackGridScreen() {
             </TouchableOpacity>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Move OUT of the rack grid: pick an Alt Cellar (loose) or a bin (drops
+          into a diamond on the bin screen). Fixes the gap where racks/fridges
+          couldn't hand a wine to alt storage or bins. */}
+      <Modal visible={locBinPicker !== null} transparent animationType="fade" onRequestClose={() => setLocBinPicker(null)}>
+        <View style={styles.placeOverlay}>
+          <View style={styles.placeSheet}>
+            <Text style={styles.placeTitle}>Move to a Cellar or Bin</Text>
+            <Text style={styles.placeBody}>Choose where {locBinPicker?.wineName} should go — all its bottles move together.</Text>
+            <ScrollView style={{ maxHeight: 320, alignSelf: 'stretch' }}>
+              {allLocations.map((l) => (
+                <TouchableOpacity key={l.id} style={styles.destRow} onPress={() => locBinPicker && void moveWineToLocation(locBinPicker.wineId, l.id)} activeOpacity={0.7}>
+                  <Text style={styles.destName} numberOfLines={1}>{l.name}</Text>
+                  <Text style={styles.destType}>Alt Cellar</Text>
+                </TouchableOpacity>
+              ))}
+              {allBins.map((b) => (
+                <TouchableOpacity key={b.id} style={styles.destRow} onPress={() => locBinPicker && void moveWineToBin(locBinPicker.wineId, b.id)} activeOpacity={0.7}>
+                  <Text style={styles.destName} numberOfLines={1}>{b.name}</Text>
+                  <Text style={styles.destType}>Bin</Text>
+                </TouchableOpacity>
+              ))}
+              {allLocations.length === 0 && allBins.length === 0 ? (
+                <Text style={styles.placeBody}>You don't have any Alt Cellars or bins yet — create one from the Cellar tab.</Text>
+              ) : null}
+            </ScrollView>
+            <TouchableOpacity onPress={() => setLocBinPicker(null)} style={styles.placeCancel}>
+              <Text style={styles.placeCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </Modal>
 
       {/* OCR-in-progress overlay while an uploaded label is read. */}
@@ -2258,6 +2362,10 @@ const styles = StyleSheet.create({
   placeCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   // Inter — cancel link (not a button)
   placeCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  // Destination rows in the "Move to a Cellar or Bin" picker.
+  destRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
+  destName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, flexShrink: 1 },
+  destType: { fontFamily: fonts.bodySemibold, fontSize: 11, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   // Top-right header "Edit" link — opens the rack-management modal, consistent
   // with the +Add / Edit affordances elsewhere. minWidth balances the back arrow.
   headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', width: 50 },

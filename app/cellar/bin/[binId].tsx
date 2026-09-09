@@ -180,7 +180,10 @@ export default function BinDetailScreen() {
     const c = nearestCell(lx, ly);
     if (!c) return;
     if (movingWine) { void placeMoving(c); return; }
-    router.push(`/cellar/bin/cell/${c.id}?add=1` as any);
+    // Only auto-open the "add" chooser for an EMPTY cell. A cell that already
+    // holds wine just opens its contents — the user taps "Add wine" there.
+    const occupied = (c.wines?.length ?? 0) > 0;
+    router.push(`/cellar/bin/cell/${c.id}${occupied ? '' : '?add=1'}` as any);
   }
   function onLongPressFrame(lx: number, ly: number) {
     if (movingWine) return;

@@ -25,6 +25,7 @@ import { WineSearchInput } from '../../src/components/WineSearchInput';
 import { resolveIntelCurrency } from '../../src/utils/localCurrency';
 import { StartAlignedInput } from '../../src/components/StartAlignedInput';
 import { usePreferences } from '../../src/hooks/usePreferences';
+import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 import type { WineDetailsComplete } from '../../src/types/wine';
@@ -138,6 +139,11 @@ export default function LabelConfirmScreen() {
   // Inline bin-diamond quantity + format (place-bin context only).
   const [binQty, setBinQty] = useState('1');
   const [binFormat, setBinFormat] = useState(wineDetails?.bottleSizeMl ?? 750);
+  // Bin placement details are collected in a popup AFTER the wine is confirmed:
+  // bottles + format + purchase price.
+  const [binPrice, setBinPrice] = useState('');
+  const [binPopupOpen, setBinPopupOpen] = useState(false);
+  const [binConfirmed, setBinConfirmed] = useState<WineDetailsComplete | null>(null);
 
   // Bottling picker — "Not this wine? Choose from other bottlings". Lists the
   // real, distinct wines this producer makes so the user can correct a misread
@@ -282,10 +288,11 @@ export default function LabelConfirmScreen() {
 
     setWineDetailsConfirmed(confirmed);
 
-    // Bin diamond placement: quantity + format were set inline above, so save
-    // straight into the cell — one step, no separate placement popup.
+    // Bin diamond placement: the wine is confirmed here, then a small popup
+    // collects bottles + format + purchase price before it's filed in the cell.
     if (isPlaceBin) {
-      await handlePlaceBinConfirm(confirmed);
+      setBinConfirmed(confirmed);
+      setBinPopupOpen(true);
       return;
     }
 
@@ -544,6 +551,8 @@ export default function LabelConfirmScreen() {
     const cellId = pendingBinCell.cellId;
     const binId = pendingBinCell.binId;
     const qty = Math.max(1, parseInt(binQty) || 1);
+    const priceNum = binPrice.trim() ? parseFloat(binPrice.replace(/[^0-9.]/g, '')) : NaN;
+    const purchasePrice = Number.isFinite(priceNum) ? priceNum : null;
     setPlacing(true);
     try {
       const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
@@ -583,8 +592,8 @@ export default function LabelConfirmScreen() {
           estimated_value_currency: null,
           estimated_value_at: null,
           estimated_value_source: null,
-          purchase_price: null,
-          purchase_price_currency: null,
+          purchase_price: purchasePrice,
+          purchase_price_currency: purchasePrice != null ? (preferences?.defaultCurrency ?? 'GBP') : null,
           bin_cell_id: cellId,
           storage_location_id: null,
           case_id: null,
@@ -605,6 +614,7 @@ export default function LabelConfirmScreen() {
       qc.invalidateQueries({ queryKey: ['bins'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       setPendingBinCell(null);
+      setBinPopupOpen(false);
       // Pop back to the diamond cell we came from (it's always directly below the
       // confirm frame — pendingBinCell is only ever set there) rather than
       // router.replace, which stacked a SECOND cell screen on top of the
@@ -765,24 +775,8 @@ export default function LabelConfirmScreen() {
         autoCapitalize="words"
       />
 
-      {/* Bin diamond add: quantity + bottle format inline (one-step), so the
-          diamond add mirrors the rack Confirm screen plus these two fields. */}
-      {isPlaceBin ? (
-        <>
-          <Text style={[styles.label, styles.binFieldLabel]}>Bottles</Text>
-          <TextInput
-            style={styles.binQtyInput}
-            value={binQty}
-            onChangeText={(t) => setBinQty(t.replace(/[^0-9]/g, '').slice(0, 4))}
-            keyboardType="number-pad"
-            placeholder="e.g. 6"
-            placeholderTextColor={colors.textMuted}
-          />
-          <View style={{ height: spacing.md }} />
-          <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
-          <BottleSizePicker value={binFormat} onChange={setBinFormat} />
-        </>
-      ) : null}
+      {/* Bin diamond add: bottles + format + purchase price are collected in a
+          popup AFTER this Confirm (see the placement modal below). */}
 
       {/* Rack/fridge placement: bottle format is the only extra input — no
           popup, no bottle count, no fill direction. */}
@@ -799,7 +793,7 @@ export default function LabelConfirmScreen() {
         disabled={loading || placing}
       >
         <Text style={styles.buttonText}>
-          {placing ? 'Adding…' : loading ? 'Loading wine details…' : isPlaceBin ? 'Add to Diamond' : 'Confirm'}
+          {placing ? 'Adding…' : loading ? 'Loading wine details…' : 'Confirm'}
         </Text>
       </TouchableOpacity>
 
@@ -855,6 +849,47 @@ export default function LabelConfirmScreen() {
                 </TouchableOpacity>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Bin placement details — shown after the wine is confirmed: bottles,
+          format and (optional) purchase price, then filed into the diamond. */}
+      <Modal visible={binPopupOpen} transparent animationType="fade" onRequestClose={() => !placing && setBinPopupOpen(false)}>
+        <View style={styles.candOverlay}>
+          <View style={styles.candSheet}>
+            <Text style={styles.candTitle}>Add to your diamond</Text>
+            <Text style={styles.candBody}>How many bottles, what format, and — if you like — the price you paid.</Text>
+
+            <Text style={[styles.label, styles.binFieldLabel]}>Bottles</Text>
+            <TextInput
+              style={styles.binQtyInput}
+              value={binQty}
+              onChangeText={(t) => setBinQty(t.replace(/[^0-9]/g, '').slice(0, 4))}
+              keyboardType="number-pad"
+              placeholder="e.g. 6"
+              placeholderTextColor={colors.textMuted}
+            />
+            <View style={{ height: spacing.md }} />
+            <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
+            <BottleSizePicker value={binFormat} onChange={setBinFormat} />
+            <View style={{ height: spacing.md }} />
+            <Text style={[styles.label, styles.binFieldLabel]}>Purchase price per bottle (optional)</Text>
+            <TextInput
+              style={styles.binQtyInput}
+              value={binPrice}
+              onChangeText={(t) => setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10))}
+              keyboardType="decimal-pad"
+              placeholder={`e.g. ${currencySymbol(preferences?.defaultCurrency ?? 'GBP')}45`}
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <TouchableOpacity style={[styles.button, placing && styles.buttonDisabled]} onPress={() => binConfirmed && void handlePlaceBinConfirm(binConfirmed)} disabled={placing}>
+              <Text style={styles.buttonText}>{placing ? 'Adding…' : 'Add to Diamond'}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.backButton} onPress={() => { if (!placing) setBinPopupOpen(false); }}>
+              <Text style={styles.backText}>Cancel</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>

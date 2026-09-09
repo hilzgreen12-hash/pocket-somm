@@ -16,6 +16,9 @@ import { ensureMediaPermission } from '../../../../src/utils/mediaPermissions';
 import { BottleSizePicker, bottleSizeCl } from '../../../../src/components/BottleSizePicker';
 import { CellarWinePicker } from '../../../../src/components/CellarWinePicker';
 import { LabelThumb } from '../../../../src/components/LabelThumb';
+import { LabelPhotoViewer } from '../../../../src/components/LabelPhotoViewer';
+import { WineIdentityHeader } from '../../../../src/components/WineIdentityHeader';
+import { uploadLabelImage } from '../../../../src/api/labelPhotos';
 import { showAlert } from '../../../../src/components/AppAlert';
 import { colors, spacing } from '../../../../src/constants/theme';
 import { fonts } from '../../../../src/constants/fonts';
@@ -155,6 +158,34 @@ export default function BinCellScreen() {
   const [saving, setSaving] = useState(false);
 
   const capacity = cell?.capacity ?? 0;
+  const bottleCount = wines.reduce((s, w) => s + (w.quantity ?? 1), 0);
+  const [viewerWine, setViewerWine] = useState<CellarWine | null>(null);
+
+  // Long-press a wine's label → View or Change its photo (matches the wine card).
+  function openImageMenu(w: CellarWine) {
+    showAlert({
+      title: [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' · ') || w.wine_name || 'This wine',
+      buttons: [
+        ...(w.label_image_path ? [{ text: 'View Image', onPress: () => setViewerWine(w) }] : []),
+        { text: 'Change Image', onPress: () => void changeWinePhoto(w) },
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  async function changeWinePhoto(w: CellarWine) {
+    if (!userId) return;
+    if (!(await ensureMediaPermission('library'))) return;
+    try {
+      const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'] as ImagePicker.MediaType[], quality: 1 });
+      if (res.canceled || !res.assets[0]) return;
+      const path = await uploadLabelImage(userId, res.assets[0].uri, w.id);
+      await updateCellarWine(w.id, { label_image_path: path });
+      qc.invalidateQueries({ queryKey: ['bin-cell', cellId] });
+      qc.invalidateQueries({ queryKey: ['cellar'] });
+    } catch (err) {
+      showAlert({ title: 'Could not update photo', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ['bin-cell', cellId] });
@@ -320,30 +351,32 @@ export default function BinCellScreen() {
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: spacing.xl, paddingBottom: 100 }}>
-          <Text style={styles.summary}>{wines.length} {wines.length === 1 ? 'Wine' : 'Wines'} · {capacity} Slots</Text>
+          <Text style={styles.summary}>{bottleCount} {bottleCount === 1 ? 'Bottle' : 'Bottles'} · {wines.length} {wines.length === 1 ? 'Wine' : 'Wines'} · {capacity} {capacity === 1 ? 'Slot' : 'Slots'}</Text>
 
           {wines.length === 0 ? (
             <Text style={styles.empty}>No wines in this {kindLabel.toLowerCase()} yet.</Text>
           ) : (
             wines.map((w) => (
-              <TouchableOpacity
-                key={w.id}
-                style={styles.row}
-                onPress={() => router.push(`/cellar/${w.id}` as any)}
-                onLongPress={() => openEdit(w)}
-                delayLongPress={400}
-                activeOpacity={0.7}
-              >
-                <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} radius={4} frame={3} />
-                <Text style={styles.rowQty}>{w.quantity ?? 1}×</Text>
-                <View style={styles.rowMain}>
-                  <Text style={styles.rowName} numberOfLines={1}>{w.wine_name}</Text>
-                  {(w.producer || w.vintage) ? (
-                    <Text style={styles.rowMeta} numberOfLines={1}>{[w.producer, w.vintage].filter(Boolean).join(' · ')}</Text>
-                  ) : null}
-                </View>
-                <Text style={styles.rowFormat}>{bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
-              </TouchableOpacity>
+              <View key={w.id} style={styles.row}>
+                {/* Long-press the label to View or Change the photo. */}
+                <TouchableOpacity onPress={() => router.push(`/cellar/${w.id}` as any)} onLongPress={() => openImageMenu(w)} delayLongPress={350} activeOpacity={0.8}>
+                  <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.rowThumb} radius={4} frame={3} />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.rowMain} onPress={() => router.push(`/cellar/${w.id}` as any)} onLongPress={() => openEdit(w)} delayLongPress={400} activeOpacity={0.7}>
+                  {/* Producer · Wine Name · Vintage, region/location beneath. */}
+                  <WineIdentityHeader
+                    producer={w.producer}
+                    wineName={w.wine_name}
+                    vintage={w.vintage}
+                    region={w.region}
+                    grape={w.grape_variety}
+                    size="sm"
+                    align="left"
+                  />
+                  {/* Count × format sits below the region line. */}
+                  <Text style={styles.rowFormat}>{w.quantity ?? 1}×{bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
+                </TouchableOpacity>
+              </View>
             ))
           )}
 
@@ -417,7 +450,20 @@ export default function BinCellScreen() {
         </TouchableOpacity>
       </Modal>
 
+      {/* "Reading the label…" swirl while a photo is being scanned — keeps the
+          user on a loading state instead of flashing the bin behind it (matches
+          the rack slot upload). */}
+      <Modal visible={scanning} transparent animationType="fade">
+        <View style={styles.scanningOverlay}>
+          <ActivityIndicator color={colors.gold} size="large" />
+          <Text style={styles.scanningText}>Reading the label…</Text>
+        </View>
+      </Modal>
+
       <CellarWinePicker visible={pickerOpen} allowPlaced onClose={() => setPickerOpen(false)} onSelect={addFromCellar} />
+
+      {/* Full-screen label view, opened from the long-press image menu. */}
+      <LabelPhotoViewer visible={viewerWine !== null} path={viewerWine?.label_image_path} fallbackText={viewerWine?.wine_name} onClose={() => setViewerWine(null)} />
 
       {/* Move quantity — "You have N bottles, how many are we moving?" */}
       <Modal visible={moveModal !== null} transparent animationType="fade" onRequestClose={() => setMoveModal(null)}>
@@ -452,7 +498,8 @@ const styles = StyleSheet.create({
   header: { paddingTop: 54, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
-  summary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', marginBottom: spacing.lg },
+  // Stats bar — gold rule top and bottom (matches the other cellar stats bars).
+  summary: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, marginBottom: spacing.lg },
   empty: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.lg },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowThumb: { width: 40, height: 52 },
@@ -460,10 +507,12 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1 },
   rowName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   rowMeta: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
-  rowFormat: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted },
+  rowFormat: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, marginTop: 4, letterSpacing: 0.3 },
   addBtn: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
   addBtnText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  scanningOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.72)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
+  scanningText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.cream, letterSpacing: 0.3 },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   chooserTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.lg },
   chooserBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },

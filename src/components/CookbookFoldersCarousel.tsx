@@ -28,8 +28,13 @@ export function CookbookFoldersCarousel() {
       <Text style={styles.cookbookTitle}>Your Cookbook</Text>
       <Text style={styles.blurb}>Recipes you generate can be saved and organised here. Create folders and record your pairing notes.</Text>
       <View style={styles.summaryRow}>
-        <TouchableOpacity onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Text style={styles.viewLink}>View Your Cookbook →</Text>
+        {/* The arrow is absolutely positioned so only "View Your Cookbook" is
+            centred — the arrow hangs to its right without shifting the text. */}
+        <TouchableOpacity onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 30 }}>
+          <View style={styles.viewLinkWrap}>
+            <Text style={styles.viewLink}>View Your Cookbook</Text>
+            <Text style={styles.viewLinkArrow}>→</Text>
+          </View>
         </TouchableOpacity>
         <Text style={styles.summaryText}>
           {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
@@ -68,12 +73,16 @@ const styles = StyleSheet.create({
   // Cookbook →" link line, then the stats bar and carousel.
   cookbookTitle: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold, letterSpacing: 0.3 },
+  // The text sizes the wrap; the arrow is absolute (left: 100%) so it doesn't
+  // count toward the centred width.
+  viewLinkWrap: { alignItems: 'center', justifyContent: 'center' },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
+  viewLinkArrow: { position: 'absolute', left: '100%', marginLeft: 6, fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold },
   // Stats bar — the "View Your Cookbook" link sits above the recipe · folder
   // count (mirrors Your Cellar Archive), between full-width gold rules.
   // No top rule; a single faded-yellow separator line below (not a boxed bar).
   summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.divider },
-  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 
   // Box tiles — matched to the Cellar storage carousel (HomeStorageSection).

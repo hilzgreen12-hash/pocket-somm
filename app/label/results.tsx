@@ -1640,7 +1640,9 @@ export default function LabelResultsScreen() {
         ? `Wine-Searcher values range from ${formatCurrency(intel.estimatedValueLow, userCurrency, { decimals: 0 })}–${formatCurrency(intel.estimatedValueHigh, userCurrency, { decimals: 0 })}${intel.priceScope === 'all-vintage' ? ', across all vintages (no price for this exact vintage).' : '.'}`
         : `Wine-Searcher's live market value${intel.priceScope === 'all-vintage' ? ', averaged across all vintages (no price for this exact vintage).' : ' for this wine.'}`;
     } else if (intel.valueSource === 'vinster' && intel.estimatedValue != null) {
-      body = "This value is Vinster's own estimate — there's no Wine-Searcher price for this exact wine.";
+      body = intel.valueConfidence === 'low'
+        ? "This is Vinster's own estimate and there's no reliable market data for this bottle — treat it as a broad guide only. Rare, allocated or cult wines can sell for many times a typical regional price, so the real figure may be much higher."
+        : "This value is Vinster's own estimate — there's no Wine-Searcher price for this exact wine.";
     } else {
       body = "There's no Wine-Searcher price for this wine.";
     }
@@ -1962,6 +1964,11 @@ export default function LabelResultsScreen() {
               Each stat is tappable (opens a "how Vinster worked it out" popup);
               static bars elsewhere omit this caption. */}
           <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out →</Text>
+          {/* Rare/no-market-data wines: flag that the value is a soft estimate so
+              a low figure isn't mistaken for a firm market price. */}
+          {intel.valueSource === 'vinster' && intel.valueConfidence === 'low' && intel.estimatedValue != null ? (
+            <Text style={styles.valueCaveat}>Estimated value only — no reliable market data for this bottle. Rare wines can trade well above this.</Text>
+          ) : null}
           <View style={styles.statBarRule} />
 
           {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
@@ -2030,22 +2037,17 @@ export default function LabelResultsScreen() {
           {/* The Inside Line — the "sommelier best friend" verdict: how this
               vintage actually fared and how this producer stacked up against its
               peers that year. Real in-the-know context, not a dictionary entry. */}
-          {intel.insiderNote?.trim() ? (
+          {(intel.insiderNote?.trim() || isIntelOnlyFlow) ? (
             <View style={styles.section}>
               <Text style={styles.insiderTitle}>The Inside Line</Text>
-              <Text style={styles.insiderBody}>{intel.insiderNote.trim()}</Text>
+              {/* Guarantee the line shows even for wines whose cached intel
+                  pre-dates the edge function's always-fill fallback. */}
+              <Text style={styles.insiderBody}>{intel.insiderNote?.trim() || "Congratulations, you've discovered a wine that even deep AI can't. Humans win, Cheers!"}</Text>
               {isIntelOnlyFlow ? (
                 <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7}>
                   <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
                 </TouchableOpacity>
               ) : null}
-            </View>
-          ) : isIntelOnlyFlow ? (
-            // No inside line for this wine — still offer the deep-dive link.
-            <View style={styles.section}>
-              <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7}>
-                <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
-              </TouchableOpacity>
             </View>
           ) : null}
 
@@ -2718,6 +2720,7 @@ const styles = StyleSheet.create({
   // Caption that marks the stat bar as tappable (Option A). Only on interactive
   // bars — static bars app-wide omit it, keeping the bar's format identical.
   statBarHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.gold, opacity: 0.85, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
+  valueCaveat: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.sm, lineHeight: 16 },
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
   vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },

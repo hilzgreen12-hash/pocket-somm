@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, ScrollView, ActivityIndicator, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { MicButton } from './MicButton';
+import { showAlert } from './AppAlert';
 import { useAuth } from '../hooks/useAuth';
 import { useCellar } from '../hooks/useCellar';
 import { fetchStorageLocations } from '../api/storageLocations';
@@ -22,6 +23,32 @@ type Phase = 'choose' | 'speak' | 'parsing' | 'pick' | 'confirm' | 'need' | 'suc
 function wineLabel(w: CellarWine | undefined): string {
   if (!w) return 'this wine';
   return [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' · ');
+}
+
+// Speech-to-text routinely mishears wine vocabulary ("seller" for "cellar",
+// etc.). Nudge the obvious ones back. Applied to the MIC's output only — manual
+// edits in the input field are left exactly as the user types them.
+function correctWineTerms(text: string): string {
+  const fixes: Array<[RegExp, string]> = [
+    [/\bsellers?\b/gi, 'cellar'],
+    [/\bsellars?\b/gi, 'cellar'],
+    [/\bcella\b/gi, 'cellar'],
+    [/\bwould store\b/gi, 'wood store'],
+    [/\bwood stall\b/gi, 'wood store'],
+    [/\bshably\b/gi, 'Chablis'],
+    [/\bbore doe\b/gi, 'Bordeaux'],
+    [/\bsee rah\b/gi, 'Syrah'],
+    [/\bgren(a|ai)sh\b/gi, 'Grenache'],
+    [/\bmag num\b/gi, 'magnum'],
+  ];
+  return fixes.reduce((s, [re, rep]) => s.replace(re, rep), text);
+}
+
+// True if the spoken command names a vintage (a 19xx/20xx year) or explicitly
+// flags a non-vintage bottle ("non-vintage" / "NV"). Move / archive / add all
+// require one so Vinster targets the right bottle.
+function mentionsVintage(text: string): boolean {
+  return /\b(19|20)\d{2}\b/.test(text) || /\bnon[-\s]?vintage\b/i.test(text) || /\bnv\b/i.test(text);
 }
 
 export function CellarCommandModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -77,12 +104,20 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     onClose();
   }
 
-  // A mood/recommendation is a free description of how the user feels, not a
-  // move/archive/add command. Only treat it as one when no command verb is
-  // present AND it reads like a mood or a request for a suggestion.
+  // Decide whether a spoken command is a free-form mood / recommendation vs a
+  // Move / Archive / Add instruction. Priority order matters so a verb that
+  // merely appears MID-sentence in a recommendation ("a wine to move the night
+  // along", "something to add warmth") doesn't hijack it:
+  //   1. An imperative that STARTS with move/archive/add is always a command.
+  //   2. Otherwise, strong recommendation phrasing → mood, even if a verb slips in.
+  //   3. Otherwise it's a command only if it names a verb at all; else → mood.
   function isMoodCommand(t: string): boolean {
-    if (/\b(move|archiv|add)\b/i.test(t)) return false;
-    return /\b(mood|recommend|suggest|what should i|feel like|i fancy|i want|in the mood|craving|fireside|open tonight|something (smooth|light|bold|rich|crisp|warming|cold|warm))\b/i.test(t);
+    const s = t.trim();
+    if (/^(please\s+|can you\s+|could you\s+|vinster,?\s+)*(move|archive|add)\b/i.test(s)) return false;
+    const moodSignal = /\b(mood|recommend(ation)?s?|suggest(ion)?s?|feel like|i fancy|i want|i'd like|i would like|i need|i'm after|in the mood|craving|treat myself|what should i|which wine|what (wine )?(should|would|do|can) i|help me (choose|pick|decide)|pair(ing)?( with)?|goes (well )?with|open tonight|for (dinner|tonight|a celebration|an occasion|the occasion)|celebrat|something (smooth|light|bold|rich|crisp|warming|cold|warm|fruity|elegant|special|celebratory|festive|easy|refreshing|full[- ]?bodied|delicate|spicy|sweet|savoury))\b/i.test(s);
+    if (moodSignal) return true;
+    const hasCommandVerb = /\bmove(s|d|ing)?\b/i.test(s) || /\barchiv/i.test(s) || /\badd(s|ed|ing)?\b/i.test(s);
+    return !hasCommandVerb;
   }
 
   async function runMoodRecommend() {
@@ -108,6 +143,15 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
     if (!transcript.trim()) return;
     // Mood / recommendation — a free description, handled by its own flow.
     if (isMoodCommand(transcript)) { runMoodRecommend(); return; }
+    // Move / archive / add must name a vintage so the right bottle is targeted —
+    // or the user can explicitly say the wine is non-vintage.
+    if (!mentionsVintage(transcript)) {
+      showAlert({
+        title: "Vinster didn't catch a vintage",
+        body: "Please repeat the command including the wine's vintage, or say 'non-vintage'.",
+      });
+      return;
+    }
     // Free-form command: infer the verb from the words rather than making the
     // user pick it up front. "add" (a new bottle) first, then archive, else move.
     const act: CellarCommandAction = /\badd(s|ed|ing)?\b/i.test(transcript)
@@ -313,21 +357,30 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
           {phase === 'speak' && (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.voiceHeader}>Voice Command</Text>
-              <Text style={styles.introText}>Vinster has been trained in four voice commands: Move wines between storage locations, archive bottles or add them to your cellar list for you to place into a specific location later, or ask Vinster to recommend wines to drink based on your mood and occasion.</Text>
+              <Text style={styles.introText}>Vinster has been trained in four voice commands: Move wines between storage locations, Archive bottles or Add them to your cellar list for you to place into a specific location later, or ask Vinster to recommend wines to drink based on your mood and occasion.</Text>
 
               <View style={styles.modalDivider} />
 
               <Text style={styles.title}>Tap the mic and speak</Text>
               <View style={styles.micRow}>
-                <MicButton value={transcript} onChangeText={setTranscript} onClear={() => setTranscript('')} />
+                {/* Mic output runs through the wine-term corrector; manual edits below don't. */}
+                <MicButton value={transcript} onChangeText={(t) => setTranscript(correctWineTerms(t))} onClear={() => setTranscript('')} />
               </View>
-              <View style={styles.inputField}>
-                <Text style={[styles.inputText, !transcript && styles.inputPlaceholder]}>{transcript || 'Tap the mic and speak…'}</Text>
-              </View>
+              {/* Editable so the user can fix any mis-hearing before confirming. */}
+              <TextInput
+                style={[styles.inputField, styles.inputText]}
+                value={transcript}
+                onChangeText={setTranscript}
+                placeholder="Tap the mic and speak, or type your command…"
+                placeholderTextColor={colors.textSubtle}
+                multiline
+              />
+              <Text style={styles.editHint}>Tip: you can edit the text above before confirming.</Text>
 
               <View style={styles.suggestions}>
                 <Text style={styles.suggestion}>“Move my Lafite 1982 from my wine fridge to my small wine rack”</Text>
                 <Text style={styles.suggestion}>“Archive 3 bottles of Harlan 1990”</Text>
+                <Text style={styles.suggestion}>“Add a bottle of Sassicaia 2007 to my cellar”</Text>
                 <Text style={styles.suggestion}>“It's cold and raining, I want a smooth red wine for the fireside.”</Text>
               </View>
 
@@ -423,9 +476,10 @@ const styles = StyleSheet.create({
   modalDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   micRow: { alignItems: 'center', marginBottom: spacing.md },
   // Transcript box — darker terracotta, matching the voice-note inputs in Reviews.
-  inputField: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md, minHeight: 64, justifyContent: 'center', marginBottom: spacing.md },
+  inputField: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.md, paddingHorizontal: spacing.md, minHeight: 64, marginBottom: spacing.xs },
   inputText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
   inputPlaceholder: { color: colors.textSubtle },
+  editHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textSubtle, textAlign: 'center', marginBottom: spacing.md },
   // Suggested commands — white italic, quoted.
   suggestions: { gap: spacing.sm, marginBottom: spacing.lg },
   suggestion: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 20 },

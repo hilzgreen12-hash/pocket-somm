@@ -1884,22 +1884,17 @@ export default function CellarWineDetail() {
 
         {/* The Inside Line — Vinster's sommelier-best-friend verdict, shown just
             as on the scan Wine Intel card. Filled once the wine's intel runs. */}
-        {wine.insider_note?.trim() ? (
+        {(wine.insider_note?.trim() || !isArchived) ? (
           <View style={styles.insiderSection}>
             <Text style={styles.insiderTitle}>The Inside Line</Text>
-            <Text style={styles.insiderBody}>{wine.insider_note.trim()}</Text>
+            {/* Always show the line — fall back for wines whose cached intel
+                pre-dates the edge function's always-fill guarantee. */}
+            <Text style={styles.insiderBody}>{wine.insider_note?.trim() || "Congratulations, you've discovered a wine that even deep AI can't. Humans win, Cheers!"}</Text>
             {!isArchived ? (
               <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
                 <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
               </TouchableOpacity>
             ) : null}
-          </View>
-        ) : !isArchived ? (
-          // No inside line yet — still offer the deep-dive link, matching the intel card.
-          <View style={styles.insiderSection}>
-            <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
-              <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
-            </TouchableOpacity>
           </View>
         ) : null}
 

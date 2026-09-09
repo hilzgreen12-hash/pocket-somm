@@ -182,6 +182,9 @@ export async function generateWineIntel(
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
     grapeVariety: intel.grapeVariety ?? pricing.grape ?? null,
     valueSource: useWs ? 'wine-searcher' : 'vinster',
+    // Real Wine-Searcher market data is high-confidence; otherwise carry Claude's
+    // own confidence so the card can flag a shaky (rare/no-market-data) estimate.
+    valueConfidence: useWs ? 'high' : (intel.valueConfidence ?? null),
     // Verified = Wine-Searcher found a real record. When false, the score/value
     // are Vinster estimates (labelled as such) and disambiguation is offered.
     verified: wsMatched,

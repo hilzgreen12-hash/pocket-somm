@@ -290,7 +290,7 @@ export default function StorageLocationScreen() {
       body: `${label} was moved here and is awaiting placement. File it into a case, or leave it loose in ${location?.name ?? 'this cellar'}.`,
       buttons: [
         ...cases.map((c) => ({ text: `Into ${c.name}`, onPress: () => void placeAwaiting(w, c.id) })),
-        { text: 'Leave loose (ignore)', onPress: () => void placeAwaiting(w, null) },
+        { text: 'Leave loose', onPress: () => void placeAwaiting(w, null) },
         { text: 'Cancel', style: 'cancel' as const },
       ],
     });
@@ -889,38 +889,31 @@ export default function StorageLocationScreen() {
         {/* Bottles moved here (e.g. by Voice Command) that haven't been filed —
             shown in yellow at the top; long-press to place them or leave loose. */}
         {awaitingBottles > 0 ? (
-          <>
+          <View style={styles.awaitingBlock}>
             <Text style={styles.awaitingBanner}>{awaitingBottles} {awaitingBottles === 1 ? 'Bottle' : 'Bottles'} moved here — awaiting placement</Text>
             {awaitingWines.map((w) => (
-              <TouchableOpacity key={w.id} style={styles.awaitingRow} onLongPress={() => openPlaceAwaiting(w)} onPress={() => openPlaceAwaiting(w)} delayLongPress={400} activeOpacity={0.7}>
+              <TouchableOpacity key={w.id} style={styles.awaitingRow} onPress={() => openPlaceAwaiting(w)} activeOpacity={0.7}>
                 <Text style={styles.awaitingWine} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name}</Text>
-                <Text style={styles.awaitingHint}>Long-press to place, or leave loose →</Text>
+                <Text style={styles.awaitingHint}>View storage options to place →</Text>
               </TouchableOpacity>
             ))}
-          </>
+          </View>
         ) : null}
 
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
-            style={[styles.filterChip, (listView !== 'bottles' || caseFilter) && styles.filterChipActive]}
+            style={[styles.filterChip, (listView !== 'bottles' || caseFilter || packaging === 'loose') && styles.filterChipActive]}
             onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, (listView !== 'bottles' || caseFilter) && styles.filterChipTextActive]}>
-              {caseFilter ? (cases.find((c) => c.id === caseFilter)?.name ?? 'Case') : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List')} {listOpen ? '▴' : '▾'}
+            <Text style={[styles.filterChipText, (listView !== 'bottles' || caseFilter || packaging === 'loose') && styles.filterChipTextActive]}>
+              {caseFilter ? `(${cases.find((c) => c.id === caseFilter)?.name ?? 'Case'})` : packaging === 'loose' ? 'Loose Bottles' : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List')} {listOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.filterChip, packaging ? styles.filterChipActive : null]}
-            onPress={() => { setPackagingOpen((v) => !v); setMaturityOpen(false); setListOpen(false); }}
-            activeOpacity={0.7}
-          >
-            <Text style={[styles.filterChipText, packaging ? styles.filterChipTextActive : null]}>
-              {packaging ? (PACKAGING_OPTIONS.find((o) => o.value === packaging)?.label ?? 'Packed As') : 'Packed As'} {packagingOpen ? '▴' : '▾'}
-            </Text>
-          </TouchableOpacity>
+          {/* "Packed As" filter removed — Loose Bottles now lives in the List
+              dropdown, and each case shows its kind (OWC / Mixed / Non-OWC). */}
           <TouchableOpacity
             style={[styles.filterChip, maturity ? styles.filterChipActive : null]}
             onPress={() => { setMaturityOpen((v) => !v); setPackagingOpen(false); setListOpen(false); }}
@@ -945,35 +938,32 @@ export default function StorageLocationScreen() {
 
         {listOpen ? (
           <View style={styles.maturityDropdown}>
-            {LIST_VIEW_OPTIONS.map((o) => {
-              const active = listView === o.value && !caseFilter;
+            {/* Loose bottles — un-cased wines, the first quick filter (replaces
+                the removed "Packed As" chip). */}
+            {(() => {
+              const active = packaging === 'loose';
               return (
-                <TouchableOpacity key={o.value} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setListView(o.value); setCaseFilter(''); setListOpen(false); }} activeOpacity={0.7}>
+                <TouchableOpacity style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setPackaging('loose'); setCaseFilter(''); setListView('bottles'); setListOpen(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>Loose Bottles</Text>
+                </TouchableOpacity>
+              );
+            })()}
+            {LIST_VIEW_OPTIONS.map((o) => {
+              const active = listView === o.value && !caseFilter && packaging !== 'loose';
+              return (
+                <TouchableOpacity key={o.value} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setListView(o.value); setCaseFilter(''); setPackaging(''); setListOpen(false); }} activeOpacity={0.7}>
                   <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
                 </TouchableOpacity>
               );
             })}
-            {/* Individual case names — picking one narrows the flat list to that
-                case's bottles. */}
+            {/* Individual cases — name in parentheses, then the packaging kind
+                (OWC / Mixed / Non-OWC Case). Picking one narrows to its bottles. */}
             {cases.length > 0 ? <View style={styles.dropdownDivider} /> : null}
             {cases.map((c) => {
               const active = caseFilter === c.id;
               return (
-                <TouchableOpacity key={c.id} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCaseFilter(c.id); setListView('bottles'); setListOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>{c.name}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : null}
-
-        {packagingOpen ? (
-          <View style={styles.maturityDropdown}>
-            {PACKAGING_OPTIONS.map((o) => {
-              const active = packaging === o.value;
-              return (
-                <TouchableOpacity key={o.value || 'all'} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setPackaging(o.value); setPackagingOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
+                <TouchableOpacity key={c.id} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCaseFilter(c.id); setListView('bottles'); setPackaging(''); setListOpen(false); }} activeOpacity={0.7}>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>({c.name}) {caseKindLabel(c.kind)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -1277,6 +1267,8 @@ const styles = StyleSheet.create({
   // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
   statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, marginBottom: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
   // "Awaiting placement" banner + yellow rows (moved-here, not yet filed).
+  // Sits above the filter carousel with a clear gap below it.
+  awaitingBlock: { marginBottom: spacing.lg },
   awaitingBanner: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textAlign: 'center', paddingTop: spacing.sm, paddingHorizontal: spacing.xl },
   awaitingRow: { marginHorizontal: spacing.xl, marginTop: spacing.sm, padding: spacing.md, borderRadius: 10, borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(212,176,96,0.12)' },
   awaitingWine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },

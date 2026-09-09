@@ -28,6 +28,15 @@ const TEMPLATES: { type: string; name: string; kind: 'rack' | 'fridge' | 'bin' |
   { type: 'Alt Cellar', name: 'Alt Cellar', kind: 'location' },
 ];
 
+// Shown after deleting a location but KEEPING its bottles (the plain "Delete X",
+// not "& Contents"): the wines stay in the full cellar list, just unplaced.
+function contentsKeptNotice() {
+  showAlert({
+    title: 'Location deleted',
+    body: 'The contents of this location remain in your full cellar list, but are now unplaced in home storage.',
+  });
+}
+
 // "Your Wines At Home" — the home-storage section embedded in the Cellar tab
 // (replaces the standalone Home Wine Storage page). One unified carousel across
 // racks, fridges, bins and Alt Cellars; when empty it shows setup templates.
@@ -106,7 +115,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     showAlert({
       title: rack.name,
       buttons: [
-        { text: `Delete ${noun}`, style: 'destructive', onPress: () => { removeRack.mutate(rack.id, { onError }); } },
+        { text: `Delete ${noun}`, style: 'destructive', onPress: () => { removeRack.mutate(rack.id, { onError, onSuccess: contentsKeptNotice }); } },
         {
           text: `Delete ${noun} & Contents`,
           style: 'destructive',
@@ -134,7 +143,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     showAlert({
       title: bin.name,
       buttons: [
-        { text: 'Delete Bin', style: 'destructive', onPress: async () => { try { await deleteBin(bin.id); invalidate(); } catch (err) { onError(err); } } },
+        { text: 'Delete Bin', style: 'destructive', onPress: async () => { try { await deleteBin(bin.id); invalidate(); contentsKeptNotice(); } catch (err) { onError(err); } } },
         {
           text: 'Delete Bin & Contents',
           style: 'destructive',
@@ -161,7 +170,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     showAlert({
       title: loc.name,
       buttons: [
-        { text: 'Delete Alt Cellar', style: 'destructive', onPress: async () => { try { await deleteStorageLocation(loc.id); invalidate(); } catch (err) { onError(err); } } },
+        { text: 'Delete Alt Cellar', style: 'destructive', onPress: async () => { try { await deleteStorageLocation(loc.id); invalidate(); contentsKeptNotice(); } catch (err) { onError(err); } } },
         {
           text: 'Delete Alt Cellar & Contents',
           style: 'destructive',
