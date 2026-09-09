@@ -1963,7 +1963,7 @@ export default function LabelResultsScreen() {
           {/* Affordance INSIDE the bar — below the stats, above the lower rule.
               Each stat is tappable (opens a "how Vinster worked it out" popup);
               static bars elsewhere omit this caption. */}
-          <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out →</Text>
+          <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out</Text>
           {/* Rare/no-market-data wines: flag that the value is a soft estimate so
               a low figure isn't mistaken for a firm market price. */}
           {intel.valueSource === 'vinster' && intel.valueConfidence === 'low' && intel.estimatedValue != null ? (
@@ -2722,7 +2722,7 @@ const styles = StyleSheet.create({
   statBarHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.gold, opacity: 0.85, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },
   valueCaveat: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.sm, lineHeight: 16 },
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
-  vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
+  vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
   vintageLoading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingTop: spacing.md },
   vintageLoadingText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted },

@@ -207,7 +207,6 @@ export default function BinDetailScreen() {
             ],
           }),
         },
-        { text: 'Edit', onPress: () => router.push(`/cellar/bin/cell/${c.id}` as any) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
@@ -415,7 +414,7 @@ export default function BinDetailScreen() {
               filters and the diamond grid below scroll. */}
           <Text style={styles.statsLine1}>{diamonds} {diamonds === 1 ? 'Diamond' : 'Diamonds'} · {halfDiamonds} Half {halfDiamonds === 1 ? 'Diamond' : 'Diamonds'}</Text>
           <Text style={styles.statsLine2}>{entries.length} {entries.length === 1 ? 'Wine' : 'Wines'} · {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalCapacity} Slots</Text>
-          <Text style={styles.hint}>Short tap an area to add wine or view contents. Long hold to Empty or Edit.</Text>
+          <Text style={styles.hint}>Short tap an area to add wine or view / edit contents. Long hold to empty.</Text>
           {/* Bottles moved into this bin (e.g. by Voice Command) with no cell
               yet — yellow at the top; long-press then tap a diamond to file. */}
           {awaitingBottles > 0 && !movingWine ? (

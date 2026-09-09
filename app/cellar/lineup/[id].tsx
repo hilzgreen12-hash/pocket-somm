@@ -778,7 +778,7 @@ export default function LineupDetailScreen() {
 
             {/* No match — dismisses the prompt for this lineup and closes. */}
             <TouchableOpacity onPress={dismissNoMatch} disabled={savingMatch} activeOpacity={0.7} style={styles.noMatchRow}>
-              <Text style={styles.noMatchText}>This lineup does not match to a restaurant review</Text>
+              <Text style={styles.noMatchText} numberOfLines={1}>Don't Match This Wine to a Review</Text>
             </TouchableOpacity>
 
             <View style={styles.pickerDivider} />
@@ -980,7 +980,7 @@ const styles = StyleSheet.create({
   // Restaurant-match picker: white X, a "no match" dismiss link, then a divider.
   pickerCloseX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 2, padding: 4 },
   noMatchRow: { paddingTop: spacing.md, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg, alignItems: 'center' },
-  noMatchText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', textDecorationLine: 'underline' },
+  noMatchText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', textDecorationLine: 'underline' },
   pickerDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   noteText: { paddingHorizontal: spacing.xl, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
   addNoteLink: { paddingHorizontal: spacing.xl, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },

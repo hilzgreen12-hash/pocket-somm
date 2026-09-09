@@ -142,6 +142,7 @@ export default function LabelConfirmScreen() {
   // Bin placement details are collected in a popup AFTER the wine is confirmed:
   // bottles + format + purchase price.
   const [binPrice, setBinPrice] = useState('');
+  const [binPriceEstimating, setBinPriceEstimating] = useState(false);
   const [binPopupOpen, setBinPopupOpen] = useState(false);
   const [binConfirmed, setBinConfirmed] = useState<WineDetailsComplete | null>(null);
 
@@ -293,6 +294,19 @@ export default function LabelConfirmScreen() {
     if (isPlaceBin) {
       setBinConfirmed(confirmed);
       setBinPopupOpen(true);
+      // Pre-fill the purchase price with Vinster's estimate (labelled as an
+      // estimate in the popup). Non-blocking — the popup opens straight away and
+      // the field fills in a moment later; the user can overwrite it.
+      if (!binPrice.trim()) {
+        setBinPriceEstimating(true);
+        void (async () => {
+          try {
+            const intel = await generateWineIntel(confirmed, preferences?.defaultCurrency ?? 'GBP');
+            if (intel.estimatedValue != null) setBinPrice((prev) => prev.trim() || String(Math.round(intel.estimatedValue!)));
+          } catch { /* leave the field blank on failure */ }
+          finally { setBinPriceEstimating(false); }
+        })();
+      }
       return;
     }
 
@@ -874,13 +888,13 @@ export default function LabelConfirmScreen() {
             <Text style={[styles.label, styles.binFieldLabel]}>Format</Text>
             <BottleSizePicker value={binFormat} onChange={setBinFormat} />
             <View style={{ height: spacing.md }} />
-            <Text style={[styles.label, styles.binFieldLabel]}>Purchase price per bottle (optional)</Text>
+            <Text style={[styles.label, styles.binFieldLabel]}>Estimated Purchase Price / Bottle — {currencySymbol(preferences?.defaultCurrency ?? 'GBP')} (Vinster's estimate; edit if you know it)</Text>
             <TextInput
               style={styles.binQtyInput}
               value={binPrice}
               onChangeText={(t) => setBinPrice(t.replace(/[^0-9.]/g, '').slice(0, 10))}
               keyboardType="decimal-pad"
-              placeholder={`e.g. ${currencySymbol(preferences?.defaultCurrency ?? 'GBP')}45`}
+              placeholder={binPriceEstimating ? 'Estimating…' : `e.g. ${currencySymbol(preferences?.defaultCurrency ?? 'GBP')}45`}
               placeholderTextColor={colors.textMuted}
             />
 

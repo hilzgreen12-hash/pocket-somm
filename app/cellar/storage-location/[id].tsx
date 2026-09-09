@@ -860,13 +860,8 @@ export default function StorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        {/* Layout: header (+ its separator), the "+ Add Wine" stats bar, the
-            (landscape) photo (no line above it), then the counts stats bar,
-            then filters/search/list. */}
-        <TouchableOpacity onPress={openAddWine} style={styles.addWineRow} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
-          <Text style={styles.addWineText}>+ Add Wine</Text>
-        </TouchableOpacity>
-
+        {/* Layout: header (+ its separator), the (landscape) photo, then the
+            counts stats bar with a "+ Add Wine" link inside it, then filters. */}
         {photoUrl ? (
           <View style={styles.photoWrap}>
             <Image source={{ uri: photoUrl }} style={styles.areaPhoto} resizeMode="cover" />
@@ -882,9 +877,14 @@ export default function StorageLocationScreen() {
           </TouchableOpacity>
         )}
 
-        <Text style={styles.statsBar}>
-          {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'}
-        </Text>
+        <View style={styles.statsBar}>
+          <Text style={styles.statsBarText}>
+            {caseCount} {caseCount === 1 ? 'Case' : 'Cases'} · {looseBottles} Loose {looseBottles === 1 ? 'Bottle' : 'Bottles'}
+          </Text>
+          <TouchableOpacity onPress={openAddWine} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+            <Text style={styles.addWineText}>+ Add Wine</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Bottles moved here (e.g. by Voice Command) that haven't been filed —
             shown in yellow at the top; long-press to place them or leave loose. */}
@@ -909,7 +909,7 @@ export default function StorageLocationScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.filterChipText, (listView !== 'bottles' || caseFilter || packaging === 'loose') && styles.filterChipTextActive]}>
-              {caseFilter ? `(${cases.find((c) => c.id === caseFilter)?.name ?? 'Case'})` : packaging === 'loose' ? 'Loose Bottles' : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List')} {listOpen ? '▴' : '▾'}
+              {caseFilter ? `'${cases.find((c) => c.id === caseFilter)?.name ?? 'Case'}'` : packaging === 'loose' ? 'Loose Bottles' : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List')} {listOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
           {/* "Packed As" filter removed — Loose Bottles now lives in the List
@@ -963,7 +963,7 @@ export default function StorageLocationScreen() {
               const active = caseFilter === c.id;
               return (
                 <TouchableOpacity key={c.id} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCaseFilter(c.id); setListView('bottles'); setPackaging(''); setListOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>({c.name}) {caseKindLabel(c.kind)}</Text>
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>'{c.name}' {caseKindLabel(c.kind)}</Text>
                 </TouchableOpacity>
               );
             })}
@@ -1265,7 +1265,9 @@ const styles = StyleSheet.create({
   photoAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   sectionLine: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginTop: spacing.xs },
   // Stats bar — full-width yellow (gold) rules top and bottom, beneath the photo.
-  statsBar: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center', paddingVertical: spacing.sm, marginBottom: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
+  // Counts + a "+ Add Wine" link stacked inside one bordered bar.
+  statsBar: { paddingVertical: spacing.sm, marginBottom: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
+  statsBarText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6, textAlign: 'center' },
   // "Awaiting placement" banner + yellow rows (moved-here, not yet filed).
   // Sits above the filter carousel with a clear gap below it.
   awaitingBlock: { marginBottom: spacing.lg },
