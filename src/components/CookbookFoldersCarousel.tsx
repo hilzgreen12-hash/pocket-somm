@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   cookbookTitle: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
   blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   viewLinkRow: { alignItems: 'center', paddingTop: spacing.xs, paddingBottom: spacing.xs },
-  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  viewLink: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold, letterSpacing: 0.3 },
   // Stats bar — green outline + light-green fill (matches the "upload instead"
   // banner on the Scan tab), distinct from the terracotta separator lines.
   // Stats BAR — full-width, green rule top and bottom running edge to edge.

@@ -29,7 +29,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { assignSlots, getRackSlots, getSlotAssignments, clearWineFromRacks } from '../../src/api/racks';
 import { fetchPricing, generateWineIntel, fetchVintageComparison, type VintageComparisonRow } from '../../src/services/pricing';
 import { peekIntelCurrency } from '../../src/utils/localCurrency';
-import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange } from '../../src/api/label';
+import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { formatWineTitle } from '../../src/utils/wineTitle';
@@ -157,6 +157,27 @@ export default function LabelResultsScreen() {
   const [producerRange, setProducerRange] = useState<ProducerRange | null>(null);
   const [producerRangeLoading, setProducerRangeLoading] = useState(false);
   const producerRangeTriedRef = useRef(false);
+  // Deduped range: the model sometimes lists the same wine twice — once bare and
+  // once with the château in parentheses (e.g. "Saint-Émilion Grand Cru" AND
+  // "Saint-Émilion Grand Cru (Château Laforge)"). Collapse by a normalised key,
+  // keeping the current wine (isThis) or the shorter, cleaner name.
+  const rangeWines = useMemo<ProducerRangeWine[]>(() => {
+    const wines = producerRange?.wines ?? [];
+    const norm = (s: string) => (s ?? '')
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/[^a-z0-9]+/g, ' ').trim();
+    const byKey = new Map<string, ProducerRangeWine>();
+    for (const w of wines) {
+      const k = norm(w.wineName);
+      if (!k) continue;
+      const prev = byKey.get(k);
+      if (!prev) { byKey.set(k, w); continue; }
+      const keep = w.isThis ? w : prev.isThis ? prev : (w.wineName.length < prev.wineName.length ? w : prev);
+      byKey.set(k, { ...keep, isThis: keep.isThis || w.isThis || prev.isThis });
+    }
+    return Array.from(byKey.values());
+  }, [producerRange]);
   // The range wine the user tapped for its "inside line" note.
   const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
@@ -2022,16 +2043,17 @@ export default function LabelResultsScreen() {
 
           {/* Where this wine sits in the producer's range — the context most
               wine apps don't offer. Wine Intel card only (needs a live lookup). */}
-          {isIntelOnlyFlow && (producerRangeLoading || (producerRange && producerRange.wines.length > 0)) ? (
+          {isIntelOnlyFlow && (producerRangeLoading || rangeWines.length > 0) ? (
             <View style={styles.section}>
               <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
-              {producerRange && producerRange.wines.length > 0 ? (
+              {rangeWines.some((rw) => !rw.isThis) ? (
                 <Text style={styles.rangeHint}>Tap a wine for its inside line</Text>
               ) : null}
               {producerRange ? (
                 <>
-                  {producerRange.wines.map((rw, i) => (
-                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={0.7}>
+                  {rangeWines.map((rw, i) => (
+                    // The current wine isn't tappable — you're already on its intel card.
+                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={rw.isThis ? 1 : 0.7} disabled={rw.isThis}>
                       <View style={styles.rangeRowMain}>
                         <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
                         <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
@@ -2707,7 +2729,7 @@ const styles = StyleSheet.create({
   // Producer range ladder — entry → flagship, this wine highlighted. Header gold
   // to match The Inside Line above it.
   rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  rangeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
+  rangeHint: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
   rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },

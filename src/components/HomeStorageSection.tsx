@@ -276,7 +276,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
 
 const styles = StyleSheet.create({
   // Matches "Vinster's Review of You" on the Review tab.
-  sectionHeader: { fontFamily: fontsSpectral.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sectionHeader: { fontFamily: fontsSpectral.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Elegant Cormorant, matching the Cellar header/blurb above.
   intro: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // Stats bar — green outline + light-green fill (matches the "upload instead"

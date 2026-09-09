@@ -113,7 +113,7 @@ const styles = StyleSheet.create({
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   // "Vinster's Review of You" section header + the "Your Personality Sketch"
   // sub-heading with its "what's this?" link.
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Elegant Cormorant, matching the Review header blurb above. Extra bottom
   // margin gives the alter-ego carousel room to breathe beneath it.
   sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },

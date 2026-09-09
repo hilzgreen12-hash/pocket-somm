@@ -142,7 +142,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // "Your Cookbook" header — matches Cellar / Review section headers.
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Section question prompts ("Chosen your bottle?", "Have a recipe & need
   // a wine?") — Cormorant.

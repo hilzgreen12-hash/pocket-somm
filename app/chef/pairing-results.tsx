@@ -7,6 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { SearchProgress } from '../../src/components/SearchProgress';
+import { PairMasthead } from '../../src/components/PairMasthead';
 import { useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample } from '../../src/stores/foodPairingStore';
@@ -316,16 +317,19 @@ export default function PairingResultsScreen() {
           </View>
         )}
 
-        <View style={styles.header}>
-          <Text style={styles.headerLine}>Your Wine Pairing Brief</Text>
-          <Text style={styles.briefMode}>{mode === 'cellar' ? 'Select from Cellar' : 'Select from Market'}</Text>
-          <Text style={styles.dish}>{titleCase(dish)}</Text>
-          {mode === 'general' && wines.length > 0 && (
+        <PairMasthead
+          eyebrow="Wine Pairings"
+          sub="Paired by Vinster"
+          title={titleCase(dish)}
+          meta={mode === 'cellar' ? 'Select from Cellar' : 'Select from Market'}
+        />
+        {mode === 'general' && wines.length > 0 && (
+          <View style={styles.cellarPromptWrap}>
             <TouchableOpacity onPress={handleShowCellarOptions} activeOpacity={0.7}>
               <Text style={styles.cellarPromptLink}>Show me all of the wines from my cellar that could work</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          </View>
+        )}
 
         <View style={styles.section}>
           {mode === 'general' && <Text style={styles.sectionTitle}>Style Recommendations</Text>}
@@ -436,16 +440,7 @@ const styles = StyleSheet.create({
   stampLocation: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center' },
   // Page title — matches "Pairing to a Wine" on the sibling results page.
   pageTitle: { fontSize: 26, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, paddingTop: spacing.xs, marginBottom: spacing.md },
-  header: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md, alignItems: 'center' },
-  headerLine: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase' },
-  // "Select from Cellar" / "Select from Market" — the source line of the brief,
-  // sits between "Your Brief" and the dish.
-  briefMode: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs, textAlign: 'center' },
-  // The dish text is the user's free-form brief — promote it from a
-  // 15pt subline to the visual headline of the page (was previously
-  // dominated by "Your Pairing" at 20pt bold). Now reads as a proper
-  // headline so the user can quickly see what they asked for.
-  dish: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, marginTop: spacing.xs, lineHeight: 28, textAlign: 'center' },
+  cellarPromptWrap: { paddingHorizontal: spacing.xl, alignItems: 'center' },
   cellarPromptLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textDecorationLine: 'underline', marginTop: spacing.md, textAlign: 'center' },
   successTick: { fontFamily: fonts.headingBold, fontSize: 56, color: colors.gold, textAlign: 'center', marginBottom: spacing.sm },
   successCount: { fontFamily: fonts.headingBold, fontSize: 18, color: colors.gold, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.sm },

@@ -13,6 +13,7 @@ import { buildRecipeHtml } from '../../src/utils/recipeHtml';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { RecipeShareCard, RECIPE_SHARE_QR_URL } from '../../src/components/RecipeShareCard';
+import { PairMasthead } from '../../src/components/PairMasthead';
 import { generatePairings } from '../../src/api/label';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -493,11 +494,13 @@ export default function ChefResultsScreen() {
           Hidden for cookbook entries (the saved-recipe card carries its own
           recipe-name-first layout with the wine as subhead). */}
       {!isFromHistory && (
-        <View style={styles.freshHeader}>
-          <Text style={styles.briefLabel}>Your Recipe Brief</Text>
-          <Text style={styles.freshWineLine}>{headerLine}{wine.region ? `, ${regionWithCountry(wine.region)}` : ''}</Text>
-          {briefSummary ? <Text style={styles.briefSummary}>{briefSummary}</Text> : null}
-        </View>
+        <PairMasthead
+          eyebrow="Recipe Pairings"
+          sub="from Vinster's Kitchen"
+          title={headerLine}
+          meta={wine.region ? regionWithCountry(wine.region) : null}
+          note={briefSummary || null}
+        />
       )}
 
       <View style={styles.section}>
@@ -666,13 +669,6 @@ const styles = StyleSheet.create({
   header: { padding: spacing.xl, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   headerLine: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.5 },
   region: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: spacing.xs },
-  // Fresh-result header — wine line centred in gold beneath the date, with
-  // a "Brief Summary" of the requested requirements below it.
-  freshHeader: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, paddingBottom: spacing.md, alignItems: 'center' },
-  // "Your Brief" label — matches the sibling page's headerLine.
-  briefLabel: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.textMuted, letterSpacing: 1, textTransform: 'uppercase', marginBottom: spacing.xs },
-  freshWineLine: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, lineHeight: 28 },
-  briefSummary: { fontSize: 13, fontFamily: fonts.bodyRegular, color: 'rgba(255,255,255,0.9)', textAlign: 'center', lineHeight: 19, marginTop: spacing.sm },
   section: { padding: spacing.xl },
   sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },

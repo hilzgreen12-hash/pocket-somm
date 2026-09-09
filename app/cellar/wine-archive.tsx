@@ -88,8 +88,6 @@ export default function WineArchiveScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.sepShort} />
-
         {/* Archive a Night Lineups — a sub-header (not a bubble), its blurb, the
             stats bar bracketed by full-width rules, then the thumbnail carousel
             with a swipe hint above it. */}
@@ -133,7 +131,7 @@ const styles = StyleSheet.create({
   // Matches the "Your Wines At Home" intro on the Cellar tab (Spectral, 17).
   blurb: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
   // Stats bar — green outline + light-green fill bubble (matches the other pages).
   // Stats BAR — full-width, green rule top and bottom running edge to edge.
   stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },

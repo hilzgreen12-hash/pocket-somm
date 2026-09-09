@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useMemo } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
@@ -25,7 +25,7 @@ import { useRacks } from '../../src/hooks/useRacks';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useRackStore } from '../../src/stores/rackStore';
-import { generatePairings, fetchProducerRange, type ProducerRange } from '../../src/api/label';
+import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
@@ -357,6 +357,25 @@ export default function CellarWineDetail() {
   const [producerRangeLoading, setProducerRangeLoading] = useState(false);
   const producerRangeTriedRef = useRef<string | null>(null);
   const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
+  // Deduped range — same as the scan Wine Intel card: collapse the same wine
+  // listed twice (bare vs. with the château in parentheses) by a normalised key.
+  const rangeWines = useMemo<ProducerRangeWine[]>(() => {
+    const wines = producerRange?.wines ?? [];
+    const norm = (s: string) => (s ?? '')
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\([^)]*\)/g, ' ')
+      .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const byKey = new Map<string, ProducerRangeWine>();
+    for (const w of wines) {
+      const k = norm(w.wineName);
+      if (!k) continue;
+      const prev = byKey.get(k);
+      if (!prev) { byKey.set(k, w); continue; }
+      const keep = w.isThis ? w : prev.isThis ? prev : (w.wineName.length < prev.wineName.length ? w : prev);
+      byKey.set(k, { ...keep, isThis: keep.isThis || w.isThis || prev.isThis });
+    }
+    return Array.from(byKey.values());
+  }, [producerRange]);
   useEffect(() => {
     if (!wine || isWishlist || isArchived) return;
     const hasIntel = wine.critic_score != null || wine.estimated_value != null;
@@ -1865,20 +1884,33 @@ export default function CellarWineDetail() {
           <View style={styles.insiderSection}>
             <Text style={styles.insiderTitle}>The Inside Line</Text>
             <Text style={styles.insiderBody}>{wine.insider_note.trim()}</Text>
+            {!isArchived ? (
+              <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
+                <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : !isArchived ? (
+          // No inside line yet — still offer the deep-dive link, matching the intel card.
+          <View style={styles.insiderSection}>
+            <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
+              <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
 
         {/* Where this wine sits in the producer's range — as on the intel card. */}
-        {producerRangeLoading || (producerRange && producerRange.wines.length > 0) ? (
+        {producerRangeLoading || rangeWines.length > 0 ? (
           <View style={styles.rangeSection}>
             <Text style={styles.rangeTitle}>The {wine.producer} range</Text>
-            {producerRange && producerRange.wines.length > 0 ? (
+            {rangeWines.some((rw) => !rw.isThis) ? (
               <Text style={styles.rangeHint}>Tap a wine for its inside line</Text>
             ) : null}
             {producerRange ? (
               <>
-                {producerRange.wines.map((rw, i) => (
-                  <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={0.7}>
+                {rangeWines.map((rw, i) => (
+                  // The current wine isn't tappable — you're already on its card.
+                  <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={rw.isThis ? 1 : 0.7} disabled={rw.isThis}>
                     <View style={styles.rangeRowMain}>
                       <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
                       <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
@@ -1954,17 +1986,6 @@ export default function CellarWineDetail() {
             <Text style={styles.chefBtnText}>Find me a recipe for this wine</Text>
           </TouchableOpacity>
         )
-      )}
-
-      {/* Dive Deeper — opens the Vinster "Wine Knowledge" page (producer /
-          region / vintage / grape profiles). Available for wishlist wines too. */}
-      {!isArchived && (
-        <TouchableOpacity
-          style={[styles.chefBtn, { marginTop: spacing.md }]}
-          onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)}
-        >
-          <Text style={styles.chefBtnText}>Dive Deeper into this wine</Text>
-        </TouchableOpacity>
       )}
 
       {/* Regenerate the wine card's intel from scratch — refreshes value, score,
@@ -2342,11 +2363,14 @@ const styles = StyleSheet.create({
   reviewSubsection: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
   // The Inside Line + producer range — mirrored from the scan Wine Intel card.
   insiderSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
+  // "Dive deeper into this wine →" link beneath the inside line — matches the
+  // scan Wine Intel card (moved here from a button at the bottom of the screen).
+  diveDeeperLink: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
   insiderTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
   insiderBody: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 23 },
   rangeSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg },
   rangeTitle: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.sm },
-  rangeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
+  rangeHint: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginBottom: spacing.sm },
   rangeLoading: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm },
   rangeLoadingText: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted },
   rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.md },
