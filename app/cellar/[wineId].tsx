@@ -1862,7 +1862,7 @@ export default function CellarWineDetail() {
                 </Text>
               </>
             ) : refreshingValue ? (
-              <Text style={[styles.tastingNotes, { fontStyle: 'italic' }]}>Generating Vinster's review…</Text>
+              <Text style={styles.tastingNotes}>Generating Vinster's review…</Text>
             ) : (
               <TouchableOpacity style={styles.generateNoteBtn} onPress={() => handleRefreshEstimate()} activeOpacity={0.7}>
                 <Text style={styles.generateNoteBtnText}>Generate</Text>

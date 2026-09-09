@@ -15,6 +15,7 @@ import * as Linking from 'expo-linking';
 import { supabase } from '../src/api/supabase';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
+import { OfflineBanner } from '../src/components/OfflineBanner';
 import { AppAlertHost } from '../src/components/AppAlert';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -154,6 +155,7 @@ export default function RootLayout() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <View style={{ flex: 1 }}>
+          <OfflineBanner />
           <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
