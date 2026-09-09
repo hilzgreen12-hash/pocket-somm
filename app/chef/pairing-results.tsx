@@ -470,15 +470,19 @@ const styles = StyleSheet.create({
   sectionTitle: { fontSize: 20, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.md },
   summary: { fontSize: 15, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 20, marginBottom: spacing.md },
   card: { backgroundColor: colors.surface, borderRadius: 8, padding: spacing.md, marginBottom: spacing.md },
-  cardWine: { fontSize: 16, fontFamily: fonts.bodyBold, color: colors.text },
+  // Matches the recipe-result headers (dishName): 22pt headingBold, but kept
+  // left-aligned so the region/country subtitle sits neatly beneath.
+  cardWine: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text },
   // Tappable wine name → its card (Wine Intel); a gold chevron signals it opens.
   cardWineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  cardWineChevron: { fontSize: 20, color: colors.gold, fontFamily: fonts.bodyBold, marginTop: -2 },
+  cardWineChevron: { fontSize: 24, color: colors.gold, fontFamily: fonts.bodyBold, marginTop: -2 },
   // Gold-outline bubble buttons inside each cellar card (View in Your Cellar,
   // Select and Archive This Wine).
   cardBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center', marginTop: spacing.sm },
   cardBtnText: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.3 },
-  cardSubtitle: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2 },
+  // Scaled up to sit proportionally beneath the larger wine header, and set in
+  // the same face as the title (headingBold) rather than body italic.
+  cardSubtitle: { fontSize: 16, fontFamily: fonts.headingBold, color: colors.gold, marginTop: 4 },
   cardBody: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   cardSection: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs },
   cardItem: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.text, lineHeight: 20, marginBottom: 4 },

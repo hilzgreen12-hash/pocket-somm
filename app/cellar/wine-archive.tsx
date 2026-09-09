@@ -120,7 +120,8 @@ export default function WineArchiveScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Terracotta header band (lighter than the buttons) with cream fonts.
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // No bottom rule — the title flows straight into the blurb below.
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // width 40 mirrors the right spacer so the flex-1 title is screen-centred.
   back: { width: 40, fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 0.8, textAlign: 'center' },
@@ -134,14 +135,17 @@ const styles = StyleSheet.create({
   // Matches the "Your Wines At Home" intro on the Cellar tab (Spectral, 17).
   blurb: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
 
-  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.md, marginBottom: spacing.sm },
+  // Extra top gap so the stats lower border and this header aren't cramped.
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.xl, marginBottom: spacing.sm },
   // Stats bar — green outline + light-green fill bubble (matches the other pages).
   // Stats BAR — full-width, green rule top and bottom running edge to edge.
   stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Cellar Archive stats bar: the counts with the "View …" link stacked inside
   // the same top/bottom borders, just beneath the counts.
   // No top rule; a single faded-yellow separator line below (not a boxed bar).
-  statsBox: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
+  // Pulled up close under the blurb (no top margin/padding); the faded-gold
+  // separator + counts still sit below.
+  statsBox: { marginTop: 0, marginBottom: spacing.sm, paddingTop: 0, paddingBottom: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider, alignItems: 'center', gap: spacing.xs },
   statsText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
 

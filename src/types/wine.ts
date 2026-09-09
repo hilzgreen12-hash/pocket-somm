@@ -213,6 +213,9 @@ export interface Recipe {
 export interface Pairing {
   dishName: string;
   chefInspiration: string;
+  // Country of the chef's culinary tradition (not their birthplace). Optional —
+  // absent on pairings generated before this field was added.
+  chefCountry?: string;
   pairingNotes: string;
   introduction: string;
   recipe: Recipe;

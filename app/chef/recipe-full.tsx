@@ -28,8 +28,8 @@ import type { Pairing, WineDetailsComplete } from '../../src/types/wine';
 export default function RecipeFullScreen() {
   const { index, sessionId } = useLocalSearchParams<{ index?: string; sessionId?: string }>();
   const { session } = useAuth();
-  const { wineDetailsConfirmed, pairings: freshPairings } = useLabelStore();
-  const { sessions: labelSessions, updateNotes } = useChefLabelHistory();
+  const { wineDetailsConfirmed, pairings: freshPairings, filters: labelFilters } = useLabelStore();
+  const { sessions: labelSessions, updateNotes, save: saveLabelSession } = useChefLabelHistory();
   const shareCardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [printing, setPrinting] = useState(false);
@@ -56,6 +56,35 @@ export default function RecipeFullScreen() {
   const wineLine = wine
     ? wineHeaderLine(wine.producer, wine.wineName, wine.vintage)
     : '';
+
+  // "Add to Cookbook" — the bottom-of-card save. Already saved if we opened this
+  // from the cookbook (sessionId) or a saved session already holds this dish for
+  // this wine, so the button reads "In Your Cookbook ✓" instead.
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const alreadyInCookbook = !!sessionId || labelSessions.some((s) =>
+    (s.pairings ?? []).some((p) => p.dishName === pairing?.dishName) &&
+    s.wine?.wineName === wine?.wineName &&
+    String(s.wine?.vintage ?? '') === String(wine?.vintage ?? ''),
+  );
+  const isSaved = saveState === 'saved' || alreadyInCookbook;
+
+  async function handleAddToCookbook() {
+    if (!wine || !pairing || saveState !== 'idle' || isSaved) return;
+    if (!session) {
+      showAlert({ title: 'Sign in to save', body: 'Create a free account or sign in to save recipes to Your Cookbook.' });
+      return;
+    }
+    setSaveState('saving');
+    try {
+      // Save just this one recipe as its own cookbook entry (mirrors the Quick
+      // Save on the results screen).
+      await saveLabelSession.mutateAsync({ wine, filters: labelFilters ?? null, pairings: [pairing] });
+      setSaveState('saved');
+    } catch (err) {
+      setSaveState('idle');
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
 
   async function handleShare() {
     if (!pairing || sharing) return;
@@ -174,7 +203,7 @@ export default function RecipeFullScreen() {
         <View style={styles.shortDivider} />
 
         <Text style={styles.dishName}>{pairing.dishName}</Text>
-        <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
+        <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}{pairing.chefCountry ? `, ${pairing.chefCountry}` : ''}</Text>
         <Text style={styles.meta}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
 
         <Text style={styles.sectionLabel}>Vinster's Pairing Notes</Text>
@@ -192,6 +221,18 @@ export default function RecipeFullScreen() {
         {pairing.recipe.instructions.map((step, i) => (
           <Text key={i} style={styles.bullet}>{step}</Text>
         ))}
+
+        {/* Add this recipe to Your Cookbook — sits at the foot of the card. */}
+        <TouchableOpacity
+          style={[styles.addCookbookBtn, (isSaved || saveState === 'saving') && styles.addCookbookBtnDisabled]}
+          onPress={handleAddToCookbook}
+          disabled={isSaved || saveState === 'saving'}
+          activeOpacity={0.85}
+        >
+          <Text style={styles.addCookbookText}>
+            {isSaved ? 'In Your Cookbook ✓' : saveState === 'saving' ? 'Saving…' : 'Add to Cookbook'}
+          </Text>
+        </TouchableOpacity>
 
         {/* The "Get Vinster" footer is retired from the on-screen card (it still
             appears on the shared/printed export via buildRecipeHtml). */}
@@ -284,7 +325,7 @@ function buildPrintHtml(pairing: Pairing, wineLine: string): string {
   <div class="wine">${esc(wineLine || '')}</div>
   <hr/>
   <h1>${esc(pairing.dishName)}</h1>
-  <div class="chef">Inspired by ${esc(pairing.chefInspiration)}</div>
+  <div class="chef">Inspired by ${esc(pairing.chefInspiration)}${pairing.chefCountry ? `, ${esc(pairing.chefCountry)}` : ''}</div>
   <div class="meta">Serves ${esc(String(pairing.recipe.servings))} · Prep ${esc(pairing.recipe.prepTime)} · Cook ${esc(pairing.recipe.cookTime)}</div>
   <h2>Pairing notes</h2>
   <p>${esc(pairing.pairingNotes)}</p>
@@ -328,6 +369,10 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 120, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
   notesSaveBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
   notesSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // "Add to Cookbook" at the foot of the recipe card — gold-outline bubble.
+  addCookbookBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.xl },
+  addCookbookBtnDisabled: { opacity: 0.6 },
+  addCookbookText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
   notesCancel: { alignItems: 'center', paddingTop: spacing.md },
   notesCancelText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted },
   wineHeader: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', marginTop: 4, lineHeight: 28 },

@@ -29,7 +29,6 @@ export function JournalCarousel() {
 
   return (
     <>
-      <Text style={styles.hint}>Listed by recency · Swipe to view all →</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
         {hasPosts ? (
           published.map((p) => (
@@ -54,6 +53,7 @@ export function JournalCarousel() {
         <View style={styles.futureCard}><Text style={styles.futureText}>Future entries appear here</Text></View>
         <View style={styles.futureCard}><Text style={styles.futureText}>Future entries appear here</Text></View>
       </ScrollView>
+      <Text style={styles.hint}>Listed by recency · Swipe to view all →</Text>
     </>
   );
 }
@@ -67,8 +67,8 @@ const styles = StyleSheet.create({
   // On-brand brown (matches a populated Vinster's Review of You entry) rather
   // than the old near-black placeholder.
   comingCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
-  comingTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 23 },
-  comingSub: { fontSize: 14, fontFamily: fonts.headingItalic, color: 'rgba(232,214,184,0.8)', lineHeight: 18 },
+  comingTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.gold, lineHeight: 23 },
+  comingSub: { fontSize: 14, fontFamily: fonts.headingItalic, color: '#FFFFFF', lineHeight: 18 },
   futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
   futureText: { fontSize: 15, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 19 },
 });

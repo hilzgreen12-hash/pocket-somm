@@ -201,6 +201,7 @@ Return ONLY a valid JSON object with this exact structure:
     {
       "dishName": "Full dish name",
       "chefInspiration": "Chef's full name",
+      "chefCountry": "The country of the CUISINE / culinary tradition this chef is known for cooking — NOT necessarily where they were born or live. E.g. for a chef famed for Japanese cuisine, 'Japan'; for one famed for French cooking, 'France'. A single country name.",
       "pairingNotes": "1-2 sentences explaining how the wine and dish complement each other",
       "introduction": "3-4 sentences exploring why this pairing works",
       "recipe": {

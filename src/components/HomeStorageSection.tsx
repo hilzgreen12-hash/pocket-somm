@@ -193,9 +193,6 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           <Text style={styles.stats}>
             {totalBottles} {totalBottles === 1 ? 'Bottle' : 'Bottles'} · {totalLocations} {totalLocations === 1 ? 'Location' : 'Locations'}
           </Text>
-          {/* Directly above the carousel, left-indented: adding is via the
-              carousel's "+ Add" card — swipe right to reach it. */}
-          <Text style={styles.swipeHint}>Swipe Right to view and add locations →</Text>
         </>
       )}
 
@@ -270,6 +267,10 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           </TouchableOpacity>
         </ScrollView>
       )}
+      {/* Sits beneath the carousel: adding is via the "+ Add" card at its end. */}
+      {hasStorage && (
+        <Text style={styles.swipeHint}>Swipe Right to view and add locations →</Text>
+      )}
     </View>
   );
 }
@@ -287,7 +288,7 @@ const styles = StyleSheet.create({
   fadedRule: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   // Left-indented italic hint pointing to the carousel's "+ Add" card, sitting
   // directly above the carousel (matches the FCL filter hint style).
-  swipeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'left', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  swipeHint: { fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'left', paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
   loading: { paddingVertical: spacing.lg, alignItems: 'center' },
   error: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', paddingHorizontal: spacing.xl, paddingVertical: spacing.md },
   // The swipe hint sits directly above, so no extra top gap here.

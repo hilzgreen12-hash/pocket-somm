@@ -40,9 +40,9 @@ function PairingCard({
       {/* Tap the recipe itself to open the full-screen recipe page (sharing
           lives there, not on this thumbnail). */}
       <TouchableOpacity activeOpacity={0.8} onPress={onViewFull}>
+        <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}{pairing.chefCountry ? `, ${pairing.chefCountry}` : ''}</Text>
         <Text style={styles.dishName}>{pairing.dishName}</Text>
         <Text style={styles.tapHint}>View Full Recipe →</Text>
-        <Text style={styles.chefInspiration}>Inspired by {pairing.chefInspiration}</Text>
         <Text style={styles.recipeMetaInline}>Serves {pairing.recipe.servings} · Prep {pairing.recipe.prepTime} · Cook {pairing.recipe.cookTime}</Text>
         <Text style={styles.pairingNotes}>{pairing.pairingNotes}</Text>
       </TouchableOpacity>
@@ -109,7 +109,7 @@ function PairingCardSaved({
       {/* The whole title block opens the full recipe (not only "+ FULL"). */}
       <TouchableOpacity onPress={onViewFull} activeOpacity={0.8}>
         <Text style={styles.savedDishName}>{pairing.dishName}</Text>
-        <Text style={styles.savedChef}>Inspired by {pairing.chefInspiration}</Text>
+        <Text style={styles.savedChef}>Inspired by {pairing.chefInspiration}{pairing.chefCountry ? `, ${pairing.chefCountry}` : ''}</Text>
         {wineLine ? <Text style={styles.savedWineLine}>To pair with {wineLine}</Text> : null}
       </TouchableOpacity>
 
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
   cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   cardShareLink: { paddingHorizontal: spacing.xs, paddingVertical: 2 },
   cardShareLinkText: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase' },
-  chefInspiration: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2, marginBottom: spacing.sm },
+  chefInspiration: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, textAlign: 'center', marginBottom: spacing.xs },
   recipeMetaInline: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 4, letterSpacing: 0.3 },
   pairingNotes: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },

@@ -792,11 +792,6 @@ export default function RestaurantReviewsScreen() {
                       <Text style={styles.restaurantName} numberOfLines={1}>
                         {item.restaurantName || 'Unnamed restaurant'}
                       </Text>
-                      <View style={styles.rightCluster}>
-                        {item.ratingOverall != null && (
-                          <StarRating value={item.ratingOverall} size={14} readonly />
-                        )}
-                      </View>
                     </View>
                     <View style={styles.cardCompactMetaRow}>
                       <Text style={styles.metaText}>{formatDate(item.capturedAt)}</Text>
@@ -804,14 +799,19 @@ export default function RestaurantReviewsScreen() {
                         <Text style={styles.metaText} numberOfLines={1}> · {item.city}</Text>
                       ) : null}
                     </View>
+                    {/* Overall star rating — sits below the date · location line. */}
+                    {item.ratingOverall != null && (
+                      <View style={styles.starRow}>
+                        <StarRating value={item.ratingOverall} size={14} readonly />
+                      </View>
+                    )}
                     {/* Yellow "Awaiting Review" note for a restaurant captured from a
                         List scan that carries no rating or note yet — mirrors the
                         wine review page. */}
                     {!restaurantReviewed(item) && (
                       <Text style={styles.awaitingReviewNote}>Awaiting Review</Text>
                     )}
-                    {/* First line of the review, in place of the detailed rating
-                        grid — the overall star rating already sits by the name. */}
+                    {/* First line of the review, in place of the detailed rating grid. */}
                     {item.restaurantNote?.trim() ? (
                       <Text style={styles.reviewSnippet} numberOfLines={1} ellipsizeMode="tail">{item.restaurantNote.trim()}</Text>
                     ) : null}
@@ -1066,6 +1066,8 @@ const styles = StyleSheet.create({
   restaurantThumb: { width: 100, height: 130 },
   // First line of the review, shown in place of the rating grid.
   reviewSnippet: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, marginTop: 6 },
+  // Overall stars moved beneath the date · location line.
+  starRow: { marginTop: 6, flexDirection: 'row' },
   metaText: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   notePreview: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, marginTop: 4, lineHeight: 18 },
   ratingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, marginTop: spacing.xs },

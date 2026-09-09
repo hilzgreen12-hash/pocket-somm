@@ -570,7 +570,7 @@ const styles = StyleSheet.create({
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
-  tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.gold, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
   tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   // Fixed line box so every tile's icon occupies the SAME vertical space — the
   // search vs camera glyphs have different metrics, which pushed the Search a
