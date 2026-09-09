@@ -9,8 +9,9 @@ import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import * as ImagePicker from 'expo-image-picker';
 import { captureRef } from 'react-native-view-shot';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, useQuery } from '@tanstack/react-query';
 import { supabase } from '../api/supabase';
+import { listLineupArchives } from '../api/lineups';
 import { addSessionBottle, patchChosenWine } from '../api/chosenWines';
 import { archiveCellarWine } from '../api/cellar';
 import { uploadLabelImage } from '../api/labelPhotos';
@@ -92,6 +93,14 @@ export function RestaurantReviewModal({
   const qc = useQueryClient();
   const { session } = useAuth();
   const { wines: cellarWines } = useCellar();
+  // A lineup archived under "Archive a Night" can be matched to THIS restaurant
+  // visit (its restaurant_session_id points here) — surface it as a reference.
+  const { data: lineups = [] } = useQuery({
+    queryKey: ['lineup-archives', session?.user.id],
+    queryFn: () => listLineupArchives(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+  const matchedLineup = lineups.find((l) => l.restaurant_session_id === sessionId) ?? null;
   const { chosenWines } = useChosenWines();
   // Restaurant identity — prefilled from the scan but editable here so the
   // user can correct the name or place while saving their review.
@@ -700,7 +709,9 @@ export function RestaurantReviewModal({
                   placeholder="Restaurant name"
                   placeholderTextColor="rgba(255,255,255,0.6)"
                 />
-                <View style={styles.bannerMetaRow}>
+                {/* Location then date STACKED (date below location), matched
+                    fonts, neither italic. */}
+                <View style={styles.bannerMetaCol}>
                   <TextInput
                     style={styles.bannerMetaInput}
                     value={cityValue}
@@ -709,24 +720,24 @@ export function RestaurantReviewModal({
                     placeholderTextColor="rgba(255,255,255,0.55)"
                   />
                   {capturedAt != null ? (
-                    <>
-                      <Text style={styles.bannerMetaDot}>·</Text>
-                      <DateInput
-                        style={[styles.bannerMetaInput, styles.bannerDateInput]}
-                        valueIso={dateValue}
-                        onChangeIso={setDateValue}
-                        placeholderTextColor="rgba(255,255,255,0.55)"
-                      />
-                    </>
+                    <DateInput
+                      style={[styles.bannerMetaInput, styles.bannerDateInput]}
+                      valueIso={dateValue}
+                      onChangeIso={setDateValue}
+                      placeholderTextColor="rgba(255,255,255,0.55)"
+                    />
                   ) : date ? (
-                    <>
-                      <Text style={styles.bannerMetaDot}>·</Text>
-                      <Text style={styles.bannerMetaStatic}>{date}</Text>
-                    </>
+                    <Text style={styles.bannerMetaStatic}>{date}</Text>
                   ) : null}
                 </View>
               </View>
             </View>
+
+            {/* Matched to an Archive-a-Night lineup (its restaurant_session_id
+                points at this visit) — a gold italic reference below the image. */}
+            {matchedLineup ? (
+              <Text style={styles.matchedLineup}>Matched to ‘{matchedLineup.name?.trim() || 'Your Lineup'}’ from your Lineup Archive</Text>
+            ) : null}
 
             <View style={styles.divider} />
 
@@ -1045,8 +1056,11 @@ const styles = StyleSheet.create({
   photoBannerText: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.md },
   addPhotoLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   bannerNameInput: { fontFamily: fonts.headingBold, fontSize: 28, color: '#fff', letterSpacing: 0.3, paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
-  bannerMetaRow: { flexDirection: 'row', alignItems: 'center', marginTop: 2 },
-  bannerMetaInput: { flexShrink: 1, fontFamily: fonts.headingItalic, fontSize: 15, color: 'rgba(255,255,255,0.92)', paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
+  // Location + date stacked (date on its own line beneath the location).
+  bannerMetaCol: { alignItems: 'flex-start', marginTop: 2 },
+  // Gold italic "Matched to … from your Lineup Archive", sized like the location.
+  matchedLineup: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.gold, textAlign: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.sm },
+  bannerMetaInput: { flexShrink: 1, fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.92)', paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   bannerDateInput: { flexShrink: 0, width: 118, fontStyle: 'normal', fontFamily: fonts.bodyRegular },
   bannerMetaDot: { fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.7)', marginHorizontal: 6, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
   bannerMetaStatic: { fontFamily: fonts.bodyRegular, fontSize: 15, color: 'rgba(255,255,255,0.92)', textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
@@ -1064,12 +1078,12 @@ const styles = StyleSheet.create({
   stampPin: { fontSize: 20 },
   stampName: { flex: 1, fontFamily: fonts.headingBold, fontSize: 24, color: colors.text },
   stampMeta: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted, marginTop: spacing.xs },
-  sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
+  sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, marginBottom: spacing.sm },
   // Sub-heading for each bottle bucket (List / Off-List).
   bottleGroupLabel: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginTop: spacing.sm, marginBottom: spacing.xs },
   fieldLabel: {
     fontFamily: fonts.bodySemibold,
-    fontSize: 12,
+    fontSize: 16,
     color: colors.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,

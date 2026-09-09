@@ -7,6 +7,7 @@ import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
 import * as ImagePicker from 'expo-image-picker';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
@@ -166,6 +167,10 @@ export default function LineupDetailScreen() {
   // Match this lineup to a restaurant review in Your Restaurants (scan_sessions).
   const [restaurantPickerOpen, setRestaurantPickerOpen] = useState(false);
   const [savingMatch, setSavingMatch] = useState(false);
+  const [restaurantSearch, setRestaurantSearch] = useState('');
+  // The user can say this lineup has no matching review — dismissed locally so
+  // the prompt stays hidden for THIS lineup. Loaded once the id is known.
+  const [noMatchDismissed, setNoMatchDismissed] = useState(false);
   const matchedRestaurant = lineup?.restaurant_session_id
     ? restaurantArchive.find((a) => a.id === lineup.restaurant_session_id) ?? null
     : null;
@@ -184,6 +189,24 @@ export default function LineupDetailScreen() {
       setSavingMatch(false);
     }
   }
+
+  const noMatchKey = `lineup-nomatch-${id}`;
+  useEffect(() => {
+    AsyncStorage.getItem(noMatchKey).then((v) => setNoMatchDismissed(!!v)).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  async function dismissNoMatch() {
+    try { await AsyncStorage.setItem(noMatchKey, '1'); } catch { /* non-fatal */ }
+    setNoMatchDismissed(true);
+    setRestaurantPickerOpen(false);
+  }
+
+  // Restaurant reviews filtered by the picker's search box.
+  const filteredRestaurants = restaurantArchive.filter((a) => {
+    const q = restaurantSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (a.restaurantName ?? '').toLowerCase().includes(q) || (a.city ?? '').toLowerCase().includes(q);
+  });
 
   // "Identify wines" — Vinster reads the archived photo, then the user confirms.
   const [identifying, setIdentifying] = useState(false);
@@ -556,9 +579,9 @@ export default function LineupDetailScreen() {
           >
             <Text style={styles.matchLink} numberOfLines={1}>View Your Matched Restaurant Review</Text>
           </TouchableOpacity>
-        ) : (
+        ) : noMatchDismissed ? null : (
           <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Text style={styles.matchLink} numberOfLines={2}>Match this lineup to a review in Your Restaurants</Text>
+            <Text style={styles.matchLink} numberOfLines={2}>Match this lineup to a restaurant review?</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -740,12 +763,35 @@ export default function LineupDetailScreen() {
       <Modal visible={restaurantPickerOpen} transparent animationType="fade" onRequestClose={() => setRestaurantPickerOpen(false)}>
         <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setRestaurantPickerOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            <Text style={styles.stampTitle}>Match to a restaurant</Text>
+            {/* White X (top-right) to cancel. */}
+            <TouchableOpacity style={styles.pickerCloseX} onPress={() => setRestaurantPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
+              <Text style={styles.closeX}>✕</Text>
+            </TouchableOpacity>
+
+            {/* No match — dismisses the prompt for this lineup and closes. */}
+            <TouchableOpacity onPress={dismissNoMatch} disabled={savingMatch} activeOpacity={0.7} style={styles.noMatchRow}>
+              <Text style={styles.noMatchText}>This lineup does not match to a restaurant review</Text>
+            </TouchableOpacity>
+
+            <View style={styles.pickerDivider} />
+
+            <Text style={styles.stampTitle}>Match this lineup to a restaurant review</Text>
+            <TextInput
+              style={styles.stampInput}
+              value={restaurantSearch}
+              onChangeText={setRestaurantSearch}
+              placeholder="Search your restaurant reviews…"
+              placeholderTextColor={colors.textMuted}
+              spellCheck={false}
+              autoCorrect={false}
+            />
             {restaurantArchive.length === 0 ? (
               <Text style={styles.muted}>No restaurant reviews yet. Add one in Your Restaurants first.</Text>
+            ) : filteredRestaurants.length === 0 ? (
+              <Text style={styles.muted}>No restaurants match your search.</Text>
             ) : (
-              <ScrollView style={{ maxHeight: 340 }} keyboardShouldPersistTaps="handled">
-                {restaurantArchive.map((a) => {
+              <ScrollView style={{ maxHeight: 300, marginTop: spacing.sm }} keyboardShouldPersistTaps="handled">
+                {filteredRestaurants.map((a) => {
                   const active = a.id === lineup.restaurant_session_id;
                   return (
                     <TouchableOpacity key={a.id} style={styles.pickerOption} onPress={() => matchRestaurant(a.id)} disabled={savingMatch} activeOpacity={0.7}>
@@ -920,6 +966,11 @@ const styles = StyleSheet.create({
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
   noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },
+  // Restaurant-match picker: white X, a "no match" dismiss link, then a divider.
+  pickerCloseX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 2, padding: 4 },
+  noMatchRow: { paddingTop: spacing.md, paddingBottom: spacing.sm, paddingHorizontal: spacing.lg, alignItems: 'center' },
+  noMatchText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', textDecorationLine: 'underline' },
+  pickerDivider: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   noteText: { paddingHorizontal: spacing.xl, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
   addNoteLink: { paddingHorizontal: spacing.xl, fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   noteEditorInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 100, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
