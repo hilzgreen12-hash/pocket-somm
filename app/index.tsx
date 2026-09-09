@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../src/hooks/useAuth';
 import { supabase } from '../src/api/supabase';
+import { LoadingScreen } from '../src/components/LoadingScreen';
 
 // Local key written by /age-gate. We only check for presence here — the
 // gate screen validates the date of birth itself and stores the result.
@@ -38,7 +39,7 @@ export default function Index() {
     },
   });
 
-  if (loading || ageVerified === null) return null;
+  if (loading || ageVerified === null) return <LoadingScreen />;
 
   // Age gate runs before anything else — app stores require a neutral
   // age-verification screen for alcohol apps, and we don't want to show
@@ -48,8 +49,10 @@ export default function Index() {
   // Not signed in → public welcome page.
   if (!session) return <Redirect href="/welcome" />;
 
-  // Wait for the onboarding check before routing a signed-in user.
-  if (statusLoading) return null;
+  // Wait for the onboarding check before routing a signed-in user. With
+  // networkMode 'offlineFirst' this resolves/errors even offline (rather than
+  // hanging), so it can't strand the app here.
+  if (statusLoading) return <LoadingScreen />;
 
   // On a status-check failure, fail open to the Scan landing tab rather than
   // trapping a returning user in onboarding.

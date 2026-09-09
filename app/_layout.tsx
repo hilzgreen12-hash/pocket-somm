@@ -32,6 +32,10 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false, // don't refetch when app regains focus
       refetchOnReconnect: true,    // do refetch when network comes back
       retry: 1,                    // a single retry on failure (default 3 was overkill)
+      // Run queries even with no connection: on failure they ERROR (which
+      // screens handle) instead of hanging forever in the default "paused"
+      // state — that pause was what left offline launches on a blank screen.
+      networkMode: 'offlineFirst',
     },
   },
 });

@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
       <View style={styles.container}>
         <Text style={styles.title}>Something went wrong</Text>
         <Text style={styles.body}>
-          Vinster hit an unexpected error. You can try again — your saved data is safe.
+          Vinster hit a problem. If you're offline, some features need a connection — reconnect and try again. Your saved data is safe.
         </Text>
         <Text style={styles.detail} numberOfLines={3}>{this.state.error.message}</Text>
         <TouchableOpacity style={styles.button} onPress={this.reset}>

@@ -54,6 +54,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // otherwise leave the app on a blank screen forever, with nothing thrown
     // for the root ErrorBoundary to catch. Treat a failure as signed-out and
     // let the normal routing take over.
+    // Safety net: if getSession() ever hangs (a wedged transport on a flaky/no
+    // connection), clear the gate anyway so the app can't sit on the loading
+    // screen forever — it falls through to normal routing as signed-out.
+    const safety = setTimeout(() => setLoading(false), 8000);
     supabase.auth
       .getSession()
       .then(({ data }) => {
@@ -63,6 +67,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         syncUser(null);
       })
       .finally(() => {
+        clearTimeout(safety);
         setLoading(false);
       });
 
@@ -70,7 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       syncUser(session);
     });
 
-    return () => listener.subscription.unsubscribe();
+    return () => { clearTimeout(safety); listener.subscription.unsubscribe(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
