@@ -518,8 +518,8 @@ const styles = StyleSheet.create({
   lastResultBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
   lastResultBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
   // Rows inside the "Choose Your Wine" chooser popup.
-  chooserOption: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
-  chooserOptionText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
+  chooserOption: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', marginBottom: spacing.sm },
+  chooserOptionText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
   back: { alignItems: 'center', paddingVertical: spacing.lg },
   backText: { color: colors.textMuted, fontFamily: fonts.bodyRegular, fontSize: 14, textDecorationLine: 'underline' },
   // Top-left Back, matching the rest of the app.

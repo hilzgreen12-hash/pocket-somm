@@ -8,13 +8,15 @@ import { showAlert } from '../../src/components/AppAlert';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { PairMasthead } from '../../src/components/PairMasthead';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useFoodPairingStore, type CellarRecommendation, type GeneralRecommendation, type PriceBandExample } from '../../src/stores/foodPairingStore';
 import { useCellar } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../../src/api/cellar';
+import { useRacks } from '../../src/hooks/useRacks';
+import { getSlotAssignments } from '../../src/api/racks';
 import { findFoodWinePairing } from '../../src/api/label';
 import { currencySymbol } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
@@ -43,17 +45,37 @@ function CellarResults({ recommendations, wines, onSelect }: {
   // genuine matches, which used to render as a dead "no longer in your cellar"
   // card. Drop those rather than surface them.
   const live = recommendations.filter((rec) => wines.some((w) => w.id === rec.cellarWineId));
+  // Resolve where each wine physically lives so "View in Your Home Storage"
+  // jumps straight to that spot — the same targets the wine card links to.
+  const { racks } = useRacks();
+  const rackIds = racks.map((r) => r.id);
+  const { data: slotAssignments = [] } = useQuery({
+    queryKey: ['slot-assignments', rackIds],
+    queryFn: () => getSlotAssignments(rackIds),
+    enabled: rackIds.length > 0,
+  });
+  function storageHref(w: CellarWine): string {
+    if (w.storage_location_id) return `/cellar/storage-location/${w.storage_location_id}`;
+    if (w.bin_cell_id) return `/cellar/bin/cell/${w.bin_cell_id}`;
+    const slot = slotAssignments.find((s) => s.cellar_wine_id === w.id);
+    if (slot) return `/cellar/rack/${slot.rack_id}?highlight=${w.id}`;
+    return `/cellar/${w.id}`; // not yet placed → fall back to the wine card
+  }
   return (
     <>
       {live.map((rec) => {
         const wine = wines.find((w) => w.id === rec.cellarWineId)!;
-        const subtitle = [wine.vintage, wine.region].filter(Boolean).join(' · ');
+        // Vintage rides in the title (plain, no brackets); the subtitle carries
+        // only region/country so the year isn't repeated.
+        const v = wine.vintage != null ? String(wine.vintage) : '';
+        const title = v && !rec.wineName.includes(v) ? `${rec.wineName} ${v}` : rec.wineName;
+        const subtitle = wine.region ?? '';
         return (
           <View key={rec.cellarWineId} style={styles.card}>
             {/* Tap the wine name to open its card — Wine Intel + details. */}
             <TouchableOpacity onPress={() => router.push(`/cellar/${wine.id}` as any)} activeOpacity={0.7}>
               <View style={styles.cardWineRow}>
-                <Text style={styles.cardWine}>{rec.wineName}</Text>
+                <Text style={styles.cardWine}>{title}</Text>
                 <Text style={styles.cardWineChevron}>›</Text>
               </View>
             </TouchableOpacity>
@@ -63,9 +85,9 @@ function CellarResults({ recommendations, wines, onSelect }: {
             <Text style={[styles.cardSection, { marginTop: spacing.md }]}>Serving tip</Text>
             <Text style={styles.cardItem}>{rec.servingTip}</Text>
 
-            {/* Jump to the wine in Your Cellar / Home Storage. */}
-            <TouchableOpacity onPress={() => router.push(`/cellar/${wine.id}` as any)} activeOpacity={0.8} style={styles.cardBtn}>
-              <Text style={styles.cardBtnText}>View in Your Cellar · Home Storage</Text>
+            {/* Jump straight to where this bottle lives (rack / bin / location). */}
+            <TouchableOpacity onPress={() => router.push(storageHref(wine) as any)} activeOpacity={0.8} style={styles.cardBtn}>
+              <Text style={styles.cardBtnText}>View In Your Home Storage</Text>
             </TouchableOpacity>
 
             <TouchableOpacity onPress={() => onSelect(wine, rec.wineName)} activeOpacity={0.8} style={styles.cardBtn}>
@@ -321,7 +343,7 @@ export default function PairingResultsScreen() {
           eyebrow="Wine Pairings"
           sub="Paired by Vinster"
           title={titleCase(dish)}
-          meta={mode === 'cellar' ? 'Select from Cellar' : 'Select from Market'}
+          meta={mode === 'cellar' ? 'Selected from Cellar' : 'Selected from Market'}
         />
         {mode === 'general' && wines.length > 0 && (
           <View style={styles.cellarPromptWrap}>

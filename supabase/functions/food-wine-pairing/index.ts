@@ -87,6 +87,8 @@ ${wineList}
 
 Select the 1 to 3 wines from this cellar that pair best with the dish. Prioritise wines at "peak" or "approaching" drinking window. Where multiple wines pair equally well, favour those matching the user's profile preferences and budget. If no wines are a strong match, say so honestly and suggest the closest option.
 
+VARIETY: When you recommend more than one wine, make them genuinely distinct options — do NOT return two wines from the same producer, and where the pairing is otherwise a toss-up, prefer wines from different countries or regions so the user has real choice. Only repeat a producer or region if the cellar simply has no comparable alternative and you say why.
+
 Return ONLY valid JSON with this structure:
 {
   "recommendations": [
