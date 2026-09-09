@@ -1,10 +1,11 @@
 import { useRef, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, useWindowDimensions, Linking } from 'react-native';
 import { router } from 'expo-router';
 import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
+import { JournalCarousel } from '../../src/components/JournalCarousel';
 
 const COMMUNITY_HELP = `Share is where Vinster users will share wine reviews, restaurant finds and personality sketches with friends and the wider community.
 
@@ -67,30 +68,34 @@ export default function CommunityTab() {
 
       <View style={styles.section}>
         <Text style={styles.sectionDesc}>Be a part of the Vinster community, share and discover wine and restaurant reviews while connecting with friends, old and new.</Text>
-        <Text style={styles.comingSoonNotice}>Coming Soon</Text>
       </View>
 
       <View style={styles.divider} />
 
+      {/* The Journal — Vinster's own blog; public to read. Header + blurb, then a
+          3-box carousel of entries (mirrors "Vinster's Review of You"). */}
       <View style={styles.section}>
-        {/* The Journal is live now — Vinster's own blog, readable by everyone.
-            Reading is public, so it navigates directly (no sign-in gate). */}
-        <TouchableOpacity style={styles.journalButton} onPress={() => router.push('/community/blog')}>
-          <Text style={styles.journalText}>The Journal</Text>
-          <Text style={styles.journalSub}>Wine notes, stories &amp; finds from Vinster</Text>
-        </TouchableOpacity>
-        {/* "Your Community Profile" now lives on the You tab under preferences. */}
-        <TouchableOpacity style={styles.button} onPress={() => gated('/community/wine')}>
+        <Text style={styles.sectionHeader}>The Journal</Text>
+        <Text style={styles.journalBlurb}>
+          Thoughts and musings on wine, food, and the places and people who share our passion. Written by you. Submit entries to{' '}
+          <Text style={styles.journalEmail} onPress={() => Linking.openURL('mailto:tellme@vinsterapp.com')}>tellme@vinsterapp.com</Text>
+        </Text>
+      </View>
+      <JournalCarousel />
+
+      <View style={styles.divider} />
+
+      {/* Other Features Arriving Soon — the community-sharing features, shown
+          faded as unbuilt (Wine / Restaurant community feeds, Connections). */}
+      <View style={styles.section}>
+        <Text style={styles.sectionHeader}>Other Features Arriving Soon</Text>
+        <TouchableOpacity style={[styles.button, styles.buttonSoon]} disabled activeOpacity={1}>
           <Text style={styles.buttonText}>Wine Reviews</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.button} onPress={() => gated('/community/restaurant')}>
+        <TouchableOpacity style={[styles.button, styles.buttonSoon]} disabled activeOpacity={1}>
           <Text style={styles.buttonText}>Restaurant Reviews</Text>
         </TouchableOpacity>
-        {/* No /community/connections route exists yet. Left in place as a
-            placeholder, but explicitly disabled: with an active-looking button
-            and no onPress it dimmed on tap and did nothing, which reads as a
-            broken app rather than an unbuilt feature. */}
-        <TouchableOpacity style={[styles.button, { opacity: 0.5 }]} disabled>
+        <TouchableOpacity style={[styles.button, styles.buttonSoon]} disabled activeOpacity={1}>
           <Text style={styles.buttonText}>Your Connections</Text>
         </TouchableOpacity>
       </View>
@@ -116,14 +121,14 @@ const styles = StyleSheet.create({
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   // Italic blurb below the tab title — kept Cormorant per spec.
   sectionDesc: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs },
-  // Coming-soon banner — body content, Inter.
-  comingSoonNotice: { fontSize: 18, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'center', letterSpacing: 1.5, marginTop: spacing.sm },
+  // Section headers ("The Journal", "Other Features Arriving Soon") — match the
+  // 22pt white headers on the other tabs (Your Wines At Home, Review of You).
+  sectionHeader: { fontSize: 22, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  journalBlurb: { fontSize: 15, fontFamily: fonts.headingItalic, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 21 },
+  journalEmail: { color: colors.gold, textDecorationLine: 'underline' },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, padding: spacing.md, alignItems: 'center' },
   // Button label — Cormorant.
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15, textAlign: 'center' },
-  // The Journal — a live feature, so it's gold-accented to stand apart from
-  // the coming-soon buttons above.
-  journalButton: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, paddingHorizontal: spacing.md, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)', gap: 2, marginBottom: spacing.xs },
-  journalText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 18, textAlign: 'center', letterSpacing: 0.5 },
-  journalSub: { color: 'rgba(255,255,255,0.7)', fontFamily: fonts.bodyRegular, fontSize: 13, textAlign: 'center' },
+  // "Arriving soon" bubbles are faded to read as unbuilt.
+  buttonSoon: { opacity: 0.5 },
 });
