@@ -106,11 +106,12 @@ function PairingCardSaved({
           <Text style={styles.cardShareLinkText}>+ FULL</Text>
         </TouchableOpacity>
       </View>
-      <View>
+      {/* The whole title block opens the full recipe (not only "+ FULL"). */}
+      <TouchableOpacity onPress={onViewFull} activeOpacity={0.8}>
         <Text style={styles.savedDishName}>{pairing.dishName}</Text>
         <Text style={styles.savedChef}>Inspired by {pairing.chefInspiration}</Text>
         {wineLine ? <Text style={styles.savedWineLine}>To pair with {wineLine}</Text> : null}
-      </View>
+      </TouchableOpacity>
 
       <TouchableOpacity onPress={onOpenNotes} style={styles.savedNotesLink} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
         <Text style={styles.savedNotesLinkText}>
@@ -677,7 +678,7 @@ const styles = StyleSheet.create({
   cardHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   cardShareLink: { paddingHorizontal: spacing.xs, paddingVertical: 2 },
   cardShareLinkText: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, letterSpacing: 1.5, textTransform: 'uppercase' },
-  chefInspiration: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2 },
+  chefInspiration: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold, marginTop: 2, marginBottom: spacing.sm },
   recipeMetaInline: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.text, marginTop: 4, letterSpacing: 0.3 },
   pairingNotes: { fontSize: 14, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: spacing.sm, lineHeight: 20 },
   toggle: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, marginTop: spacing.sm },

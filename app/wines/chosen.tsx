@@ -473,9 +473,11 @@ export default function ChosenWinesScreen() {
 
   useEffect(() => {
     if (promptShownRef.current || isLoading || awaitingReview.length === 0) return;
-    // Don't nudge when arriving from the Label Library to view/create a review —
-    // that prompt is only for a plain visit to Your Wine Reviews.
-    if (cameViaLabelLink) { promptShownRef.current = true; return; }
+    // Only nudge on a plain visit to Your Wine Reviews. When the user deep-linked
+    // in for a SPECIFIC wine — from a cellar wine card (openCellarReview /
+    // openCellarReviewInput) or the Label Library (openReview / seedAdd) — they're
+    // here on purpose; the "wines awaiting review" reminder would be an intrusion.
+    if (cameViaLink) { promptShownRef.current = true; return; }
     promptShownRef.current = true;
     const list = [...awaitingReview];
     AsyncStorage.getItem(promptKey)

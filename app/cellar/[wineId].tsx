@@ -1362,9 +1362,13 @@ export default function CellarWineDetail() {
   // From an archived wine card, the review flow should return the user back
   // HERE (backTo) with a "saved to Your Wine Reviews" confirmation, rather than
   // stranding them on the reviews list.
-  const archiveReviewReturn = isArchived
-    ? `&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}&savedToast=${encodeURIComponent([wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ') || wine.wine_name || 'this wine')}`
-    : '';
+  // Always return to THIS wine card when the review closes: a cellar review lives
+  // in Your Wine Reviews, but the user opened it from here and should land back
+  // here — not stranded on the reviews list. Archived wines also get the "saved
+  // to Your Wine Reviews" confirmation toast.
+  const archiveReviewReturn = `&backTo=${encodeURIComponent(`/cellar/${wine.id}`)}${
+    isArchived ? `&savedToast=${encodeURIComponent([wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ') || wine.wine_name || 'this wine')}` : ''
+  }`;
 
   return (
     <KeyboardAwareScrollView
@@ -2413,7 +2417,7 @@ const styles = StyleSheet.create({
   // Inter — tasting notes body
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
   // The inlined "what's this" explainer shown in italics after Vinster's Review.
-  vinsterExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 19, marginTop: spacing.sm },
+  vinsterExplainer: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.gold, lineHeight: 19, marginTop: spacing.sm },
   // "Generate" button shown inside Vinster's Review when there's no note yet.
   generateNoteBtn: { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.xs, paddingHorizontal: spacing.lg, marginTop: spacing.xs },
   generateNoteBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },

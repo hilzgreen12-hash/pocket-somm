@@ -43,7 +43,10 @@ function LineupCard({ item }: { item: LineupArchive }) {
       <View style={styles.cardImageWrap}>
         {url ? <Image source={{ uri: url }} style={styles.cardImage} resizeMode="cover" /> : <ActivityIndicator color={colors.gold} />}
       </View>
-      <Text style={styles.cardStamp} numberOfLines={1}>{date}{place ? ` · ${place}` : ''}</Text>
+      {/* The user-given lineup title (migration 101) sits above the date · venue
+          stamp; when there's no title yet, the stamp stands alone. */}
+      {item.name?.trim() ? <Text style={styles.cardName} numberOfLines={1}>{item.name.trim()}</Text> : null}
+      <Text style={[styles.cardStamp, item.name?.trim() ? styles.cardStampTight : null]} numberOfLines={1}>{date}{place ? ` · ${place}` : ''}</Text>
     </TouchableOpacity>
   );
 }
@@ -154,7 +157,10 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardImageWrap: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   cardImage: { width: 220, height: 165 },
+  // The lineup title (e.g. "Girls Weekend in Italy"), above the date · venue stamp.
+  cardName: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, marginTop: 6, letterSpacing: 0.3 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 6 },
+  cardStampTight: { marginTop: 2 },
 
   // Dashed "add a lineup" tile trailing the carousel, sized to the thumbnails.
   addCard: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 6 },
