@@ -33,9 +33,13 @@ Deno.serve(async (req) => {
 - Wine name / cuvée: "${wineName ?? ''}"
 - Vintage: "${vintage ?? ''}"
 
-First, if the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans). Then list THIS producer's core range so the user can pick the right bottling — the specific cuvée may have been missed or misread on the label.
+First, if the producer text is misspelt or an OCR misread, silently correct it to the real producer you recognise (e.g. "Pazo Senorans" → Pazo de Señorans).
 
-List the REAL, DISTINCT wines that this producer actually makes — be THOROUGH and include their whole core range (up to 8), not just the obvious one. Most estates make several bottlings; a well-known producer's core range is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño, the aged Selección de Añada, and the sweet Sol de Señoráns). Order by how likely each is given the partial reading.
+Then decide how WIDE the list should be, using what was actually read from the label — be thoughtful, not exhaustive:
+- If the Region/appellation OR the Wine name/cuvée was clearly read (e.g. Region "Cornas", or a legible cuvée), list ONLY the bottlings this producer makes that MATCH that appellation/cuvée. The ambiguity is just WHICH of those it is — e.g. a grower's two different Cornas cuvées. Do NOT include their wines from OTHER appellations or ranges; that only adds noise and confuses the user.
+- ONLY when BOTH the appellation and the cuvée are blank/unreadable should you fall back to the producer's broader core range (up to 8), so the user can still find it. A well-known range is easy to recall (e.g. Pazo de Señoráns makes the standard Albariño, the aged Selección de Añada, and the sweet Sol de Señoráns).
+
+List the REAL, DISTINCT wines that fit the above (up to 8), ordered by how likely each is given the partial reading.
 
 ACCURACY IS CRITICAL — a wrong list is worse than a short one:
 - Do NOT invent bottlings. Only real wines this producer actually makes.

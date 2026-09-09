@@ -706,7 +706,7 @@ export default function RestaurantReviewsScreen() {
             <Text style={[styles.summaryLink, awaitingRestaurants.length === 0 && { opacity: 0.5 }]}>View Restaurants Awaiting Review</Text>
           </TouchableOpacity>
         </View>
-        <ScrollView style={styles.scrollArea} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
+          {/* Filters + search stay FIXED; only the review bubbles below scroll. */}
           <Text style={styles.filterHint}>Listed by recency · Swipe to see all filters →</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll} contentContainerStyle={styles.filterChipRow}>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('date')}>
@@ -771,10 +771,11 @@ export default function RestaurantReviewsScreen() {
             ) : null}
           </View>
 
+          {/* Only the review bubbles scroll — the filters + search above are fixed. */}
+          <ScrollView style={styles.scrollArea} contentContainerStyle={{ flexGrow: 1, paddingBottom: 60 }} keyboardShouldPersistTaps="handled">
           {sorted.length === 0 ? (
             <View style={styles.empty}>
-              {/* Sits on the cream scroll area, so dark text (not the white emptyBody). */}
-              <Text style={[styles.emptyBody, styles.emptyBodyOnCream]}>No visits match these filters. Try widening the date range or lowering the rating.</Text>
+              <Text style={styles.emptyBody}>No visits match these filters. Try widening the date range or lowering the rating.</Text>
             </View>
           ) : (
             sorted.map((item) => {
@@ -1086,8 +1087,7 @@ const styles = StyleSheet.create({
   // The filters / search / review-bubble list scroll on a cream "page"; the
   // bubbles, chips and search bar keep their own terracotta fill (below) so
   // their interiors — and their white/gold text — are unchanged.
-  scrollArea: { flex: 1, backgroundColor: colors.cream },
-  emptyBodyOnCream: { color: colors.surfaceElevated },
+  scrollArea: { flex: 1 },
   intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -1103,7 +1103,8 @@ const styles = StyleSheet.create({
   // opacity:0 — on Android that degrades the rasterised PNG, so the card
   // is hidden by off-screen position alone.
   shareCardWrap: { position: 'absolute', left: -10000, top: 0 },
-  cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.background },
+  // Review bubbles — the same brown as the carousel cards on other pages.
+  cardCompact: { marginHorizontal: spacing.xl, marginTop: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, backgroundColor: colors.surface },
   cardCompactRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: spacing.sm },
   // Star rating sits above the share icon on the right of each card.
   rightCluster: { alignItems: 'flex-end', gap: spacing.xs },
@@ -1124,16 +1125,16 @@ const styles = StyleSheet.create({
   wineLine: { flex: 1, fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.gold },
   wineScore: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold, marginLeft: spacing.sm },
   // Black on the cream scroll page (was muted white on terracotta).
-  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: '#000000', letterSpacing: 0.3 },
+  filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
   filterScroll: { flexGrow: 0, flexShrink: 0 },
   filterChipRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, gap: spacing.sm },
-  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden', backgroundColor: colors.background },
+  filterChip: { width: 120, height: 56, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, marginRight: spacing.sm, justifyContent: 'center', alignItems: 'flex-start', overflow: 'hidden' },
   // Bespoke user-created filter chips (the "+ Add" row) — same look as the
   // Label Library.
-  customChip: { height: 56, justifyContent: 'center', alignItems: 'flex-start', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, minWidth: 110, maxWidth: 180, overflow: 'hidden', backgroundColor: colors.background },
+  customChip: { height: 56, justifyContent: 'center', alignItems: 'flex-start', borderWidth: 1, borderColor: colors.borderLight, borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, minWidth: 110, maxWidth: 180, overflow: 'hidden' },
   customChipActive: { borderColor: colors.gold },
   customChipText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, marginTop: 3, alignSelf: 'stretch' },
-  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md, backgroundColor: colors.background },
+  customChipAdd: { height: 56, justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 12, paddingHorizontal: spacing.md },
   customChipAddText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   filterChipHeadingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', alignSelf: 'stretch' },
   filterChipLabel: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8 },
@@ -1161,7 +1162,7 @@ const styles = StyleSheet.create({
   // Search bar beneath the filter chips.
   // Search bar — mirrors Your Wine Reviews: a light input, not a dark filled row.
   searchRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: spacing.xl, marginTop: spacing.xs, marginBottom: spacing.sm },
-  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.background },
+  searchInput: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
   searchClear: { fontSize: 15, color: colors.textMuted, paddingLeft: spacing.sm },
   // Gold summary bar (mirrors Your Wine Reviews).
   summaryRow: { paddingHorizontal: spacing.xl, paddingVertical: spacing.sm, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: colors.border },

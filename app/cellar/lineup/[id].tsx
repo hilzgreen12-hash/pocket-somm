@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Keyboard } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
@@ -69,6 +69,9 @@ export default function LineupDetailScreen() {
   const [noteDraft, setNoteDraft] = useState('');
   // Free-text venue (restaurant / bar / home), edited inline via the pin field.
   const [venue, setVenue] = useState('');
+  // Shows a subtle "Done" beneath the inline venue while it's being edited, so
+  // there's a clear way to confirm and dismiss the keyboard.
+  const [venueFocused, setVenueFocused] = useState(false);
   const hydrated = useRef(false);
   useEffect(() => {
     if (lineup && !hydrated.current) {
@@ -523,13 +526,21 @@ export default function LineupDetailScreen() {
             style={styles.venueInput}
             value={venue}
             onChangeText={setVenue}
-            onEndEditing={saveVenue}
+            onFocus={() => setVenueFocused(true)}
+            onEndEditing={() => { setVenueFocused(false); saveVenue(); }}
             onSubmitEditing={saveVenue}
             placeholder="Input Venue"
             placeholderTextColor={colors.textMuted}
             returnKeyType="done"
             textAlign="center"
+            spellCheck={false}
+            autoCorrect={false}
           />
+          {venueFocused ? (
+            <TouchableOpacity onPress={() => Keyboard.dismiss()} hitSlop={{ top: 6, bottom: 6, left: 10, right: 10 }} activeOpacity={0.7}>
+              <Text style={styles.venueDone}>Done</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
         {/* Once linked, the row becomes a link straight to the matched
             restaurant review card (long-press to re-match); otherwise it opens
@@ -667,6 +678,8 @@ export default function LineupDetailScreen() {
               onChangeText={setCityDraft}
               placeholder="City or place"
               placeholderTextColor={colors.textMuted}
+              spellCheck={false}
+              autoCorrect={false}
             />
             <TouchableOpacity style={[styles.stampSaveBtn, savingStamp && { opacity: 0.5 }]} onPress={saveStamp} disabled={savingStamp} activeOpacity={0.85}>
               <Text style={styles.stampSaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
@@ -808,6 +821,8 @@ export default function LineupDetailScreen() {
               autoFocus
               returnKeyType="done"
               onSubmitEditing={saveName}
+              spellCheck={false}
+              autoCorrect={false}
             />
             <TouchableOpacity style={[styles.stampSaveBtn, savingName && { opacity: 0.5 }]} onPress={saveName} disabled={savingName} activeOpacity={0.85}>
               <Text style={styles.stampSaveText}>{savingName ? 'Saving…' : 'Save'}</Text>
@@ -852,6 +867,8 @@ const styles = StyleSheet.create({
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
   venueRow: { alignItems: 'center', marginTop: spacing.xs, paddingHorizontal: spacing.xl },
   venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, textAlign: 'center', paddingVertical: 2, alignSelf: 'stretch' },
+  // Subtle "Done" beneath the venue while editing — confirm + dismiss keyboard.
+  venueDone: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 4 },
   matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
   matchLink: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline', textAlign: 'center' },
   matchedText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
@@ -896,10 +913,10 @@ const styles = StyleSheet.create({
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   // Section headers — yellow, all-caps, matching the stats-bar type.
-  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm },
   noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8 },
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
   noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },

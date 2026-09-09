@@ -83,19 +83,19 @@ export default function WineArchiveScreen() {
             the stats bar. */}
         <Text style={styles.blurb}>Bottles you've moved out of your cellar live here. You can still add reviews and cellar notes for the wines in your archive.</Text>
         <View style={styles.statsBox}>
-          <Text style={styles.statsText}>
-            {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
-          </Text>
           <TouchableOpacity onPress={() => router.push('/cellar/list?archived=1')} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
             <Text style={styles.viewLink}>View Your Cellar Archive →</Text>
           </TouchableOpacity>
+          <Text style={styles.statsText}>
+            {archivedWines.length} {archivedWines.length === 1 ? 'Wine' : 'Wines'} · {archivedBottles} {archivedBottles === 1 ? 'Bottle' : 'Bottles'}
+          </Text>
         </View>
 
         {/* Archive a Night Lineups — a sub-header (not a bubble), its blurb, the
             stats bar bracketed by full-width rules, then the thumbnail carousel
             with a swipe hint above it. */}
         <Text style={styles.sectionHeader}>Archive a Night Lineups</Text>
-        <Text style={styles.blurb}>Your vinous exploits save here automatically from Scan a Lineup, or add Lineups directly. This archive is a diary of your best wine memories.</Text>
+        <Text style={styles.blurb}>Your Vinous exploits are saved here automatically from the Scan tab, Scan a Lineup. This archive is a diary of your most epic wine memories.</Text>
         <Text style={styles.stats}>
           {lineups.length} {lineups.length === 1 ? 'Lineup' : 'Lineups'} · {lineupBottles} {lineupBottles === 1 ? 'Bottle' : 'Bottles'}
         </Text>

@@ -4,6 +4,7 @@ import {
   StyleSheet, Keyboard, Share, ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
+import { Ionicons } from '@expo/vector-icons';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../utils/shareCard';
 import * as ImagePicker from 'expo-image-picker';
@@ -676,8 +677,8 @@ export function RestaurantReviewModal({
                 <>
                   <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoBannerImg} radius={0} frame={0} resizeMode="contain" />
                   <View style={styles.photoBannerScrim} pointerEvents="none" />
-                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.()} activeOpacity={0.8} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={styles.photoChangeText}>Change</Text>
+                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.()} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
+                    <Ionicons name="camera" size={18} color={colors.gold} />
                   </TouchableOpacity>
                 </>
               ) : (
@@ -1038,8 +1039,8 @@ const styles = StyleSheet.create({
   photoBannerAdd: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', gap: 6 },
   photoBannerAddIcon: { fontFamily: fonts.headingBold, fontSize: 34, color: colors.gold },
   photoBannerAddText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
-  photoChangeBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: 6 },
-  photoChangeText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: '#fff', letterSpacing: 0.3 },
+  // Camera badge (top-right of the photo), matching the archived-lineup image.
+  photoChangeBtn: { position: 'absolute', top: spacing.sm, right: spacing.sm, backgroundColor: 'rgba(0,0,0,0.45)', borderRadius: 18, minWidth: 34, height: 32, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center' },
   // Overlaid, editable identity anchored to the bottom of the banner.
   photoBannerText: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.md },
   addPhotoLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },

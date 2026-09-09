@@ -879,7 +879,7 @@ export default function LabelResultsScreen() {
 
         <View style={styles.header}>
           {imageUri ? (
-            <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85}>
+            <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85} style={styles.heroFrame}>
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
           ) : null}
@@ -1800,7 +1800,7 @@ export default function LabelResultsScreen() {
               wine identity (name · region · grape) on its right. Manual entries
               have no imageUri, so the text column simply fills the row. */}
           {imageUri ? (
-            <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85}>
+            <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85} style={styles.heroFrame}>
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
           ) : null}
@@ -1955,6 +1955,10 @@ export default function LabelResultsScreen() {
             </TouchableOpacity>
           </View>
           <View style={styles.statBarRule} />
+          {/* Affordance: the three stats are tappable (each opens a "how Vinster
+              worked it out" popup). Static stat bars elsewhere omit this caption,
+              so the bar's format stays identical app-wide. */}
+          <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out →</Text>
 
           {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
               one above the other with no separator between them; the section's
@@ -2632,7 +2636,11 @@ const styles = StyleSheet.create({
   // separator above Vinster's Note / Map.
   headerBlock: {},
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: spacing.sm },
-  heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: colors.surface, marginRight: spacing.md },
+  // Framed label picture — the photo sits in a cream mat with a subtle lift,
+  // exactly like the restaurant-review photo (LabelThumb), integrated beside the
+  // wine identity in the header row.
+  heroFrame: { backgroundColor: colors.cream, padding: 5, borderRadius: 12, marginRight: spacing.md, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 3, shadowOffset: { width: 0, height: 1 }, elevation: 3 },
+  heroImage: { width: 120, aspectRatio: 3 / 4, borderRadius: 7, backgroundColor: colors.surface },
   headerText: { flex: 1 },
   candOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   candSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%', maxWidth: 440 },
@@ -2703,6 +2711,9 @@ const styles = StyleSheet.create({
   // Gold, label-less headline stats bar under the title — tappable figures.
   statBarValueGold: { fontSize: 18, fontFamily: fonts.bodyBold, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
   statBarSepGold: { fontSize: 26, color: colors.gold, opacity: 0.75 },
+  // Caption that marks the stat bar as tappable (Option A). Only on interactive
+  // bars — static bars app-wide omit it, keeping the bar's format identical.
+  statBarHint: { fontFamily: fonts.bodyItalic, fontSize: 12.5, color: colors.gold, opacity: 0.85, textAlign: 'center', marginTop: spacing.sm },
   // Vinster's Vintage & Market Comparison — collapsible section + its table.
   vintageSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
   vintageHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: spacing.xs },
