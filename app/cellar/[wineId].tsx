@@ -28,6 +28,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
+import { fetchPlacementsForWine, placedCount } from '../../src/api/placements';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -137,6 +138,14 @@ export default function CellarWineDetail() {
     queryKey: ['slot-assignments', rackIds],
     queryFn: () => getSlotAssignments(rackIds),
     enabled: rackIds.length > 0,
+  });
+  // Unified placements (migration 103/104) — read path. Bottles not covered by
+  // any placement are "unplaced" (loose in the Full Cellar List); surfacing them
+  // fixes the "3 in a rack, where are the other 3?" gap.
+  const { data: winePlacements = [] } = useQuery({
+    queryKey: ['placements', wineId],
+    queryFn: () => fetchPlacementsForWine(wineId!),
+    enabled: !!wineId,
   });
   // A single listing's bottles can span several racks, so tally a per-rack
   // count and surface one "N bottles in <rack>" link for each.
@@ -1715,6 +1724,14 @@ export default function CellarWineDetail() {
               <Text style={styles.statAction}>{wine.quantity} bottle{wine.quantity === 1 ? '' : 's'} in {wineStorageLocation.name}{wineCase ? ` - ${wineCase.name}` : ''} →</Text>
             </TouchableOpacity>
           )}
+          {/* Bottles not covered by any placement — surfaced from the unified
+              placements model so partially-placed wines no longer hide bottles. */}
+          {(() => {
+            const unplaced = Math.max(0, (wine.quantity ?? 0) - placedCount(winePlacements));
+            return unplaced > 0 && placedCount(winePlacements) > 0 ? (
+              <Text style={styles.statActionMuted}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed in home storage</Text>
+            ) : null;
+          })()}
           {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !wine?.bin_cell_id && !isArchived && !isWishlist && (
             <TouchableOpacity onPress={handleAddToLocation}>
               <Text style={styles.statAction}>Add to Location</Text>
@@ -2576,6 +2593,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: fonts.headingSemibold,
     color: colors.gold,
+    marginTop: 4,
+  },
+  // Informational (non-tappable) placement note — muted italic.
+  statActionMuted: {
+    fontSize: 12,
+    fontFamily: fonts.bodyItalic,
+    color: colors.textMuted,
     marginTop: 4,
   },
   // Inter — subtle cancel

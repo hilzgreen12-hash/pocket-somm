@@ -1,0 +1,69 @@
+import { supabase } from './supabase';
+
+// A single placement of some of a wine's bottles in ONE spot — a rack slot, a
+// bin cell, or an alt cellar (optionally in a case). Introduced by the unified
+// home-storage model (migration 103). During Phase 2 these are kept in sync with
+// the legacy fields by DB triggers (migration 104); Phase 3 writes them directly.
+export interface CellarPlacement {
+  id: string;
+  cellar_wine_id: string;
+  kind: 'rack' | 'bin' | 'location';
+  quantity: number;
+  rack_id: string | null;
+  row_index: number | null;
+  col_index: number | null;
+  bin_cell_id: string | null;
+  storage_location_id: string | null;
+  case_id: string | null;
+}
+
+const COLS =
+  'id, cellar_wine_id, kind, quantity, rack_id, row_index, col_index, bin_cell_id, storage_location_id, case_id';
+
+// All placements for one wine (its full bottle-distribution across storage).
+export async function fetchPlacementsForWine(wineId: string): Promise<CellarPlacement[]> {
+  const { data, error } = await supabase
+    .from('cellar_placements')
+    .select(COLS)
+    .eq('cellar_wine_id', wineId);
+  if (error) throw error;
+  return (data ?? []) as CellarPlacement[];
+}
+
+// Placements for many wines at once (batched — for list/stats screens). Chunked
+// so a big cellar doesn't blow the `in (...)` limit.
+export async function fetchPlacementsForWines(wineIds: string[]): Promise<CellarPlacement[]> {
+  const ids = Array.from(new Set(wineIds.filter(Boolean)));
+  if (ids.length === 0) return [];
+  const CHUNK = 300;
+  const out: CellarPlacement[] = [];
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const slice = ids.slice(i, i + CHUNK);
+    const { data, error } = await supabase
+      .from('cellar_placements')
+      .select(COLS)
+      .in('cellar_wine_id', slice);
+    if (error) throw error;
+    out.push(...((data ?? []) as CellarPlacement[]));
+  }
+  return out;
+}
+
+// Every placement that lives in a given rack / bin / alt cellar — for the
+// per-location screens and their bottle counts.
+export async function fetchPlacementsForRack(rackId: string): Promise<CellarPlacement[]> {
+  const { data, error } = await supabase.from('cellar_placements').select(COLS).eq('rack_id', rackId);
+  if (error) throw error;
+  return (data ?? []) as CellarPlacement[];
+}
+export async function fetchPlacementsForLocation(locationId: string): Promise<CellarPlacement[]> {
+  const { data, error } = await supabase.from('cellar_placements').select(COLS).eq('storage_location_id', locationId);
+  if (error) throw error;
+  return (data ?? []) as CellarPlacement[];
+}
+
+// Bottles of a wine that are placed somewhere (sum of placement quantities). The
+// rest of the wine's `quantity` is "unplaced" (loose in the Full Cellar List).
+export function placedCount(placements: CellarPlacement[]): number {
+  return placements.reduce((sum, p) => sum + (p.quantity ?? 0), 0);
+}
