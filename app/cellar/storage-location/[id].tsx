@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, normalizeCaseKind, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
+import { fetchLocationPlacementRows } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
@@ -107,9 +108,12 @@ export default function StorageLocationScreen() {
     queryFn: () => fetchStorageLocation(id!),
     enabled: !!id,
   });
+  // Wines in this alt cellar now come from location PLACEMENTS (unified model),
+  // so a wine can be here AND in a rack; each row carries the quantity + case of
+  // its placement here.
   const { data: wines = [] } = useQuery({
     queryKey: ['storage-location-wines', id],
-    queryFn: () => fetchStorageLocationWines(id!),
+    queryFn: () => fetchLocationPlacementRows(id!),
     enabled: !!id,
   });
   const { data: cases = [] } = useQuery({

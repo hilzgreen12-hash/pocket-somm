@@ -186,6 +186,15 @@ export async function deleteStorageCase(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// Fetch specific cases by id (to resolve names for location placements).
+export async function fetchStorageCasesByIds(ids: string[]): Promise<StorageCase[]> {
+  const clean = Array.from(new Set(ids.filter(Boolean)));
+  if (clean.length === 0) return [];
+  const { data, error } = await supabase.from('storage_cases').select(CASE_COLS).in('id', clean);
+  if (error) throw error;
+  return (data ?? []) as StorageCase[];
+}
+
 // File (or unfile, with null) a wine into a case.
 export async function assignWineToCase(wineId: string, caseId: string | null): Promise<void> {
   const { error } = await supabase.from('cellar_wines').update({ case_id: caseId }).eq('id', wineId);
@@ -196,14 +205,23 @@ export async function assignWineToCase(wineId: string, caseId: string | null): P
 // case doesn't linger as a nameless orphan (still surfacing its old name in the
 // add-a-wine flow) after its bottles are removed, deleted, or archived.
 export async function deleteEmptyCasesForLocation(locationId: string): Promise<void> {
-  const { data, error } = await supabase
+  // Case membership now lives on cellar_placements (case_id), NOT cellar_wines —
+  // so a case is "empty" only when no PLACEMENT points at it. (Checking the old
+  // cellar_wines.case_id here would wrongly delete every case.)
+  const { data: cases, error } = await supabase
     .from('storage_cases')
-    .select('id, cellar_wines(id)')
+    .select('id')
     .eq('storage_location_id', locationId);
   if (error) throw error;
-  const emptyIds = (data ?? [])
-    .filter((c: any) => (Array.isArray(c.cellar_wines) ? c.cellar_wines.length : 0) === 0)
-    .map((c: any) => c.id as string);
+  const caseIds = (cases ?? []).map((c: any) => c.id as string);
+  if (caseIds.length === 0) return;
+  const { data: used, error: pErr } = await supabase
+    .from('cellar_placements')
+    .select('case_id')
+    .in('case_id', caseIds);
+  if (pErr) throw pErr;
+  const usedIds = new Set((used ?? []).map((p: any) => p.case_id).filter(Boolean));
+  const emptyIds = caseIds.filter((id) => !usedIds.has(id));
   if (emptyIds.length === 0) return;
   const { error: delErr } = await supabase.from('storage_cases').delete().in('id', emptyIds);
   if (delErr) throw delErr;

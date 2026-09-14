@@ -38,7 +38,7 @@ import { evictCachedLabel } from '../../src/api/labelImageCache';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
-import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageLocationCases } from '../../src/api/storageLocations';
+import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageLocationCases, fetchStorageCasesByIds } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { PackagingPrompt } from '../../src/components/PackagingPrompt';
@@ -146,6 +146,15 @@ export default function CellarWineDetail() {
     queryKey: ['placements', wineId],
     queryFn: () => fetchPlacementsForWine(wineId!),
     enabled: !!wineId,
+  });
+  // Alt-cellar placements (a wine can be in several locations/cases). Case names
+  // are resolved for the breakdown lines.
+  const locationPlacements = winePlacements.filter((p) => p.kind === 'location');
+  const placementCaseIds = Array.from(new Set(locationPlacements.map((p) => p.case_id).filter(Boolean) as string[]));
+  const { data: placementCases = [] } = useQuery({
+    queryKey: ['placement-cases', placementCaseIds],
+    queryFn: () => fetchStorageCasesByIds(placementCaseIds),
+    enabled: placementCaseIds.length > 0,
   });
   // A single listing's bottles can span several racks, so tally a per-rack
   // count and surface one "N bottles in <rack>" link for each.
@@ -1716,14 +1725,17 @@ export default function CellarWineDetail() {
           {wineLocations.map((l) => (
             <Text key={l.id} style={styles.statAction}>In {l.name}</Text>
           ))}
-          {wineStorageLocation && (
-            <TouchableOpacity onPress={() => router.push(`/cellar/storage-location/${wineStorageLocation.id}` as any)}>
-              {/* A location-filed row holds its full quantity there — placement is
-                  mutually exclusive with racks/bins — so show that bottle count,
-                  matching the rack lines above. */}
-              <Text style={styles.statAction}>{wine.quantity} bottle{wine.quantity === 1 ? '' : 's'} in {wineStorageLocation.name}{wineCase ? ` - ${wineCase.name}` : ''} →</Text>
-            </TouchableOpacity>
-          )}
+          {/* Alt-cellar placements — a wine can be in a rack AND one or more alt
+              cellars now; each placement is its own "N bottles in <location> - <case>" line. */}
+          {locationPlacements.map((p) => {
+            const loc = storageLocations.find((l) => l.id === p.storage_location_id);
+            const cs = placementCases.find((c) => c.id === p.case_id);
+            return (
+              <TouchableOpacity key={p.id} onPress={() => router.push(`/cellar/storage-location/${p.storage_location_id}` as any)}>
+                <Text style={styles.statAction}>{p.quantity} bottle{p.quantity === 1 ? '' : 's'} in {loc?.name ?? 'a location'}{cs ? ` - ${cs.name}` : ''} →</Text>
+              </TouchableOpacity>
+            );
+          })}
           {/* Bottles not covered by any placement — surfaced from the unified
               placements model so partially-placed wines no longer hide bottles. */}
           {(() => {
@@ -1732,7 +1744,7 @@ export default function CellarWineDetail() {
               <Text style={styles.statActionMuted}>{unplaced} bottle{unplaced === 1 ? '' : 's'} not yet placed in home storage</Text>
             ) : null;
           })()}
-          {wineRacks.length === 0 && wineLocations.length === 0 && !wineStorageLocation && !wine?.bin_cell_id && !isArchived && !isWishlist && (
+          {wineRacks.length === 0 && wineLocations.length === 0 && locationPlacements.length === 0 && !wine?.bin_cell_id && !isArchived && !isWishlist && (
             <TouchableOpacity onPress={handleAddToLocation}>
               <Text style={styles.statAction}>Add to Location</Text>
             </TouchableOpacity>

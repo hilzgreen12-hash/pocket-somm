@@ -67,3 +67,55 @@ export async function fetchPlacementsForLocation(locationId: string): Promise<Ce
 export function placedCount(placements: CellarPlacement[]): number {
   return placements.reduce((sum, p) => sum + (p.quantity ?? 0), 0);
 }
+
+// ---- App-managed 'location' (alt cellar) placements (Phase 3) --------------
+
+// Add `quantity` bottles of a wine to an alt cellar (optionally boxed in a case),
+// merging into an existing matching placement rather than spawning a duplicate.
+export async function addLocationPlacement(
+  wineId: string, locationId: string, caseId: string | null, quantity: number,
+): Promise<void> {
+  let q = supabase
+    .from('cellar_placements')
+    .select('id, quantity')
+    .eq('cellar_wine_id', wineId)
+    .eq('kind', 'location')
+    .eq('storage_location_id', locationId);
+  q = caseId ? q.eq('case_id', caseId) : q.is('case_id', null);
+  const { data: existing, error: selErr } = await q.limit(1).maybeSingle();
+  if (selErr) throw selErr;
+  if (existing) {
+    const { error } = await supabase
+      .from('cellar_placements')
+      .update({ quantity: (existing.quantity ?? 0) + quantity })
+      .eq('id', existing.id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase.from('cellar_placements').insert({
+      cellar_wine_id: wineId, kind: 'location', quantity, storage_location_id: locationId, case_id: caseId,
+    });
+    if (error) throw error;
+  }
+}
+
+// A wine "row" as it appears inside an alt cellar: the wine's details but with
+// the quantity + case of its placement THERE (a wine can also be racked/binned
+// elsewhere). Shaped like a CellarWine so the alt-cellar screen renders it.
+export async function fetchLocationPlacementRows(locationId: string): Promise<any[]> {
+  const { data: placements, error } = await supabase
+    .from('cellar_placements')
+    .select(COLS)
+    .eq('storage_location_id', locationId)
+    .eq('kind', 'location');
+  if (error) throw error;
+  const rows = (placements ?? []) as CellarPlacement[];
+  if (rows.length === 0) return [];
+  const wineIds = Array.from(new Set(rows.map((p) => p.cellar_wine_id)));
+  const { data: wines, error: wErr } = await supabase.from('cellar_wines').select('*').in('id', wineIds);
+  if (wErr) throw wErr;
+  const wineById = new Map((wines ?? []).map((w: any) => [w.id, w]));
+  return rows.flatMap((p) => {
+    const w = wineById.get(p.cellar_wine_id);
+    return w ? [{ ...w, quantity: p.quantity, case_id: p.case_id, placement_id: p.id }] : [];
+  });
+}

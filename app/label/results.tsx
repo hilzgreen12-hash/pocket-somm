@@ -20,6 +20,7 @@ import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
 import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases } from '../../src/api/storageLocations';
+import { addLocationPlacement } from '../../src/api/placements';
 import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -1117,50 +1118,37 @@ export default function LabelResultsScreen() {
     // harmless on any other flow). File the saved wine in and return to it.
     if (pendingStorageLocationId && context === 'add-location') {
       const locQty = Math.max(1, bottleCount);
-      // Filing into a location means the wine is no longer racked. A re-scanned
-      // wine that already sat in a rack would otherwise be counted twice — once
-      // via its rack slots and once via the location's summed quantity (S3).
-      await clearWineFromRacks(savedWineId);
+      // Unified placements: bump the wine's TOTAL (a merge adds to the existing
+      // count; a fresh add sets it), but do NOT clear its rack slots or set
+      // storage_location_id — a wine can live in a rack AND an alt cellar now.
+      // The alt-cellar bottles are recorded as a location PLACEMENT below, so
+      // nothing is ever dropped when adding to a wine that's placed elsewhere.
       await updateWine.mutateAsync({
         id: savedWineId,
-        updates: { quantity: mode === 'merge' ? baseQuantity + locQty : locQty, storage_location_id: pendingStorageLocationId },
+        updates: { quantity: mode === 'merge' ? baseQuantity + locQty : locQty },
       });
-      // Case boxing: attach to the case we were told to (the "add another to
-      // this case" loop) or create a fresh one from the storage-kind choice.
-      // Non-fatal — a failure still leaves the wine filed loose in the location.
+      // Resolve/create the case — the grouping lives on the placement, not the
+      // wine. Mixed cases can merge into an existing same-name case; complete
+      // cases are always their own. Non-fatal: a failure just files them loose.
+      let placementCaseId: string | null = pendingCaseId ?? null;
       try {
-        if (pendingCaseId) {
-          await assignWineToCase(savedWineId, pendingCaseId);
-        } else if (storageKind !== 'loose' && session?.user.id) {
-          // Merge into an existing case of the same name only for MIXED cases —
-          // they're the only kind another wine can join. Complete/OWC cases are
-          // single-wine, so they always create a fresh case even on a name clash.
+        if (!placementCaseId && storageKind !== 'loose' && session?.user.id) {
           const wanted = caseName.trim().toLowerCase();
           const existingCase = wanted && storageKind === 'mixed'
             ? locationCases.find((c) => c.kind === 'mixed' && c.name.trim().toLowerCase() === wanted)
             : undefined;
-          if (existingCase) {
-            await assignWineToCase(savedWineId, existingCase.id);
-          } else {
-            const created = await createStorageCase(session.user.id, {
-              storageLocationId: pendingStorageLocationId,
-              name: caseName,
-              kind: storageKind,
-              note: caseNote,
-            });
-            try {
-              await assignWineToCase(savedWineId, created.id);
-            } catch (assignErr) {
-              // Roll back the just-created case — a create that succeeds followed
-              // by a failed assign otherwise commits a zero-member case that (per
-              // D1) is invisible and undeletable (D2).
-              try { await deleteStorageCase(created.id); } catch { /* best-effort */ }
-              throw assignErr;
-            }
-          }
+          placementCaseId = existingCase
+            ? existingCase.id
+            : (await createStorageCase(session.user.id, {
+                storageLocationId: pendingStorageLocationId, name: caseName, kind: storageKind, note: caseNote,
+              })).id;
         }
-      } catch { /* wine is still filed in the location */ }
+      } catch { placementCaseId = pendingCaseId ?? null; }
+      // File the bottles into the alt cellar as a placement (merges into an
+      // existing matching placement rather than spawning a duplicate).
+      await addLocationPlacement(savedWineId, pendingStorageLocationId, placementCaseId, locQty);
       qc.invalidateQueries({ queryKey: ['cellar'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines', pendingStorageLocationId] });
       qc.invalidateQueries({ queryKey: ['storage-location-cases', pendingStorageLocationId] });
       qc.invalidateQueries({ queryKey: ['storage-locations', session?.user.id] });
@@ -1501,48 +1489,10 @@ export default function LabelResultsScreen() {
       showAlert({ title: 'Case name needed', body: 'Give this case a name before adding — e.g. "Mixed Burgundy".' });
       return;
     }
-    // Scanning a wine to add to a home storage location, but that wine already
-    // sits UNPLACED in the cellar → offer to place the existing listing here
-    // (rather than duplicating it) or just bump the existing count.
-    if (context === 'add-location' && matchingExisting && pendingStorageLocationId
-        && !matchingExisting.storage_location_id && !matchingExisting.bin_cell_id) {
-      const target = matchingExisting;
-      const destLoc = pendingStorageLocationId;
-      const addCount = Math.max(1, bottleCount);
-      const existingQty = target.quantity;
-      const wineLabel = `${target.wine_name}${target.vintage ? ` ${target.vintage}` : ''}`;
-      showAlert({
-        title: 'Already in your cellar!',
-        body: `You already have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel} not yet in a home storage location. Should Vinster place your existing listing here?`,
-        buttons: [
-          { text: 'Yes, place existing wines', onPress: async () => {
-            setSaving(true);
-            try {
-              await clearWineFromRacks(target.id);
-              await updateWine.mutateAsync({ id: target.id, updates: { storage_location_id: destLoc, bin_cell_id: null, case_id: pendingCaseId ?? null } });
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-              qc.invalidateQueries({ queryKey: ['storage-location-wines', destLoc] });
-              qc.invalidateQueries({ queryKey: ['storage-locations'] });
-              setPendingStorageLocationId(null); setPendingCaseId(null); setAddingToCellar(false);
-              router.replace(`/cellar/storage-location/${destLoc}` as any);
-            } catch (err) { showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' }); }
-            finally { setSaving(false); }
-          } },
-          { text: 'No, add to existing wines', onPress: async () => {
-            setSaving(true);
-            try {
-              await updateWine.mutateAsync({ id: target.id, updates: { quantity: target.quantity + addCount } });
-              qc.invalidateQueries({ queryKey: ['cellar'] });
-              setPendingStorageLocationId(null); setPendingCaseId(null); setAddingToCellar(false);
-              router.replace('/cellar/list?added=1');
-            } catch (err) { showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' }); }
-            finally { setSaving(false); }
-          } },
-          { text: 'Cancel', style: 'cancel' },
-        ],
-      });
-      return;
-    }
+    // Add-to-location for a wine already in the cellar (incl. one already sitting
+    // in a rack) is handled by performMerge below: it bumps the wine's total and
+    // files the new bottles as a location PLACEMENT. A wine can live in a rack
+    // AND an alt cellar at once, so nothing is moved or dropped.
     if (matchingExisting) {
       // Exact match (producer + wine name + vintage). We never create a
       // second Full Cellar List line for the same bottle — that would
