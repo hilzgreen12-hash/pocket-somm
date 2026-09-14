@@ -192,11 +192,18 @@ async function lookupWineSearcher(name: string, vintageValue: string | null, cur
 
 Deno.serve(async (req) => {
   try {
-    const { wineName, vintage, currency } = await req.json();
+    const { wineName: rawWineName, vintage, currency } = await req.json();
 
-    if (!wineName) {
+    if (!rawWineName) {
       return new Response(JSON.stringify({ error: 'wineName required' }), { status: 400 });
     }
+
+    // The WS API matches names FAR more strictly than the website, so scrub the
+    // query: drop any vintage embedded in the name (it's passed separately — a
+    // stray year is a common strict-miss), and collapse whitespace. Sending
+    // "Stella di Campalto Brunello di Montalcino Rosa 2016" + vintage=2016 double-
+    // counts the year and misses; "…Rosa" + vintage=2016 matches.
+    const wineName = String(rawWineName).replace(/\b(?:19|20)\d{2}\b/g, ' ').replace(/\s{2,}/g, ' ').trim();
 
     const cur = (currency ?? 'GBP').toString().toUpperCase();
     const vintageParam = vintage ?? 'NV';

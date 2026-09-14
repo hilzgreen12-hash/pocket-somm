@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Image, ActivityInd
 import { KeyboardAwareScrollView } from 'react-native-keyboard-controller';
 import { router } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
@@ -20,7 +21,6 @@ export default function NewStorageLocationScreen() {
   const qc = useQueryClient();
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [name, setName] = useState('');
-  const [isExternal, setIsExternal] = useState(false);
   const [saving, setSaving] = useState(false);
 
   async function pickPhoto(source: 'camera' | 'library') {
@@ -38,6 +38,18 @@ export default function NewStorageLocationScreen() {
     setPhotoUri(res.assets[0].uri);
   }
 
+  // Tap the photo area → the same take/upload chooser as the label thumbnails.
+  function openPhotoChooser() {
+    showAlert({
+      title: 'Add a photo',
+      buttons: [
+        { text: 'Take a Photo', onPress: () => void pickPhoto('camera') },
+        { text: 'Choose from Library', onPress: () => void pickPhoto('library') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   async function handleSave() {
     if (saving) return;
     if (!session?.user.id) { showAlert({ title: 'Sign in needed', body: 'Sign in to create a storage location.' }); return; }
@@ -49,7 +61,7 @@ export default function NewStorageLocationScreen() {
     // creates a duplicate (D4).
     let createdId: string | null = null;
     try {
-      const loc = await createStorageLocation(session.user.id, name, isExternal);
+      const loc = await createStorageLocation(session.user.id, name, false);
       createdId = loc.id;
       const path = await uploadLocationPhoto(session.user.id, photoUri, loc.id);
       await setStorageLocationPhoto(loc.id, path);
@@ -75,25 +87,22 @@ export default function NewStorageLocationScreen() {
       </View>
 
       <KeyboardAwareScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.xl * 3, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
-        <Text style={styles.notice}>Add a visual and a name to begin.</Text>
-        <Text style={styles.noticeSub}>Landscape images work best.</Text>
+        <Text style={styles.blurb}>Alternative Cellars are areas within your home that become cellar overspill, catching the organised chaos of too many wines at home. We've been there. Under the desk, in the garage, wherever there's space, let Vinster keep track.</Text>
 
         {photoUri ? (
           <View style={styles.previewWrap}>
-            <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="contain" />
+            <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
+              <Image source={{ uri: photoUri }} style={styles.preview} resizeMode="cover" />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setPhotoUri(null)} style={styles.retakeBtn} activeOpacity={0.7}>
-              <Text style={styles.retakeText}>Retake</Text>
+              <Text style={styles.retakeText}>Remove photo</Text>
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.photoButtons}>
-            <TouchableOpacity style={styles.photoBtn} onPress={() => pickPhoto('camera')} activeOpacity={0.85}>
-              <Text style={styles.photoBtnText}>Take a photo</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={[styles.photoBtn, styles.photoBtnSecondary]} onPress={() => pickPhoto('library')} activeOpacity={0.85}>
-              <Text style={[styles.photoBtnText, styles.photoBtnTextSecondary]}>Choose from library</Text>
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.addPhotoBox} onPress={openPhotoChooser} activeOpacity={0.85}>
+            <Ionicons name="camera-outline" size={30} color={colors.gold} />
+            <Text style={styles.addPhotoText}>+ Add Photo</Text>
+          </TouchableOpacity>
         )}
 
         <Text style={styles.fieldLabel}>Location name</Text>
@@ -104,17 +113,6 @@ export default function NewStorageLocationScreen() {
           placeholder="e.g. The shed, Under the bed…"
           placeholderTextColor={colors.textMuted}
         />
-
-        <Text style={styles.fieldLabel}>Where is it?</Text>
-        <View style={styles.segRow}>
-          <TouchableOpacity style={[styles.segBtn, !isExternal && styles.segBtnOn]} onPress={() => setIsExternal(false)} activeOpacity={0.8}>
-            <Text style={[styles.segText, !isExternal && styles.segTextOn]}>At home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.segBtn, isExternal && styles.segBtnOn]} onPress={() => setIsExternal(true)} activeOpacity={0.8}>
-            <Text style={[styles.segText, isExternal && styles.segTextOn]}>External</Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.segHint}>External covers offsite storage — a bonded warehouse, merchant en primeur or a unit away from home.</Text>
 
         <TouchableOpacity style={[styles.saveBtn, saving && styles.btnDisabled]} onPress={handleSave} disabled={saving} activeOpacity={0.85}>
           {saving ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.saveBtnText}>Create Location</Text>}
@@ -131,6 +129,10 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   notice: { fontSize: 15, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, marginBottom: spacing.xs },
   noticeSub: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 18, marginBottom: spacing.lg },
+  blurb: { fontSize: 15, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
+  // Large tap-to-add photo area (take or upload), like the label thumbnails.
+  addPhotoBox: { width: '100%', aspectRatio: 4 / 3, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
+  addPhotoText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
   photoButtons: { gap: spacing.sm },
   photoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
   photoBtnSecondary: { borderColor: '#FFFFFF' },
