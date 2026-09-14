@@ -813,16 +813,19 @@ export default function CellarWineDetail() {
         if (session?.user.id) {
           qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
         }
-        const slotsRemoved = await removeSlotsForWine(wine!.id, count);
-        if (slotsRemoved > 0) {
+        // Take the archived bottles from UNPLACED (loose) bottles first — only
+        // free a rack slot for any that exceed the loose count. No note: taking
+        // from loose is the expected, silent behaviour (there's no "live cellar
+        // rack" — a wine's placement is just where it sits).
+        const unplacedBottles = Math.max(0, (wine!.quantity ?? 0) - placedCount(winePlacements));
+        const slotsToFree = Math.max(0, count - unplacedBottles);
+        if (slotsToFree > 0) {
+          await removeSlotsForWine(wine!.id, slotsToFree);
           qc.invalidateQueries({ queryKey: ['slot-assignments'] });
           qc.invalidateQueries({ queryKey: ['rack-slots'] });
-          setRackRemovalMsg(
-            `${slotsRemoved} bottle${slotsRemoved === 1 ? '' : 's'} also removed from your live cellar rack.`
-          );
-        } else {
-          setRackRemovalMsg(null);
         }
+        setRackRemovalMsg(null);
+        qc.invalidateQueries({ queryKey: ['placements', wine!.id] });
         setRemoveCount('1');
         setRemoveNote('');
         setArchiveModalOpen(false);

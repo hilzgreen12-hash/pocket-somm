@@ -116,6 +116,8 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
   const wineById = new Map((wines ?? []).map((w: any) => [w.id, w]));
   return rows.flatMap((p) => {
     const w = wineById.get(p.cellar_wine_id);
-    return w ? [{ ...w, quantity: p.quantity, case_id: p.case_id, placement_id: p.id }] : [];
+    // Archived / wishlist wines aren't physically stored here.
+    if (!w || w.archived_at || w.is_wishlist) return [];
+    return [{ ...w, quantity: p.quantity, case_id: p.case_id, placement_id: p.id }];
   });
 }
