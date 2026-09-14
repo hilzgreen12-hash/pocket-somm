@@ -22,6 +22,7 @@ import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWin
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
+import { fetchPlacementsForWines, type CellarPlacement } from '../../src/api/placements';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -451,6 +452,20 @@ export default function FullCellarListScreen() {
   const wineToRackId: Record<string, string> = {};
   for (const slot of slotAssignments) wineToRackId[slot.cellar_wine_id] = slot.rack_id;
 
+  // Unified placements for the whole list — drives the Location filter (a wine
+  // can now be split across a rack and an alt cellar).
+  const allWineIds = useMemo(() => wines.map((w) => w.id), [wines]);
+  const { data: allPlacements = [] } = useQuery({
+    queryKey: ['placements-list', allWineIds],
+    queryFn: () => fetchPlacementsForWines(allWineIds),
+    enabled: allWineIds.length > 0,
+  });
+  const placementsByWine = useMemo(() => {
+    const m = new Map<string, CellarPlacement[]>();
+    for (const p of allPlacements) { const arr = m.get(p.cellar_wine_id) ?? []; arr.push(p); m.set(p.cellar_wine_id, arr); }
+    return m;
+  }, [allPlacements]);
+
   // 'All' | rackId | 'loc:'+locationId | 'Unassigned'
   const [locationFilter, setLocationFilter] = useState<string>('All');
   const [countryFilter, setCountryFilter] = useState<string>('All');     // 'All' | country canonical
@@ -539,20 +554,26 @@ export default function FullCellarListScreen() {
       : wines;
   const filtered = baseWines.filter((w) => {
     if (locationFilter !== 'All') {
+      const wp = placementsByWine.get(w.id) ?? [];
+      const locP = wp.filter((p) => p.kind === 'location');
+      const placed = wp.reduce((s, p) => s + (p.quantity ?? 0), 0);
+      const unplaced = Math.max(0, (w.quantity ?? 0) - placed);
       if (locationFilter === 'home') {
-        // At home = anything NOT filed in an external Alt Cellar (racks, bins,
-        // home cellars and unplaced wines all qualify).
-        if (w.storage_location_id && externalLocIds.has(w.storage_location_id)) return false;
+        // At home = has bottles in a rack/bin/home Alt Cellar, or loose bottles —
+        // i.e. anything that isn't exclusively in an external Alt Cellar.
+        const hasHome = wp.some((p) => p.kind !== 'location' || !externalLocIds.has(p.storage_location_id ?? '')) || unplaced > 0;
+        if (!hasHome) return false;
       } else if (locationFilter === 'external') {
-        if (!w.storage_location_id || !externalLocIds.has(w.storage_location_id)) return false;
+        if (!locP.some((p) => externalLocIds.has(p.storage_location_id ?? ''))) return false;
       } else if (locationFilter === 'Unassigned') {
-        // Truly unplaced — not in a rack, an Alt Cellar, or a bin.
-        if (wineToRackId[w.id] || w.storage_location_id || w.bin_cell_id) return false;
+        // Loose Bottles — the wine has bottles not filed into any placement.
+        if (unplaced <= 0) return false;
       } else if (locationFilter.startsWith('loc:')) {
         const loc = locations.find((l) => l.id === locationFilter.slice(4));
         if (!loc || !loc.wineIds.includes(w.id)) return false;
       } else if (locationFilter.startsWith('sloc:')) {
-        if (w.storage_location_id !== locationFilter.slice(5)) return false;
+        const sid = locationFilter.slice(5);
+        if (!locP.some((p) => p.storage_location_id === sid)) return false;
       } else if (wineToRackId[w.id] !== locationFilter) {
         return false;
       }
@@ -693,15 +714,14 @@ export default function FullCellarListScreen() {
     // Bespoke cellar-wide Location filters stay at the top level.
     for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
     // At-home group — the racks/fridges, home Alt Cellars, then the unplaced.
-    opts.push({ value: 'home', label: 'All wines at home', group: true });
+    opts.push({ value: 'home', label: 'All Wines At Home', group: true });
     for (const r of racks) opts.push({ value: r.id, label: r.name, indent: true });
     for (const s of homeCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
-    opts.push({ value: 'Unassigned', label: 'Not placed in a storage location', indent: true });
-    // External group — only shown once at least one Alt Cellar is external.
-    if (externalCellars.length) {
-      opts.push({ value: 'external', label: 'All wines stored externally', group: true });
-      for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
-    }
+    opts.push({ value: 'Unassigned', label: 'Loose Bottles', indent: true });
+    // External group — always offered at the bottom; specific external cellars
+    // are listed beneath it when any exist.
+    opts.push({ value: 'external', label: 'All Wines Stored Externally', group: true });
+    for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
     return opts;
   }, [racks, locations, storageLocations]);
 
