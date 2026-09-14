@@ -12,27 +12,35 @@ const LIST_COLS = 'id, user_id, name, photo_path, created_at, is_external';
 export async function fetchStorageLocations(userId: string): Promise<StorageLocation[]> {
   const { data, error } = await supabase
     .from('storage_locations')
-    // Pull the (non-archived) wines' quantities so the card shows a real BOTTLE
-    // count — the old embedded count(*) counted rows and included archived wines.
-    .select(`${LIST_COLS}, cellar_wines(quantity, archived_at, is_wishlist)`)
+    .select(LIST_COLS)
     .eq('user_id', userId)
     .order('created_at', { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((r: any) => {
-    const wines: Array<{ quantity?: number | null; archived_at?: string | null; is_wishlist?: boolean | null }> = Array.isArray(r.cellar_wines) ? r.cellar_wines : [];
-    // Exclude wishlist wines (unowned) — they aren't physically stored here, so
-    // they must not inflate the bottle count. Mirrors the rack path (S2).
-    const wineCount = wines.filter((w) => !w.archived_at && !w.is_wishlist).reduce((sum, w) => sum + (w.quantity ?? 1), 0);
-    return {
-      id: r.id,
-      user_id: r.user_id,
-      name: r.name,
-      photo_path: r.photo_path,
-      created_at: r.created_at,
-      is_external: !!r.is_external,
-      wineCount,
-    };
-  });
+  const locs = (data ?? []) as any[];
+  // Bottle counts come from location PLACEMENTS now (a wine can be split across a
+  // rack and an alt cellar), excluding archived/wishlist wines.
+  const { data: placements, error: pErr } = await supabase
+    .from('cellar_placements')
+    .select('quantity, storage_location_id, cellar_wines(archived_at, is_wishlist)')
+    .eq('kind', 'location')
+    .not('storage_location_id', 'is', null);
+  if (pErr) throw pErr;
+  const countByLoc = new Map<string, number>();
+  for (const p of (placements ?? []) as any[]) {
+    const w = p.cellar_wines;
+    if (w && (w.archived_at || w.is_wishlist)) continue;
+    if (!p.storage_location_id) continue;
+    countByLoc.set(p.storage_location_id, (countByLoc.get(p.storage_location_id) ?? 0) + (p.quantity ?? 0));
+  }
+  return locs.map((r) => ({
+    id: r.id,
+    user_id: r.user_id,
+    name: r.name,
+    photo_path: r.photo_path,
+    created_at: r.created_at,
+    is_external: !!r.is_external,
+    wineCount: countByLoc.get(r.id) ?? 0,
+  }));
 }
 
 export async function fetchStorageLocation(id: string): Promise<StorageLocation | null> {

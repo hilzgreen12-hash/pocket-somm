@@ -243,16 +243,39 @@ export default function FullCellarListScreen() {
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || w.wine_name,
       buttons: [
-        { text: 'Edit Wine', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        // Update the label photo via the shared Take Photo / Upload / Search
-        // Online sheet. (Viewing intel is the short-press action, so it's not
-        // repeated here.)
-        { text: 'Update Label Photo', onPress: () => attachPhoto.present({ kind: 'cellar', wineId: w.id, producer: w.producer, wineName: w.wine_name }) },
+        // Edit the wine's identity OR its label photo — one entry, a small chooser.
+        { text: 'Update Label or Wine Name', onPress: () => showAlert({
+          title: 'Update this wine',
+          buttons: [
+            { text: 'Edit Wine Name / Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
+            { text: 'Update Label Photo', onPress: () => attachPhoto.present({ kind: 'cellar', wineId: w.id, producer: w.producer, wineName: w.wine_name }) },
+            { text: 'Cancel', style: 'cancel' },
+          ],
+        }) },
+        { text: 'View Location', onPress: () => viewWineLocation(w) },
         { text: 'Archive Wine', onPress: () => confirmArchiveOne(w) },
         { text: 'Delete Wine', style: 'destructive', onPress: () => confirmDeleteOne(w) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+  // "View Location" — jump to where the wine physically lives. One placement goes
+  // straight there; several offer a picker; none tells the user it's loose.
+  function viewWineLocation(w: CellarWine) {
+    const wp = placementsByWine.get(w.id) ?? [];
+    const dests: { label: string; route: string }[] = [];
+    for (const p of wp) {
+      if (p.kind === 'rack' && p.rack_id) {
+        const route = `/cellar/rack/${p.rack_id}?highlight=${w.id}`;
+        if (!dests.some((d) => d.route === route)) dests.push({ label: racks.find((r) => r.id === p.rack_id)?.name ?? 'Rack', route });
+      } else if (p.kind === 'location' && p.storage_location_id) {
+        const l = storageLocations.find((sl) => sl.id === p.storage_location_id);
+        dests.push({ label: `${l?.name ?? 'Alt Cellar'}${l?.is_external ? ' (external)' : ''}`, route: `/cellar/storage-location/${p.storage_location_id}` });
+      }
+    }
+    if (dests.length === 0) { showAlert({ title: 'No home-storage location', body: 'This wine has no placement yet — its bottles are loose in your cellar list.' }); return; }
+    if (dests.length === 1) { router.push(dests[0].route as any); return; }
+    showAlert({ title: 'View location', buttons: [...dests.map((d) => ({ text: d.label, onPress: () => router.push(d.route as any) })), { text: 'Cancel', style: 'cancel' as const }] });
   }
   // Archive from the list opens the note modal (mirrors the wine card): capture
   // an optional "where / with whom" note + log the removal event so it shows in
