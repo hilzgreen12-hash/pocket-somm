@@ -16,8 +16,7 @@ import { fonts } from '../constants/fonts';
 // Loose leaves it uncased. The caller invalidates via onDone.
 const NEW_KINDS: { kind: CaseKind; label: string }[] = [
   { kind: 'mixed', label: 'Mixed Case' },
-  { kind: 'non_owc', label: 'Non-OWC Case' },
-  { kind: 'owc', label: 'OWC' },
+  { kind: 'complete', label: 'Complete Case' },
 ];
 
 interface Props {

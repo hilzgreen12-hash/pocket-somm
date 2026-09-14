@@ -516,7 +516,7 @@ export default function ImportCellarScreen() {
         // filed loose in the location.
         if (locationId && isCased(w)) {
           try {
-            const kind = w.packaging === 'non_owc' ? 'non_owc' : 'owc';
+            const kind = 'complete' as const;
             const name = caseSummary(w, bottleSizeCl);
             const created = await createStorageCase(userId, { storageLocationId: locationId, name, kind });
             await assignWineToCase(saved.id, created.id);

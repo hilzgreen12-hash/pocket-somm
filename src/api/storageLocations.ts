@@ -123,17 +123,21 @@ export async function assignWineToStorageLocation(wineId: string, locationId: st
 const CASE_COLS = 'id, user_id, storage_location_id, name, kind, note, created_at';
 
 // Case packaging kinds (migration 073). Loose is a UI-only choice (no case row).
-export type CaseKind = 'single' | 'mixed' | 'owc' | 'non_owc';
+// Two case types only now: a mixed case (several different wines) or a complete
+// case (a full case of one wine). Legacy 'owc' / 'non_owc' / 'single' rows are
+// treated as complete.
+export type CaseKind = 'mixed' | 'complete';
 
-// User-facing label for a case's packaging kind, shared across the add flow,
-// the location card chips and the Cases filter so the wording stays in sync.
+// Normalise any stored kind (incl. the retired owc/non_owc/single) to the two
+// current types.
+export function normalizeCaseKind(kind: string | null | undefined): CaseKind {
+  return kind === 'mixed' ? 'mixed' : 'complete';
+}
+
+// User-facing label for a case's type, shared across the add flow, the location
+// card chips and the Cases filter so the wording stays in sync.
 export function caseKindLabel(kind: string): string {
-  switch (kind) {
-    case 'owc': return 'OWC';
-    case 'non_owc': return 'Non-OWC Case';
-    case 'mixed': return 'Mixed';
-    default: return 'Case'; // legacy 'single'
-  }
+  return normalizeCaseKind(kind) === 'mixed' ? 'Mixed Case' : 'Complete Case';
 }
 
 export async function createStorageCase(

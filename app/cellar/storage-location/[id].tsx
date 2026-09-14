@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
+import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, normalizeCaseKind, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
@@ -59,10 +59,9 @@ const PACKAGING_OPTIONS: { value: string; label: string }[] = [
 // The "List" chip is a view-mode picker. The default is the flat full list (in
 // the order wines were added); the grouped-by-case and cases-summary views are
 // the alternates.
-const LIST_VIEW_OPTIONS: { value: 'bottles' | 'default' | 'cases'; label: string }[] = [
-  { value: 'bottles', label: 'Full List' },
-  { value: 'default', label: 'Grouped by Case' },
-  { value: 'cases', label: 'Cases List' },
+const LIST_VIEW_OPTIONS: { value: 'bottles' | 'default'; label: string }[] = [
+  { value: 'bottles', label: 'All Wines' },
+  { value: 'default', label: 'Wines Grouped by Case' },
 ];
 
 function bottleLabel(n: number) {
@@ -249,7 +248,7 @@ export default function StorageLocationScreen() {
       // Packaging filter: "loose" keeps only un-cased bottles; a case kind keeps
       // only wines boxed in a case of that kind.
       if (packaging === 'loose') { if (w.case_id) return false; }
-      else if (packaging) { if (!w.case_id || caseKindById[w.case_id] !== packaging) return false; }
+      else if (packaging) { if (!w.case_id || normalizeCaseKind(caseKindById[w.case_id]) !== packaging) return false; }
       if (activeFilterWineIds && !activeFilterWineIds.has(w.id)) return false;
       if (caseFilter && w.case_id !== caseFilter) return false;
       if (q) {
@@ -764,6 +763,18 @@ export default function StorageLocationScreen() {
       ],
     });
   }
+  // Long-press a case name in the List filter → rename it or delete it (its
+  // bottles stay in the location as loose wines).
+  function openCaseFilterMenu(c: StorageCase) {
+    showAlert({
+      title: c.name,
+      buttons: [
+        { text: 'Rename Case', onPress: () => { setCaseEditName(c.name); setCaseEditNote(c.note ?? ''); setCaseEdit(c); } },
+        { text: 'Delete Case (contents land as loose bottles)', style: 'destructive', onPress: () => confirmDissolveCase(c) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
   function openCaseMenu(c: StorageCase) {
     showAlert({
       title: c.name,
@@ -793,7 +804,7 @@ export default function StorageLocationScreen() {
   // kind. Case groups are built from `filtered` so maturity/search/bespoke
   // filters compose into the grouped + cases views too.
   const caseGroups = (packaging === 'loose' ? [] : cases
-    .filter((c) => !packaging || c.kind === packaging)
+    .filter((c) => !packaging || normalizeCaseKind(c.kind) === packaging)
     .map((c) => ({ box: c, wines: filtered.filter((w) => w.case_id === c.id) })));
   const looseFiltered = filtered.filter((w) => !w.case_id);
 
@@ -904,12 +915,16 @@ export default function StorageLocationScreen() {
             filters, then + Add, mirroring the rack/fridge affordance. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
           <TouchableOpacity
-            style={[styles.filterChip, (listView !== 'bottles' || caseFilter || packaging === 'loose') && styles.filterChipActive]}
+            style={[styles.filterChip, (listView !== 'bottles' || !!caseFilter || !!packaging) && styles.filterChipActive]}
             onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, (listView !== 'bottles' || caseFilter || packaging === 'loose') && styles.filterChipTextActive]}>
-              {caseFilter ? `'${cases.find((c) => c.id === caseFilter)?.name ?? 'Case'}'` : packaging === 'loose' ? 'Loose Bottles' : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'List')} {listOpen ? '▴' : '▾'}
+            <Text style={[styles.filterChipText, (listView !== 'bottles' || !!caseFilter || !!packaging) && styles.filterChipTextActive]}>
+              {caseFilter ? (cases.find((c) => c.id === caseFilter)?.name ?? 'Case')
+                : packaging === 'loose' ? 'Loose Bottles'
+                : packaging === 'mixed' ? 'Mixed Cases'
+                : packaging === 'complete' ? 'Complete Cases'
+                : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'All Wines')} {listOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
           {/* "Packed As" filter removed — Loose Bottles now lives in the List
@@ -938,32 +953,34 @@ export default function StorageLocationScreen() {
 
         {listOpen ? (
           <View style={styles.maturityDropdown}>
-            {/* Loose bottles — un-cased wines, the first quick filter (replaces
-                the removed "Packed As" chip). */}
-            {(() => {
-              const active = packaging === 'loose';
-              return (
-                <TouchableOpacity style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setPackaging('loose'); setCaseFilter(''); setListView('bottles'); setListOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>Loose Bottles</Text>
-                </TouchableOpacity>
-              );
-            })()}
-            {LIST_VIEW_OPTIONS.map((o) => {
-              const active = listView === o.value && !caseFilter && packaging !== 'loose';
-              return (
-                <TouchableOpacity key={o.value} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setListView(o.value); setCaseFilter(''); setPackaging(''); setListOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]}>{o.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-            {/* Individual cases — name in parentheses, then the packaging kind
-                (OWC / Mixed / Non-OWC Case). Picking one narrows to its bottles. */}
+            {/* Order: All Wines · Loose Bottles · Wines Grouped by Case · Mixed
+                Cases · Complete Cases, then the individual cases. */}
+            {([
+              { key: 'all', label: 'All Wines', active: listView === 'bottles' && !caseFilter && !packaging, onPress: () => { setListView('bottles'); setCaseFilter(''); setPackaging(''); } },
+              { key: 'loose', label: 'Loose Bottles', active: packaging === 'loose', onPress: () => { setPackaging('loose'); setListView('bottles'); setCaseFilter(''); } },
+              { key: 'grouped', label: 'Wines Grouped by Case', active: listView === 'default' && !caseFilter && !packaging, onPress: () => { setListView('default'); setCaseFilter(''); setPackaging(''); } },
+              { key: 'mixed', label: 'Mixed Cases', active: packaging === 'mixed', onPress: () => { setPackaging('mixed'); setListView('default'); setCaseFilter(''); } },
+              { key: 'complete', label: 'Complete Cases', active: packaging === 'complete', onPress: () => { setPackaging('complete'); setListView('default'); setCaseFilter(''); } },
+            ] as const).map((o) => (
+              <TouchableOpacity key={o.key} style={[styles.maturityOption, o.active && styles.maturityOptionActive]} onPress={() => { o.onPress(); setListOpen(false); }} activeOpacity={0.7}>
+                <Text style={[styles.maturityOptionText, o.active && styles.maturityOptionTextActive]}>{o.label}</Text>
+              </TouchableOpacity>
+            ))}
+            {/* Individual cases — plain name with its type in parentheses.
+                Long-press to rename or delete the case. */}
             {cases.length > 0 ? <View style={styles.dropdownDivider} /> : null}
             {cases.map((c) => {
               const active = caseFilter === c.id;
               return (
-                <TouchableOpacity key={c.id} style={[styles.maturityOption, active && styles.maturityOptionActive]} onPress={() => { setCaseFilter(c.id); setListView('bottles'); setPackaging(''); setListOpen(false); }} activeOpacity={0.7}>
-                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>'{c.name}' {caseKindLabel(c.kind)}</Text>
+                <TouchableOpacity
+                  key={c.id}
+                  style={[styles.maturityOption, active && styles.maturityOptionActive]}
+                  onPress={() => { setCaseFilter(c.id); setListView('bottles'); setPackaging(''); setListOpen(false); }}
+                  onLongPress={() => { setListOpen(false); openCaseFilterMenu(c); }}
+                  delayLongPress={400}
+                  activeOpacity={0.7}
+                >
+                  <Text style={[styles.maturityOptionText, active && styles.maturityOptionTextActive]} numberOfLines={1}>{c.name} ({caseKindLabel(c.kind)})</Text>
                 </TouchableOpacity>
               );
             })}

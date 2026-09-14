@@ -614,13 +614,12 @@ export default function LabelResultsScreen() {
   // the rest create a storage_cases row of that kind (migration 073).
   const PACKAGING = [
     { k: 'loose', label: 'Loose Bottle(s)' },
-    { k: 'owc', label: 'OWC' },
-    { k: 'non_owc', label: 'Non-OWC Case' },
     { k: 'mixed', label: 'Mixed Case' },
+    { k: 'complete', label: 'Complete Case' },
   ] as const;
-  // Case storage (add-to-location flow, migration 069). 'loose' files the wine
-  // straight into the location; 'single'/'mixed' also box it in a named case.
-  const [storageKind, setStorageKind] = useState<'loose' | 'owc' | 'non_owc' | 'mixed'>('loose');
+  // Case storage (add-to-location flow). 'loose' files the wine straight into the
+  // location; 'mixed'/'complete' also box it in a named case.
+  const [storageKind, setStorageKind] = useState<'loose' | 'mixed' | 'complete'>('loose');
   const [caseName, setCaseName] = useState('');
   const [caseNote, setCaseNote] = useState('');
   const [customSizeMode, setCustomSizeMode] = useState(false);
@@ -1620,7 +1619,7 @@ export default function LabelResultsScreen() {
                 setStorageKind(p.k);
                 // Whole-wine cases auto-name after the wine (editable); mixed
                 // cases are named by the user; loose needs no case name.
-                if (p.k === 'owc' || p.k === 'non_owc') setCaseName(autoCaseName());
+                if (p.k === 'complete') setCaseName(autoCaseName());
                 else setCaseName('');
               } }))
             : [];
@@ -2519,7 +2518,7 @@ export default function LabelResultsScreen() {
                           style={styles.caseInput}
                           value={caseName}
                           onChangeText={setCaseName}
-                          placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. OWC'}
+                          placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. Château Musar 2016'}
                           placeholderTextColor={colors.textSubtle}
                         />
                         {/* Quick-pick from existing MIXED case names in this
