@@ -16,6 +16,7 @@ import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
+import { addLocationPlacement } from '../../../src/api/placements';
 import { getBins } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -821,13 +822,16 @@ export default function RackGridScreen() {
   }
 
   // Move a placed wine OUT of the rack grid into an Alt Cellar (loose) — clears
-  // its slots and files it in the location. All bottles go together.
+  // its rack slots and files those bottles as a location PLACEMENT (unified
+  // model). The wine's total is unchanged; its bottles just relocate.
   async function moveWineToLocation(wineId: string, locId: string) {
     try {
+      const movedCount = wines.find((w) => w.id === wineId)?.quantity ?? 1;
       await clearWineFromRacks(wineId);
-      await updateWine.mutateAsync({ id: wineId, updates: { storage_location_id: locId, bin_cell_id: null, case_id: null, awaiting_placement: false, awaiting_placement_unit_id: null } });
+      await addLocationPlacement(wineId, locId, null, movedCount);
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['placements'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
       qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
       setLocBinPicker(null);
