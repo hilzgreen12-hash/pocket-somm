@@ -4,6 +4,33 @@ import { wineQueryName } from '../utils/wineIdentity';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
 import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
 
+// Collapse a wine name to a comparison key (lowercase, alphanumerics only) so we
+// can tell whether Claude's canonical wsSearchName actually differs from the raw
+// query — and skip a wasted second Wine-Searcher lookup when it doesn't.
+function wsNameKey(s: string): string {
+  return (s ?? '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+// Look a wine up on Wine-Searcher, retrying once with Claude's canonical
+// wsSearchName when the raw scanned name misses. This closes the "cult producer
+// with a finicky canonical name" gap (e.g. "Stella di Campalto … S Giuseppe Rosa"
+// -> "… Podere San Giuseppe Rosa Brunello di Montalcino"). Only fires on a miss,
+// so a normal match costs nothing extra.
+async function resolveWsPricing(
+  first: PricingData,
+  queryName: string,
+  wsSearchName: string | null | undefined,
+  vintage: number | null,
+  currency: string,
+): Promise<PricingData> {
+  const matched = first.source === 'wine-searcher' && first.matched !== false;
+  if (matched || !wsSearchName) return first;
+  if (wsNameKey(wsSearchName) === wsNameKey(queryName)) return first;
+  const retry = await fetchPricing(wsSearchName, vintage, currency);
+  const retryMatched = retry.source === 'wine-searcher' && retry.matched !== false;
+  return retryMatched ? retry : first;
+}
+
 export async function fetchPricing(
   wineName: string,
   vintage: number | null,
@@ -104,12 +131,18 @@ export async function valueWine(
   const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
-  const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
+  const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;
+  const first = await fetchPricing(queryName, vintageArg, currency);
+  const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
+
+  // Claude fills drinking window, tasting notes, grape, (anchored) score, and a
+  // canonical Wine-Searcher search name we fall back to when the raw query misses.
+  const intel = await getWineIntelligence(wine, currency, firstMatched ? first.criticScore : null);
+
+  // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
+  const pricing = await resolveWsPricing(first, queryName, intel.wsSearchName, vintageArg, currency);
   const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
   const wsScore = wsMatched ? pricing.criticScore : null;
-
-  // Claude fills drinking window, tasting notes, grape, and (anchored) score.
-  const intel = await getWineIntelligence(wine, currency, wsScore);
 
   // Headline value: real WS market average when matched, else Claude estimate.
   const useWs = wsMatched && pricing.averageMarketPrice != null;
@@ -158,12 +191,18 @@ export async function generateWineIntel(
   const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
-  const pricing = await fetchPricing(queryName, Number.isFinite(vintageNum) ? vintageNum : null, currency);
+  const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;
+  const first = await fetchPricing(queryName, vintageArg, currency);
+  const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
+
+  // Claude fills the rich fields; wsScore anchors its critic score to WS. It also
+  // returns wsSearchName — the canonical WS query we retry with on a miss.
+  const intel = await getWineIntelligence(wine, currency, firstMatched ? first.criticScore : null);
+
+  // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
+  const pricing = await resolveWsPricing(first, queryName, intel.wsSearchName, vintageArg, currency);
   const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
   const wsScore = wsMatched ? pricing.criticScore : null;
-
-  // Claude fills the rich fields; wsScore anchors its critic score to WS.
-  const intel = await getWineIntelligence(wine, currency, wsScore);
 
   // Headline value: real WS market average (already in the user's currency)
   // when matched, else Claude's estimate.

@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, updateStorageCase, deleteStorageCase, deleteEmptyCasesForLocation, caseKindLabel, normalizeCaseKind, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
-import { fetchLocationPlacementRows } from '../../../src/api/placements';
+import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
@@ -29,6 +29,7 @@ import { effectiveMaturity } from '../../../src/utils/maturity';
 import { showAlert } from '../../../src/components/AppAlert';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { MicButton } from '../../../src/components/MicButton';
+import { bottleSizeCl } from '../../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
 
@@ -346,10 +347,29 @@ export default function StorageLocationScreen() {
   // card) plain back(), mirroring the rack screen's handleBack.
   function handleBack() {
     const state = navigation.getState?.();
-    const hasRacks = state?.routes?.some((r) => r.name === 'cellar/racks') ?? false;
-    if (hasRacks) router.dismissTo('/cellar/racks');
-    else if (router.canGoBack()) router.back();
-    else router.replace('/(tabs)/cellar');
+    const routes = state?.routes ?? [];
+    const hasRacks = routes.some((r) => r.name === 'cellar/racks');
+    if (hasRacks) {
+      // A Racks page sits below us — collapse everything (location copies + any
+      // scanner screens) back onto it in one hop.
+      router.dismissTo('/cellar/racks');
+      return;
+    }
+    // Reached this location directly (no Racks page below). The add-a-wine flow
+    // (camera → confirm → results) does a router.replace back to THIS same route
+    // after each bottle, stacking one extra identical copy per wine. A single
+    // back() would just reveal the copy underneath, so Back looks dead and the
+    // user is trapped (they end up pressing it several times). Pop ALL the stacked
+    // copies of this screen at once so Back always leaves. Mirrors the rack screen.
+    const topName = routes.length ? routes[routes.length - 1].name : undefined;
+    let sameTop = 0;
+    for (let i = routes.length - 1; i >= 0 && routes[i].name === topName; i--) sameTop++;
+    if (sameTop >= routes.length || !router.canGoBack()) {
+      // Nothing but location copies below (or nothing to pop) — leave to the Cellar tab.
+      router.replace('/(tabs)/cellar');
+    } else {
+      router.dismiss(sameTop);
+    }
   }
 
   // "+ Add Wine" header link → the same chooser the rack/bin flows use.
@@ -595,8 +615,8 @@ export default function StorageLocationScreen() {
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
       buttons: [
         { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        { text: 'Update Packaging', onPress: () => setPackagingWineId(w.id) },
-        { text: 'Move Wine', onPress: () => openMoveWine(w) },
+        { text: 'Move Wine/Bottles', onPress: () => openMoveWine(w) },
+        { text: 'Archive Wine', onPress: () => openArchiveWine(w) },
         { text: 'Delete', style: 'destructive', onPress: () => showAlert({
           title: 'Delete this wine?',
           body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
@@ -610,31 +630,64 @@ export default function StorageLocationScreen() {
     });
   }
 
-  // "Move Wine" → back to the Full Cellar List, to a different location, or to
-  // the Archive. Replaces the old Remove-from-Location + Archive entries.
+  // "Move Wine/Bottles" → first ask HOW MANY of this location's bottles to move
+  // (skipped when there's only one), then WHERE: back to the Full Cellar List as
+  // loose bottles, or into a different location. Archiving is its own top-level
+  // action now, not a move destination.
   function openMoveWine(w: CellarWine) {
+    const total = w.quantity ?? 1;
+    if (total <= 1) { promptMoveDestination(w, 1); return; }
+    // One button per count (capped for a tidy sheet), plus an explicit "All".
+    const cap = Math.min(total, 12);
+    const counts: number[] = [];
+    for (let n = 1; n <= cap; n++) counts.push(n);
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
-      body: 'Where would you like to move this wine?',
+      body: `How many of your ${total} bottles would you like to move?`,
+      buttons: [
+        ...counts.map((n) => ({
+          text: n === total ? `All ${n}` : `${n} bottle${n === 1 ? '' : 's'}`,
+          onPress: () => promptMoveDestination(w, n),
+        })),
+        ...(total > cap ? [{ text: `All ${total}`, onPress: () => promptMoveDestination(w, total) }] : []),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
+  // Second step of the move: pick a destination for the chosen `count` bottles.
+  function promptMoveDestination(w: CellarWine, count: number) {
+    const placementId = (w as any).placement_id as string | undefined;
+    const noun = count === (w.quantity ?? 1) ? 'this wine' : `${count} bottle${count === 1 ? '' : 's'}`;
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      body: `Where would you like to move ${noun}?`,
       buttons: [
         { text: 'Move to Cellar List', onPress: () => showAlert({
           title: `Move out of ${location?.name ?? 'this location'}?`,
-          body: 'It goes back to your Full Cellar List as a loose bottle. Nothing else changes.',
+          body: `${count === 1 ? 'It goes' : 'They go'} back to your Full Cellar List as loose bottles. Nothing else changes.`,
           buttons: [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Move to Cellar List', onPress: () => runSingle('Moved', w.id, async (wid) => { await assignWineToCase(wid, null); await assignWineToStorageLocation(wid, null); }) },
+            { text: 'Move to Cellar List', onPress: () => runSingle('Moved', w.id, async () => {
+              if (placementId) await decrementPlacement(placementId, count);
+            }) },
           ],
         }) },
-        { text: 'Move to Different Location', onPress: () => openMoveToDifferentLocation(w) },
-        { text: 'Archive', onPress: () => showAlert({
-          title: 'Archive this wine?',
-          body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',
-          buttons: [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Archive', onPress: () => runSingle('Archived', w.id, async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
-          ],
-        }) },
+        { text: 'Move to Different Location', onPress: () => openMoveToDifferentLocation(w, count) },
         { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  // Archive this wine (all bottles) — moved out of the "Move" popup into its own
+  // top-level long-press action.
+  function openArchiveWine(w: CellarWine) {
+    showAlert({
+      title: 'Archive this wine?',
+      body: 'It moves to Your Archive and leaves this location. Your reviews and history stay.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Archive', onPress: () => runSingle('Archived', w.id, async (wid) => { await clearWineFromRacks(wid); await assignWineToCase(wid, null); await archiveCellarWine(wid); }) },
       ],
     });
   }
@@ -647,11 +700,12 @@ export default function StorageLocationScreen() {
     router.push(`/cellar/rack/${rackId}` as any);
   }
 
-  function openMoveToDifferentLocation(w: CellarWine) {
+  function openMoveToDifferentLocation(w: CellarWine, count: number) {
     // Destinations are every OTHER home-storage place: racks & fridges (which
-    // need slot placement) plus other Alt Cellars (a direct storage_location_id
-    // assignment). Previously only Alt Cellars were offered, so a user whose
-    // only other storage was a rack saw a wrong "No other locations".
+    // need slot placement) plus other Alt Cellars (a placement here). Previously
+    // only Alt Cellars were offered, so a user whose only other storage was a
+    // rack saw a wrong "No other locations".
+    const placementId = (w as any).placement_id as string | undefined;
     const otherLocations = allLocations.filter((l) => l.id !== id);
     if (racks.length === 0 && otherLocations.length === 0) {
       showAlert({ title: 'No other locations', body: 'You have no other racks, fridges or home storage locations to move this into yet.' });
@@ -662,14 +716,18 @@ export default function StorageLocationScreen() {
       buttons: [
         ...racks.map((r) => ({
           text: `${r.name} (${r.storage_type === 'fridge' ? 'fridge' : 'rack'})`,
-          onPress: () => moveToRack(w, r.id),
+          // Free the bottles from this location first (they become loose if the
+          // user backs out of the rack placement — not lost), then place in the rack.
+          onPress: async () => {
+            if (placementId) { try { await decrementPlacement(placementId, count); invalidateAfterBulk(); } catch { /* placement gone */ } }
+            moveToRack(w, r.id);
+          },
         })),
         ...otherLocations.map((l) => ({
           text: `${l.name} (home storage)`,
           onPress: () => runSingle('Moved', w.id, async (wid) => {
-            await clearWineFromRacks(wid);
-            await assignWineToCase(wid, null);
-            await assignWineToStorageLocation(wid, l.id);
+            if (placementId) await decrementPlacement(placementId, count);
+            await addLocationPlacement(wid, l.id, null, count);
             qc.invalidateQueries({ queryKey: ['storage-location-wines', l.id] });
           }),
         })),
@@ -832,7 +890,7 @@ export default function StorageLocationScreen() {
           <View style={styles.wineMetaRow}>
             {w.region ? <Text style={styles.wineMeta} numberOfLines={1}>{w.region}</Text> : null}
             {w.region ? <Text style={styles.wineMetaDot}>·</Text> : null}
-            <Text style={styles.wineMeta}>{bottleLabel(w.quantity ?? 0)}</Text>
+            <Text style={styles.wineMeta}>{w.quantity ?? 0} x {bottleSizeCl(w.bottle_size_ml ?? 750)}cl</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -1300,7 +1358,8 @@ const styles = StyleSheet.create({
   // cramped top-right header stack).
   // "+ Add Wine" — stats-bar format (yellow full-width rules), below the header.
   addWineRow: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.md, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider },
-  addWineText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
+  // Matches the counts line above it (uppercase gold, bodySemibold).
+  addWineText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.6 },
   filterChipAdd: { borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 18, paddingVertical: 7, paddingHorizontal: spacing.md },
   filterChipAddText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold },
   pickRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },

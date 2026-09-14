@@ -98,6 +98,29 @@ export async function addLocationPlacement(
   }
 }
 
+// Remove `by` bottles from ONE placement (a specific spot). Deletes the row when
+// that empties it. Used by the alt-cellar partial "Move Wine/Bottles" flow — the
+// moved bottles either become loose (Full Cellar List) or land in a new placement.
+export async function decrementPlacement(placementId: string, by: number): Promise<void> {
+  const { data, error } = await supabase
+    .from('cellar_placements')
+    .select('quantity')
+    .eq('id', placementId)
+    .maybeSingle();
+  if (error) throw error;
+  const remaining = (data?.quantity ?? 0) - Math.max(0, by);
+  if (remaining > 0) {
+    const { error: updErr } = await supabase
+      .from('cellar_placements')
+      .update({ quantity: remaining })
+      .eq('id', placementId);
+    if (updErr) throw updErr;
+  } else {
+    const { error: delErr } = await supabase.from('cellar_placements').delete().eq('id', placementId);
+    if (delErr) throw delErr;
+  }
+}
+
 // A wine "row" as it appears inside an alt cellar: the wine's details but with
 // the quantity + case of its placement THERE (a wine can also be racked/binned
 // elsewhere). Shaped like a CellarWine so the alt-cellar screen renders it.

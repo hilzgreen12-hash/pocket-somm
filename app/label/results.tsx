@@ -19,7 +19,7 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
-import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases } from '../../src/api/storageLocations';
+import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases, fetchStorageLocation } from '../../src/api/storageLocations';
 import { addLocationPlacement } from '../../src/api/placements';
 import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
@@ -652,29 +652,12 @@ export default function LabelResultsScreen() {
     queryFn: () => fetchStorageLocationCases(pendingStorageLocationId!),
     enabled: !!pendingStorageLocationId && context === 'add-location',
   });
-
-  // Default name for a whole-wine case (OWC / Non-OWC): the wine itself —
-  // producer · name · region · vintage as one line, e.g. "Château Petrus
-  // Pomerol 2008". When the location already holds a case of the same wine, the
-  // new one is numbered ("No2 …") so identical cases stay distinguishable. The
-  // user can still edit it. Mixed cases are named by the user instead.
-  function autoCaseName(): string {
-    const base = [
-      wine.producer,
-      wine.wineName && wine.wineName.trim() && wine.wineName.trim() !== (wine.producer ?? '').trim() ? wine.wineName : null,
-      wine.region,
-      wine.vintage,
-    ]
-      .map((s) => (s == null ? '' : String(s).trim()))
-      .filter((s) => s.length > 0)
-      .join(' ');
-    if (!base) return '';
-    // Count existing whole-wine cases of this same base (ignoring any "NoN "
-    // prefix already applied), so the next one continues the numbering.
-    const stripNo = (s: string) => s.trim().replace(/^no\s*\d+\s+/i, '').toLowerCase();
-    const dupes = locationCases.filter((c) => c.kind !== 'mixed' && stripNo(c.name) === base.toLowerCase()).length;
-    return dupes >= 1 ? `No${dupes + 1} ${base}` : base;
-  }
+  // Name of the alt cellar we're adding into, for the "Add to {location}" title.
+  const { data: pendingLocation } = useQuery({
+    queryKey: ['storage-location', pendingStorageLocationId],
+    queryFn: () => fetchStorageLocation(pendingStorageLocationId!),
+    enabled: !!pendingStorageLocationId && context === 'add-location',
+  });
 
   // Across-all-racks placement map, so the duplicate prompt can tell the user
   // *where* their existing bottles already sit (e.g. "in your Kitchen rack").
@@ -1567,10 +1550,9 @@ export default function LabelResultsScreen() {
           : openField === 'packaging'
             ? PACKAGING.map((p) => ({ label: p.label, value: p.k, onSelect: () => {
                 setStorageKind(p.k);
-                // Whole-wine cases auto-name after the wine (editable); mixed
-                // cases are named by the user; loose needs no case name.
-                if (p.k === 'complete') setCaseName(autoCaseName());
-                else setCaseName('');
+                // Always start the case name blank — the user names their own
+                // case (short & snappy), never prefilled with the wine name.
+                setCaseName('');
               } }))
             : [];
 
@@ -1741,7 +1723,7 @@ export default function LabelResultsScreen() {
         </TouchableOpacity>
       ) : null}
 
-      <Text style={styles.pageTitle}>{context === 'add-location' ? 'Add to Location' : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
+      <Text style={styles.pageTitle}>{context === 'add-location' ? `Add to ${pendingLocation?.name ?? 'Location'}` : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
 
       {/* One separator line beneath the title. The stats bar itself now sits
           lower — below the wine identity, just above Vinster's Note / Map. */}
@@ -2463,12 +2445,12 @@ export default function LabelResultsScreen() {
 
                     {storageKind !== 'loose' && (
                       <>
-                        <Text style={styles.modalLabel}>Case name</Text>
+                        <Text style={styles.modalLabel}>Case name <Text style={styles.modalLabelHint}>(short &amp; snappy)</Text></Text>
                         <TextInput
                           style={styles.caseInput}
                           value={caseName}
                           onChangeText={setCaseName}
-                          placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. Château Musar 2016'}
+                          placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. Musar 2010'}
                           placeholderTextColor={colors.textSubtle}
                         />
                         {/* Quick-pick from existing MIXED case names in this

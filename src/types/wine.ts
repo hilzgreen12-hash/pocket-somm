@@ -189,6 +189,12 @@ export interface WineIntelligence {
   // record of the same wine shares one real, registry-backed id.
   wsWineId?: string | null;
   wsWineName?: string | null;
+  // Claude's best canonical Wine-Searcher search string for this wine (producer +
+  // cuvée/vineyard + appellation, no vintage). Used as a retry query when the raw
+  // scanned name fails to match on Wine-Searcher — closes the "cult producer with a
+  // finicky canonical name" gap (e.g. "S Giuseppe" -> "Podere San Giuseppe … Brunello
+  // di Montalcino"). Not persisted; a transient lookup aid.
+  wsSearchName?: string | null;
   // When the headline value is a real Wine-Searcher price: 'vintage' if it's the
   // exact vintage, 'all-vintage' if the exact vintage had no listing and this is
   // WS's average across all vintages. Null when the value is a Vinster estimate

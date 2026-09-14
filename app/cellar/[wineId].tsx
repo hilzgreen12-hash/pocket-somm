@@ -1715,7 +1715,7 @@ export default function CellarWineDetail() {
       <View style={[styles.statsGrid, { paddingTop: 0 }]}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
-          <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeLabel(wine.bottle_size_ml ?? 750)}</Text>
+          <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
           {/* Per-location breakdown — always shown so a wine split across a
               fridge and a rack reads "1 in My Wine Fridge · 2 in Large Wine
               Rack", not just a bare total. (Tapping the rack you came from just
@@ -1759,7 +1759,7 @@ export default function CellarWineDetail() {
             <Text style={[styles.statValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
           ) : (
             <Text style={styles.statValue}>
-              {bottlesInArchive}x{bottleSizeLabel(archiveBottleMl)}
+              {bottleLabel(bottlesInArchive)}
               {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
             </Text>
           )}
