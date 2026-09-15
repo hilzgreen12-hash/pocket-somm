@@ -86,7 +86,7 @@ export default function NewStorageLocationScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      <KeyboardAwareScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.xl * 3, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+      <KeyboardAwareScrollView contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingTop: spacing.xl, paddingBottom: 80 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         <Text style={styles.blurb}>Alternative Cellars are areas within your home that become cellar overspill, catching the organised chaos of too many wines at home. We've been there. Under the desk, in the garage, wherever there's space, let Vinster keep track.</Text>
 
         {photoUri ? (
@@ -129,7 +129,8 @@ const styles = StyleSheet.create({
   title: { flex: 1, fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center' },
   notice: { fontSize: 15, fontFamily: fonts.bodyRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 21, marginBottom: spacing.xs },
   noticeSub: { fontSize: 13, fontFamily: fonts.bodyItalic, color: colors.textMuted, textAlign: 'center', lineHeight: 18, marginBottom: spacing.lg },
-  blurb: { fontSize: 15, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 22, marginBottom: spacing.xl },
+  // Matches the tab-page blurbs (Home tab intro): larger Cormorant, roomy leading.
+  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 26, marginBottom: spacing.xl },
   // Large tap-to-add photo area (take or upload), like the label thumbnails.
   addPhotoBox: { width: '100%', aspectRatio: 4 / 3, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   addPhotoText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },

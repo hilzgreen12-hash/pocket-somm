@@ -16,13 +16,18 @@ import { getCachedLabelUri } from '../api/labelImageCache';
 // re-run is a cheap local exists() check that returns the cached URI with no
 // network.
 export function useLabelImageUrl(path: string | null | undefined): string | null {
+  // Imported reviews (e.g. Vivino) store a remote https label URL rather than a
+  // Supabase storage path — render it directly instead of routing through the
+  // storage-path cache.
+  const isRemote = !!path && /^https?:\/\//i.test(path);
   const { data } = useQuery({
     queryKey: ['label-image', path],
     queryFn: () => getCachedLabelUri(path),
-    enabled: !!path,
+    enabled: !!path && !isRemote,
     staleTime: 60 * 1000,
     gcTime: 24 * 60 * 60 * 1000,
     retry: 1,
   });
+  if (isRemote) return path as string;
   return data ?? null;
 }

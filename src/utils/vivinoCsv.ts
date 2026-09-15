@@ -40,6 +40,67 @@ export function fixMojibake(s: string): string {
   return out;
 }
 
+// Windows-1252 smart-punctuation reverse map: the real code point -> the cp1252
+// byte it occupied. fixMojibake above recovers Latin-1 accents but NOT these
+// (apostrophes, quotes, dashes, ellipsis, €, ™…), because they live in cp1252's
+// 0x80–0x9F block which a plain `& 0xff` can't reproduce. Real Vivino review
+// exports are double-encoded and full of these, so a review reads "Iâ€™m".
+const CP1252_REV: Record<number, number> = {
+  0x20ac: 0x80, 0x201a: 0x82, 0x0192: 0x83, 0x201e: 0x84, 0x2026: 0x85, 0x2020: 0x86,
+  0x2021: 0x87, 0x02c6: 0x88, 0x2030: 0x89, 0x0160: 0x8a, 0x2039: 0x8b, 0x0152: 0x8c,
+  0x017d: 0x8e, 0x2018: 0x91, 0x2019: 0x92, 0x201c: 0x93, 0x201d: 0x94, 0x2022: 0x95,
+  0x2013: 0x96, 0x2014: 0x97, 0x02dc: 0x98, 0x2122: 0x99, 0x0161: 0x9a, 0x203a: 0x9b,
+  0x0153: 0x9c, 0x017e: 0x9e, 0x0178: 0x9f,
+};
+
+// STRICT manual UTF-8 decode (Hermes has no Buffer): returns the decoded string,
+// or null if the bytes aren't well-formed UTF-8. The null result is the guard
+// that stops us mangling already-clean text (e.g. a real "Château": its lone â
+// byte fails validation, so the original is kept).
+function utf8Strict(bytes: number[]): string | null {
+  let out = '';
+  let i = 0;
+  const cont = (b: number | undefined) => b !== undefined && (b & 0xc0) === 0x80;
+  while (i < bytes.length) {
+    const c = bytes[i];
+    if (c < 0x80) { out += String.fromCharCode(c); i += 1; continue; }
+    if (c >= 0xc2 && c < 0xe0) {
+      if (!cont(bytes[i + 1])) return null;
+      out += String.fromCharCode(((c & 0x1f) << 6) | (bytes[i + 1] & 0x3f)); i += 2; continue;
+    }
+    if (c >= 0xe0 && c < 0xf0) {
+      if (!cont(bytes[i + 1]) || !cont(bytes[i + 2])) return null;
+      out += String.fromCharCode(((c & 0x0f) << 12) | ((bytes[i + 1] & 0x3f) << 6) | (bytes[i + 2] & 0x3f)); i += 3; continue;
+    }
+    if (c >= 0xf0 && c < 0xf5) {
+      if (!cont(bytes[i + 1]) || !cont(bytes[i + 2]) || !cont(bytes[i + 3])) return null;
+      const w = (((c & 0x07) << 18) | ((bytes[i + 1] & 0x3f) << 12) | ((bytes[i + 2] & 0x3f) << 6) | (bytes[i + 3] & 0x3f)) - 0x10000;
+      out += String.fromCharCode(0xd800 + ((w >>> 10) & 0x3ff), 0xdc00 + (w & 0x3ff)); i += 4; continue;
+    }
+    return null; // invalid lead byte
+  }
+  return out;
+}
+
+// cp1252-aware demojibake for double-encoded text (Vivino reviews). Maps every
+// char back to its cp1252 byte, then STRICT-decodes the run as UTF-8 — keeping
+// the result only when it's valid AND changed, so clean text is never touched.
+// Handles both representations a reader might produce (raw bytes ≤0xFF, or the
+// decoded smart-punctuation code points). Apply AFTER fixMojibake; idempotent on
+// already-clean strings.
+export function demojibakeSmart(s: string): string {
+  if (!s) return s;
+  const bytes: number[] = [];
+  for (let i = 0; i < s.length; i++) {
+    const cp = s.charCodeAt(i);
+    const b = CP1252_REV[cp] ?? (cp <= 0xff ? cp : -1);
+    if (b < 0) return s; // a genuine char beyond cp1252 (e.g. clean emoji) — not this mojibake
+    bytes.push(b);
+  }
+  const decoded = utf8Strict(bytes);
+  return decoded && decoded !== s ? decoded : s;
+}
+
 // Sniff the field delimiter from the header line so we handle comma-CSV,
 // tab-delimited (CellarTracker "text" export, Excel "Save As Tab"), and the
 // semicolon CSVs some locales produce — whichever appears most, outside quotes.
@@ -121,11 +182,14 @@ export interface VivinoReview {
   producer: string;
   wineName: string;
   vintage: string | null;
+  region: string | null;       // drives Vinster's inferred country
+  colour: string | null;       // "Red" | "White" | … (from Vivino "Wine type")
   score: number | null;
   reviewNote: string | null;   // "Your review" — the shareable tasting note
   personalNote: string | null; // "Personal Note" — private
   location: string | null;
   date: string | null;         // yyyy-mm-dd (from the scan/review date)
+  labelImageUrl: string | null; // Vivino-hosted label image, used as the starter thumbnail
 }
 
 // Parse the Vivino "full_wine_list" export for the rows the user actually
@@ -138,8 +202,37 @@ export function parseVivinoReviews(rows: string[][]): VivinoReview[] {
   const cWinery = idx('winery'), cWine = idx('wine name'), cVint = idx('vintage');
   const cRating = idx('your rating'), cReview = idx('your review'), cNote = idx('personal note');
   const cDate = idx('scan date'), cLoc = idx('scan/review location');
+  const cRegion = idx('region'), cType = idx('wine type'), cImg = idx('label image');
   if (cWine < 0 && cWinery < 0) return [];
-  const cell = (r: string[], i: number) => (i >= 0 && i < r.length ? (r[i] ?? '').trim() : '');
+  // Every text cell gets the cp1252 smart-punctuation repair on top of the
+  // Latin-1 fixMojibake already applied upstream — Vivino review text is riddled
+  // with double-encoded apostrophes/quotes/dashes.
+  const cell = (r: string[], i: number) => (i >= 0 && i < r.length ? demojibakeSmart((r[i] ?? '').trim()) : '');
+  // Vivino "Wine type" is "Red Wine" / "White Wine" / "Sparkling wine" etc. —
+  // reduce to the colour word Vinster stores.
+  // Vivino "Scan date" arrives either ISO (yyyy-mm-dd) or, once Excel/SheetJS has
+  // formatted the serial, US "M/D/YY H:MM". Normalise both to yyyy-mm-dd.
+  const parseReviewDate = (raw: string): string | null => {
+    if (!raw) return null;
+    const iso = raw.match(/\d{4}-\d{2}-\d{2}/);
+    if (iso) return iso[0];
+    const m = raw.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (!m) return null;
+    let mm = parseInt(m[1], 10), dd = parseInt(m[2], 10);
+    if (mm > 12 && dd <= 12) { const t = mm; mm = dd; dd = t; } // tolerate D/M exports
+    let yr = parseInt(m[3], 10); if (yr < 100) yr += 2000;
+    if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+    return `${yr}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
+  };
+  const colourOf = (t: string): string | null => {
+    const s = t.toLowerCase();
+    if (s.includes('sparkl')) return 'Sparkling';
+    if (s.includes('ros')) return 'Rosé';
+    if (s.includes('white')) return 'White';
+    if (s.includes('red')) return 'Red';
+    if (s.includes('dessert') || s.includes('fortif') || s.includes('port')) return 'Fortified';
+    return t || null;
+  };
   const out: VivinoReview[] = [];
   for (let ri = 1; ri < rows.length; ri++) {
     const r = rows[ri];
@@ -148,16 +241,20 @@ export function parseVivinoReviews(rows: string[][]): VivinoReview[] {
     const stars = rating ? parseFloat(rating.replace(/[^0-9.]/g, '')) : NaN;
     const score = Number.isFinite(stars) ? Math.round(Math.max(0, Math.min(5, stars)) * 20) : null;
     const vintageRaw = cell(r, cVint);
-    const date = (cell(r, cDate).match(/\d{4}-\d{2}-\d{2}/) ?? [])[0] ?? null;
+    const date = parseReviewDate(cell(r, cDate));
+    const img = cell(r, cImg);
     out.push({
       producer: cell(r, cWinery),
       wineName: cell(r, cWine),
       vintage: vintageRaw ? (vintageRaw.replace(/[^0-9A-Za-z]/g, '') || null) : null,
+      region: cell(r, cRegion) || null,
+      colour: colourOf(cell(r, cType)),
       score,
       reviewNote: review || null,
       personalNote: note || null,
       location: cell(r, cLoc) || null,
       date,
+      labelImageUrl: /^https?:\/\//i.test(img) ? img : null,
     });
   }
   return out;

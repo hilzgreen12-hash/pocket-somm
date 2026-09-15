@@ -1,4 +1,5 @@
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
+import { useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useRacks } from '../hooks/useRacks';
@@ -6,7 +7,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useRackStore } from '../stores/rackStore';
 import { getRackBottleCounts, getSlotAssignments } from '../api/racks';
 import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../api/bins';
-import { fetchStorageLocations, deleteStorageLocation, fetchStorageLocationWines } from '../api/storageLocations';
+import { fetchStorageLocations, deleteStorageLocation, fetchStorageLocationWines, renameStorageLocation } from '../api/storageLocations';
 import { deleteCellarWine } from '../api/cellar';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
@@ -46,6 +47,24 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
   const qc = useQueryClient();
   const { setPendingStorageType, reset: resetRackStore, setPendingWineId, setPendingAddMode } = useRackStore();
   const userId = session?.user.id;
+
+  // Rename an Alt Cellar from its carousel long-press (showAlert has no input,
+  // so the rename lives in its own small modal).
+  const [renameLoc, setRenameLoc] = useState<{ id: string; name: string } | null>(null);
+  const [renameVal, setRenameVal] = useState('');
+  const [renaming, setRenaming] = useState(false);
+  async function saveRename() {
+    if (!renameLoc || !renameVal.trim() || renaming) return;
+    setRenaming(true);
+    try {
+      await renameStorageLocation(renameLoc.id, renameVal.trim());
+      qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+      qc.invalidateQueries({ queryKey: ['storage-location', renameLoc.id] });
+      setRenameLoc(null);
+    } catch (err) {
+      showAlert({ title: 'Could not rename', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally { setRenaming(false); }
+  }
 
   const { data: storageLocations = [] } = useQuery({
     queryKey: ['storage-locations', userId],
@@ -170,6 +189,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     showAlert({
       title: loc.name,
       buttons: [
+        { text: 'Rename Location', onPress: () => { setRenameLoc(loc); setRenameVal(loc.name); } },
         { text: 'Delete Alt Cellar', style: 'destructive', onPress: async () => { try { await deleteStorageLocation(loc.id); invalidate(); contentsKeptNotice(); } catch (err) { onError(err); } } },
         {
           text: 'Delete Alt Cellar & Contents',
@@ -280,6 +300,30 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
       {hasStorage && (
         <Text style={styles.swipeHint}>Swipe Right to view and add locations →</Text>
       )}
+
+      <Modal visible={!!renameLoc} transparent animationType="fade" onRequestClose={() => setRenameLoc(null)}>
+        <View style={styles.renameBackdrop}>
+          <View style={styles.renameSheet}>
+            <Text style={styles.renameTitle}>Rename Location</Text>
+            <TextInput
+              style={styles.renameInput}
+              value={renameVal}
+              onChangeText={setRenameVal}
+              placeholder="e.g. The shed, Under the bed…"
+              placeholderTextColor={colors.textMuted}
+              autoFocus
+            />
+            <View style={styles.renameRow}>
+              <TouchableOpacity style={styles.renameBtn} onPress={() => setRenameLoc(null)} activeOpacity={0.7}>
+                <Text style={styles.renameBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.renameBtn, styles.renameBtnPrimary, (!renameVal.trim() || renaming) && styles.renameBtnDisabled]} onPress={saveRename} disabled={!renameVal.trim() || renaming} activeOpacity={0.85}>
+                <Text style={[styles.renameBtnText, styles.renameBtnTextPrimary]}>{renaming ? 'Saving…' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -310,4 +354,15 @@ const styles = StyleSheet.create({
   storageCardCount: { fontSize: 13, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted },
   addTile: { width: 152, height: 108, borderWidth: 1, borderColor: colors.gold, borderStyle: 'dashed', borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   addTilePlus: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5 },
+  // Rename-location modal.
+  renameBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
+  renameSheet: { width: '100%', maxWidth: 400, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.borderWhite, padding: spacing.lg },
+  renameTitle: { fontSize: 18, fontFamily: fontsSpectral.headingSemibold, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: spacing.md },
+  renameInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, marginBottom: spacing.md },
+  renameRow: { flexDirection: 'row', gap: spacing.sm },
+  renameBtn: { flex: 1, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center' },
+  renameBtnPrimary: { borderColor: colors.gold },
+  renameBtnDisabled: { opacity: 0.5 },
+  renameBtnText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text },
+  renameBtnTextPrimary: { color: colors.gold },
 });

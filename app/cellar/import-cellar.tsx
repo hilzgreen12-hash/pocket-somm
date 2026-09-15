@@ -11,7 +11,8 @@ import { importCellarDocument, prepareImageBase64, parseCellarImport, parseCella
 import { fileToSheets, type ImportSheet } from '../../src/utils/cellarImportDecode';
 import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
-import { saveManualChosenWine } from '../../src/api/chosenWines';
+import { saveManualChosenWine, bulkCreateChosenReviews } from '../../src/api/chosenWines';
+import { createLibraryFilter } from '../../src/api/libraryFilters';
 import { parseVivinoReviews, type VivinoReview } from '../../src/utils/vivinoCsv';
 import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
@@ -122,7 +123,7 @@ export default function ImportCellarScreen() {
   const defaultCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   // Entry source from the "Upload Cellar Document" chooser: camera / library
   // (photo → OCR) or vivino (a Vivino CSV export → parse).
-  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' }>();
+  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' | 'vivino-reviews' }>();
   // The three CSV/spreadsheet sources share one flow; only the on-screen copy
   // (name, export steps, label-image caveat) differs — driven by CSV_SOURCES.
   const csv = source && source in CSV_SOURCES ? CSV_SOURCES[source as CsvSource] : null;
@@ -162,6 +163,7 @@ export default function ImportCellarScreen() {
     didAuto.current = true;
     if (source === 'camera') void pick('camera');
     else if (source === 'library') void pick('library');
+    else if (source === 'vivino-reviews') void pickReviewsFile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
@@ -335,46 +337,32 @@ export default function ImportCellarScreen() {
     if (!userId) return;
     setStage('adding');
     try {
-      const cellar = await getCellarWines(userId);
-      const byKey = new Map<string, CellarWine>();
-      for (const w of cellar) { const k = wineKey(w); if (!byKey.has(k)) byKey.set(k, w); }
-      let matched = 0, added = 0, skipped = 0;
-      for (const rv of reviews) {
-        const existing = byKey.get(wineKey({ producer: rv.producer, wineName: rv.wineName, vintage: rv.vintage }));
-        if (existing) {
-          // Don't overwrite a review the user has already written in Vinster.
-          if (existing.review_score != null || (existing.review_note && existing.review_note.trim())) { skipped++; continue; }
-          await updateCellarWine(existing.id, {
-            review_score: rv.score,
-            review_note: rv.reviewNote,
-            user_notes: rv.personalNote,
-            review_location: rv.location,
-            review_date: rv.date,
-          });
-          matched++;
-        } else {
-          await saveManualChosenWine(userId, {
-            wineName: rv.wineName || rv.producer,
-            producer: rv.producer,
-            region: '',
-            vintage: rv.vintage ? (parseInt(rv.vintage, 10) || null) : null,
-            restaurantName: '',
-            city: rv.location ?? '',
-            listPrice: null,
-            currency: defaultCurrency,
-            tastingNote: rv.reviewNote ?? '',
-            otherObservations: rv.personalNote ?? '',
-            userScore: rv.score,
-            isFavourite: false,
-            source: 'other',
-            reviewDate: rv.date,
-          });
-          added++;
-        }
-      }
-      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      // De-dupe exact repeats within this file (producer + name + vintage), keeping
+      // the first occurrence. Everything imports into Your Wine Reviews as its own
+      // review — no intel/valuation generated now (on demand when a wine is opened).
+      const seen = new Set<string>();
+      const items = reviews
+        .filter((rv) => { const k = wineKey({ producer: rv.producer, wineName: rv.wineName, vintage: rv.vintage }); if (seen.has(k)) return false; seen.add(k); return true; })
+        .map((rv) => ({
+          producer: rv.producer,
+          wineName: rv.wineName || rv.producer,
+          vintage: rv.vintage ? (parseInt(rv.vintage, 10) || null) : null,
+          region: rv.region,
+          style: rv.colour,
+          userScore: rv.score,
+          tastingNote: rv.reviewNote,
+          otherObservations: rv.personalNote,
+          location: rv.location,
+          reviewDate: rv.date,
+          labelImagePath: rv.labelImageUrl,
+        }));
+      const ids = await bulkCreateChosenReviews(userId, items);
+      // Group this batch under a dated "Import" folder on the Wine Reviews carousel.
+      const folderName = `Import — ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
+      if (ids.length > 0) await createLibraryFilter(userId, 'wine-review', folderName, ids);
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
-      setReviewSummary({ matched, added, skipped });
+      qc.invalidateQueries({ queryKey: ['library-filters'] });
+      setReviewSummary({ matched: 0, added: ids.length, skipped: reviews.length - items.length });
       setStage('reviews-done');
     } catch (err) {
       showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -565,27 +553,33 @@ export default function ImportCellarScreen() {
       </View>
 
       {stage === 'capture' ? (
-        // Import is still being built — for now every source lands on a
-        // "coming soon" view: the buttons are shown faded/disabled so users
-        // see what's on the way, but nothing is wired up yet.
         <ScrollView contentContainerStyle={styles.content}>
-          <Text style={styles.lead}>Import features are coming next, stay tuned.</Text>
-          <View pointerEvents="none" style={{ opacity: 0.35, alignSelf: 'stretch' }}>
-            {csv ? (
-              <TouchableOpacity style={styles.primaryBtn} disabled activeOpacity={1}>
+          {source === 'vivino-reviews' ? (
+            <>
+              <Text style={styles.lead}>Import your Vivino reviews. Every rated wine becomes a review in Your Wine Reviews, grouped in a dated Import folder — no bottles are added to your cellar.</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => void pickReviewsFile()} activeOpacity={0.85}>
+                <Text style={styles.primaryBtnText}>Choose your Vivino export</Text>
+              </TouchableOpacity>
+            </>
+          ) : csv ? (
+            <>
+              <Text style={styles.lead}>{csv.lead}</Text>
+              <Text style={styles.hint}>{csv.hint}</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => void pickCsvFile()} activeOpacity={0.85}>
                 <Text style={styles.primaryBtnText}>{csv.name === 'File' ? 'Choose a file' : `Choose ${csv.name} export file`}</Text>
               </TouchableOpacity>
-            ) : (
-              <>
-                <TouchableOpacity style={styles.primaryBtn} disabled activeOpacity={1}>
-                  <Text style={styles.primaryBtnText}>Upload Screenshot</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={styles.secondaryBtn} disabled activeOpacity={1}>
-                  <Text style={styles.secondaryBtnText}>Take Photo</Text>
-                </TouchableOpacity>
-              </>
-            )}
-          </View>
+            </>
+          ) : (
+            <>
+              <Text style={styles.lead}>Import an existing cellar from a photo or screenshot of a wine list.</Text>
+              <TouchableOpacity style={styles.primaryBtn} onPress={() => void pick('library')} activeOpacity={0.85}>
+                <Text style={styles.primaryBtnText}>Upload Screenshot</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.secondaryBtn} onPress={() => void pick('camera')} activeOpacity={0.85}>
+                <Text style={styles.secondaryBtnText}>Take Photo</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </ScrollView>
       ) : stage === 'sheets' ? (
         <ScrollView contentContainerStyle={styles.content}>
@@ -684,7 +678,7 @@ export default function ImportCellarScreen() {
           <Text style={styles.doneTitle}>Reviews imported</Text>
           <Text style={styles.hint}>
             {reviewSummary
-              ? `${reviewSummary.matched} review${reviewSummary.matched === 1 ? '' : 's'} added to wines in your cellar${reviewSummary.added > 0 ? `, ${reviewSummary.added} kept as Other reviews` : ''}${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} were skipped (already reviewed in Vinster)` : ''}. Find them on each wine card and in Pair · Wine Reviews.`
+              ? `${reviewSummary.added} review${reviewSummary.added === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.`
               : 'Your reviews have been imported.'}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>

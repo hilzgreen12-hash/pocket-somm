@@ -90,6 +90,55 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
   return data as ChosenWine;
 }
 
+// One imported Vivino review → a standalone chosen_wines row.
+export interface ImportReviewInput {
+  producer: string;
+  wineName: string;
+  vintage: number | null;
+  region: string | null;
+  style: string | null;          // colour (Red / White / …)
+  userScore: number | null;      // /100
+  tastingNote: string | null;    // "Your review" (shareable)
+  otherObservations: string | null; // "Personal Note" (private)
+  location: string | null;
+  reviewDate: string | null;     // yyyy-mm-dd
+  labelImagePath: string | null; // stored label ref (a Vivino https URL for imports)
+}
+
+// Bulk-insert imported reviews as standalone (source 'other') chosen_wines rows.
+// Chunked so a big cellar import stays under the request payload limit. Returns
+// the new row ids (for assigning the batch to an "Import" folder). No AI/enrich
+// at import time — reviews come in flat, intel is generated on demand later.
+export async function bulkCreateChosenReviews(userId: string, items: ImportReviewInput[]): Promise<string[]> {
+  if (items.length === 0) return [];
+  const CHUNK = 500;
+  const ids: string[] = [];
+  for (let i = 0; i < items.length; i += CHUNK) {
+    const rows = items.slice(i, i + CHUNK).map((it) => ({
+      user_id: userId,
+      scan_session_id: null,
+      wine_name: it.wineName.trim() || it.producer.trim() || 'Unnamed wine',
+      producer: it.producer.trim() || null,
+      region: it.region?.trim() || null,
+      vintage: it.vintage,
+      style: it.style,
+      tasting_note: it.tastingNote?.trim() || null,
+      other_observations: it.otherObservations?.trim() || null,
+      user_score: it.userScore,
+      is_favourite: false,
+      restaurant_name: null,
+      city: it.location?.trim() || null,
+      label_image_path: it.labelImagePath,
+      source: 'other' as const,
+      ...(it.reviewDate ? { chosen_at: it.reviewDate } : {}),
+    }));
+    const { data, error } = await supabase.from('chosen_wines').insert(rows).select('id');
+    if (error) throw new Error(error.message);
+    for (const r of data ?? []) ids.push((r as { id: string }).id);
+  }
+  return ids;
+}
+
 // Attach a wine to a restaurant visit as a bottle the user brought (e.g. from
 // home). Linked to the scan session and marked source='other' so it shows in
 // the visit's "Your Bottles" but never in the List-scan "Bottle Picks".
