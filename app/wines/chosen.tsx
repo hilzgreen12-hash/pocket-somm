@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
+import { View, Text, ScrollView, FlatList, TouchableOpacity, StyleSheet, Modal, ActivityIndicator, Share, TextInput } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -1712,13 +1712,21 @@ export default function ChosenWinesScreen() {
             )}
           </View>
 
-        <ScrollView ref={listScrollRef} contentContainerStyle={{ paddingBottom: 60 }}>
-          {sorted.length === 0 ? (
+        <FlatList
+          data={sorted}
+          keyExtractor={(item) => `${item.source}-${item.wine.id}`}
+          contentContainerStyle={{ paddingBottom: 60 }}
+          initialNumToRender={12}
+          maxToRenderPerBatch={12}
+          windowSize={11}
+          removeClippedSubviews
+          keyboardShouldPersistTaps="handled"
+          ListEmptyComponent={
             <View style={styles.emptyFilter}>
               <Text style={styles.emptyBody}>No reviews match these filters.</Text>
             </View>
-          ) : (
-            sorted.map((item) => {
+          }
+          renderItem={({ item }) => {
               const w = item.wine;
               // Every thumbnail opens a focused review input, never the full
               // wine card: chosen_wines reviews (restaurant + other) open
@@ -1788,12 +1796,8 @@ export default function ChosenWinesScreen() {
                   </View>
                 </TouchableOpacity>
               );
-            })
-          )}
-
-          {/* Awaiting-review picks now stack into the list above, sorted by date
-              (see isShownReview) — no separate bottom section. */}
-        </ScrollView>
+          }}
+        />
         </>
       )}
 
