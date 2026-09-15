@@ -275,6 +275,18 @@ export async function deleteChosenWine(id: string): Promise<void> {
   }
 }
 
+// Delete many chosen_wines rows by id, chunked so a large batch (e.g. clearing a
+// whole import folder of thousands of reviews) stays under the request limit.
+export async function bulkDeleteChosenWines(ids: string[]): Promise<void> {
+  const unique = Array.from(new Set(ids.filter(Boolean)));
+  const CHUNK = 500;
+  for (let i = 0; i < unique.length; i += CHUNK) {
+    const slice = unique.slice(i, i + CHUNK);
+    const { error } = await supabase.from('chosen_wines').delete().in('id', slice);
+    if (error) throw new Error(error.message);
+  }
+}
+
 // Clear the review CONTENT off a chosen wine without deleting the row — so a
 // restaurant bottle pick returns to "awaiting review" instead of vanishing.
 export async function clearChosenReview(id: string): Promise<void> {

@@ -8,7 +8,8 @@ import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../../src/hooks/useChosenWines';
-import { clearChosenReview, patchChosenWine } from '../../src/api/chosenWines';
+import { clearChosenReview, patchChosenWine, bulkDeleteChosenWines } from '../../src/api/chosenWines';
+import { deleteLibraryFilter } from '../../src/api/libraryFilters';
 import { useCellar, useArchive } from '../../src/hooks/useCellar';
 import { useAuth } from '../../src/hooks/useAuth';
 import { EditChosenWineModal } from '../../src/components/EditChosenWineModal';
@@ -766,13 +767,41 @@ export default function ChosenWinesScreen() {
     setFilterModalOpen(true);
   }
   function openFilterOptions(f: LibraryFilter) {
+    // An "Import — <date>" folder from a review import gets an extra destructive
+    // option to delete the folder AND every review it brought in — the clean way
+    // to undo an import (e.g. before re-importing a corrected file).
+    const isImport = /^import\b/i.test(f.name.trim());
     showAlert({
       title: f.name,
-      body: 'Edit this folder’s name and wines, or delete it. Your reviews stay in the list either way.',
+      body: 'Edit this folder’s name and wines, or delete it. Deleting the folder keeps your reviews in the list.',
       buttons: [
         { text: 'Edit', onPress: () => { setEditingFilter(f); setFilterModalOpen(true); } },
-        { text: 'Delete', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); removeFilter.mutate(f.id); } },
+        { text: 'Delete Folder Only', style: 'destructive', onPress: () => { if (activeCustomId === f.id) setActiveCustomId(null); removeFilter.mutate(f.id); } },
+        ...(isImport ? [{ text: 'Delete Import & Its Reviews', style: 'destructive' as const, onPress: () => confirmDeleteImport(f) }] : []),
         { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  // Delete an import wholesale: every review it added, then the folder. Used to
+  // undo an import before re-importing a corrected file.
+  function confirmDeleteImport(f: LibraryFilter) {
+    const n = f.itemIds.length;
+    showAlert({
+      title: `Delete this import?`,
+      body: `This permanently deletes the folder “${f.name}” and all ${n} review${n === 1 ? '' : 's'} it imported. This can’t be undone.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete Everything', style: 'destructive', onPress: async () => {
+          try {
+            if (activeCustomId === f.id) setActiveCustomId(null);
+            await bulkDeleteChosenWines(f.itemIds);
+            await deleteLibraryFilter(f.id);
+            qc.invalidateQueries({ queryKey: ['chosen-wines'] });
+            qc.invalidateQueries({ queryKey: ['library-filters'] });
+          } catch (err) {
+            showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+          }
+        } },
       ],
     });
   }
@@ -1653,7 +1682,7 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, monthFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{monthLabel(monthFilter)}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.filterChip, sortMode !== 'recent' && styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
+            <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('sort')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Your Score</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>
