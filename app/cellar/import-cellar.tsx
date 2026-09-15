@@ -13,7 +13,7 @@ import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
 import { saveManualChosenWine, bulkCreateChosenReviews } from '../../src/api/chosenWines';
 import { createLibraryFilter } from '../../src/api/libraryFilters';
-import { parseVivinoReviews, type VivinoReview } from '../../src/utils/vivinoCsv';
+import { parseVivinoReviews, isMonthFirstCurrency, type VivinoReview } from '../../src/utils/vivinoCsv';
 import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
@@ -123,7 +123,8 @@ export default function ImportCellarScreen() {
   const defaultCurrency = (preferences?.defaultCurrency ?? 'GBP').toUpperCase();
   // Entry source from the "Upload Cellar Document" chooser: camera / library
   // (photo → OCR) or vivino (a Vivino CSV export → parse).
-  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' | 'vivino-reviews' }>();
+  const { source } = useLocalSearchParams<{ source?: 'camera' | 'library' | 'vivino' | 'cellartracker' | 'file' | 'vivino-reviews' | 'review-spreadsheet' }>();
+  const isReviewImport = source === 'vivino-reviews' || source === 'review-spreadsheet';
   // The three CSV/spreadsheet sources share one flow; only the on-screen copy
   // (name, export steps, label-image caveat) differs — driven by CSV_SOURCES.
   const csv = source && source in CSV_SOURCES ? CSV_SOURCES[source as CsvSource] : null;
@@ -163,7 +164,7 @@ export default function ImportCellarScreen() {
     didAuto.current = true;
     if (source === 'camera') void pick('camera');
     else if (source === 'library') void pick('library');
-    else if (source === 'vivino-reviews') void pickReviewsFile();
+    else if (source === 'vivino-reviews' || source === 'review-spreadsheet') void pickReviewsFile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [source]);
 
@@ -314,12 +315,19 @@ export default function ImportCellarScreen() {
         multiple: false,
       });
       if (res.canceled || !res.assets?.[0]) return;
-      setStage('analyzing');
       const asset = res.assets[0];
+      // CSV only — xlsx/xls text mangles when read on-device (mojibake), so we
+      // reject spreadsheets up front and ask for a CSV re-save.
+      if (/\.(xlsx|xls|ods)$/i.test(asset.name ?? '')) {
+        showAlert({ title: 'Please upload a CSV', body: 'Vinster can only read reviews from a CSV file. In Excel/Numbers/Sheets choose File → Save As (or Export) → CSV, then upload that.' });
+        setStage('capture');
+        return;
+      }
+      setStage('analyzing');
       const bytes = await new File(asset.uri).bytes();
       const base64 = await new File(asset.uri).base64();
       const parsedSheets = fileToSheets(bytes, asset.name ?? 'file', base64);
-      const reviews = parseVivinoReviews(parsedSheets[0]?.rows ?? []);
+      const reviews = parseVivinoReviews(parsedSheets[0]?.rows ?? [], !isMonthFirstCurrency(defaultCurrency));
       if (reviews.length === 0) {
         showAlert({ title: 'No reviews found', body: 'This file has no wines with a rating, review or note. Make sure you exported your full Vivino wine list (not just the cellar).' });
         setStage('capture');
@@ -554,11 +562,11 @@ export default function ImportCellarScreen() {
 
       {stage === 'capture' ? (
         <ScrollView contentContainerStyle={styles.content}>
-          {source === 'vivino-reviews' ? (
+          {isReviewImport ? (
             <>
-              <Text style={styles.lead}>Import your Vivino reviews. Every rated wine becomes a review in Your Wine Reviews, grouped in a dated Import folder — no bottles are added to your cellar.</Text>
+              <Text style={styles.lead}>{source === 'vivino-reviews' ? 'Import your Vivino reviews' : 'Import reviews from a spreadsheet'}. Each rated wine becomes a review in Your Wine Reviews, grouped in a dated Import folder — no bottles are added to your cellar. CSV files only.</Text>
               <TouchableOpacity style={styles.primaryBtn} onPress={() => void pickReviewsFile()} activeOpacity={0.85}>
-                <Text style={styles.primaryBtnText}>Choose your Vivino export</Text>
+                <Text style={styles.primaryBtnText}>Choose your CSV file</Text>
               </TouchableOpacity>
             </>
           ) : csv ? (

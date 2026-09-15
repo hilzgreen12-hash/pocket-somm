@@ -20,6 +20,8 @@ import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { showAlert } from '../../src/components/AppAlert';
 import { ShareIcon } from '../../src/components/ShareIcon';
+import { usePreferences } from '../../src/hooks/usePreferences';
+import { isMonthFirstCurrency } from '../../src/utils/vivinoCsv';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -219,6 +221,7 @@ export default function ChosenWinesScreen() {
   const [search, setSearch] = useState('');
   // Bespoke user-created filters (the "+ Add" chip), same as the Label Library.
   const { filters: customFilters, create: createFilter, setItems: setFilterItems, rename: renameFilter, remove: removeFilter } = useLibraryFilters('wine-review');
+  const { preferences } = usePreferences();
   const [activeCustomId, setActiveCustomId] = useState<string | null>(null);
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
@@ -417,6 +420,35 @@ export default function ChosenWinesScreen() {
     pendingAssignRef.current = null;
     setNewTagOpen(false);
     if (target) setAssignForId(target);
+  }
+  // "+ Import" — bring reviews in from a file. Vivino export or a general
+  // spreadsheet of reviews; both must be CSV (xlsx text mangles on-device).
+  function openReviewImportMenu() {
+    showAlert({
+      title: 'Import Reviews',
+      buttons: [
+        { text: 'Import Vivino CSV File', onPress: () => showImportInstructions('vivino-reviews') },
+        { text: 'Import Spreadsheet', onPress: () => showImportInstructions('review-spreadsheet') },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function showImportInstructions(src: 'vivino-reviews' | 'review-spreadsheet') {
+    const monthFirst = isMonthFirstCurrency(preferences?.defaultCurrency);
+    const dateLine = monthFirst
+      ? "You're in the US/Canada, so your file will be read with the date formatted month/day/year."
+      : "You're in the UK/Europe, so your file will be read with the date formatted day/month/year.";
+    showAlert({
+      title: src === 'vivino-reviews' ? 'Import a Vivino CSV' : 'Import a Spreadsheet',
+      body:
+        'Vinster can only accept uploads saved as CSV files — please make sure you have saved your document correctly before uploading.\n\n' +
+        'Ensure you have kept the Column Header row in the file, stating which input is in each column (Wine Name, Vintage, etc).\n\n' +
+        dateLine,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Choose File', onPress: () => router.push(`/cellar/import-cellar?source=${src}` as any) },
+      ],
+    });
   }
   // Remove a bespoke filter entirely — drop it from the list and off every review.
   function deleteTag(tag: string) {
@@ -1545,12 +1577,17 @@ export default function ChosenWinesScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
-        <TouchableOpacity
-          onPress={() => { setAddSource('other'); setAddToGroupId(null); setChooserOpen(true); }}
-          hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
-        >
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={openReviewImportMenu} hitSlop={{ top: 8, bottom: 4, left: 8, right: 8 }}>
+            <Text style={styles.headerActionLink}>+ Import</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => { setAddSource('other'); setAddToGroupId(null); setChooserOpen(true); }}
+            hitSlop={{ top: 4, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.headerActionLink}>+ Add Review</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       {isLoading ? (
@@ -1871,6 +1908,9 @@ const styles = StyleSheet.create({
   awaitingName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
   awaitingMeta: { fontSize: 12, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 3 },
   addLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, width: 50, textAlign: 'right' },
+  // Stacked "+ Import" (top) / "+ Add Review" (below) on the header's right.
+  headerActions: { alignItems: 'flex-end', gap: 6 },
+  headerActionLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, letterSpacing: 0.5, textAlign: 'right' },
   title: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1, textAlign: 'center', flex: 1 },
   empty: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.xl },
   emptyTitle: { fontSize: 22, fontFamily: fonts.headingBold, color: colors.text, marginBottom: spacing.sm },

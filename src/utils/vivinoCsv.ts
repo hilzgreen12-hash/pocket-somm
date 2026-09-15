@@ -195,14 +195,31 @@ export interface VivinoReview {
 // Parse the Vivino "full_wine_list" export for the rows the user actually
 // engaged with (a rating, a review, or a personal note). Only those become
 // reviews — a scanned-but-unrated wine is skipped.
-export function parseVivinoReviews(rows: string[][]): VivinoReview[] {
+// US/Canada read dates month-first; everyone else day-first. Vinster's only
+// stored locale signal is the user's default currency, so we infer region from it.
+export function isMonthFirstCurrency(currency: string | null | undefined): boolean {
+  return ['USD', 'CAD'].includes((currency ?? '').toUpperCase());
+}
+
+// `defaultDayFirst` is the fallback date order (d/m vs m/d) used ONLY when the
+// file's own dates never disambiguate — caller derives it from the user's locale
+// (US/Canada → month-first, elsewhere → day-first).
+export function parseVivinoReviews(rows: string[][], defaultDayFirst = true): VivinoReview[] {
   if (rows.length < 2) return [];
-  const header = rows[0].map((h) => (h ?? '').trim().toLowerCase());
-  const idx = (name: string) => header.indexOf(name);
-  const cWinery = idx('winery'), cWine = idx('wine name'), cVint = idx('vintage');
-  const cRating = idx('your rating'), cReview = idx('your review'), cNote = idx('personal note');
-  const cDate = idx('scan date'), cLoc = idx('scan/review location');
-  const cRegion = idx('region'), cType = idx('wine type'), cImg = idx('label image');
+  // Synonym-matched columns so this handles a Vivino export AND a user's own
+  // review spreadsheet (as long as the header row names each column).
+  const header = rows[0];
+  const cWinery = findCol(header, ['winery', 'producer', 'winemaker', 'wine maker', 'domaine', 'estate']);
+  const cWine = findCol(header, ['wine name', 'wine', 'cuvée', 'cuvee', 'name']);
+  const cVint = findCol(header, ['vintage', 'year']);
+  const cRating = findCol(header, ['your rating', 'rating', 'my rating', 'score', 'my score', 'stars']);
+  const cReview = findCol(header, ['your review', 'review', 'tasting note', 'tasting notes', 'notes', 'note', 'comment', 'comments'], /personal|private/);
+  const cNote = findCol(header, ['personal note', 'private note']);
+  const cDate = findCol(header, ['scan date', 'review date', 'date tasted', 'tasted', 'date']);
+  const cLoc = findCol(header, ['scan/review location', 'review location', 'location', 'where']);
+  const cRegion = findCol(header, ['region', 'appellation']);
+  const cType = findCol(header, ['wine type', 'type', 'colour', 'color', 'style']);
+  const cImg = findCol(header, ['label image', 'image url', 'label url', 'label', 'image', 'photo']);
   if (cWine < 0 && cWinery < 0) return [];
   // Every text cell gets the cp1252 smart-punctuation repair on top of the
   // Latin-1 fixMojibake already applied upstream — Vivino review text is riddled
@@ -210,16 +227,32 @@ export function parseVivinoReviews(rows: string[][]): VivinoReview[] {
   const cell = (r: string[], i: number) => (i >= 0 && i < r.length ? demojibakeSmart((r[i] ?? '').trim()) : '');
   // Vivino "Wine type" is "Red Wine" / "White Wine" / "Sparkling wine" etc. —
   // reduce to the colour word Vinster stores.
-  // Vivino "Scan date" arrives either ISO (yyyy-mm-dd) or, once Excel/SheetJS has
-  // formatted the serial, US "M/D/YY H:MM". Normalise both to yyyy-mm-dd.
+  // Dates arrive ISO (yyyy-mm-dd) or slash-separated (d/m or m/d). Slash dates are
+  // ambiguous, so detect the order from the FILE'S OWN data: any first part >12 ⇒
+  // day-first; any second part >12 ⇒ month-first. When nothing disambiguates
+  // (all parts ≤12), fall back to the caller's locale default (defaultDayFirst):
+  // UK/EU day-first, US/Canada month-first.
+  let dayFirst = defaultDayFirst;
+  if (cDate >= 0) {
+    let sawDayFirst = false, sawMonthFirst = false;
+    for (let ri = 1; ri < rows.length; ri++) {
+      const m = String(rows[ri]?.[cDate] ?? '').trim().match(/^(\d{1,2})\/(\d{1,2})\//);
+      if (!m) continue;
+      if (parseInt(m[1], 10) > 12) sawDayFirst = true;
+      else if (parseInt(m[2], 10) > 12) sawMonthFirst = true;
+    }
+    if (sawDayFirst) dayFirst = true;
+    else if (sawMonthFirst) dayFirst = false;
+  }
   const parseReviewDate = (raw: string): string | null => {
     if (!raw) return null;
     const iso = raw.match(/\d{4}-\d{2}-\d{2}/);
     if (iso) return iso[0];
     const m = raw.match(/^\s*(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
     if (!m) return null;
-    let mm = parseInt(m[1], 10), dd = parseInt(m[2], 10);
-    if (mm > 12 && dd <= 12) { const t = mm; mm = dd; dd = t; } // tolerate D/M exports
+    let dd = parseInt(dayFirst ? m[1] : m[2], 10);
+    let mm = parseInt(dayFirst ? m[2] : m[1], 10);
+    if (mm > 12 && dd <= 12) { const t = mm; mm = dd; dd = t; } // self-correct a stray row
     let yr = parseInt(m[3], 10); if (yr < 100) yr += 2000;
     if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
     return `${yr}-${String(mm).padStart(2, '0')}-${String(dd).padStart(2, '0')}`;
@@ -238,8 +271,12 @@ export function parseVivinoReviews(rows: string[][]): VivinoReview[] {
     const r = rows[ri];
     const rating = cell(r, cRating), review = cell(r, cReview), note = cell(r, cNote);
     if (!rating && !review && !note) continue;
-    const stars = rating ? parseFloat(rating.replace(/[^0-9.]/g, '')) : NaN;
-    const score = Number.isFinite(stars) ? Math.round(Math.max(0, Math.min(5, stars)) * 20) : null;
+    // Vivino rates 1–5 stars (×20 → /100). A user's own sheet may already be on
+    // a /100 scale, so treat anything above 5 as an already-100-point score.
+    const raw = rating ? parseFloat(rating.replace(/[^0-9.]/g, '')) : NaN;
+    const score = Number.isFinite(raw)
+      ? (raw > 5 ? Math.round(Math.min(100, raw)) : Math.round(Math.max(0, raw) * 20))
+      : null;
     const vintageRaw = cell(r, cVint);
     const date = parseReviewDate(cell(r, cDate));
     const img = cell(r, cImg);

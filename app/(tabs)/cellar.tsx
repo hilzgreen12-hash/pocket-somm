@@ -56,19 +56,11 @@ export default function CellarTab() {
     });
   }
 
-  // Top-right "+ Import" — choose what to bring in: an existing cellar list
-  // (photo/screenshot/file) or a Vivino reviews export (ratings + tasting notes
-  // that land in Your Wine Reviews under a dated Import folder).
+  // Top-right "+ Import" — bring in an existing CELLAR list (photo / screenshot /
+  // file). Reviews (Vivino etc.) are imported from Your Wine Reviews, not here —
+  // they're not cellar stock.
   function openImportMenu() {
-    showAlert({
-      title: 'Import',
-      body: 'Bring an existing cellar list — or your Vivino reviews — into Vinster.',
-      buttons: [
-        { text: 'Cellar List (photo or file)', onPress: () => openImportChooser() },
-        { text: 'Vivino Reviews (ratings & notes)', onPress: () => router.push('/cellar/import-cellar?source=vivino-reviews' as any) },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-    });
+    openImportChooser();
   }
 
   function continueWithoutAccount() {
