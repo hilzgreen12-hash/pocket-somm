@@ -285,14 +285,30 @@ export async function clearChosenReview(id: string): Promise<void> {
   }
 }
 
+// Fetch ALL of a user's chosen_wines, paging past PostgREST's ~1000-row cap. A
+// large imported review history (e.g. a full Vivino export, ~9000) would silently
+// truncate to the first 1000 on a single request, so we loop in pages until a
+// short page signals the end.
+async function fetchAllChosenWines(userId: string): Promise<ChosenWine[]> {
+  const PAGE = 1000;
+  const out: ChosenWine[] = [];
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('chosen_wines')
+      .select('*')
+      .eq('user_id', userId)
+      .order('chosen_at', { ascending: false })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    const batch = (data ?? []) as ChosenWine[];
+    out.push(...batch);
+    if (batch.length < PAGE) break;
+  }
+  return out;
+}
+
 export async function fetchChosenWines(userId: string): Promise<ChosenWine[]> {
-  const { data, error } = await supabase
-    .from('chosen_wines')
-    .select('*')
-    .eq('user_id', userId)
-    .order('chosen_at', { ascending: false });
-  if (error) throw error;
-  return data ?? [];
+  return fetchAllChosenWines(userId);
 }
 
 // Look up the most recent chosen_wines (review) row for this user that
@@ -303,13 +319,9 @@ export async function findMatchingChosenWine(
   userId: string,
   identity: { producer: string | null; wineName: string; vintage: string | number | null; wsWineId?: string | null }
 ): Promise<ChosenWine | null> {
-  const { data, error } = await supabase
-    .from('chosen_wines')
-    .select('*')
-    .eq('user_id', userId)
-    .order('chosen_at', { ascending: false });
-  if (error) throw error;
-  const list = (data ?? []) as ChosenWine[];
+  // Paged so a match can be found even in a >1000-row review history (otherwise
+  // auto-link / wishlist-sync would only see the most recent 1000).
+  const list = await fetchAllChosenWines(userId);
 
   const wantId = identity.wsWineId ?? null;
   const wantKey = wineNameKey(identity.producer, identity.wineName);

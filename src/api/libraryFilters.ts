@@ -21,11 +21,21 @@ export async function fetchLibraryFilters(userId: string, scope: LibraryScope): 
   const ids = (filters ?? []).map((f) => f.id);
   if (ids.length === 0) return [];
 
-  const { data: links, error: linkErr } = await supabase
-    .from('library_filter_items')
-    .select('filter_id, item_id')
-    .in('filter_id', ids);
-  if (linkErr) throw new Error(linkErr.message);
+  // Page past the ~1000-row cap: a big "Import" folder can hold thousands of
+  // items, and a single request would silently return only the first 1000.
+  const links: { filter_id: string; item_id: string }[] = [];
+  const PAGE = 1000;
+  for (let from = 0; ; from += PAGE) {
+    const { data, error: linkErr } = await supabase
+      .from('library_filter_items')
+      .select('filter_id, item_id')
+      .in('filter_id', ids)
+      .range(from, from + PAGE - 1);
+    if (linkErr) throw new Error(linkErr.message);
+    const batch = data ?? [];
+    links.push(...batch);
+    if (batch.length < PAGE) break;
+  }
 
   const byFilter = new Map<string, string[]>();
   for (const l of links ?? []) {
@@ -53,9 +63,14 @@ export async function setLibraryFilterItems(filterId: string, itemIds: string[])
   const { error: deleteError } = await supabase.from('library_filter_items').delete().eq('filter_id', filterId);
   if (deleteError) throw new Error(deleteError.message);
   if (itemIds.length === 0) return;
-  const rows = itemIds.map((item_id) => ({ filter_id: filterId, item_id }));
-  const { error } = await supabase.from('library_filter_items').insert(rows);
-  if (error) throw new Error(error.message);
+  // Chunked so a large "Import" folder (thousands of items) stays under the
+  // request payload limit.
+  const CHUNK = 1000;
+  for (let i = 0; i < itemIds.length; i += CHUNK) {
+    const rows = itemIds.slice(i, i + CHUNK).map((item_id) => ({ filter_id: filterId, item_id }));
+    const { error } = await supabase.from('library_filter_items').insert(rows);
+    if (error) throw new Error(error.message);
+  }
 }
 
 export async function renameLibraryFilter(filterId: string, name: string): Promise<void> {
