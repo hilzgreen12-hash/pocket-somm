@@ -128,9 +128,11 @@ const styles = StyleSheet.create({
   cardName: { fontSize: 19, fontFamily: fonts.headingSemibold, color: colors.gold, lineHeight: 24, textAlign: 'center' },
   cardDate: { fontSize: 14, fontFamily: fonts.headingRegular, color: colors.textMuted, textAlign: 'center' },
   // Brown "your alter-ego is coming" placeholder.
-  mysteryCard: { width: 190, height: 134, borderWidth: 1, borderColor: '#6B4A32', borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: '#3A2A20' },
-  mysteryTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: '#E8D6B8', lineHeight: 23 },
-  mysterySub: { fontSize: 14, fontFamily: fonts.headingItalic, color: 'rgba(232,214,184,0.8)', lineHeight: 18 },
+  // Match the themed sketch cards (and the other tab carousels): brown surface,
+  // gold title, muted-white sub — not the old off-theme brown/cream.
+  mysteryCard: { width: 190, height: 134, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, padding: spacing.md, justifyContent: 'center', gap: 4, backgroundColor: colors.surface },
+  mysteryTitle: { fontSize: 18, fontFamily: fonts.headingBold, color: colors.gold, lineHeight: 23 },
+  mysterySub: { fontSize: 14, fontFamily: fonts.headingItalic, color: colors.textMuted, lineHeight: 18 },
   // Dashed gold "future" tiles — same look as the "+ Add" carousel tiles.
   futureCard: { width: 190, height: 134, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, borderRadius: 14, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
   futureText: { fontSize: 15, fontFamily: fonts.headingRegular, color: colors.gold, textAlign: 'center', lineHeight: 19 },

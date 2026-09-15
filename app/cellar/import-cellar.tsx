@@ -387,7 +387,7 @@ export default function ImportCellarScreen() {
       if (ids.length > 0) await createLibraryFilter(userId, 'wine-review', folderName, ids);
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       qc.invalidateQueries({ queryKey: ['library-filters'] });
-      setReviewSummary({ matched: 0, added: ids.length, skipped: trueDupes });
+      setReviewSummary({ matched: groupIds.size, added: ids.length, skipped: trueDupes });
       setStage('reviews-done');
     } catch (err) {
       showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -703,7 +703,7 @@ export default function ImportCellarScreen() {
           <Text style={styles.doneTitle}>Reviews imported</Text>
           <Text style={styles.hint}>
             {reviewSummary
-              ? `${reviewSummary.added} review${reviewSummary.added === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.`
+              ? `${reviewSummary.added} review${reviewSummary.added === 1 ? '' : 's'} across ${reviewSummary.matched} wine${reviewSummary.matched === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} exact duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.`
               : 'Your reviews have been imported.'}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>

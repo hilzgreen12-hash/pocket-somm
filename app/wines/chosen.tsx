@@ -227,6 +227,9 @@ export default function ChosenWinesScreen() {
   const [filterModalOpen, setFilterModalOpen] = useState(false);
   const [editingFilter, setEditingFilter] = useState<LibraryFilter | null>(null);
   const [savingFilter, setSavingFilter] = useState(false);
+  // Shown while a whole import folder + its (potentially thousands of) reviews are
+  // being deleted — the delete can take a while, so the user gets clear feedback.
+  const [deletingImport, setDeletingImport] = useState(false);
   // "+ Add" is a two-step chooser: first the collection (Restaurant / Cellar /
   // Other), then — for restaurant/other — Scan / Upload / Manual. Cellar routes
   // to a picker over the live cellar (a cellar review must attach to a real
@@ -792,6 +795,7 @@ export default function ChosenWinesScreen() {
       buttons: [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete Everything', style: 'destructive', onPress: async () => {
+          setDeletingImport(true);
           try {
             if (activeCustomId === f.id) setActiveCustomId(null);
             await bulkDeleteChosenWines(f.itemIds);
@@ -800,6 +804,8 @@ export default function ChosenWinesScreen() {
             qc.invalidateQueries({ queryKey: ['library-filters'] });
           } catch (err) {
             showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+          } finally {
+            setDeletingImport(false);
           }
         } },
       ],
@@ -1580,6 +1586,15 @@ export default function ChosenWinesScreen() {
         </View>
       ) : null}
 
+      {/* Blocking overlay while an import folder + its reviews delete (can be
+          thousands of rows, so it takes a moment). */}
+      {deletingImport ? (
+        <View style={styles.uploadingOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
+          <Text style={styles.deletingText}>Deleting Folder & Contents…</Text>
+        </View>
+      ) : null}
+
       {/* Off-screen branded share card. Mounted only while a share is
           in flight so its layout work doesn't sit idle in the tree. */}
       {reviewSharePayload && (
@@ -2034,6 +2049,7 @@ const styles = StyleSheet.create({
   uploadingOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.7)', justifyContent: 'center', alignItems: 'center', gap: spacing.md },
   // Status read-out shown during background upload — treat as subtle/muted info text.
   uploadingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
+  deletingText: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.text, letterSpacing: 0.5 },
   // Hides the off-screen branded share card from the visible layout
   // while still keeping it mountable for react-native-view-shot to
   // snapshot. Matches the WineListShareCard pattern in scan/results.
