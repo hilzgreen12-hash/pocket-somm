@@ -13,6 +13,8 @@
 export const PERSONALITY_GATE = {
   wineMinWines: 8,          // distinct cellar wines
   wineMinListPicks: 4,      // distinct List-scan sessions where a bottle was picked
+  wineMinReviews: 8,        // distinct reviewed wines (incl. imported reviews) — a
+                            // rich review history earns a sketch even with no cellar
   foodieMinSignals: 5,      // total food-side signals
   foodieMinHardSignals: 2,  // of those, this many must be "hard" (a review or saved recipe — not a bare search)
   minDistinctDays: 2,       // activity must span at least this many calendar days
@@ -32,7 +34,7 @@ function distinctDays(isos: Array<string | null | undefined>): number {
 
 export interface PersonalityReadinessInput {
   wines: Array<{ created_at?: string | null }>;
-  chosenWines: Array<{ source?: string | null; scan_session_id?: string | null; chosen_at?: string | null }>;
+  chosenWines: Array<{ source?: string | null; scan_session_id?: string | null; chosen_at?: string | null; user_score?: number | null; tasting_note?: string | null }>;
   archive: Array<{ restaurantName?: string | null; ratingOverall?: number | null; ratingFood?: number | null; restaurantNote?: string | null; capturedAt?: string | null }>;
   chefLabelSessions: Array<{ saved_at?: string | null }>;
   chefPairingSessions: Array<{ saved_at?: string | null }>;
@@ -46,10 +48,19 @@ export function evaluatePersonalityReadiness(input: PersonalityReadinessInput): 
   const listSessions = new Set(
     input.chosenWines.filter((cw) => cw.source !== 'other' && cw.scan_session_id).map((cw) => cw.scan_session_id),
   ).size;
-  const wineVolume = distinctCellarWines >= g.wineMinWines || listSessions >= g.wineMinListPicks;
+  // A written/imported review (carries a score or a tasting note) is a genuine
+  // signal regardless of source — a user with a rich review history (e.g. an
+  // imported Vivino export) has earned a sketch even with an empty cellar.
+  const reviewedChosen = input.chosenWines.filter((cw) => cw.user_score != null || (cw.tasting_note && cw.tasting_note.trim()));
+  const wineVolume =
+    distinctCellarWines >= g.wineMinWines ||
+    listSessions >= g.wineMinListPicks ||
+    reviewedChosen.length >= g.wineMinReviews;
   const wineDays = distinctDays([
     ...input.wines.map((w) => w.created_at),
+    // Count non-'other' list picks AND any reviewed rows (incl. imports) for spread.
     ...input.chosenWines.filter((cw) => cw.source !== 'other').map((cw) => cw.chosen_at),
+    ...reviewedChosen.map((cw) => cw.chosen_at),
   ]);
   const wineReady = wineVolume && wineDays >= g.minDistinctDays;
 

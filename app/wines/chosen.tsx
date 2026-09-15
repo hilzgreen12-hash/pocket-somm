@@ -1653,7 +1653,7 @@ export default function ChosenWinesScreen() {
               </View>
               <Text style={[styles.filterChipValue, monthFilter !== 'all' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{monthLabel(monthFilter)}</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={[styles.filterChip, styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
+            <TouchableOpacity style={[styles.filterChip, sortMode !== 'recent' && styles.filterChipSort]} onPress={() => setOpenDropdown('sort')}>
               <View style={styles.filterChipHeadingRow}>
                 <Text style={styles.filterChipLabel}>Your Score</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>

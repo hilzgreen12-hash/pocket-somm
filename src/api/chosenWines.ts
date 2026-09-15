@@ -103,6 +103,7 @@ export interface ImportReviewInput {
   location: string | null;
   reviewDate: string | null;     // yyyy-mm-dd
   labelImagePath: string | null; // stored label ref (a Vivino https URL for imports)
+  reviewGroupId?: string | null; // shared across repeat tastings of the same wine
 }
 
 // Bulk-insert imported reviews as standalone (source 'other') chosen_wines rows.
@@ -131,6 +132,9 @@ export async function bulkCreateChosenReviews(userId: string, items: ImportRevie
       label_image_path: it.labelImagePath,
       source: 'other' as const,
       ...(it.reviewDate ? { chosen_at: it.reviewDate } : {}),
+      // Repeat tastings of the same wine share a review_group_id so they collapse
+      // into one review card (dated entries), matching Vinster's native model.
+      ...(it.reviewGroupId ? { review_group_id: it.reviewGroupId } : {}),
     }));
     const { data, error } = await supabase.from('chosen_wines').insert(rows).select('id');
     if (error) throw new Error(error.message);

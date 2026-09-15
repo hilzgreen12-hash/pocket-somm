@@ -8,15 +8,23 @@ const client = new Anthropic({ apiKey: Deno.env.get('ANTHROPIC_API_KEY')! });
 const PERSONALITY_HOURLY_LIMIT = 20;
 const PERSONALITY_DAILY_LIMIT = 60;
 
+// One wine line for a prompt: identity + (when present) the user's own score and
+// tasting-note snippet — their voice is the richest signal for a sketch.
+function wineLine(w: any): string {
+  const id = [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' — ');
+  const region = w.region ? ` (${w.region})` : '';
+  const score = w.score != null ? ` · ${w.score}/100` : '';
+  const note = w.note ? ` · "${String(w.note).slice(0, 160)}"` : '';
+  return `- ${id}${region}${score}${note}`;
+}
+
 function buildWinePrompt(payload: any): string {
   const p = payload.preferences ?? {};
   const wines: any[] = payload.wines ?? [];
 
   const wineLines = wines.length === 0
     ? 'None yet — they haven\'t added any wines to their cellar or reviewed any.'
-    : wines.slice(0, 30)
-        .map((w: any) => `- ${[w.producer, w.wine_name, w.vintage].filter(Boolean).join(' — ')}${w.region ? ` (${w.region})` : ''}`)
-        .join('\n');
+    : wines.slice(0, 30).map(wineLine).join('\n');
 
   const arr = (a: any) => Array.isArray(a) && a.length ? a.join(', ') : 'none specified';
 
@@ -139,7 +147,7 @@ function buildAlterEgoPrompt(payload: any): string {
 
   const wineLines = wines.length === 0
     ? 'None yet.'
-    : wines.slice(0, 30).map((w: any) => `- ${[w.producer, w.wine_name, w.vintage].filter(Boolean).join(' — ')}${w.region ? ` (${w.region})` : ''}`).join('\n');
+    : wines.slice(0, 30).map(wineLine).join('\n');
   const restaurantLines = restaurants.length === 0
     ? 'None yet.'
     : restaurants.slice(0, 25).map((r: any) => `- ${r.name ?? 'Unnamed'}${r.city ? ` (${r.city})` : ''} — Food ${stars(r.food)}, Overall ${stars(r.overall)}${r.note ? ` · "${String(r.note).slice(0, 120)}"` : ''}`).join('\n');

@@ -133,10 +133,22 @@ export default function PersonalityScreen() {
     try {
       const wantsWine = cat === 'wine' || cat === 'alter-ego';
       const wantsFood = cat === 'recipe' || cat === 'alter-ego';
+      // Reviewed wines carry the richest signal — the user's own score + tasting
+      // note (their voice). Send those so the sketch reflects their palate and
+      // opinions, not just which labels they own. Reviewed picks lead, so a big
+      // imported review history shapes the sketch even with an empty cellar.
+      const reviewed = (chosenWines ?? [])
+        .filter((w) => w.user_score != null || (w.tasting_note && w.tasting_note.trim()))
+        .map((w) => ({
+          producer: w.producer, wine_name: w.wine_name,
+          vintage: w.vintage != null ? String(w.vintage) : null, region: w.region,
+          score: w.user_score ?? null,
+          note: w.tasting_note ? String(w.tasting_note).slice(0, 160) : null,
+        }));
       const wineData = wantsWine
         ? [
-            ...(wines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage, region: w.region })),
-            ...(chosenWines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage != null ? String(w.vintage) : null, region: w.region })),
+            ...reviewed,
+            ...(wines ?? []).map((w) => ({ producer: w.producer, wine_name: w.wine_name, vintage: w.vintage, region: w.region, score: null, note: null })),
           ].slice(0, 30)
         : undefined;
       // Foodie personality folds in restaurant dining history, saved

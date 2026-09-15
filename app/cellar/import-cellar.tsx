@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
+import * as Crypto from 'expo-crypto';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -345,32 +346,48 @@ export default function ImportCellarScreen() {
     if (!userId) return;
     setStage('adding');
     try {
-      // De-dupe exact repeats within this file (producer + name + vintage), keeping
-      // the first occurrence. Everything imports into Your Wine Reviews as its own
-      // review — no intel/valuation generated now (on demand when a wine is opened).
-      const seen = new Set<string>();
+      // Drop only TRULY identical rows (same wine AND same review text/note/score
+      // /date) — a real duplicate. DISTINCT reviews of the same wine (different
+      // tasting occasions) are all kept: they share a review_group_id so they
+      // collapse into ONE review card with dated entries. No intel generated now
+      // (on demand when a wine is opened).
+      const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+      const groupIds = new Map<string, string>(); // wine+vintage -> shared review_group_id
+      const seenIdentical = new Set<string>();
+      let trueDupes = 0;
       const items = reviews
-        .filter((rv) => { const k = wineKey({ producer: rv.producer, wineName: rv.wineName, vintage: rv.vintage }); if (seen.has(k)) return false; seen.add(k); return true; })
-        .map((rv) => ({
-          producer: rv.producer,
-          wineName: rv.wineName || rv.producer,
-          vintage: rv.vintage ? (parseInt(rv.vintage, 10) || null) : null,
-          region: rv.region,
-          style: rv.colour,
-          userScore: rv.score,
-          tastingNote: rv.reviewNote,
-          otherObservations: rv.personalNote,
-          location: rv.location,
-          reviewDate: rv.date,
-          labelImagePath: rv.labelImageUrl,
-        }));
+        .filter((rv) => {
+          const identical = `${wineKey({ producer: rv.producer, wineName: rv.wineName, vintage: rv.vintage })}|${norm(rv.reviewNote)}|${norm(rv.personalNote)}|${rv.score ?? ''}|${rv.date ?? ''}`;
+          if (seenIdentical.has(identical)) { trueDupes++; return false; }
+          seenIdentical.add(identical);
+          return true;
+        })
+        .map((rv) => {
+          const wk = wineKey({ producer: rv.producer, wineName: rv.wineName, vintage: rv.vintage });
+          let gid = groupIds.get(wk);
+          if (!gid) { gid = Crypto.randomUUID(); groupIds.set(wk, gid); }
+          return {
+            producer: rv.producer,
+            wineName: rv.wineName || rv.producer,
+            vintage: rv.vintage ? (parseInt(rv.vintage, 10) || null) : null,
+            region: rv.region,
+            style: rv.colour,
+            userScore: rv.score,
+            tastingNote: rv.reviewNote,
+            otherObservations: rv.personalNote,
+            location: rv.location,
+            reviewDate: rv.date,
+            labelImagePath: rv.labelImageUrl,
+            reviewGroupId: gid,
+          };
+        });
       const ids = await bulkCreateChosenReviews(userId, items);
       // Group this batch under a dated "Import" folder on the Wine Reviews carousel.
       const folderName = `Import — ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}`;
       if (ids.length > 0) await createLibraryFilter(userId, 'wine-review', folderName, ids);
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       qc.invalidateQueries({ queryKey: ['library-filters'] });
-      setReviewSummary({ matched: 0, added: ids.length, skipped: reviews.length - items.length });
+      setReviewSummary({ matched: 0, added: ids.length, skipped: trueDupes });
       setStage('reviews-done');
     } catch (err) {
       showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
