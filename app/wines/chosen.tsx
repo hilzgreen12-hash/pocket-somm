@@ -306,7 +306,9 @@ export default function ChosenWinesScreen() {
       return {
         source: rep.source === 'other' ? 'other' : 'restaurant',
         date: rep.chosen_at,
-        score: rep.user_score,
+        // Sort by the wine's AVERAGE score (what the card shows), not just the
+        // newest tasting — so the Score sort groups by the visible average.
+        score: fromChosenGroup(entries).averageScore,
         wine: rep,
         entries,
       };
@@ -318,7 +320,8 @@ export default function ChosenWinesScreen() {
     ...dedupedCellarReviews.map((w): ReviewItem => ({
       source: 'cellar',
       date: w.review_date ?? w.updated_at ?? w.created_at,
-      score: w.review_score ?? null,
+      // Average across the cellar wine's dated review entries — matches the card.
+      score: fromCellar(w).averageScore,
       wine: w,
     })),
   ];
@@ -850,7 +853,7 @@ export default function ChosenWinesScreen() {
 
   // Labels surfaced inside each chip's value line.
   const SORT_OPTIONS: { value: SortMode; label: string }[] = [
-    { value: 'recent',     label: 'Recently added (default)' },
+    { value: 'recent',     label: 'All' },
     { value: 'score-desc', label: 'Descending score' },
     { value: 'score-asc',  label: 'Ascending score' },
   ];
@@ -863,14 +866,14 @@ export default function ChosenWinesScreen() {
     { value: 'cellar',     label: 'Cellar Wines' },
     { value: 'other',      label: 'Other Wines' },
   ];
-  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Recently added (default)';
+  const sortLabel = SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'All';
   const collectionLabel = COLLECTION_OPTIONS.find((o) => o.value === typeFilter)?.label ?? 'All Wine Reviews';
   // Short value for the narrow Collection chip — the dropdown carries the full
   // "… Wines" labels.
   const collectionChipLabel = typeFilter === 'all' ? 'All'
     : typeFilter === 'restaurant' ? 'Winelist'
     : typeFilter === 'cellar' ? 'Cellar' : 'Other';
-  const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'Any';
+  const yourScoreLabel = (sortMode === 'score-desc' || sortMode === 'score-asc') ? sortLabel : 'All';
 
   // Build the dropdown config for whichever chip the user tapped.
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string }[]; selected: string; onSelect: (v: string) => void } | null {
@@ -1712,7 +1715,7 @@ export default function ChosenWinesScreen() {
                 <Text style={styles.filterChipLabel}>Your Score</Text>
                 <Text style={styles.filterChipChevron}>{openDropdown === 'sort' ? '▴' : '▾'}</Text>
               </View>
-              <Text style={[styles.filterChipValue, yourScoreLabel !== 'Any' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
+              <Text style={[styles.filterChipValue, yourScoreLabel !== 'All' && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{yourScoreLabel}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.filterChip} onPress={() => setOpenDropdown('type')}>
               <View style={styles.filterChipHeadingRow}>
@@ -1723,6 +1726,12 @@ export default function ChosenWinesScreen() {
             </TouchableOpacity>
             {customFilters.map((f) => {
               const active = activeCustomId === f.id;
+              // Auto-generated import folders ("Import — <date>") get the "Import"
+              // heading and show just the date; user-created folders keep "Your
+              // Folder" + their name.
+              const isImport = /^import\b/i.test(f.name.trim());
+              const chipLabel = isImport ? 'Import' : 'Your Folder';
+              const chipValue = isImport ? f.name.replace(/^import\s*[—-]\s*/i, '').trim() : f.name;
               return (
                 <TouchableOpacity
                   key={f.id}
@@ -1735,10 +1744,10 @@ export default function ChosenWinesScreen() {
                   {/* Two-row layout with a top-right chevron so bespoke filters
                       match the standard filter bubbles. */}
                   <View style={styles.filterChipHeadingRow}>
-                    <Text style={styles.filterChipLabel}>Your Folder</Text>
+                    <Text style={styles.filterChipLabel}>{chipLabel}</Text>
                     <Text style={styles.filterChipChevron}>▾</Text>
                   </View>
-                  <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{f.name}</Text>
+                  <Text style={[styles.filterChipValue, active && { color: colors.gold }]} numberOfLines={1} ellipsizeMode="tail">{chipValue}</Text>
                 </TouchableOpacity>
               );
             })}
