@@ -14,6 +14,7 @@ import { parseKnownSource } from '../../src/utils/cellarImportProfiles';
 import { addCellarWine, getCellarWines, updateCellarWine } from '../../src/api/cellar';
 import { saveManualChosenWine, bulkCreateChosenReviews } from '../../src/api/chosenWines';
 import { createLibraryFilter } from '../../src/api/libraryFilters';
+import { supabase } from '../../src/api/supabase';
 import { parseVivinoReviews, isMonthFirstCurrency, type VivinoReview } from '../../src/utils/vivinoCsv';
 import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
@@ -154,7 +155,7 @@ export default function ImportCellarScreen() {
   const [savingLocation, setSavingLocation] = useState(false);
   // Vivino reviews import summary (matched onto cellar wines vs added as
   // standalone "other" reviews vs skipped because already reviewed).
-  const [reviewSummary, setReviewSummary] = useState<{ matched: number; added: number; skipped: number } | null>(null);
+  const [reviewSummary, setReviewSummary] = useState<{ matched: number; added: number; skipped: number; rawRows?: number; parsed?: number; items?: number; dbCount?: number } | null>(null);
 
   // Auto-open the right picker so the chooser → this screen → picker feels like
   // one action. Vivino stays on the instructions screen (the user needs to have
@@ -334,14 +335,14 @@ export default function ImportCellarScreen() {
         setStage('capture');
         return;
       }
-      await importReviews(reviews);
+      await importReviews(reviews, (parsedSheets[0]?.rows?.length ?? 0));
     } catch (err) {
       showAlert({ title: 'Could not read the file', body: err instanceof Error ? err.message : 'Please try again.' });
       setStage('capture');
     }
   }
 
-  async function importReviews(reviews: VivinoReview[]) {
+  async function importReviews(reviews: VivinoReview[], rawRows: number) {
     const userId = session?.user.id;
     if (!userId) return;
     setStage('adding');
@@ -387,7 +388,20 @@ export default function ImportCellarScreen() {
       if (ids.length > 0) await createLibraryFilter(userId, 'wine-review', folderName, ids);
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
       qc.invalidateQueries({ queryKey: ['library-filters'] });
-      setReviewSummary({ matched: groupIds.size, added: ids.length, skipped: trueDupes });
+      // Exact DB row count (bypasses pagination) — distinguishes an INSERT loss
+      // (dbCount < items) from a FETCH/display loss (dbCount == items but the
+      // screen shows fewer).
+      let dbCount = 0;
+      try {
+        const { count } = await supabase
+          .from('chosen_wines')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', userId);
+        dbCount = count ?? 0;
+      } catch { /* diagnostic only */ }
+      // Full pipeline breakdown so any row loss is visible at a glance:
+      // file rows → parsed reviews → after dedup → rows inserted → rows in DB → wines.
+      setReviewSummary({ matched: groupIds.size, added: ids.length, skipped: trueDupes, rawRows, parsed: reviews.length, items: items.length, dbCount });
       setStage('reviews-done');
     } catch (err) {
       showAlert({ title: 'Could not import reviews', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -703,7 +717,7 @@ export default function ImportCellarScreen() {
           <Text style={styles.doneTitle}>Reviews imported</Text>
           <Text style={styles.hint}>
             {reviewSummary
-              ? `${reviewSummary.added} review${reviewSummary.added === 1 ? '' : 's'} across ${reviewSummary.matched} wine${reviewSummary.matched === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} exact duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.`
+              ? `${reviewSummary.added} review${reviewSummary.added === 1 ? '' : 's'} across ${reviewSummary.matched} wine${reviewSummary.matched === 1 ? '' : 's'} imported into a new dated Import folder in Your Wine Reviews${reviewSummary.skipped > 0 ? `. ${reviewSummary.skipped} exact duplicate${reviewSummary.skipped === 1 ? ' was' : 's were'} skipped` : ''}. Open Pair · Wine Reviews, then the Import folder, to see them.\n\nImport detail: ${reviewSummary.rawRows ?? '?'} file rows → ${reviewSummary.parsed ?? '?'} reviews read → ${reviewSummary.items ?? '?'} to add → ${reviewSummary.added} saved → ${reviewSummary.dbCount ?? '?'} now in your account.`
               : 'Your reviews have been imported.'}
           </Text>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/wines/chosen')} activeOpacity={0.85}>

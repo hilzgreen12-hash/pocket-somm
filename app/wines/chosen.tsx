@@ -1659,7 +1659,17 @@ export default function ChosenWinesScreen() {
                   const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
                   return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
                 }));
-                const r = filtered.filter((it) => !isAwaitingItem(it)).length;
+                // Reviews = total tastings, not cards: a grouped wine (e.g. one
+                // reviewed 11 times) is ONE card but ELEVEN reviews. Sum each
+                // card's dated entries (chosen groups carry `entries`; cellar
+                // reviews carry review_entries via entriesOf).
+                const reviewed = filtered.filter((it) => !isAwaitingItem(it));
+                const r = reviewed.reduce((sum, it) => {
+                  const entries = it.source === 'cellar'
+                    ? entriesOf(it.wine as CellarWine).length
+                    : ((it as { entries?: unknown[] }).entries?.length ?? 1);
+                  return sum + Math.max(1, entries);
+                }, 0);
                 const n = wineKeys.size;
                 // Total awaiting in the current collection (independent of the
                 // toggle, so the label stays stable when tapped).
@@ -1668,7 +1678,7 @@ export default function ChosenWinesScreen() {
                 ).length;
                 return (
                   <>
-                    {`${r} ${r === 1 ? 'Review' : 'Reviews'} · ${n} ${n === 1 ? 'Wine' : 'Wines'}`}
+                    {`${n} ${n === 1 ? 'Wine' : 'Wines'} · ${r} ${r === 1 ? 'Review' : 'Reviews'}`}
                     {(a > 0 || awaitingOnly) ? (
                       // Tap to toggle the "awaiting only" filter; tap again to clear.
                       // Stays visible while the toggle is on so it's always escapable.
