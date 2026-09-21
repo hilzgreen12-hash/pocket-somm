@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, TextInput, Modal, Keyboard, ActivityIndicator, Share } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { showAlert } from '../../src/components/AppAlert';
 import { DateInput } from '../../src/components/DateInput';
-import { useLocalSearchParams, router } from 'expo-router';
+import { useLocalSearchParams, router, useFocusEffect } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useKeepAwake } from 'expo-keep-awake';
@@ -310,36 +310,45 @@ export default function CellarWineDetail() {
   }
 
   // Auto-link an existing review: if this cellar wine carries no review yet but
-  // the user already reviewed it in Your Wine Reviews, pull that review onto the
-  // bottle so its Your Review shows straight away. Silent + once per wine; the
-  // manual "Import from Your Wine Reviews" remains for anything this misses.
-  const autoLinkRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!wine || isWishlist || isArchived) return;
-    if (autoLinkRef.current === wine.id) return;
-    if (entriesOf(wine).length > 0) return; // already has its own review
-    autoLinkRef.current = wine.id;
-    void (async () => {
-      if (!session?.user.id) return;
-      try {
-        const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, wsWineId: wine.ws_wine_id });
-        if (!match) return;
-        const hasContent = !!((match.tasting_note && match.tasting_note.trim()) || (match.other_observations && match.other_observations.trim()) || match.user_score != null);
-        if (!hasContent) return;
-        const entry = buildEntry({
-          note: match.tasting_note ?? '',
-          personalNotes: match.other_observations ?? '',
-          score: match.user_score,
-          location: [match.restaurant_name, match.city].map((s) => (s ?? '').trim()).filter(Boolean).join(', '),
-          date: match.chosen_at ? match.chosen_at.split('T')[0] : null,
-          drinkingWindow: match.user_drinking_window ?? '',
-        });
-        const next = [...entriesOf(wine), entry];
-        await updateWine.mutateAsync({ id: wine.id, updates: { review_entries: next, ...flatMirror(latestEntry(next)) } });
-      } catch { /* best-effort — the manual import stays available */ }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wine?.id, isWishlist, isArchived]);
+  // the user already reviewed it in Your Wine Reviews (same producer/name/vintage),
+  // pull that review onto the bottle so its Your Review shows straight away. This
+  // runs on every screen FOCUS (not just first mount) so a review written AFTER
+  // the card was first opened still gets attached when the user returns to it —
+  // previously it checked once and gave up, so a later review never linked.
+  // `autoLinkBusy` guards only against overlapping runs within one focus.
+  const autoLinkBusy = useRef(false);
+  useFocusEffect(
+    useCallback(() => {
+      // Archived wines DO link — a common flow is to review a bottle then archive
+      // it, and the review must still show on the archived card. Only wishlist
+      // wines (not yet owned/drunk) are excluded.
+      if (!wine || isWishlist) return;
+      if (entriesOf(wine).length > 0) return; // already has its own review
+      if (autoLinkBusy.current) return;
+      autoLinkBusy.current = true;
+      void (async () => {
+        if (!session?.user.id) { autoLinkBusy.current = false; return; }
+        try {
+          const match = await findMatchingChosenWine(session.user.id, { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage, wsWineId: wine.ws_wine_id });
+          if (!match) return;
+          const hasContent = !!((match.tasting_note && match.tasting_note.trim()) || (match.other_observations && match.other_observations.trim()) || match.user_score != null);
+          if (!hasContent) return;
+          const entry = buildEntry({
+            note: match.tasting_note ?? '',
+            personalNotes: match.other_observations ?? '',
+            score: match.user_score,
+            location: [match.restaurant_name, match.city].map((s) => (s ?? '').trim()).filter(Boolean).join(', '),
+            date: match.chosen_at ? match.chosen_at.split('T')[0] : null,
+            drinkingWindow: match.user_drinking_window ?? '',
+          });
+          const next = [...entriesOf(wine), entry];
+          await updateWine.mutateAsync({ id: wine.id, updates: { review_entries: next, ...flatMirror(latestEntry(next)) } });
+        } catch { /* best-effort — the manual import stays available */ }
+        finally { autoLinkBusy.current = false; }
+      })();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [wine?.id, isWishlist, isArchived, session?.user.id]),
+  );
 
   // Vinster's Note — collapsed by default now (was always visible).
   // The "(what's this)" link surfaces a short explanation modal so a
