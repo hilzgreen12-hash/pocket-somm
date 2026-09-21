@@ -12,6 +12,7 @@ import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
+import { ReviewCardHeader } from './ReviewCardHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -40,7 +41,7 @@ interface Props {
   // Optional OCR pre-fill so Scan / Upload land on this SAME screen (no wine
   // intel card) with the wine identity already filled in — the only difference
   // from Manual Input is where the details come from.
-  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null; date?: string | null } | null;
+  initial?: { producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; grape?: string | null; listPrice?: number | null; date?: string | null } | null;
   // Local image uri of the scanned/uploaded label (Scan / Upload review flow).
   // When present and the review is newly CREATED, we upload it and stamp
   // chosen_wines.label_image_path so the review card shows the label photo —
@@ -79,6 +80,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
   const [wineName, setWineName] = useState('');
   const [vintage, setVintage] = useState('');
   const [region, setRegion] = useState('');
+  const [grape, setGrape] = useState('');
   // Combined "Discovered at" (restaurant + city), split on save.
   const [locCity, setLocCity] = useState('');
   const [locName, setLocName] = useState('');
@@ -218,6 +220,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
       setWineName(initial?.wineName ?? '');
       setVintage(initial?.vintage != null ? String(initial.vintage) : '');
       setRegion(initial?.region ?? '');
+      setGrape(initial?.grape ?? '');
       setLocCity(''); setLocName(''); setTastingNote(''); setOtherObservations('');
       // Carry the scanned/stored menu price through so the user doesn't have to
       // re-enter it when reviewing a restaurant wine after the fact.
@@ -433,10 +436,15 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     </TouchableOpacity>
                   </View>
                 )}
-                <View style={[styles.cardHeader, styles.cardHeaderRow]}>
-                  {/* Thumbnail area — the label photo, or a tappable "add photo"
-                      placeholder so every confirmed review has room for one. */}
-                  {editImageUri ? (
+                <ReviewCardHeader
+                  producer={producer}
+                  wineName={wineName}
+                  vintage={vintage}
+                  region={region}
+                  grape={grape}
+                  dateIso={reviewDate}
+                  location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ')}
+                  thumbnail={editImageUri ? (
                     <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
                       <Image source={{ uri: editImageUri }} style={styles.headerThumb} resizeMode="cover" />
                     </TouchableOpacity>
@@ -450,25 +458,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                       <Text style={styles.headerThumbAddText}>Photo</Text>
                     </TouchableOpacity>
                   )}
-                  <View style={styles.headerTextCol}>
-                    <WineIdentityHeader
-                      producer={producer}
-                      wineName={wineName}
-                      vintage={vintage}
-                      region={region}
-                      align="left"
-                      size="lg"
-                    />
-                    {(() => {
-                      const loc = [locName.trim(), locCity.trim()].filter(Boolean).join(', ');
-                      const dateStr = reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
-                      // Read-only date · location display; both are entered (and
-                      // required) in the review fields below.
-                      const stamp = [dateStr, loc].filter(Boolean).join(' · ');
-                      return stamp ? <Text style={[styles.stampLine, styles.headerLineLeft]}>{stamp}</Text> : null;
-                    })()}
-                  </View>
-                </View>
+                />
 
                 <View style={styles.divider} />
               </>

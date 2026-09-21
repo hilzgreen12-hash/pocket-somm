@@ -5,6 +5,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
+import { ReviewCardHeader } from '../../src/components/ReviewCardHeader';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -2172,9 +2173,17 @@ export default function LabelResultsScreen() {
             bottomOffset={24}
           >
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Review this Wine</Text>
-              <Text style={styles.modalWine}>{wine.wineName ?? wine.producer} {wine.vintage}</Text>
-              <Text style={styles.modalHint}>Save your tasting note for this wine without adding it to your cellar or wish list.</Text>
+              <ReviewCardHeader
+                producer={wine.producer}
+                wineName={wine.wineName}
+                vintage={wine.vintage}
+                region={wine.region}
+                grape={intel.grapeVariety ?? wine.grape}
+                dateIso={new Date().toISOString()}
+                location={[reviewRestaurant.trim(), reviewCity.trim()].filter(Boolean).join(', ')}
+                thumbnail={imageUri ? <Image source={{ uri: imageUri }} style={styles.reviewHeaderThumb} resizeMode="cover" /> : null}
+              />
+              <View style={styles.titleRule} />
 
               <Text style={styles.modalLabel}>Tasting note</Text>
               <TextInput
@@ -2642,6 +2651,7 @@ const styles = StyleSheet.create({
   statBarRule: { height: 1, backgroundColor: colors.divider },
   // Subtle separator directly beneath the "Wine Intel" title.
   titleRule: { height: 1, backgroundColor: colors.border },
+  reviewHeaderThumb: { width: 52, height: 68, borderRadius: 5, backgroundColor: colors.surface },
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
   statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },

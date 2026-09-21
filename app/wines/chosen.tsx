@@ -185,7 +185,7 @@ export default function ChosenWinesScreen() {
   const [addOpen, setAddOpen] = useState(false);
   // OCR pre-fill for the Add-a-Review modal when the user came via Scan/Upload
   // (null for Manual Input). Keeps all three on the same review input screen.
-  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; listPrice?: number | null; date?: string | null } | null>(null);
+  const [addInitial, setAddInitial] = useState<{ producer?: string | null; wineName?: string | null; vintage?: string | number | null; region?: string | null; grape?: string | null; listPrice?: number | null; date?: string | null } | null>(null);
   // Local uri of a scanned/uploaded label, retained through the Add-a-Review
   // modal so the new review can carry its label photo (Part 3). Null for Manual.
   const [pendingReviewLabelUri, setPendingReviewLabelUri] = useState<string | null>(null);
@@ -254,6 +254,9 @@ export default function ChosenWinesScreen() {
   const [newTagName, setNewTagName] = useState('');
   // Review id whose tag-assignment sheet is open (null = closed).
   const [assignForId, setAssignForId] = useState<string | null>(null);
+  // The folder highlighted in the Add-to-Folder sheet, committed on Confirm.
+  const [assignPick, setAssignPick] = useState<string | null>(null);
+  useEffect(() => { if (assignForId) setAssignPick(null); }, [assignForId]);
   // Remembers the review being tagged while the "New filter" sheet is open, so
   // creating a tag mid-assign files it onto that review (only one modal shows at
   // a time — we close the assign sheet, create, then reopen it).
@@ -1222,7 +1225,7 @@ export default function ChosenWinesScreen() {
           const w = it.wine as ChosenWine;
           // Carry the stored menu price so the new entry keeps the restaurant
           // list price even though the user no longer has the menu.
-          setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region, listPrice: w.menu_price });
+          setAddInitial({ producer: w.producer, wineName: w.wine_name, vintage: w.vintage, region: w.region, grape: (w as ChosenWine).grape ?? null, listPrice: w.menu_price });
           setAddSource(it.source === 'other' ? 'other' : 'restaurant');
           // Review-card add flow: the wine is known, so use the clean review-card
           // layout (thumbnail + name, no identity fields / header), carry the
@@ -1513,34 +1516,42 @@ export default function ChosenWinesScreen() {
           <TouchableOpacity activeOpacity={1} style={styles.dropdownSheet} onPress={() => {}}>
             <Text style={styles.dropdownTitle}>Add to Folder</Text>
             {customFilters.length === 0 ? (
-              <Text style={styles.pickerEmpty}>No folders yet — create one below.</Text>
+              <Text style={styles.pickerEmpty}>No folders yet. Create one from the folder row on the reviews screen.</Text>
             ) : (
               <ScrollView style={{ maxHeight: 340 }}>
                 {customFilters.map((f) => {
-                  const on = !!(assignForId && f.itemIds.includes(assignForId));
+                  // Highlight the tapped folder; a ✓ marks folders the review is
+                  // already in. Confirm commits the highlighted one.
+                  const picked = assignPick === f.id;
+                  const already = !!(assignForId && f.itemIds.includes(assignForId));
                   return (
                     <TouchableOpacity
                       key={f.id}
-                      style={[styles.dropdownOption, on && styles.dropdownOptionActive]}
-                      onPress={() => { if (assignForId) toggleReviewInFolder(assignForId, f); }}
+                      style={[styles.dropdownOption, picked && styles.dropdownOptionActive]}
+                      onPress={() => setAssignPick(f.id)}
                       activeOpacity={0.7}
                     >
-                      <Text style={[styles.dropdownOptionText, on && styles.dropdownOptionTextActive]}>{f.name}</Text>
-                      {on && <Text style={styles.dropdownOptionCheck}>✓</Text>}
+                      <Text style={[styles.dropdownOptionText, picked && styles.dropdownOptionTextActive]}>{f.name}</Text>
+                      {already && <Text style={styles.dropdownOptionCheck}>✓</Text>}
                     </TouchableOpacity>
                   );
                 })}
               </ScrollView>
             )}
             <TouchableOpacity
-              style={styles.chooserBtn}
-              onPress={() => { pendingAssignRef.current = assignForId; setAssignForId(null); setNewTagName(''); setNewTagOpen(true); }}
+              style={[styles.confirmBtn, !assignPick && styles.confirmBtnDisabled]}
+              disabled={!assignPick}
+              onPress={() => {
+                const f = customFilters.find((x) => x.id === assignPick);
+                if (assignForId && f && !f.itemIds.includes(assignForId)) toggleReviewInFolder(assignForId, f);
+                setAssignForId(null);
+              }}
               activeOpacity={0.85}
             >
-              <Text style={styles.chooserBtnText}>＋ New folder</Text>
+              <Text style={styles.confirmBtnText}>Confirm</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.dropdownCancel} onPress={() => setAssignForId(null)}>
-              <Text style={styles.dropdownCancelText}>Done</Text>
+              <Text style={styles.dropdownCancelText}>Cancel</Text>
             </TouchableOpacity>
           </TouchableOpacity>
         </TouchableOpacity>
@@ -2064,6 +2075,9 @@ const styles = StyleSheet.create({
   dropdownOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },
   dropdownCancel: { alignItems: 'center', paddingTop: spacing.md, paddingBottom: 4 },
   dropdownCancelText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
+  confirmBtn: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.md },
+  confirmBtnDisabled: { opacity: 0.4 },
+  confirmBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.surface, letterSpacing: 0.3 },
   chooserOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   chooserSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.xl, width: '100%' },
   chooserTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },

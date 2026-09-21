@@ -11,6 +11,7 @@ import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { AddPhotoThumb } from './AddPhotoThumb';
+import { ReviewCardHeader } from './ReviewCardHeader';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
 import * as Sharing from 'expo-sharing';
@@ -478,13 +479,18 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
               </TouchableOpacity>
             </View>
 
-            {/* Header — mirrors the cellar wine card: label thumbnail on the
-                left (when the wine has a scanned/uploaded photo) with the
-                identity beside it. No favourite star. */}
-            <View style={[styles.header, styles.headerWithThumb]}>
-              {wine.label_image_path ? (
-                // Tap to enlarge; long-press for image options (scan / upload /
-                // find online / delete).
+            {/* Header — the shared review header: a centred "Reviewed <date> ·
+                <location>" stamp (live from the fields below), then thumbnail +
+                identity, exactly like the cellar wine card. */}
+            <ReviewCardHeader
+              producer={wine.producer}
+              wineName={wine.wine_name}
+              vintage={wine.vintage}
+              region={wine.region}
+              grape={wine.grape}
+              dateIso={reviewDate}
+              location={[locName, locCity].filter(Boolean).join(', ')}
+              thumbnail={wine.label_image_path ? (
                 <TouchableOpacity
                   onPress={() => setLabelViewerOpen(true)}
                   onLongPress={() => attachPhoto.present({ kind: 'chosen', wineId: wine.id, producer: wine.producer, wineName: wine.wine_name, hasPhoto: true })}
@@ -494,23 +500,13 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
                   <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
                 </TouchableOpacity>
               ) : (
-                // No photo (e.g. a scanned-list pick) — offer to add one.
                 <AddPhotoThumb
                   style={styles.headerThumb}
                   radius={5}
                   onPress={() => attachPhoto.present({ kind: 'chosen', wineId: wine.id, producer: wine.producer, wineName: wine.wine_name })}
                 />
               )}
-              <View style={styles.headerTextCol}>
-                <Text style={[styles.headerLine, styles.headerLineLeft]}>{headerLine}</Text>
-                {(wine.region || wine.grape) ? (
-                  <Text style={[styles.region, styles.regionLeft]}>{[wine.region, wine.grape].filter(Boolean).join(' · ')}</Text>
-                ) : null}
-                {/* When editing, the date + location are the editable input fields
-                    below (Date + Location in WineReviewFields) — not a header
-                    stamp — so this is the one place they appear as fields. */}
-              </View>
-            </View>
+            />
 
             <View style={styles.divider} />
 

@@ -11,6 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { LabelThumb } from './LabelThumb';
+import { ReviewCardHeader } from './ReviewCardHeader';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
@@ -310,24 +311,21 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               </View>
             </View>
 
-            {/* Header — label thumbnail (when present) beside the identity, then
-                a date · location stamp beneath the region. */}
-            <View style={[styles.header, wine.label_image_path ? styles.headerWithThumb : null]}>
-              {wine.label_image_path ? (
-                <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
-              ) : null}
-              <View style={wine.label_image_path ? styles.headerTextCol : undefined}>
-                <WineIdentityHeader
-                  producer={wine.producer}
-                  wineName={wine.wine_name}
-                  vintage={wine.vintage}
-                  region={wine.region}
-                  grape={wine.grape_variety}
-                  align={wine.label_image_path ? 'left' : 'center'}
-                  size="lg"
-                />
-              </View>
-            </View>
+            {/* Header — the shared review header: centred "Reviewed <date> ·
+                <location>" stamp (live), then thumbnail + identity like the
+                cellar wine card. */}
+            <ReviewCardHeader
+              producer={wine.producer}
+              wineName={wine.wine_name}
+              vintage={wine.vintage}
+              region={wine.region}
+              grape={wine.grape_variety}
+              dateIso={reviewDate}
+              location={[locName, locCity].filter(Boolean).join(', ')}
+              thumbnail={wine.label_image_path
+                ? <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
+                : null}
+            />
 
             <View style={styles.divider} />
 
