@@ -1397,6 +1397,9 @@ export default function LabelResultsScreen() {
           wineName: wine.wineName ?? wine.producer,
           producer: wine.producer,
           region: wine.region,
+          // Persist the grape so it shows on the review card — prefer the
+          // AI-resolved intel grape, falling back to whatever the label read.
+          grape: intel.grapeVariety ?? wine.grape ?? null,
           vintage: validVintage,
           restaurantName: reviewRestaurant,
           city: reviewCity,

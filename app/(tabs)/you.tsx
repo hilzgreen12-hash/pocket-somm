@@ -11,6 +11,7 @@ import { router } from 'expo-router';
 import { useAuth } from '../../src/hooks/useAuth';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { supabase } from '../../src/api/supabase';
+import { backfillMissingGrapes, countGrapelessReviews } from '../../src/services/grapeBackfill';
 import { CURRENCIES } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
@@ -39,6 +40,39 @@ export default function YouScreen() {
     session?.user.user_metadata?.notify_updates ?? true
   );
   const [currencyOpen, setCurrencyOpen] = useState(false);
+
+  // One-off backfill: fill the grape variety on reviews saved without one
+  // (chiefly the Vivino imports). Resolved in bulk by AI, then written back.
+  const [grapeBackfilling, setGrapeBackfilling] = useState(false);
+  const [grapeProgress, setGrapeProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
+  async function runGrapeBackfill() {
+    const userId = session?.user.id;
+    if (!userId || grapeBackfilling) return;
+    const missing = await countGrapelessReviews(userId).catch(() => 0);
+    if (missing === 0) {
+      showAlert({ title: 'All set', body: 'Every one of your reviews already has a grape variety.' });
+      return;
+    }
+    showAlert({
+      title: `Fill in ${missing} grape ${missing === 1 ? 'variety' : 'varieties'}?`,
+      body: 'Vinster will look up the grape for each review that’s missing one and fill it in. This can take a few minutes for a large collection — keep the app open.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Fill Them In', onPress: async () => {
+          setGrapeProgress({ done: 0, total: missing });
+          setGrapeBackfilling(true);
+          try {
+            const { filled } = await backfillMissingGrapes(userId, (done, total) => setGrapeProgress({ done, total }));
+            showAlert({ title: 'Grapes filled in', body: `Vinster added a grape variety to ${filled} ${filled === 1 ? 'review' : 'reviews'}.` });
+          } catch (err) {
+            showAlert({ title: 'Could not finish', body: err instanceof Error ? err.message : 'Please try again.' });
+          } finally {
+            setGrapeBackfilling(false);
+          }
+        } },
+      ],
+    });
+  }
   const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
   const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
 
@@ -209,7 +243,22 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/community/profile')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Community Profile</Text>
         </TouchableOpacity>
+        {/* One-off maintenance: fill grape varieties on reviews that lack one. */}
+        <TouchableOpacity style={styles.prefButton} onPress={() => void runGrapeBackfill()} activeOpacity={0.7} disabled={grapeBackfilling}>
+          <Text style={styles.prefButtonText}>Fill In Missing Grape Varieties</Text>
+        </TouchableOpacity>
       </View>
+
+      <Modal visible={grapeBackfilling} transparent animationType="fade">
+        <View style={styles.grapeOverlay}>
+          <View style={styles.grapeSheet}>
+            <ActivityIndicator size="large" color={colors.gold} />
+            <Text style={styles.grapeTitle}>Filling in grape varieties…</Text>
+            <Text style={styles.grapeCount}>{grapeProgress.done} of {grapeProgress.total}</Text>
+            <Text style={styles.grapeHint}>Please keep the app open.</Text>
+          </View>
+        </View>
+      </Modal>
 
       <View style={styles.divider} />
 
@@ -402,6 +451,11 @@ const styles = StyleSheet.create({
   blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
+  grapeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
+  grapeSheet: { width: '100%', maxWidth: 340, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
+  grapeTitle: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, textAlign: 'center' },
+  grapeCount: { fontFamily: fonts.bodySemibold, fontSize: 16, color: colors.gold, textAlign: 'center' },
+  grapeHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
   // Form-style label in identity rows.
   rowLabel: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },

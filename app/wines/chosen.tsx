@@ -1847,8 +1847,9 @@ export default function ChosenWinesScreen() {
                       <Text style={styles.wineNameCompact} numberOfLines={2}>
                         {wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                       </Text>
-                      {/* Region, Country (yellow). No grape. */}
+                      {/* Region, Country (yellow) then grape variety beneath it. */}
                       {w.region ? <Text style={styles.regionText} numberOfLines={1}>{regionWithCountry(w.region)}</Text> : null}
+                      {uni.grape ? <Text style={styles.grapeText} numberOfLines={1}>{uni.grape}</Text> : null}
                       {/* Review date · location stamp (white). Wraps when long. */}
                       <Text style={[styles.metaText, styles.cardCompactMeta]}>
                         {formatDate(item.date)}{locText ? ` · ${locText}` : ''}
@@ -2005,6 +2006,7 @@ const styles = StyleSheet.create({
   reviewStatsLine: { fontFamily: fonts.bodySemibold, fontSize: 12.5, color: colors.gold, marginTop: 3 },
   wineNameCompact: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text, lineHeight: 22 },
   regionText: { fontSize: 14, fontFamily: fonts.headingItalic, color: colors.gold, marginTop: 2 },
+  grapeText: { fontSize: 13, fontFamily: fonts.headingItalic, color: colors.textMuted, marginTop: 1 },
   // The user's own review score — white, matching the wine cards (critic scores
   // are gold; the user's score is white).
   scoreCompact: { fontSize: 18, fontFamily: fonts.bodyBold, color: '#FFFFFF' },

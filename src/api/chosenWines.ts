@@ -32,6 +32,7 @@ export interface ManualSaveChosenWineInput {
   wineName: string;
   producer: string;
   region: string;
+  grape?: string | null;
   vintage: number | null;
   restaurantName: string;
   city: string;
@@ -63,7 +64,7 @@ export async function saveManualChosenWine(userId: string, input: ManualSaveChos
     producer: input.producer.trim() || null,
     region: input.region.trim() || null,
     appellation: null,
-    grape: null,
+    grape: input.grape?.trim() || null,
     vintage: input.vintage,
     menu_price: input.listPrice,
     currency: input.currency,
