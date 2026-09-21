@@ -722,7 +722,9 @@ export default function LabelConfirmScreen() {
             setRegion(r.region ?? '');
             setStyle(r.style ?? '');
             setGrape(r.grape ?? '');
-            if (!vintage.trim()) setHighlightVintage(true);
+            // A vintage typed into the search ("… 2009") fills the vintage field.
+            if (r.vintage) setVintage(r.vintage);
+            else if (!vintage.trim()) setHighlightVintage(true);
             // A search-bar pick IS the confirmation — skip the match popup.
             setPickedFromSearch(true);
           }} />

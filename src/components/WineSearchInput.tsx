@@ -54,7 +54,7 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
     // Keep the chosen wine in the bar (rather than clearing it) so the user can
     // see what they picked; suppress the follow-up search it would trigger.
     skipSearch.current = true;
-    setQuery([r.producer, r.wineName].filter(Boolean).join(' '));
+    setQuery([r.producer, r.wineName, r.vintage].filter(Boolean).join(' '));
     setResults([]);
     setOpen(false);
   }
@@ -94,7 +94,15 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
                   (or mis-guesses) are never a dead end — enter them as typed and
                   edit the fields below. */}
               {!loading && query.trim().length >= 3 ? (
-                <TouchableOpacity style={styles.option} onPress={() => choose({ producer: query.trim(), wineName: null, region: null, style: null, grape: null })} activeOpacity={0.7}>
+                <TouchableOpacity style={styles.option} onPress={() => {
+                  // Split a typed-in vintage off the free-text name so "…2009" fills
+                  // the vintage field rather than becoming part of the wine name.
+                  const typed = query.trim();
+                  const vm = typed.match(/\b(?:19|20)\d{2}\b/);
+                  const v = vm ? vm[0] : null;
+                  const name = v ? typed.replace(vm![0], ' ').replace(/\s{2,}/g, ' ').trim() : typed;
+                  choose({ producer: name || typed, wineName: null, region: null, style: null, grape: null, vintage: v });
+                }} activeOpacity={0.7}>
                   <Text style={styles.optionName} numberOfLines={2}>Use “{query.trim()}”</Text>
                   <Text style={styles.optionMeta}>{results.length ? "Not listed? Add it as typed and edit below." : "No matches — add it as typed and edit the details below."}</Text>
                 </TouchableOpacity>

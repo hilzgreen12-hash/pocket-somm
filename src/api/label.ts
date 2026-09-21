@@ -73,12 +73,24 @@ export interface WineSearchResult {
   region: string | null;
   style: string | null;
   grape: string | null;
+  // A 4-digit vintage typed into the search ("Forts de Latour 2009") — stripped
+  // before matching the (vintage-less) catalog, then carried onto every result so
+  // picking one fills the vintage too. Null when the query had no vintage.
+  vintage: string | null;
 }
 
 // Predictive wine typeahead for manual entry — returns real wines matching the
 // partial query, with clean/consistent formatting, to fill the identity fields.
 export async function searchWines(query: string): Promise<WineSearchResult[]> {
-  const q = query.trim();
+  const raw = query.trim();
+  if (raw.length < 3) return [];
+  // The catalog stores wines WITHOUT a vintage, so a query like "Forts de Latour
+  // 2009" never matches. Pull a 4-digit vintage out of the query, match the
+  // catalog on the name part only, then carry the vintage onto every result so
+  // picking one fills the vintage too.
+  const vintageMatch = raw.match(/\b(?:19|20)\d{2}\b/);
+  const vintage = vintageMatch ? vintageMatch[0] : null;
+  const q = vintage ? raw.replace(vintageMatch![0], ' ').replace(/\s{2,}/g, ' ').trim() : raw;
   if (q.length < 3) return [];
   // Catalog ONLY — the trigram-indexed wines_catalog (public-readable) is the
   // single source of truth for the typeahead. Deliberately NO generative
@@ -95,6 +107,7 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
       region: r.region ?? null,
       style: r.style ?? null,
       grape: r.grape ?? null,
+      vintage,
     }));
   } catch {
     return [];
