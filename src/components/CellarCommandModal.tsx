@@ -105,18 +105,32 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
   }
 
   // Decide whether a spoken command is a free-form mood / recommendation vs a
-  // Move / Archive / Add instruction. Priority order matters so a verb that
-  // merely appears MID-sentence in a recommendation ("a wine to move the night
-  // along", "something to add warmth") doesn't hijack it:
-  //   1. An imperative that STARTS with move/archive/add is always a command.
-  //   2. Otherwise, strong recommendation phrasing → mood, even if a verb slips in.
-  //   3. Otherwise it's a command only if it names a verb at all; else → mood.
+  // Move / Archive / Add instruction. Commands are treated STRICTLY: a clear
+  // "move/archive/add" instruction must never be mistaken for a recommendation.
+  // Priority order:
+  //   1. A command verb led by an optional polite/desire preamble ("I want to
+  //      move…", "please add…", "can you archive…") is ALWAYS a command — the
+  //      desire words ("I want", "I'd like") are how people phrase commands too,
+  //      so they never by themselves mean "recommend".
+  //   2. A command verb co-occurring with a source/destination preposition
+  //      ("move X from the bin to the fridge") is ALWAYS a command.
+  //   3. Otherwise, genuine recommendation phrasing → mood.
+  //   4. Otherwise it's a command only if it names a verb at all; else → mood.
   function isMoodCommand(t: string): boolean {
     const s = t.trim();
-    if (/^(please\s+|can you\s+|could you\s+|vinster,?\s+)*(move|archive|add)\b/i.test(s)) return false;
-    const moodSignal = /\b(mood|recommend(ation)?s?|suggest(ion)?s?|feel like|i fancy|i want|i'd like|i would like|i need|i'm after|in the mood|craving|treat myself|what should i|which wine|what (wine )?(should|would|do|can) i|help me (choose|pick|decide)|pair(ing)?( with)?|goes (well )?with|open tonight|for (dinner|tonight|a celebration|an occasion|the occasion)|celebrat|something (smooth|light|bold|rich|crisp|warming|cold|warm|fruity|elegant|special|celebratory|festive|easy|refreshing|full[- ]?bodied|delicate|spicy|sweet|savoury))\b/i.test(s);
-    if (moodSignal) return true;
+    // 1. Leading command, allowing a polite/desire preamble before the verb.
+    const preamble = '(please\\s+|can you\\s+|could you\\s+|would you\\s+|will you\\s+|vinster,?\\s+|i\\s+want\\s+to\\s+|i\\s+wanna\\s+|i\'?d\\s+like\\s+to\\s+|i\\s+would\\s+like\\s+to\\s+|i\\s+need\\s+to\\s+|i\'?d\\s+want\\s+to\\s+|let\'?s\\s+|please\\s+can\\s+you\\s+)';
+    if (new RegExp(`^(${preamble})*(move|archive|add)\\b`, 'i').test(s)) return false;
     const hasCommandVerb = /\bmove(s|d|ing)?\b/i.test(s) || /\barchiv/i.test(s) || /\badd(s|ed|ing)?\b/i.test(s);
+    // 2. A command verb plus a source/destination preposition is an unambiguous
+    //    action ("…move… from… to…", "…add… into…").
+    if (hasCommandVerb && /\b(from|to|into|out of|onto)\b/i.test(s)) return false;
+    // 3. Genuine recommendation phrasing. NB the bare desire verbs (i want,
+    //    i'd like, i need…) are deliberately NOT here — they equally precede
+    //    commands, so on their own they must not force a recommendation.
+    const moodSignal = /\b(mood|recommend(ation)?s?|suggest(ion)?s?|feel like|i fancy|in the mood|craving|treat myself|what should i|which wine|what (wine )?(should|would|do|can) i|help me (choose|pick|decide)|pair(ing)?( with)?|goes (well )?with|open tonight|for (dinner|tonight|a celebration|an occasion|the occasion)|celebrat|something (smooth|light|bold|rich|crisp|warming|cold|warm|fruity|elegant|special|celebratory|festive|easy|refreshing|full[- ]?bodied|delicate|spicy|sweet|savoury))\b/i.test(s);
+    if (moodSignal) return true;
+    // 4. A stray command verb anywhere → command; otherwise mood.
     return !hasCommandVerb;
   }
 
