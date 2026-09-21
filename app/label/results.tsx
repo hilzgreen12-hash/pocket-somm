@@ -1616,7 +1616,7 @@ export default function LabelResultsScreen() {
     if (!wine) return;
     const label = [wine.producer, wine.wineName, wine.vintage].filter(Boolean).join(' ');
     showAlert({
-      title: 'Save to Your Wine Reviews',
+      title: 'Add Your Wine Review',
       body: `${label}\n\nReview it now, or save it to review later?`,
       buttons: [
         {
@@ -1717,18 +1717,29 @@ export default function LabelResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
-      {/* Share the intel card (top-right). Replaces the old Scan/Upload Again
-          action — re-reading a bottle is still available from the Scan tab. */}
+      {/* Top-right actions, stacked: Export the intel card, then Edit / Scan
+          Again (correct the wine or re-scan) — the relocated replacement for the
+          old "Not this wine?" link. */}
       {isIntelOnlyFlow ? (
-        <TouchableOpacity
-          style={styles.scanAgainBtn}
-          onPress={handleShare}
-          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-          activeOpacity={0.7}
-          disabled={sharing}
-        >
-          <Text style={styles.scanAgainText}>{sharing ? 'Exporting…' : 'Export'}</Text>
-        </TouchableOpacity>
+        <View style={styles.topRightActions}>
+          <TouchableOpacity
+            onPress={handleShare}
+            hitSlop={{ top: 8, bottom: 6, left: 10, right: 10 }}
+            activeOpacity={0.7}
+            disabled={sharing}
+          >
+            <Text style={styles.scanAgainText}>{sharing ? 'Exporting…' : 'Export'}</Text>
+          </TouchableOpacity>
+          {intelligence ? (
+            <TouchableOpacity
+              onPress={openManualConfirm}
+              hitSlop={{ top: 6, bottom: 8, left: 10, right: 10 }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.scanAgainText}>Edit / Scan Again</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
       ) : null}
 
       <Text style={styles.pageTitle}>{context === 'add-location' ? `Add to ${pendingLocation?.name ?? 'Location'}` : isAddFlow ? 'Add to Cellar' : 'Wine Intel'}</Text>
@@ -1764,14 +1775,8 @@ export default function LabelResultsScreen() {
           </View>
         </View>
 
-        {/* Always-available correction — centred, above the separator line. Even
-            a confident card can be the wrong wine (OCR can swap in a different
-            real producer, which verifies and never auto-prompts). */}
-        {isIntelOnlyFlow && intelligence ? (
-          <TouchableOpacity onPress={openManualConfirm} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} style={styles.wrongWineLink} activeOpacity={0.7}>
-            <Text style={styles.wrongWineText}>Not this wine? Search for the right one</Text>
-          </TouchableOpacity>
-        ) : null}
+        {/* The correction action moved to the top-right ("Edit / Scan Again",
+            below Export) — see the header actions above. */}
       </View>
 
       {/* Tap the label photo to view it full-screen with pinch/zoom + pan. */}
@@ -2041,7 +2046,7 @@ export default function LabelResultsScreen() {
       {isIntelOnlyFlow ? (
         <View style={styles.section}>
           <TouchableOpacity style={styles.saveReviewBtn} onPress={handleSaveToReviews} activeOpacity={0.85}>
-            <Text style={styles.saveReviewBtnText}>Save to Your Wine Reviews</Text>
+            <Text style={styles.saveReviewBtnText}>Add Your Wine Review</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.saveReviewBtn, { marginTop: spacing.sm }]}
@@ -2582,6 +2587,8 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted },
   scanAgainBtn: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, paddingVertical: spacing.xs },
   scanAgainText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Stacked top-right actions (Export, then Edit / Scan Again), same gold font.
+  topRightActions: { position: 'absolute', top: 56, right: spacing.xl, zIndex: 10, alignItems: 'flex-end', gap: spacing.xs },
   reReadOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   reReadText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: '#FFFFFF' },
   pageTitle: { fontSize: 26, fontFamily: fonts.headingBold, color: colors.text, letterSpacing: 1.5, textAlign: 'center', marginBottom: spacing.sm, marginTop: spacing.xs },
