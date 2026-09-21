@@ -16,6 +16,7 @@ import { supabase } from '../src/api/supabase';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { OfflineBanner } from '../src/components/OfflineBanner';
+import { UpdatePromptModal } from '../src/components/UpdatePromptModal';
 import { AppAlertHost } from '../src/components/AppAlert';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -156,6 +157,7 @@ export default function RootLayout() {
         <AuthProvider>
           <View style={{ flex: 1 }}>
           <OfflineBanner />
+          <UpdatePromptModal />
           <View style={{ flex: 1 }}>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
