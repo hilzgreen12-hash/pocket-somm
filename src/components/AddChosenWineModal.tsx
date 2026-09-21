@@ -444,20 +444,28 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   grape={grape}
                   dateIso={reviewDate}
                   location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ')}
-                  thumbnail={editImageUri ? (
-                    <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
-                      <Image source={{ uri: editImageUri }} style={styles.headerThumb} resizeMode="cover" />
-                    </TouchableOpacity>
-                  ) : labelImagePath ? (
-                    <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
-                      <LabelThumb path={labelImagePath} fallbackText={wineName} style={styles.headerThumb} radius={5} frame={0} />
-                    </TouchableOpacity>
-                  ) : (
-                    <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.8} style={styles.headerThumbAdd}>
-                      <Text style={styles.headerThumbAddIcon}>＋</Text>
-                      <Text style={styles.headerThumbAddText}>Photo</Text>
-                    </TouchableOpacity>
-                  )}
+                  thumbnail={(() => {
+                    // A retaken photo, else the local scanned-label uri carried in
+                    // from Scan → Review (labelImageUri), else a stored label path,
+                    // else the "+ Photo" placeholder. The scan uri was previously
+                    // omitted here, so a fresh scan showed the empty placeholder
+                    // even though its label uploads fine on save.
+                    const uri = editImageUri ?? labelImageUri;
+                    return uri ? (
+                      <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
+                        <Image source={{ uri }} style={styles.headerThumb} resizeMode="cover" />
+                      </TouchableOpacity>
+                    ) : labelImagePath ? (
+                      <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.85}>
+                        <LabelThumb path={labelImagePath} fallbackText={wineName} style={styles.headerThumb} radius={5} frame={0} />
+                      </TouchableOpacity>
+                    ) : (
+                      <TouchableOpacity onPress={openPhotoChooser} activeOpacity={0.8} style={styles.headerThumbAdd}>
+                        <Text style={styles.headerThumbAddIcon}>＋</Text>
+                        <Text style={styles.headerThumbAddText}>Photo</Text>
+                      </TouchableOpacity>
+                    );
+                  })()}
                 />
 
                 <View style={styles.divider} />
@@ -721,11 +729,11 @@ const styles = StyleSheet.create({
   scanAgainLink: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textDecorationLine: 'underline' },
   cardHeader: { alignItems: 'center', marginBottom: spacing.sm },
   cardHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headerThumb: { width: 52, height: 68 },
+  headerThumb: { width: 96, height: 128, borderRadius: 5 },
   // Tappable "add photo" placeholder in the confirmed-card thumbnail slot.
-  headerThumbAdd: { width: 52, height: 68, borderRadius: 5, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  headerThumbAddIcon: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.gold },
-  headerThumbAddText: { fontFamily: fonts.bodySemibold, fontSize: 10, color: colors.gold },
+  headerThumbAdd: { width: 96, height: 128, borderRadius: 5, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', gap: 4 },
+  headerThumbAddIcon: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.gold },
+  headerThumbAddText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold },
   // "Add your location" — gold link in the date stamp when no location is set.
   addLocationLink: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textDecorationLine: 'underline' },
   // Manual-entry "Confirm Wine" tick — outline, gold (no filled buttons).

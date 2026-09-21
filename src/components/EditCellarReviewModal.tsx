@@ -397,7 +397,7 @@ const styles = StyleSheet.create({
   topEditText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   header: { alignItems: 'center', marginBottom: spacing.sm },
   headerWithThumb: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headerThumb: { width: 52, height: 68 },
+  headerThumb: { width: 96, height: 128, borderRadius: 5 },
   headerTextCol: { flex: 1 },
   headerLineLeft: { textAlign: 'left' },
   regionLeft: { textAlign: 'left' },

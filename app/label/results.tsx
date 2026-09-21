@@ -1632,7 +1632,11 @@ export default function LabelResultsScreen() {
             if (imageUri) qs.set('slu', '1');
             // Return straight to THIS intel card (not the Your Wine Reviews
             // list) when the review is saved, discarded, or backed out of.
-            qs.set('backTo', '/label/results');
+            // MUST carry context=intel — the full intel view (Vintage & Market
+            // Comparison, Dive Deeper, producer range, the three action buttons)
+            // and the "back → Scan tab" behaviour are all gated on it; without it
+            // the returned card re-mounts degraded and back goes to Cellar.
+            qs.set('backTo', '/label/results?context=intel');
             qs.set('fromIntel', '1');
             router.push(`/wines/chosen?${qs.toString()}` as any);
           },
@@ -2651,7 +2655,7 @@ const styles = StyleSheet.create({
   statBarRule: { height: 1, backgroundColor: colors.divider },
   // Subtle separator directly beneath the "Wine Intel" title.
   titleRule: { height: 1, backgroundColor: colors.border },
-  reviewHeaderThumb: { width: 52, height: 68, borderRadius: 5, backgroundColor: colors.surface },
+  reviewHeaderThumb: { width: 96, height: 128, borderRadius: 5, backgroundColor: colors.surface },
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
   statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
