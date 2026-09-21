@@ -445,11 +445,16 @@ export default function ChosenWinesScreen() {
     const dateLine = monthFirst
       ? "You're in the US/Canada, so your file will be read with the date formatted month/day/year."
       : "You're in the UK/Europe, so your file will be read with the date formatted day/month/year.";
+    // How ratings convert to Vinster's 100-point scale.
+    const scoreLine = src === 'vivino-reviews'
+      ? 'Your Vivino star ratings convert to Vinster\'s 100-point scale — each star is worth 20 points:\n\n5★ = 100   ·   4.5★ = 90   ·   4★ = 80\n3.5★ = 70   ·   3★ = 60   ·   2.5★ = 50'
+      : 'Ratings on a 0–5 scale convert to Vinster\'s 100-point scale (each point = 20: 5 = 100, 4 = 80, 3 = 60). Scores already on a 0–100 scale are kept as they are.';
     showAlert({
       title: src === 'vivino-reviews' ? 'Import a Vivino CSV' : 'Import a Spreadsheet',
       body:
         'Vinster can only accept uploads saved as CSV files — please make sure you have saved your document correctly before uploading.\n\n' +
         'Ensure you have kept the Column Header row in the file, stating which input is in each column (Wine Name, Vintage, etc).\n\n' +
+        scoreLine + '\n\n' +
         dateLine,
       buttons: [
         { text: 'Cancel', style: 'cancel' },

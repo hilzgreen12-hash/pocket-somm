@@ -45,6 +45,16 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    title: 'Importing Your Cellar & Reviews',
+    body: 'Already keep your wines or tasting notes somewhere else? Bring them into Vinster. From the Cellar tab you can import an existing cellar list from a photo, screenshot, or spreadsheet, and from Your Wine Reviews (+ Import) you can bring in your Vivino reviews or a review spreadsheet.\n\nA few things to know:\n\n• Files must be saved as CSV, and keep the top header row that names each column (Wine Name, Vintage, and so on)\n• Reviews land in Your Wine Reviews under a dated Import folder; if you\'ve rated the same wine several times, those tastings group into one wine card\n• Dates are read in your local format — day/month/year in the UK & Europe, month/day/year in the US & Canada\n• Importing brings in your wines and ratings only — Vinster generates the intel (critic scores, drinking windows, tasting notes, current value) when you open an individual wine, not all at once',
+    subsections: [
+      {
+        title: 'How Vivino Scores Convert',
+        body: 'Vivino rates on a 5-star scale; Vinster uses a 100-point scale. Your star rating is converted at 20 points per star, so your relative ranking is preserved exactly:\n\n5★ = 100   ·   4.5★ = 90   ·   4★ = 80\n3.5★ = 70   ·   3★ = 60   ·   2.5★ = 50\n\nThis is your own score, kept separate from the critic scores Vinster sources. If your file is already on a 0–100 scale, those scores are kept as they are.',
+      },
+    ],
+  },
+  {
     title: 'Vinster\'s Review of You',
     body: 'As you scan, cellar, rate, and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that grows and shifts as your palate broadens. You\'ll find it on the Review tab under "Vinster\'s Review of You": read it, share it with friends or the Vinster community, and browse every sketch Vinster has ever drawn for you.',
   },
