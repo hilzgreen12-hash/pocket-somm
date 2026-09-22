@@ -1278,6 +1278,7 @@ export default function StorageLocationScreen() {
           'Move two bottles of Rousseau 1999 to My Small Wine Bin',
           'Archive one bottle of Lafite 1961',
         ]}
+        allowedActions={['move', 'archive']}
       />
 
       {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}

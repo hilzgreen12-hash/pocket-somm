@@ -62,7 +62,7 @@ const DEFAULT_SUGGESTIONS = [
   "It's cold and raining, I want a smooth red wine for the fireside.",
 ];
 
-export function CellarCommandModal({ visible, onClose, introText, suggestions }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[] }) {
+export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[] }) {
   const { session } = useAuth();
   const { height: winH } = useWindowDimensions();
   const userId = session?.user.id;
@@ -182,6 +182,16 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions }:
     const act: CellarCommandAction = /\badd(s|ed|ing)?\b/i.test(transcript)
       ? 'add'
       : /\barchiv/i.test(transcript) ? 'archive' : 'move';
+    // Scoped callers (e.g. a home storage location) may only permit some verbs —
+    // e.g. move/archive but not "add". Nudge the user to the right tool instead.
+    if (allowedActions && !allowedActions.includes(act)) {
+      showAlert({
+        title: 'Not available here',
+        body: "From a home storage location you can move bottles to another location or archive them. To add a new wine, use the + Add Wine button.",
+      });
+      setPhase('speak');
+      return;
+    }
     setAction(act);
     setPhase('parsing');
     try {
