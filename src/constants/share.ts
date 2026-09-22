@@ -10,7 +10,7 @@
 export const VINSTER_APP_STORE_URL = 'https://apps.apple.com/app/id6763607127';
 export const VINSTER_INSTALL_URL = VINSTER_APP_STORE_URL;
 export const VINSTER_GET_LABEL = 'GET VINSTER';
-export const VINSTER_TAGLINE = 'Your AI sommelier — wine, food, restaurants.';
+export const VINSTER_TAGLINE = 'Real wine experience, brought to you by AI';
 
 // Plain-text footer block appended to outgoing text shares (wine reviews,
 // restaurant reviews, etc.). Blank line at the top so it sits visually

@@ -116,7 +116,7 @@ export default function SignUp() {
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled" bottomOffset={24}>
       <Text style={styles.title}>Create Account</Text>
-      <Text style={styles.subtitle}>Save your preferences and allow Vinster to learn from your selections. Your personal AI sommelier awaits.</Text>
+      <Text style={styles.subtitle}>Save your preferences and allow Vinster to learn from your selections — real wine experience, brought to you by AI.</Text>
 
       <TextInput
         style={styles.input}

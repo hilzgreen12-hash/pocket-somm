@@ -799,7 +799,7 @@ export default function ResultsScreen() {
       });
       await Share.share({
         title: 'Vinster Recommends',
-        message: `Vinster picked these wines for me:\n\n${lines.join('\n')}\n\nDownload Vinster — your AI sommelier.`,
+        message: `Vinster picked these wines for me:\n\n${lines.join('\n')}\n\nDownload Vinster — real wine experience, brought to you by AI.`,
       });
     } catch (err) {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });

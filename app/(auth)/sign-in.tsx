@@ -85,7 +85,7 @@ export default function SignIn() {
   return (
     <KeyboardAwareScrollView contentContainerStyle={styles.container} bottomOffset={24} keyboardShouldPersistTaps="handled">
       <Text style={styles.title}>Vinster</Text>
-      <Text style={styles.subtitle}>Your personal AI sommelier</Text>
+      <Text style={styles.subtitle}>Real wine experience, brought to you by AI</Text>
 
       <TextInput
         style={styles.input}

@@ -32,7 +32,7 @@ export const WineKnowledgeShareCard = forwardRef<View, Props>(
         <View style={styles.inner}>
           <View style={styles.topRow}>
             <Text style={styles.brand}>VINSTER</Text>
-            <Text style={styles.brandTagline}>Your AI Sommelier</Text>
+            <Text style={styles.brandTagline}>Real wine experience, brought to you by AI</Text>
           </View>
 
           <View style={styles.divider} />

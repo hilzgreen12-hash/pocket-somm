@@ -28,7 +28,7 @@ export const RecipeShareCard = forwardRef<View, Props>(({ pairing, wineHeader },
       <View style={styles.inner}>
         <View style={styles.brandHeader}>
           <Text style={styles.brand}>VINSTER</Text>
-          <Text style={styles.brandTagline}>Your AI Sommelier</Text>
+          <Text style={styles.brandTagline}>Real wine experience, brought to you by AI</Text>
         </View>
 
         <View style={styles.divider} />

@@ -72,8 +72,6 @@ const SECTIONS: Section[] = [
   },
 ];
 
-const FOUNDER_BLURB = 'Vinster is entirely, much to great excitement and surprise, vibecoded by one mum of two young kids in her home office. With not much technical experience but a 20 year career in fine wine under her belt, the founder started with one niggling question: how can I guide people to feel more in control of their wine choices at restaurants? And the rest was an avalanche rather than a snowball.';
-
 export default function AboutScreen() {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -82,9 +80,10 @@ export default function AboutScreen() {
       </TouchableOpacity>
 
       <Text style={styles.heading}>About Vinster</Text>
-      <Text style={styles.intro}>Vinster is your AI sommelier — built to help you choose better wine, cook more inspired meals, and understand your collection.</Text>
-
-      <Text style={styles.founderBlurb}>{FOUNDER_BLURB}</Text>
+      <Text style={styles.intro}>{`Vinster is an all-encompassing wine professional on the go. It is a sommelier at your table at restaurants, helping you choose a bottle based on your criteria. It will pair wines to dishes and vice versa, generating recipe ideas for you to explore and save to your cookbook. Vinster is the most comprehensive cellaring tool anywhere on the app stores, offering you a range of cellar and wine stats including Wine Searcher market values. You can review wines and the restaurants you drank them in while Vinster offers you up tongue in cheek personality sketches based on your engagement.`}</Text>
+      <Text style={styles.introQuestion}>Why, you ask?</Text>
+      <Text style={styles.founderBlurb}>{`When human passion and experience are combined with the capabilities of AI, amazing things can happen. Vinster is the result of exactly this, a wine professional and collector given the ability through AI to create their Wine & Food App of dreams where only her imagination is the limit.`}</Text>
+      <Text style={styles.introLeadIn}>It's complex, I know, but it's worth getting to understand:</Text>
 
       {SECTIONS.map((s) => (
         <View key={s.title} style={styles.section}>
@@ -123,7 +122,9 @@ const styles = StyleSheet.create({
   backText: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 16, color: colors.textMuted },
   heading: { fontSize: 42, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.text, letterSpacing: 1.5, marginBottom: spacing.md },
   intro: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 28, marginBottom: spacing.md },
-  founderBlurb: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 28, marginBottom: spacing.xl },
+  introQuestion: { fontSize: 22, fontFamily: 'CormorantGaramond_600SemiBold', color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.md },
+  founderBlurb: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.text, lineHeight: 28, marginBottom: spacing.md },
+  introLeadIn: { fontSize: 20, fontFamily: 'CormorantGaramond_400Regular_Italic', color: colors.textMuted, lineHeight: 28, marginBottom: spacing.xl },
   section: { marginBottom: spacing.xl, paddingBottom: spacing.xl, borderBottomWidth: 1, borderBottomColor: colors.border },
   sectionTitle: { fontSize: 22, fontFamily: 'CormorantGaramond_700Bold', color: colors.text, marginBottom: spacing.sm },
   sectionBody: { fontSize: 18, fontFamily: 'CormorantGaramond_400Regular', color: colors.textMuted, lineHeight: 27 },
