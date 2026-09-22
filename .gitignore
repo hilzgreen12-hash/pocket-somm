@@ -59,3 +59,6 @@ supabase/.temp/
 # Business plan drafts — kept local-only, not version-controlled
 Business Plan *.md
 
+
+# Local Claude Code settings — may contain machine-specific tokens; never commit
+.claude/settings.local.json
