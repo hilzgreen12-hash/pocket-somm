@@ -149,7 +149,9 @@ export default function ScanLandingScreen() {
     return () => clearTimeout(t);
   }, [wineSearch]);
 
-  // Pick a wine from the dropdown → skip the confirm form; just ask the vintage.
+  // Pick a wine from the dropdown. If the search query already carried a vintage
+  // (e.g. "Forts de Latour 2009"), apply it and go straight to the intel card —
+  // don't re-ask. Otherwise open the vintage prompt so the user can specify one.
   function selectWine(wine: WineSearchResult) {
     requireAuth(() => {
       skipSearchRef.current = true;
@@ -157,8 +159,12 @@ export default function ScanLandingScreen() {
       setSearchModalOpen(false);
       setSearchResults([]);
       setWineSearch('');
-      setVintageDraft('');
-      setVintageWine(wine);
+      if (wine.vintage) {
+        void generateSelectedIntel(wine.vintage, wine);
+      } else {
+        setVintageDraft('');
+        setVintageWine(wine);
+      }
     });
   }
 
@@ -191,9 +197,11 @@ export default function ScanLandingScreen() {
     } catch { /* no thumbnail is fine */ }
   }
 
-  // Vintage entered → generate intel straight to the card, with a label thumbnail.
-  async function generateSelectedIntel(vintage: string) {
-    const wine = vintageWine;
+  // Vintage entered (or carried in from the search query) → generate intel
+  // straight to the card, with a label thumbnail. `wineArg` lets selectWine pass
+  // the picked wine directly, bypassing the vintage-prompt state.
+  async function generateSelectedIntel(vintage: string, wineArg?: WineSearchResult | null) {
+    const wine = wineArg ?? vintageWine;
     if (!wine) return;
     setVintageWine(null);
     resetLabelStore();
