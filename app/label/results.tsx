@@ -190,6 +190,9 @@ export default function LabelResultsScreen() {
   // their read — so Vinster never builds a card for a misread/fictional wine.
   const [awaitingConfirm, setAwaitingConfirm] = useState(confirm === '1' && !identityConfirmed);
   const [confirmOptions, setConfirmOptions] = useState<WineCandidate[]>([]);
+  // Single-select index into the confirm list (0 = the wine as read, always the
+  // first row). The user taps to select, then presses Confirm.
+  const [selectedConfirm, setSelectedConfirm] = useState(0);
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
   const confirmTriedRef = useRef(false);
@@ -320,7 +323,8 @@ export default function LabelResultsScreen() {
           vintage: wineDetailsConfirmed.vintage,
         });
         setConfirmOptions(list);
-      } catch { /* silent — the panel falls back to "Scan Again" */ }
+        setSelectedConfirm(0);
+      } catch { /* silent — the panel falls back to Search Again */ }
       finally { setConfirmLoading(false); }
     })();
   }, [awaitingConfirm, wineDetailsConfirmed]);
@@ -486,6 +490,19 @@ export default function LabelResultsScreen() {
     } finally {
       setReReading(false);
     }
+  }
+  // "Search Again" — back to the Scan hub, where the user can re-scan, upload,
+  // search the catalogue, or type the wine in by hand. Reset the just-read wine
+  // so its fields don't leak into a fresh entry.
+  function openSearchAgain() {
+    useLabelStore.getState().reset();
+    router.dismissTo('/(tabs)/scan' as any);
+  }
+  // "Cancel" — leave the confirm screen without building a card, back to wherever
+  // the user came from (mirrors the back arrow).
+  function cancelConfirm() {
+    if (intelligence) { setAwaitingConfirm(false); return; }
+    router.dismissTo(backTo ? (decodeURIComponent(backTo) as any) : '/(tabs)/scan');
   }
   // Picking a bottling from the producer's range: keep the (confident) producer,
   // vintage, size and grape from the read; take the cuvée / region / style from
@@ -939,6 +956,15 @@ export default function LabelResultsScreen() {
   // existing card. The user picks the correct wine (typo/OCR-corrected) or keeps
   // what's there; picking rebuilds the card, keeping leaves it untouched.
   if (awaitingConfirm) {
+    // The confirm list always leads with the wine exactly as read (index 0), then
+    // the producer's other plausible bottlings (deduped against the read). The
+    // user selects one and presses Confirm — no wine name is shown as a title.
+    const normName = (s?: string | null) => (s ?? '').trim().toLowerCase();
+    const confirmExtraOptions = confirmOptions.filter((c) => normName(c.wineName) !== normName(wine.wineName));
+    const confirmDisplayOptions: WineCandidate[] = [
+      { wineName: wine.wineName ?? '', region: wine.region ?? null, style: null },
+      ...confirmExtraOptions,
+    ];
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity
@@ -954,29 +980,15 @@ export default function LabelResultsScreen() {
           <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
 
-        <Text style={styles.pageTitle}>Confirm this wine</Text>
-
-        <View style={styles.header}>
-          {imageUri ? (
+        {/* Thumbnail only — no wine-name title. The user checks the label photo
+            against the options below and picks the right one. */}
+        {imageUri ? (
+          <View style={styles.confirmThumbRow}>
             <TouchableOpacity onPress={() => setZoomOpen(true)} activeOpacity={0.85} style={styles.heroFrame}>
               <Image source={{ uri: imageUri }} style={styles.heroImage} resizeMode="cover" />
             </TouchableOpacity>
-          ) : null}
-          {/* Full identity reference — producer, wine name, vintage, region,
-              grape — so the user has the complete wine to check against while
-              confirming (this is the key reference on the page). */}
-          <View style={styles.headerText}>
-            <WineIdentityHeader
-              producer={wine.producer}
-              wineName={wine.wineName}
-              vintage={wine.vintage}
-              region={wine.region}
-              grape={wine.grape}
-              align="left"
-              size="md"
-            />
           </View>
-        </View>
+        ) : null}
 
         <View style={styles.section}>
           {confirmGenerating ? (
@@ -986,63 +998,54 @@ export default function LabelResultsScreen() {
             </View>
           ) : (
             <>
-              <Text style={styles.confirmTitle}>Confirm which wine this is</Text>
+              <Text style={styles.confirmTitle}>Select Your Wine From the List</Text>
               {confirmLoading ? (
                 <View style={styles.confirmLoading}>
                   <ActivityIndicator color={colors.gold} />
                   <Text style={styles.confirmLoadingText}>Finding close matches…</Text>
                 </View>
-              ) : confirmOptions.length > 0 ? (
-                confirmOptions.map((r, i) => (
-                  <TouchableOpacity
-                    key={`${r.wineName ?? ''}-${i}`}
-                    style={styles.confirmRow}
-                    onPress={() => pickConfirmOption(r)}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={styles.confirmRowName} numberOfLines={2}>
-                      {formatWineTitle({ producer: wine.producer, wineName: r.wineName, region: r.region, vintage: wine.vintage })}
-                    </Text>
-                    {r.style ? <Text style={styles.confirmRowMeta}>{r.style}</Text> : null}
-                  </TouchableOpacity>
-                ))
               ) : (
-                <Text style={styles.confirmBody}>No close matches found — try another photo.</Text>
+                confirmDisplayOptions.map((r, i) => {
+                  const selected = selectedConfirm === i;
+                  return (
+                    <TouchableOpacity
+                      key={`${r.wineName}-${i}`}
+                      style={[styles.confirmRow, selected && styles.confirmRowSelected]}
+                      onPress={() => setSelectedConfirm(i)}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={[styles.confirmRowName, selected && styles.confirmRowNameSelected]} numberOfLines={2}>
+                        {formatWineTitle({ producer: wine.producer, wineName: r.wineName, region: r.region, vintage: wine.vintage })}
+                      </Text>
+                      {r.style ? <Text style={styles.confirmRowMeta}>{r.style}</Text> : null}
+                    </TouchableOpacity>
+                  );
+                })
               )}
-              {/* Keep the current wine only applies to a manual re-confirm over an
-                  existing card; the initial confirm offers a re-capture instead. */}
-              {intelligence ? (
-                <TouchableOpacity style={styles.confirmPrimary} onPress={keepCurrentOrRead} activeOpacity={0.85}>
-                  <Text style={styles.confirmPrimaryText}>Keep the current wine</Text>
-                </TouchableOpacity>
-              ) : (
-                <>
-                  {/* Accept the read as-is — Vinster builds intel from exactly
-                      what was scanned (same as manual input), inferring the grape
-                      and details even when the catalog had no close match. */}
-                  <TouchableOpacity style={styles.confirmPrimary} onPress={keepCurrentOrRead} activeOpacity={0.85}>
-                    <Text style={styles.confirmPrimaryText}>Yes, this is my wine</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.confirmPrimary} onPress={recaptureFromConfirm} activeOpacity={0.85}>
-                    <Text style={styles.confirmPrimaryText}>{isUploadFlow ? 'Upload Again' : 'Scan Again'}</Text>
-                  </TouchableOpacity>
-                  {/* Vinster couldn't find it — let the user type it in by hand
-                      rather than only re-capturing. */}
+
+              {/* Confirm the selected wine · Search Again (scan/upload/search/
+                  manual) · Cancel — regular-size buttons. */}
+              {!confirmLoading ? (
+                <View style={styles.confirmActions}>
                   <TouchableOpacity
-                    style={styles.confirmManualLink}
+                    style={styles.confirmActionBtn}
                     onPress={() => {
-                      // Clear the just-scanned wine so its grape / bottle size /
-                      // quantity don't leak into the fresh manual entry (the
-                      // confirm screen only blanks the visible fields).
-                      useLabelStore.getState().reset();
-                      router.replace(`/label/confirm?manual=1&mode=input&context=intel&backTo=${encodeURIComponent('/(tabs)')}`);
+                      if (selectedConfirm === 0) { keepCurrentOrRead(); return; }
+                      const c = confirmExtraOptions[selectedConfirm - 1];
+                      if (c) pickConfirmOption(c);
                     }}
-                    activeOpacity={0.7}
+                    activeOpacity={0.85}
                   >
-                    <Text style={styles.confirmManualText}>Manually input wine</Text>
+                    <Text style={styles.confirmActionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Confirm</Text>
                   </TouchableOpacity>
-                </>
-              )}
+                  <TouchableOpacity style={styles.confirmActionBtn} onPress={openSearchAgain} activeOpacity={0.85}>
+                    <Text style={styles.confirmActionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Search Again</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.confirmActionGhost} onPress={cancelConfirm} activeOpacity={0.7}>
+                    <Text style={styles.confirmActionGhostText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
             </>
           )}
         </View>
@@ -2910,6 +2913,17 @@ const styles = StyleSheet.create({
   confirmPrimaryText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
   confirmManualLink: { alignItems: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
   confirmManualText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textDecorationLine: 'underline' },
+  // Thumbnail-only header on the confirm screen (no wine title).
+  confirmThumbRow: { alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.xs },
+  // Selected row in the confirm list — subtle gold highlight.
+  confirmRowSelected: { backgroundColor: colors.surface, borderRadius: 8, paddingHorizontal: spacing.sm },
+  confirmRowNameSelected: { color: colors.gold },
+  // Regular-size action buttons below the list (Confirm · Search Again · Cancel).
+  confirmActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.lg },
+  confirmActionBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center' },
+  confirmActionText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+  confirmActionGhost: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, paddingVertical: spacing.sm, paddingHorizontal: spacing.xs, alignItems: 'center', justifyContent: 'center' },
+  confirmActionGhostText: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.textMuted, textAlign: 'center' },
   // "Not this wine?" correction link under the header on the intel card.
   wrongWineLink: { alignSelf: 'center', paddingHorizontal: spacing.lg, paddingTop: 2, paddingBottom: spacing.md },
   wrongWineText: { fontSize: 13, fontFamily: fonts.bodyItalic, color: '#FFFFFF', textDecorationLine: 'underline', textAlign: 'center' },
