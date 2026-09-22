@@ -18,7 +18,6 @@ import { fromChosenGroup, fromCellar } from '../../src/utils/reviewModel';
 import { byRecency, entriesOf, flatMirror } from '../../src/utils/cellarReview';
 import { EditCellarReviewModal } from '../../src/components/EditCellarReviewModal';
 import { AddChosenWineModal } from '../../src/components/AddChosenWineModal';
-import { SearchProgress } from '../../src/components/SearchProgress';
 import { showAlert } from '../../src/components/AppAlert';
 import { ShareIcon } from '../../src/components/ShareIcon';
 import { usePreferences } from '../../src/hooks/usePreferences';
@@ -1595,13 +1594,10 @@ export default function ChosenWinesScreen() {
           Vinster percentage-bar loader (not a bare spinner on a black scrim),
           sitting above the screen so the user can't tap "+ Add" again mid-scan. */}
       {uploading ? (
-        <View style={StyleSheet.absoluteFill} pointerEvents="auto">
-          <SearchProgress
-            title="Reading the label…"
-            subtitle="Vinster needs a few seconds"
-            body="Vinster is reading your wine label and gathering the details."
-            durationMs={15000}
-          />
+        // Just a spinner while the review input prepares — no branded "Vinster"
+        // wordmark overlaying the reviews screen.
+        <View style={styles.prepOverlay} pointerEvents="auto">
+          <ActivityIndicator size="large" color={colors.gold} />
         </View>
       ) : null}
 
@@ -2066,6 +2062,7 @@ const styles = StyleSheet.create({
   // Tiny inline "clear" affordance next to the search input — treated as muted UI text, not a primary button.
   searchClearText: { fontSize: 14, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   dropdownOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
+  prepOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center', justifyContent: 'center' },
   dropdownSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.border, padding: spacing.lg, width: '100%' },
   dropdownTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   dropdownOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
