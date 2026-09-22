@@ -117,7 +117,7 @@ export default function LabelResultsScreen() {
   // no-intel adds — 'add-location' must be included or the guard below dead-ends
   // on "No results available" and the wine never saves (regression from 7e9deec).
   const isAddFlow = context === 'add' || context === 'add-location';
-  const { wineDetailsConfirmed, intelligence, imageUri, setImage, setWineDetails, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
+  const { wineDetailsConfirmed, intelligence, imageUri, setImage, setImageUri, setWineDetails, setWineDetailsConfirmed, setIntelligence } = useLabelStore();
   const { session } = useAuth();
   const { wines, addWine, updateWine } = useCellar();
   const { addWine: addToWishList } = useWishList();
@@ -350,6 +350,59 @@ export default function LabelResultsScreen() {
       setConfirmGenerating(false);
     }
   }
+  // "Edit Wine" — seed the manual-edit modal from the current card and open it.
+  function openEditWine() {
+    if (!wine) return;
+    setEditProducer(wine.producer ?? '');
+    setEditWineName(wine.wineName ?? '');
+    setEditVintage(wine.vintage ?? '');
+    setEditRegion(wine.region ?? '');
+    setEditStyle(wine.style ?? '');
+    setEditGrape((intel.grapeVariety ?? wine.grape) ?? '');
+    setEditBottleSizeMl(bottleSizeMl);
+    setEditImageUri(null);
+    setEditWineOpen(true);
+  }
+  async function pickEditPhoto(source: 'camera' | 'library') {
+    if (!(await ensureMediaPermission(source === 'camera' ? 'camera' : 'library'))) return;
+    const res = source === 'camera'
+      ? await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 1 })
+      : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
+    if (!res.canceled && res.assets[0]) setEditImageUri(res.assets[0].uri);
+  }
+  // Save the manual edit → regenerate the intel card for the corrected wine.
+  async function saveEditWine() {
+    if (savingEdit) return;
+    if (!editProducer.trim() && !editWineName.trim()) { showAlert({ title: 'Wine details needed', body: 'Add at least a producer or a wine name.' }); return; }
+    setSavingEdit(true);
+    try {
+      const confirmed: WineDetailsComplete = {
+        producer: editProducer.trim(),
+        region: editRegion.trim(),
+        wineName: editWineName.trim() || null,
+        vintage: editVintage.trim() || 'NV',
+        style: editStyle.trim() || null,
+        grape: editGrape.trim() || null,
+        bottleSizeMl: editBottleSizeMl,
+        quantity: wine?.quantity ?? 1,
+      };
+      const generated = await generateWineIntel(confirmed, userCurrency);
+      setWineDetailsConfirmed(confirmed);
+      setIntelligence(generated);
+      useLastIntelStore.getState().setLast(confirmed, generated);
+      setBottleSizeMl(editBottleSizeMl);
+      if (editImageUri) setImageUri(editImageUri);
+      // Re-map the producer range + vintage table for the corrected wine.
+      producerRangeTriedRef.current = false; setProducerRange(null);
+      vintagesTriedRef.current = false; setVintageRows(null); setVintagesExpanded(false);
+      setEditWineOpen(false);
+    } catch {
+      showAlert({ title: 'Could not get intel', body: 'Please try again.' });
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   // Manual correction: open the confirm/search step over an existing card, for
   // when the read looks confident but is simply the wrong wine (e.g. OCR swapped
   // in a different real producer, which verifies and never auto-prompts).
@@ -594,6 +647,18 @@ export default function LabelResultsScreen() {
   );
   const [saving, setSaving] = useState(false);
   const [showEstimate, setShowEstimate] = useState(false);
+  // "Edit Wine" manual-edit modal (top-right on the intel card): free-text edit of
+  // the identity + grape + bottle size + photo, then regenerate the intel card.
+  const [editWineOpen, setEditWineOpen] = useState(false);
+  const [editProducer, setEditProducer] = useState('');
+  const [editWineName, setEditWineName] = useState('');
+  const [editVintage, setEditVintage] = useState('');
+  const [editRegion, setEditRegion] = useState('');
+  const [editStyle, setEditStyle] = useState('');
+  const [editGrape, setEditGrape] = useState('');
+  const [editBottleSizeMl, setEditBottleSizeMl] = useState(750);
+  const [editImageUri, setEditImageUri] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
   // Review-without-adding form state — captured in a Modal and saved to
   // chosen_wines without touching cellar or wishlist inventory.
   const [reviewNote, setReviewNote] = useState('');
@@ -1734,11 +1799,11 @@ export default function LabelResultsScreen() {
           </TouchableOpacity>
           {intelligence ? (
             <TouchableOpacity
-              onPress={openManualConfirm}
+              onPress={openEditWine}
               hitSlop={{ top: 6, bottom: 8, left: 10, right: 10 }}
               activeOpacity={0.7}
             >
-              <Text style={styles.scanAgainText}>Edit / Scan Again</Text>
+              <Text style={styles.scanAgainText}>Edit Wine</Text>
             </TouchableOpacity>
           ) : null}
         </View>
@@ -1783,6 +1848,57 @@ export default function LabelResultsScreen() {
 
       {/* Tap the label photo to view it full-screen with pinch/zoom + pan. */}
       <LabelPhotoViewer visible={zoomOpen} uri={imageUri} onClose={() => setZoomOpen(false)} />
+
+      {/* "Edit Wine" — manual edit of photo + identity + grape + bottle size,
+          then regenerate the intel card. */}
+      <Modal visible={editWineOpen} transparent animationType="fade" onRequestClose={() => !savingEdit && setEditWineOpen(false)}>
+        <View style={styles.editWineOverlay}>
+          <KeyboardAwareScrollView contentContainerStyle={styles.editWineScroll} keyboardShouldPersistTaps="handled" bottomOffset={24}>
+            <View style={styles.editWineSheet}>
+              <Text style={styles.editWineTitle}>Edit Wine</Text>
+
+              {/* Photo */}
+              <View style={styles.editWinePhotoRow}>
+                {(editImageUri || imageUri) ? (
+                  <Image source={{ uri: (editImageUri ?? imageUri)! }} style={styles.editWineThumb} resizeMode="cover" />
+                ) : (
+                  <View style={[styles.editWineThumb, styles.editWineThumbBlank]}><Text style={styles.editWineThumbBlankText}>No photo</Text></View>
+                )}
+                <View style={styles.editWinePhotoBtns}>
+                  <TouchableOpacity style={styles.editWinePhotoBtn} onPress={() => void pickEditPhoto('camera')} activeOpacity={0.8}>
+                    <Text style={styles.editWinePhotoBtnText}>Take Photo</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.editWinePhotoBtn} onPress={() => void pickEditPhoto('library')} activeOpacity={0.8}>
+                    <Text style={styles.editWinePhotoBtnText}>Upload</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={styles.editWineLabel}>Producer</Text>
+              <TextInput style={styles.editWineInput} value={editProducer} onChangeText={setEditProducer} placeholder="Producer" placeholderTextColor={colors.textMuted} />
+              <Text style={styles.editWineLabel}>Wine name</Text>
+              <TextInput style={styles.editWineInput} value={editWineName} onChangeText={setEditWineName} placeholder="Wine name (optional)" placeholderTextColor={colors.textMuted} />
+              <Text style={styles.editWineLabel}>Vintage</Text>
+              <TextInput style={styles.editWineInput} value={editVintage} onChangeText={(t) => setEditVintage(t.replace(/[^0-9A-Za-z]/g, '').slice(0, 7))} placeholder="e.g. 2019 or NV" placeholderTextColor={colors.textMuted} autoCapitalize="characters" maxLength={7} />
+              <Text style={styles.editWineLabel}>Region</Text>
+              <TextInput style={styles.editWineInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
+              <Text style={styles.editWineLabel}>Grape variety</Text>
+              <TextInput style={styles.editWineInput} value={editGrape} onChangeText={setEditGrape} placeholder="Grape variety" placeholderTextColor={colors.textMuted} />
+              <Text style={styles.editWineLabel}>Style</Text>
+              <TextInput style={styles.editWineInput} value={editStyle} onChangeText={setEditStyle} placeholder="Red / White / Rosé / Sparkling / Fortified" placeholderTextColor={colors.textMuted} />
+              <Text style={styles.editWineLabel}>Bottle size</Text>
+              <BottleSizePicker value={editBottleSizeMl} onChange={setEditBottleSizeMl} />
+
+              <TouchableOpacity style={[styles.editWineSave, savingEdit && styles.btnDisabled]} onPress={() => void saveEditWine()} disabled={savingEdit} activeOpacity={0.85}>
+                {savingEdit ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.editWineSaveText}>Save & Regenerate</Text>}
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.editWineCancel} onPress={() => setEditWineOpen(false)} disabled={savingEdit} activeOpacity={0.7}>
+                <Text style={styles.editWineCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </KeyboardAwareScrollView>
+        </View>
+      </Modal>
 
       {/* Generate Wine Intel came back empty → prompt to check the name/format. */}
       {/* Weak intel: if we found candidate bottlings, the disambiguation modal
@@ -2664,6 +2780,25 @@ const styles = StyleSheet.create({
   // Subtle separator directly beneath the "Wine Intel" title.
   titleRule: { height: 1, backgroundColor: colors.border },
   reviewHeaderThumb: { width: 96, height: 128, borderRadius: 5, backgroundColor: colors.surface },
+  // "Edit Wine" modal.
+  editWineOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)' },
+  editWineScroll: { flexGrow: 1, justifyContent: 'center', padding: spacing.lg },
+  editWineSheet: { borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, padding: spacing.lg },
+  editWineTitle: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: spacing.md },
+  editWinePhotoRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'center', marginBottom: spacing.md },
+  editWineThumb: { width: 84, height: 112, borderRadius: 6, backgroundColor: colors.surface },
+  editWineThumbBlank: { alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite },
+  editWineThumbBlankText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted },
+  editWinePhotoBtns: { flex: 1, gap: spacing.sm },
+  editWinePhotoBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.sm, alignItems: 'center' },
+  editWinePhotoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
+  editWineLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.sm, marginBottom: 4 },
+  editWineInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
+  editWineSave: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  editWineSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.surface, letterSpacing: 0.3 },
+  editWineCancel: { alignItems: 'center', paddingVertical: spacing.md },
+  editWineCancelText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
+  btnDisabled: { opacity: 0.5 },
   statBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', flexWrap: 'nowrap', paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: spacing.sm },
   statBarItem: { alignItems: 'center', flexShrink: 1, paddingHorizontal: 2 },
   statBarValue: { fontSize: 18.5, fontFamily: fonts.bodyBold, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
