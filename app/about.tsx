@@ -82,7 +82,7 @@ export default function AboutScreen() {
       <Text style={styles.heading}>About Vinster</Text>
       <Text style={styles.intro}>{`Vinster is an all-encompassing wine professional on the go. It is a sommelier at your table at restaurants, helping you choose a bottle based on your criteria. It will pair wines to dishes and vice versa, generating recipe ideas for you to explore and save to your cookbook. Vinster is the most comprehensive cellaring tool anywhere on the app stores, offering you a range of cellar and wine stats including Wine Searcher market values. You can review wines and the restaurants you drank them in while Vinster offers you up tongue in cheek personality sketches based on your engagement.`}</Text>
       <Text style={styles.introQuestion}>Why, you ask?</Text>
-      <Text style={styles.founderBlurb}>{`When human passion and experience are combined with the capabilities of AI, amazing things can happen. Vinster is the result of exactly this, a wine professional and collector given the ability through AI to create their Wine & Food App of dreams where only her imagination is the limit.`}</Text>
+      <Text style={styles.founderBlurb}>{`When human passion and experience are combined with the capabilities of AI, amazing things can happen. Vinster is the result of exactly this: A wine professional and collector of over 20 years, given the opportunity through AI to create a Wine & Food App of dreams.`}</Text>
       <Text style={styles.introLeadIn}>It's complex, I know, but it's worth getting to understand:</Text>
 
       {SECTIONS.map((s) => (
