@@ -471,9 +471,11 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
               </>
             ) : (
               <>
-                <Text style={styles.heading}>Add a Wine Review</Text>
-
-                <View style={styles.divider} />
+                {/* Pick-a-wine step: can't show the review card until a wine is
+                    chosen, so this is a clean "find your wine" screen that flows
+                    into the review card on confirm. */}
+                <Text style={styles.pickTitle}>Find Your Wine</Text>
+                <Text style={styles.pickSubtitle}>Search Vinster's catalogue, or enter it by hand — then add your review.</Text>
 
                 {/* Predictive search — type the wine and pick a real match to fill
                     the fields below (vintage stays yours to enter). Manual typing
@@ -695,6 +697,9 @@ const styles = StyleSheet.create({
   favouriteStarActive: { color: colors.gold },
   content: { padding: spacing.xl, paddingTop: 64, paddingBottom: 60 },
   heading: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  // Pick-a-wine step title/subtitle — refined, on-brand (replaces the heavy 26px heading).
+  pickTitle: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.4, marginBottom: 2 },
+  pickSubtitle: { fontFamily: fonts.headingItalic, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.md },
   subheading: { fontFamily: fonts.headingItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', marginBottom: spacing.sm, lineHeight: 21 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.md },
   sectionLabel: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, marginBottom: spacing.sm },
