@@ -488,17 +488,13 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                     if (r.style) setStyle(r.style);
                     if (r.grape) setGrape(r.grape);
                     // A vintage typed into the search ("… 2009") fills the vintage.
-                    const v = (r.vintage ?? '').trim();
-                    const hasVintage = /^\d{4}$/.test(v) || /^nv$/i.test(v);
-                    if (v) setVintage(/^nv$/i.test(v) ? 'NV' : v);
+                    if (r.vintage) setVintage(r.vintage);
+                    // A search pick fills the identity — collapse to the "name +
+                    // vintage only" prompt so it's clear Vinster filled it in.
                     setSearchPicked(true);
                     setJustFilled(true);
                     setDirty(true);
                     if (saved) setSaved(false);
-                    // The "Confirm Wine" step only exists to capture a vintage (the
-                    // catalogue has none). If the search already gave us one, the
-                    // wine is fully identified — go straight to the review card.
-                    if (hasVintage) setIdentityConfirmed(true);
                   }} />
                 ) : null}
 
