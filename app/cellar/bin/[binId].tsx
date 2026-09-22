@@ -6,6 +6,7 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import { getBins, getBinCells, deleteBin, emptyBinCell, emptyBin, renameBin, removeWineFromCell, binCellLabels, binDiamondCount } from '../../../src/api/bins';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { RenameModal } from '../../../src/components/RenameModal';
+import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
 import { updateCellarWine, archiveCellarWine, deleteCellarWine } from '../../../src/api/cellar';
 import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { useCellar } from '../../../src/hooks/useCellar';
@@ -54,6 +55,7 @@ export default function BinDetailScreen() {
   const userId = session?.user.id;
   const [vpw, setVpw] = useState(0);
   const [listOpen, setListOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
@@ -406,6 +408,12 @@ export default function BinDetailScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
+      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
+        <Text style={styles.voiceLink}>Voice Command</Text>
+      </TouchableOpacity>
+      <View style={styles.headerDivider} />
+
       {isLoading || !bin ? (
         <View style={styles.center}><ActivityIndicator color={colors.gold} /></View>
       ) : (
@@ -607,6 +615,9 @@ export default function BinDetailScreen() {
         onSave={handleRename}
         onClose={() => setRenameOpen(false)}
       />
+
+      {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
     </View>
   );
 }
@@ -614,7 +625,10 @@ export default function BinDetailScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   // Equal-width back / Edit so the flex-1 title is truly screen-centred.
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 50 },
   headerEdit: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.gold, textAlign: 'right', width: 50 },

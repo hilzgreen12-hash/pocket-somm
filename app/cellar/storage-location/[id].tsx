@@ -16,7 +16,7 @@ import { useRacks } from '../../../src/hooks/useRacks';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { PackagingPrompt } from '../../../src/components/PackagingPrompt';
-import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
+import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { useLabelStore } from '../../../src/stores/labelStore';
@@ -749,11 +749,11 @@ export default function StorageLocationScreen() {
     if (!userId || !id) return;
     if (!newCaseName.trim()) { showAlert({ title: 'Name the case', body: 'Give this case a name so you can find it.' }); return; }
     try {
-      const created = await createStorageCase(userId, { storageLocationId: id, name: newCaseName, note: newCaseNote });
+      await createStorageCase(userId, { storageLocationId: id, name: newCaseName, note: newCaseNote });
       invalidateCases();
       setCreateCaseOpen(false);
-      // Jump the carousel filter straight to the new (empty) case.
-      setCaseFilter(created.id); setListView('bottles'); setPackaging('');
+      // Do NOT change the active filter — the new case shows up as its own chip
+      // on the carousel; the "All Wines" List chip must stay exactly as it was.
     } catch (err) {
       showAlert({ title: 'Could not create case', body: err instanceof Error ? err.message : 'Please try again.' });
     }
@@ -963,14 +963,16 @@ export default function StorageLocationScreen() {
         {/* Filter row — List (default full list), Packaging, Maturity, saved
             filters, then + Add, mirroring the rack/fridge affordance. */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow} keyboardShouldPersistTaps="handled">
+          {/* The List chip is the view-mode picker only — it never reflects a
+              selected case (that shows via the case chip's own highlight), so it
+              can't be hijacked into showing a case name. */}
           <TouchableOpacity
-            style={[styles.filterChip, (listView !== 'bottles' || !!caseFilter || !!packaging) && styles.filterChipActive]}
+            style={[styles.filterChip, (listView !== 'bottles' || !!packaging) && styles.filterChipActive]}
             onPress={() => { setListOpen((v) => !v); setMaturityOpen(false); setPackagingOpen(false); }}
             activeOpacity={0.7}
           >
-            <Text style={[styles.filterChipText, (listView !== 'bottles' || !!caseFilter || !!packaging) && styles.filterChipTextActive]}>
-              {caseFilter ? (cases.find((c) => c.id === caseFilter)?.name ?? 'Case')
-                : packaging === 'loose' ? 'Loose Bottles'
+            <Text style={[styles.filterChipText, (listView !== 'bottles' || !!packaging) && styles.filterChipTextActive]}>
+              {packaging === 'loose' ? 'Loose Bottles'
                 : (LIST_VIEW_OPTIONS.find((o) => o.value === listView)?.label ?? 'All Wines')} {listOpen ? '▴' : '▾'}
             </Text>
           </TouchableOpacity>
@@ -1035,6 +1037,13 @@ export default function StorageLocationScreen() {
             })}
           </View>
         ) : null}
+
+        {/* Carousel affordance — the case chips ("folders") scroll horizontally,
+            and "+ Add Case" lives at the end. */}
+        <View style={styles.swipeHint}>
+          <Text style={styles.swipeHintText}>Swipe to add and view folders</Text>
+          <Text style={styles.swipeHintText}>→</Text>
+        </View>
 
         <View style={styles.searchRow}>
           <TextInput
@@ -1195,7 +1204,7 @@ export default function StorageLocationScreen() {
             <View style={styles.caseModalSheet}>
               <Text style={styles.caseModalTitle}>Edit case</Text>
               <Text style={styles.caseModalLabel}>Name</Text>
-              <TextInput style={styles.caseModalInput} value={caseEditName} onChangeText={setCaseEditName} placeholder="Case name" placeholderTextColor={colors.textSubtle} />
+              <TextInput style={styles.caseModalInput} value={caseEditName} onChangeText={setCaseEditName} placeholder="Case name" placeholderTextColor={colors.textSubtle} maxLength={12} />
               <Text style={styles.caseModalLabel}>Note</Text>
               <View style={styles.caseModalNoteRow}>
                 <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={caseEditNote} onChangeText={setCaseEditNote} placeholder="Ie. in the back next to the Petrus" placeholderTextColor={colors.textSubtle} multiline />
@@ -1219,7 +1228,8 @@ export default function StorageLocationScreen() {
             <View style={styles.caseModalSheet}>
               <Text style={styles.caseModalTitle}>Create New Case</Text>
               <Text style={styles.caseModalLabel}>Name</Text>
-              <TextInput style={styles.caseModalInput} value={newCaseName} onChangeText={setNewCaseName} placeholder="e.g. Mixed Burgundy" placeholderTextColor={colors.textSubtle} autoFocus />
+              <TextInput style={styles.caseModalInput} value={newCaseName} onChangeText={setNewCaseName} placeholder="e.g. Rhône reds" placeholderTextColor={colors.textSubtle} maxLength={12} autoFocus />
+              <Text style={styles.caseModalHint}>Up to 12 characters.</Text>
               <Text style={styles.caseModalLabel}>Note</Text>
               <View style={styles.caseModalNoteRow}>
                 <TextInput style={[styles.caseModalInput, styles.caseModalNoteInput]} value={newCaseNote} onChangeText={setNewCaseNote} placeholder="Ie. in the back next to the Petrus" placeholderTextColor={colors.textSubtle} multiline />
@@ -1270,16 +1280,7 @@ export default function StorageLocationScreen() {
       <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
 
       {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
-      <CellarCommandModal
-        visible={voiceOpen}
-        onClose={() => setVoiceOpen(false)}
-        introText="Through your home storage locations you can use voice command to: Move wines from this location to another, and Archive bottles."
-        suggestions={[
-          'Move two bottles of Rousseau 1999 to My Small Wine Bin',
-          'Archive one bottle of Lafite 1961',
-        ]}
-        allowedActions={['move', 'archive']}
-      />
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
 
       {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
       <PackagingPrompt
@@ -1434,6 +1435,9 @@ const styles = StyleSheet.create({
   caseModalTitle: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.md },
   caseModalLabel: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: spacing.xs, marginTop: spacing.sm },
   caseModalInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 10, fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)' },
+  caseModalHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 4, marginBottom: spacing.xs },
+  swipeHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingHorizontal: spacing.xl, marginTop: -2, marginBottom: spacing.sm },
+  swipeHintText: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, letterSpacing: 0.2 },
   caseModalNoteRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm },
   caseModalNoteInput: { flex: 1, minHeight: 44, textAlignVertical: 'top' },
   caseModalSave: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.lg },

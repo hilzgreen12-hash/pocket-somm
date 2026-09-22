@@ -86,7 +86,7 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
             <>
               <Text style={styles.title}>Create New Case</Text>
               <Text style={styles.fieldLabel}>Case name</Text>
-              <TextInput style={styles.input} value={caseName} onChangeText={setCaseName} placeholder="e.g. Mixed Burgundy" placeholderTextColor={colors.textMuted} autoFocus />
+              <TextInput style={styles.input} value={caseName} onChangeText={setCaseName} placeholder="e.g. Rhône reds" placeholderTextColor={colors.textMuted} maxLength={12} autoFocus />
               <Text style={styles.fieldLabel}>Note (optional)</Text>
               <View style={styles.noteRow}>
                 <TextInput style={[styles.input, styles.noteInput]} value={caseNote} onChangeText={setCaseNote} placeholder="e.g. bought en primeur" placeholderTextColor={colors.textMuted} multiline />

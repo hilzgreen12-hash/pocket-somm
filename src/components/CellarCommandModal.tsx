@@ -62,6 +62,19 @@ const DEFAULT_SUGGESTIONS = [
   "It's cold and raining, I want a smooth red wine for the fireside.",
 ];
 
+// Shared preset for the "Voice Command" entry on EVERY home-storage location
+// screen (racks, fridges, bins, alt cellars): move/archive only, scoped copy +
+// examples. Spread into <CellarCommandModal {...HOME_STORAGE_VOICE} /> so all
+// four screen types stay identical.
+export const HOME_STORAGE_VOICE: { introText: string; suggestions: string[]; allowedActions: CellarCommandAction[] } = {
+  introText: 'Through your home storage locations you can use voice command to: Move wines from this location to another, and Archive bottles.',
+  suggestions: [
+    'Move two bottles of Rousseau 1999 to My Small Wine Bin',
+    'Archive one bottle of Lafite 1961',
+  ],
+  allowedActions: ['move', 'archive'],
+};
+
 export function CellarCommandModal({ visible, onClose, introText, suggestions, allowedActions }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[]; allowedActions?: CellarCommandAction[] }) {
   const { session } = useAuth();
   const { height: winH } = useWindowDimensions();

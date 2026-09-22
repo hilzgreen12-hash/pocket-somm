@@ -2648,13 +2648,14 @@ export default function LabelResultsScreen() {
 
                     {storageKind === 'new' && (
                       <>
-                        <Text style={styles.modalLabel}>Case name <Text style={styles.modalLabelHint}>(short &amp; snappy)</Text></Text>
+                        <Text style={styles.modalLabel}>Case name <Text style={styles.modalLabelHint}>(up to 12 characters)</Text></Text>
                         <TextInput
                           style={styles.caseInput}
                           value={caseName}
                           onChangeText={setCaseName}
-                          placeholder="e.g. Mixed Burgundy"
+                          placeholder="e.g. Rhône reds"
                           placeholderTextColor={colors.textSubtle}
+                          maxLength={12}
                         />
                         <Text style={styles.modalLabel}>Note <Text style={styles.modalLabelHint}>(optional)</Text></Text>
                         <View style={styles.caseNoteRow}>

@@ -29,6 +29,7 @@ import { foldAccents } from '../../../src/utils/wineIdentity';
 import { wineHeaderLine } from '../../../src/utils/wineHeader';
 import { effectiveMaturity } from '../../../src/utils/maturity';
 import { RenameModal } from '../../../src/components/RenameModal';
+import { CellarCommandModal, HOME_STORAGE_VOICE } from '../../../src/components/CellarCommandModal';
 import { LabelThumb } from '../../../src/components/LabelThumb';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -91,6 +92,7 @@ export default function RackGridScreen() {
   const { pendingSlot, setPendingSlot, pendingSlots, setPendingSlots, pendingWineId, setPendingWineId, pendingAddMode, setPendingAddMode, pendingMove, setPendingMove } = useRackStore();
   const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useCustomFilters(rackId);
   const [highlightedWineId, setHighlightedWineId] = useState<string | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   // Custom filters (named collections of wines) — now surfaced as chips in the
   // filter carousel, plus the create flow.
@@ -1525,6 +1527,12 @@ export default function RackGridScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
+      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
+        <Text style={styles.voiceLink}>Voice Command</Text>
+      </TouchableOpacity>
+      <View style={styles.headerDivider} />
+
       {/* STATIC header (outside the scroll view). When an Add Multiples / Add
           More flow is active, its bar sits here in place of the instructions so
           it never overlays the grid below; only the filters + grid scroll. */}
@@ -2019,6 +2027,9 @@ export default function RackGridScreen() {
         onClose={() => setRenameFilterTarget(null)}
       />
 
+      {/* Voice Command — same engine as the Cellar tab, scoped to move/archive. */}
+      <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} {...HOME_STORAGE_VOICE} />
+
       {/* Archive — the shared modal: how many (if you own more than one) + note. */}
       <ArchiveNoteModal
         visible={!!singleArchive}
@@ -2285,7 +2296,10 @@ const styles = StyleSheet.create({
   lineupPromptText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, lineHeight: 21 },
   lineupPromptCancel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, marginTop: spacing.sm },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   // Inter — back/nav link
   back: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 50 },
   // Cormorant — page header
