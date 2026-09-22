@@ -51,7 +51,18 @@ function mentionsVintage(text: string): boolean {
   return /\b(19|20)\d{2}\b/.test(text) || /\bnon[-\s]?vintage\b/i.test(text) || /\bnv\b/i.test(text);
 }
 
-export function CellarCommandModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+// Default intro copy + examples (the Cellar-tab, full-scope voice command).
+// A caller (e.g. a home-storage location screen) can override these to present
+// a scoped explainer — the underlying move/archive/add engine is unchanged.
+const DEFAULT_INTRO_TEXT = 'Vinster has been trained in four voice commands: Move wines between storage locations, Archive bottles or Add them to your cellar list for you to place into a specific location later, or ask Vinster to recommend wines to drink based on your mood and occasion.';
+const DEFAULT_SUGGESTIONS = [
+  'Move my Lafite 1982 from my wine fridge to my small wine rack',
+  'Archive 3 bottles of Harlan 1990',
+  'Add a bottle of Sassicaia 2007 to my cellar',
+  "It's cold and raining, I want a smooth red wine for the fireside.",
+];
+
+export function CellarCommandModal({ visible, onClose, introText, suggestions }: { visible: boolean; onClose: () => void; introText?: string; suggestions?: string[] }) {
   const { session } = useAuth();
   const { height: winH } = useWindowDimensions();
   const userId = session?.user.id;
@@ -371,7 +382,7 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
           {phase === 'speak' && (
             <ScrollView style={{ maxHeight: winH * 0.82 }} contentContainerStyle={{ paddingBottom: 0 }} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               <Text style={styles.voiceHeader}>Voice Command</Text>
-              <Text style={styles.introText}>Vinster has been trained in four voice commands: Move wines between storage locations, Archive bottles or Add them to your cellar list for you to place into a specific location later, or ask Vinster to recommend wines to drink based on your mood and occasion.</Text>
+              <Text style={styles.introText}>{introText ?? DEFAULT_INTRO_TEXT}</Text>
 
               <View style={styles.modalDivider} />
 
@@ -392,10 +403,9 @@ export function CellarCommandModal({ visible, onClose }: { visible: boolean; onC
               <Text style={styles.editHint}>Tip: you can edit the text above before confirming.</Text>
 
               <View style={styles.suggestions}>
-                <Text style={styles.suggestion}>“Move my Lafite 1982 from my wine fridge to my small wine rack”</Text>
-                <Text style={styles.suggestion}>“Archive 3 bottles of Harlan 1990”</Text>
-                <Text style={styles.suggestion}>“Add a bottle of Sassicaia 2007 to my cellar”</Text>
-                <Text style={styles.suggestion}>“It's cold and raining, I want a smooth red wine for the fireside.”</Text>
+                {(suggestions ?? DEFAULT_SUGGESTIONS).map((s, i) => (
+                  <Text key={i} style={styles.suggestion}>{`“${s}”`}</Text>
+                ))}
               </View>
 
               <TouchableOpacity

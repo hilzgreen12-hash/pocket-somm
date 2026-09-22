@@ -16,6 +16,7 @@ import { useRacks } from '../../../src/hooks/useRacks';
 import { useStorageLocationNav } from '../../../src/hooks/useStorageLocationNav';
 import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
 import { PackagingPrompt } from '../../../src/components/PackagingPrompt';
+import { CellarCommandModal } from '../../../src/components/CellarCommandModal';
 import { prepareImageBase64, scanLabel } from '../../../src/api/label';
 import { uploadLocationPhoto } from '../../../src/api/labelPhotos';
 import { useLabelStore } from '../../../src/stores/labelStore';
@@ -81,6 +82,8 @@ export default function StorageLocationScreen() {
   const [listOpen, setListOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingImage, setEditingImage] = useState(false);
+  // Voice Command entry — mirrors the Cellar tab, scoped copy for home storage.
+  const [voiceOpen, setVoiceOpen] = useState(false);
   // Bespoke "+ Add" filters, scoped to this location (migration 075).
   const { customFilters, create: createFilter, setWines: setFilterWines, rename: renameFilter, remove: removeFilter } = useLocationFilters(id);
   const [activeCustomFilterId, setActiveCustomFilterId] = useState<string | null>(null);
@@ -910,6 +913,12 @@ export default function StorageLocationScreen() {
         <View style={styles.headerSide} />
       </View>
 
+      {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
+      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
+        <Text style={styles.voiceLink}>Voice Command</Text>
+      </TouchableOpacity>
+      <View style={styles.headerDivider} />
+
       <KeyboardAwareScrollView contentContainerStyle={{ paddingBottom: selectMode ? 170 : 90 }} keyboardShouldPersistTaps="handled" bottomOffset={24}>
         {/* Layout: header (+ its separator), the (landscape) photo, then the
             counts stats bar with a "+ Add Wine" link inside it, then filters. */}
@@ -1260,6 +1269,17 @@ export default function StorageLocationScreen() {
       {/* Select from Cellar List — pick an existing wine to place/move here. */}
       <CellarWinePicker visible={cellarPickerOpen} allowPlaced onClose={() => setCellarPickerOpen(false)} onSelect={onPickCellarWine} />
 
+      {/* Voice Command — same engine as the Cellar tab, scoped copy for home storage. */}
+      <CellarCommandModal
+        visible={voiceOpen}
+        onClose={() => setVoiceOpen(false)}
+        introText="Through your home storage locations you can use voice command to: Move wines from this location to another, and Archive bottles."
+        suggestions={[
+          'Move two bottles of Rousseau 1999 to My Small Wine Bin',
+          'Archive one bottle of Lafite 1961',
+        ]}
+      />
+
       {/* "How is this wine packaged?" — on move-in and on Update Packaging. */}
       <PackagingPrompt
         visible={packagingWineId !== null}
@@ -1311,7 +1331,12 @@ export default function StorageLocationScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, gap: spacing.md },
-  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  // Voice Command row + its own divider (the separator moved off the header so
+  // the row can sit between the title and the line, matching the Cellar tab).
+  voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
+  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   // Equal-width side cells so the flex-1 titleNav is truly screen-centred.
   headerSide: { width: 44, justifyContent: 'center' },
