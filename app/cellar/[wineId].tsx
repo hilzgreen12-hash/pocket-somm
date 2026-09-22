@@ -36,7 +36,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
 import { evictCachedLabel } from '../../src/api/labelImageCache';
 import { LabelThumb } from '../../src/components/LabelThumb';
-import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
+import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations, assignWineToStorageLocation, assignWineToCase, deleteEmptyCasesForLocation, fetchStorageLocationCases, fetchStorageCasesByIds } from '../../src/api/storageLocations';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
@@ -1469,12 +1469,8 @@ export default function CellarWineDetail() {
               align="left"
               size="lg"
             />
-            {/* Bottle format shown only when non-standard (750ml is the default
-                and mentioning it everywhere is noise) — e.g. a magnum reads
-                "150cl" so the format is recorded on the card, not just the list. */}
-            {wine.bottle_size_ml && wine.bottle_size_ml !== 750 ? (
-              <Text style={styles.bottleFormat}>{bottleSizeLabel(wine.bottle_size_ml)} bottle</Text>
-            ) : null}
+            {/* Bottle format is NOT shown here — it lives in the "Bottles in My
+                Cellar" count below (e.g. "1x75cl"). */}
           </TouchableOpacity>
         </View>
         {uploadingPhoto ? <Text style={styles.photoSaving}>Saving photo…</Text> : null}
@@ -1724,7 +1720,7 @@ export default function CellarWineDetail() {
       <View style={[styles.statsGrid, { paddingTop: 0 }]}>
         <View style={styles.statCell}>
           <Text style={styles.statLabel}>Bottles in My Cellar</Text>
-          <Text style={styles.statValue}>{bottleLabel(bottlesInCellar)}</Text>
+          <Text style={styles.statValue}>{bottlesInCellar}x{bottleSizeCl(wine.bottle_size_ml ?? 750)}cl</Text>
           {/* Per-location breakdown — always shown so a wine split across a
               fridge and a rack reads "1 in My Wine Fridge · 2 in Large Wine
               Rack", not just a bare total. (Tapping the rack you came from just
@@ -1768,7 +1764,7 @@ export default function CellarWineDetail() {
             <Text style={[styles.statValue, styles.statValueMuted]}>{bottleLabel(0)}</Text>
           ) : (
             <Text style={styles.statValue}>
-              {bottleLabel(bottlesInArchive)}
+              {bottlesInArchive}x{bottleSizeCl(archiveBottleMl)}cl
               {lastArchivedAt ? `, ${new Date(lastArchivedAt).toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: '2-digit' })}` : ''}
             </Text>
           )}
