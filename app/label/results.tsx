@@ -1088,7 +1088,10 @@ export default function LabelResultsScreen() {
       drinking_window_to: intel.drinkingWindowTo,
       drinking_window_status: intel.drinkingWindowStatus,
       tasting_notes: intel.tastingNotes,
-      grape_variety: intel.grapeVariety,
+      // The grape the user CONFIRMED wins — the intel grape only fills in when
+      // none was pinned. Previously the intel grape overrode a confirmed one
+      // (e.g. a confirmed Mourvèdre saved as the model's Syrah).
+      grape_variety: (wine.grape ?? '').trim() || intel.grapeVariety || null,
       label_image_path: null,
       user_notes: null,
       is_wishlist: false,
@@ -1835,7 +1838,7 @@ export default function LabelResultsScreen() {
               wineName={wine.wineName}
               vintage={wine.vintage}
               region={wine.region}
-              grape={intel.grapeVariety ?? wine.grape}
+              grape={(wine.grape ?? '').trim() || intel.grapeVariety}
               align="left"
               size="md"
             />
