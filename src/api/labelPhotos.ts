@@ -113,7 +113,10 @@ export async function uploadRestaurantPhotoFromUrl(userId: string, imageUrl: str
 export async function uploadLocationPhoto(userId: string, localUri: string, locationId: string): Promise<string> {
   const base64 = await processToBase64(localUri);
   const bytes = base64ToBytes(base64);
-  const path = `${userId}/locations/${locationId}.jpg`;
+  // Unique filename per upload so photo_path (and the derived cache key + image
+  // URI) CHANGES when a location's photo is replaced — a stable path left the old
+  // cached image showing because useLabelImageUrl + <Image> both cache by URI.
+  const path = `${userId}/locations/${locationId}-${Date.now()}.jpg`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, bytes.buffer as ArrayBuffer, {
     contentType: 'image/jpeg',
     upsert: true,
