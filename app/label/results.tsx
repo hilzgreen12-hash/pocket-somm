@@ -20,8 +20,8 @@ import { useChosenWines } from '../../src/hooks/useChosenWines';
 import { patchChosenWine } from '../../src/api/chosenWines';
 import { findExistingReview, appendDatedEntry, todayLabel } from '../../src/utils/reviewDedup';
 import { fetchCellarLocations, addWinesToFilter } from '../../src/api/customFilters';
-import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases, fetchStorageLocation } from '../../src/api/storageLocations';
-import { addLocationPlacement } from '../../src/api/placements';
+import { createStorageCase, assignWineToCase, deleteStorageCase, fetchStorageLocationCases, fetchStorageLocation, fetchStorageLocations } from '../../src/api/storageLocations';
+import { addLocationPlacement, fetchPlacementsForWine } from '../../src/api/placements';
 import { MicButton } from '../../src/components/MicButton';
 import type { ChosenWine, WineIntelligence } from '../../src/types/wine';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -41,7 +41,7 @@ import { ensureMediaPermission } from '../../src/utils/mediaPermissions';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
 import type { WineDetailsComplete } from '../../src/types/wine';
 import { formatCurrency, currencySymbol } from '../../src/constants/currency';
-import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel } from '../../src/components/BottleSizePicker';
+import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -843,6 +843,40 @@ export default function LabelResultsScreen() {
     return null;
   }, [wineDetailsConfirmed, wines]);
 
+  // The matching wine's real bottle distribution, so the "already in your cellar"
+  // notice can name the exact location(s) its existing bottles sit in.
+  const { data: matchPlacements = [] } = useQuery({
+    queryKey: ['placements', matchingExisting?.id],
+    queryFn: () => fetchPlacementsForWine(matchingExisting!.id),
+    enabled: !!matchingExisting?.id,
+  });
+  // All alt cellars (Other Home Storage) — to resolve a 'location' placement's
+  // storage_location_id to its name (cellarLocations are bespoke filters, not these).
+  const { data: allStorageLocations = [] } = useQuery({
+    queryKey: ['storage-locations', session?.user.id],
+    queryFn: () => fetchStorageLocations(session!.user.id),
+    enabled: !!session?.user.id,
+  });
+
+  // "in {Location}", "across {A} and {B}", or "in your Full Cellar List" — where
+  // the matching wine's bottles already live (racks, alt cellars, bins).
+  function existingWhereText(): string {
+    const names: string[] = [];
+    for (const p of matchPlacements) {
+      if (p.kind === 'rack') { const n = racks.find((r) => r.id === p.rack_id)?.name; if (n) names.push(n); }
+      else if (p.kind === 'location') { const n = allStorageLocations.find((l) => l.id === p.storage_location_id)?.name; if (n) names.push(n); }
+      else if (p.kind === 'bin') names.push('a wine bin');
+    }
+    const uniq = Array.from(new Set(names));
+    if (uniq.length === 0) {
+      // No placements resolved — fall back to rack slots, else the Cellar List.
+      const rackText = matchingExisting ? existingLocationText(matchingExisting.id) : '';
+      return rackText.startsWith('in ') || rackText.startsWith('across ') ? rackText : 'in your Full Cellar List';
+    }
+    if (uniq.length === 1) return `in ${uniq[0]}`;
+    return `across ${uniq.slice(0, -1).join(', ')} and ${uniq[uniq.length - 1]}`;
+  }
+
   // Fuzzy-duplicate check — a partial hand-typed name vs a fuller scanned one
   // (e.g. "Pavillon Rouge 2009" vs "Chateau Margaux Pavillon Rouge 2009"). Same
   // vintage required; token-subset match on combined producer + wine_name, with
@@ -1558,16 +1592,17 @@ export default function LabelResultsScreen() {
     // files the new bottles as a location PLACEMENT. A wine can live in a rack
     // AND an alt cellar at once, so nothing is moved or dropped.
     if (matchingExisting) {
-      // Exact match (producer + wine name + vintage). We never create a
-      // second Full Cellar List line for the same bottle — that would
-      // fragment the count. Instead we tell the user where their existing
-      // bottles are and fold this one into that listing's total.
+      // Exact match (producer + wine name + vintage). We never create a second
+      // Full Cellar List line for the same wine — that would fragment the count.
+      // Instead we NOTIFY the user (no separate-listing question): the new
+      // bottles fold into this wine's existing total in the Full Cellar List,
+      // while the location itself shows only the bottles kept there.
       const existingQty = matchingExisting.quantity;
-      const wineLabel = `${matchingExisting.wine_name}${matchingExisting.vintage ? ` ${matchingExisting.vintage}` : ''}`;
-      const where = existingLocationText(matchingExisting.id);
+      const cl = bottleSizeCl(matchingExisting.bottle_size_ml ?? 750);
+      const where = existingWhereText();
       showAlert({
         title: 'Already in your cellar',
-        body: `You have ${existingQty} bottle${existingQty === 1 ? '' : 's'} of ${wineLabel} ${where}. Vinster won't create a duplicate listing — this bottle is added to that total.`,
+        body: `You have ${existingQty}x${cl}cl ${where}. Vinster will add these bottles to your existing bottle count in your Full Cellar List — the location will show only the bottles kept there.`,
         buttons: [
           { text: 'Add to my bottles', onPress: () => performMerge() },
           { text: 'Cancel', style: 'cancel' },
