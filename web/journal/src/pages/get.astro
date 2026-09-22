@@ -1,0 +1,116 @@
+---
+// Permanent, build-agnostic install link: https://journal.vinsterapp.com/get
+// The QR for this URL never changes. On scan it detects the phone and jumps to
+// the correct store listing — which always serves whatever build is currently
+// published, so it survives every future release on both iOS and Android.
+// Desktop / unknown user-agents stay on the page and choose a store by hand.
+import { SITE } from '../lib/site';
+const canonical = `${SITE.url}/get`;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Get Vinster</title>
+    <meta name="robots" content="noindex" />
+    <link rel="canonical" href={canonical} />
+    <meta name="description" content="Install Vinster — Real Wine Experience, AI Delivered. Free on iOS and Android." />
+    <script
+      is:inline
+      define:vars={{ iosUrl: SITE.appStoreUrl, androidUrl: SITE.playStoreUrl }}
+    >
+      (function () {
+        try {
+          var ua = navigator.userAgent || navigator.vendor || '';
+          // iPadOS 13+ reports as "Macintosh" but has touch — treat it as iOS.
+          var isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in document);
+          var isAndroid = /android/i.test(ua);
+          if (isIOS) { window.location.replace(iosUrl); }
+          else if (isAndroid) { window.location.replace(androidUrl); }
+          // else: desktop / bot — fall through to the manual buttons below.
+        } catch (e) {
+          /* leave the manual buttons for the user */
+        }
+      })();
+    </script>
+    <style>
+      :root {
+        --bg: #7f4f4c;
+        --surface: #572f2b;
+        --gold: #e0b84a;
+        --cream: #f4ebe0;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; }
+      body {
+        background: var(--bg);
+        color: var(--cream);
+        font-family: Georgia, 'Times New Roman', serif;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem 1.5rem;
+        min-height: 100%;
+      }
+      .wrap { text-align: center; max-width: 30rem; width: 100%; }
+      .brand {
+        font-size: 2.6rem;
+        font-weight: 700;
+        letter-spacing: 0.5rem;
+        color: var(--cream);
+        margin: 0 0 0.4rem;
+      }
+      .tagline {
+        font-style: italic;
+        color: var(--gold);
+        font-size: 1.15rem;
+        margin: 0 0 2rem;
+        letter-spacing: 0.03em;
+      }
+      .sub {
+        color: rgba(244, 235, 224, 0.82);
+        font-size: 1rem;
+        line-height: 1.5;
+        margin: 0 0 1.6rem;
+      }
+      .buttons { display: flex; flex-direction: column; gap: 0.75rem; }
+      .store-btn {
+        display: block;
+        text-decoration: none;
+        font-weight: 600;
+        font-size: 1.05rem;
+        color: var(--surface);
+        background: var(--gold);
+        border-radius: 999px;
+        padding: 0.8rem 1.4rem;
+        transition: filter 0.12s ease, transform 0.12s ease;
+      }
+      .store-btn:hover { filter: brightness(1.06); transform: translateY(-1px); }
+      .spinner {
+        width: 1.6rem;
+        height: 1.6rem;
+        margin: 0 auto 1.4rem;
+        border: 3px solid rgba(224, 184, 74, 0.35);
+        border-top-color: var(--gold);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <div class="brand">VINSTER</div>
+      <p class="tagline">Real Wine Experience, AI Delivered</p>
+      <div class="spinner" aria-hidden="true"></div>
+      <p class="sub">Taking you to your app store… if nothing happens, choose your platform:</p>
+      <div class="buttons">
+        <a class="store-btn" href={SITE.appStoreUrl}>Download on the App&nbsp;Store</a>
+        <a class="store-btn" href={SITE.playStoreUrl}>Get it on Google&nbsp;Play</a>
+      </div>
+    </main>
+  </body>
+</html>
