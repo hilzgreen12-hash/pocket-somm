@@ -495,7 +495,9 @@ export default function ScanLandingScreen() {
                   <>
                     {searchResults.map((r, i) => (
                       <TouchableOpacity key={`${r.producer}-${r.wineName ?? ''}-${i}`} style={styles.searchOption} onPress={() => selectWine(r)} activeOpacity={0.7}>
-                        <Text style={styles.searchOptionName}>{formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}</Text>
+                        {/* Show the typed vintage on the result so the list offers
+                            the full wine + vintage the user searched. */}
+                        <Text style={styles.searchOptionName}>{`${formatWineTitle({ producer: r.producer, wineName: r.wineName, region: r.region })}${r.vintage ? ` ${r.vintage}` : ''}`}</Text>
                         {r.region || r.style ? <Text style={styles.searchOptionMeta} numberOfLines={1}>{[r.region, r.style].filter(Boolean).join(' · ')}</Text> : null}
                       </TouchableOpacity>
                     ))}
