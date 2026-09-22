@@ -82,7 +82,10 @@ interface Props {
   // add one when there's none yet (onAddPhoto).
   restaurantPhotoPath?: string | null;
   onViewPhoto?: () => void;
-  onAddPhoto?: () => void;
+  // Passes the CURRENTLY-typed restaurant name + city so "Find Online" searches
+  // for that specific restaurant, not the stale saved value (which is empty on a
+  // fresh review the user just named).
+  onAddPhoto?: (name: string, city: string) => void;
 }
 
 export function RestaurantReviewModal({
@@ -686,19 +689,19 @@ export function RestaurantReviewModal({
                 <>
                   <LabelThumb path={restaurantPhotoPath} fallbackText={restaurantName} style={styles.photoBannerImg} radius={0} frame={0} resizeMode="contain" />
                   <View style={styles.photoBannerScrim} pointerEvents="none" />
-                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.()} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
+                  <TouchableOpacity style={styles.photoChangeBtn} onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim())} activeOpacity={0.7} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Change photo">
                     <Ionicons name="camera" size={18} color={colors.gold} />
                   </TouchableOpacity>
                 </>
               ) : (
-                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.()} activeOpacity={0.85} />
+                <TouchableOpacity style={styles.photoBannerAdd} onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim())} activeOpacity={0.85} />
               )}
               {/* Overlaid identity — always editable, anchored to the bottom.
                   A "+ Add Photo" gold link sits above the name when there's no
                   photo yet. Location · date share one line beneath the name. */}
               <View style={styles.photoBannerText} pointerEvents="box-none">
                 {!restaurantPhotoPath ? (
-                  <TouchableOpacity onPress={() => onAddPhoto?.()} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
+                  <TouchableOpacity onPress={() => onAddPhoto?.(restaurantName.trim(), cityValue.trim())} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }} activeOpacity={0.7}>
                     <Text style={styles.addPhotoLink}>+ Add Photo</Text>
                   </TouchableOpacity>
                 ) : null}
