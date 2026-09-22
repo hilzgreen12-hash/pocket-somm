@@ -71,7 +71,7 @@ export default function ScanLandingScreen() {
   const [searchModalOpen, setSearchModalOpen] = useState(false);
 
   // The Scan tab always shows its normal compact header. On the first landing
-  // after opening the app, a welcome overlay (logo · "Real wine experience, brought to you by AI" ·
+  // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
   // Welcome) appears over it, dismissed with "Continue". Shown once per app
   // session (the ref resets on a fresh launch).
   const [welcomeOpen, setWelcomeOpen] = useState(false);
@@ -524,7 +524,7 @@ export default function ScanLandingScreen() {
         <View style={styles.welcomeOverlay}>
           <View style={styles.welcomeSheet}>
             <Image source={require('../../assets/vinster-logo.png')} style={styles.logo} resizeMode="contain" />
-            <Text style={styles.tagline}>Real wine experience, brought to you by AI</Text>
+            <Text style={styles.tagline}>Real Wine Experience, AI Delivered</Text>
             <View style={styles.ruleRow}>
               <View style={styles.rule} />
               <Text style={styles.ruleMark}>◇</Text>

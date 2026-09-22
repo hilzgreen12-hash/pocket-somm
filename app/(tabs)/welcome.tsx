@@ -12,7 +12,7 @@ export default function WelcomeTab() {
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 20, paddingTop }}>
 
       <Text style={styles.title}>Welcome to Vinster</Text>
-      <Text style={styles.tagline}>Real wine experience, brought to you by AI</Text>
+      <Text style={styles.tagline}>Real Wine Experience, AI Delivered</Text>
 
       <View style={styles.divider} />
 

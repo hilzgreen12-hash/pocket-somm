@@ -42,7 +42,7 @@ export const WineListShareCard = forwardRef<View, Props>(({ wines, date, restaur
       <View style={styles.inner}>
         <View style={styles.topRow}>
           <Text style={styles.brand}>VINSTER</Text>
-          <Text style={styles.brandTagline}>Real wine experience, brought to you by AI</Text>
+          <Text style={styles.brandTagline}>Real Wine Experience, AI Delivered</Text>
         </View>
 
         <View style={styles.divider} />

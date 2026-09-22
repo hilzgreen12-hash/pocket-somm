@@ -22,7 +22,7 @@ export default function WelcomeScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <View style={styles.hero}>
         <Image source={require('../assets/vinster-logo.png')} style={styles.logo} resizeMode="contain" />
-        <Text style={styles.tagline}>Real wine experience, brought to you by AI</Text>
+        <Text style={styles.tagline}>Real Wine Experience, AI Delivered</Text>
       </View>
 
       <View style={styles.actions}>

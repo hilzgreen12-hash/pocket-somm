@@ -48,7 +48,7 @@ export function buildCellarListHtml(opts: {
 </style></head><body>
   <div class="wrap">
     <div class="brand">VINSTER</div>
-    <div class="tagline">Real wine experience, brought to you by AI</div>
+    <div class="tagline">Real Wine Experience, AI Delivered</div>
     <div class="hr"></div>
     <div class="subhead">${esc(opts.title)}</div>
     <div class="count">${opts.wineCount} ${opts.wineCount === 1 ? 'wine' : 'wines'} · ${opts.bottleCount} ${opts.bottleCount === 1 ? 'bottle' : 'bottles'}</div>
