@@ -1926,12 +1926,12 @@ export default function CellarWineDetail() {
 
         {/* The Inside Line — Vinster's sommelier-best-friend verdict, shown just
             as on the scan Wine Intel card. Filled once the wine's intel runs. */}
-        {(wine.insider_note?.trim() || !isArchived) ? (
+        {(hasRealInsiderNote(wine.insider_note) || !isArchived) ? (
           <View style={styles.insiderSection}>
             <Text style={styles.insiderTitle}>The Inside Line</Text>
-            {/* Always show the line — fall back for wines whose cached intel
-                pre-dates the edge function's always-fill guarantee. */}
-            <Text style={styles.insiderBody}>{wine.insider_note?.trim() || "Congratulations, you've discovered a wine that even deep AI can't. Humans win, Cheers!"}</Text>
+            {/* While intel is still filling the note, show "Generating…" — never
+                the jokey no-note placeholder. */}
+            <Text style={styles.insiderBody}>{hasRealInsiderNote(wine.insider_note) ? wine.insider_note?.trim() : 'Generating…'}</Text>
             {!isArchived ? (
               <TouchableOpacity onPress={() => router.push(`/cellar/wine-knowledge/${wine.id}`)} activeOpacity={0.7}>
                 <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>

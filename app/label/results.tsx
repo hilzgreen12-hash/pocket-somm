@@ -44,6 +44,7 @@ import { formatCurrency, currencySymbol } from '../../src/constants/currency';
 import { BottleSizePicker, detectPlacementMismatch, placementWarningBody, COMMON_BOTTLE_SIZES, bottleSizeLabel, bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
+import { hasRealInsiderNote } from '../../src/constants/insiderNote';
 
 function DrinkingWindowBadge({ status, from, to }: { status: string; from: number | null; to: number | null }) {
   const labels: Record<string, { text: string; color: string }> = {
@@ -2139,12 +2140,12 @@ export default function LabelResultsScreen() {
           {/* The Inside Line — the "sommelier best friend" verdict: how this
               vintage actually fared and how this producer stacked up against its
               peers that year. Real in-the-know context, not a dictionary entry. */}
-          {(intel.insiderNote?.trim() || isIntelOnlyFlow) ? (
+          {(hasRealInsiderNote(intel.insiderNote) || isIntelOnlyFlow) ? (
             <View style={styles.section}>
               <Text style={styles.insiderTitle}>The Inside Line</Text>
-              {/* Guarantee the line shows even for wines whose cached intel
-                  pre-dates the edge function's always-fill fallback. */}
-              <Text style={styles.insiderBody}>{intel.insiderNote?.trim() || "Congratulations, you've discovered a wine that even deep AI can't. Humans win, Cheers!"}</Text>
+              {/* While the note is still being generated the body reads
+                  "Generating…" — never the jokey no-note placeholder. */}
+              <Text style={styles.insiderBody}>{hasRealInsiderNote(intel.insiderNote) ? intel.insiderNote?.trim() : 'Generating…'}</Text>
               {isIntelOnlyFlow ? (
                 <TouchableOpacity onPress={handleDiveDeeper} activeOpacity={0.7}>
                   <Text style={styles.diveDeeperLink}>Dive deeper into this wine →</Text>
