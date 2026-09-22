@@ -17,6 +17,7 @@ import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
+import { hasRealInsiderNote } from '../../src/constants/insiderNote';
 import { COMMUNITY_ENABLED } from '../../src/constants/features';
 import { useAuth } from '../../src/hooks/useAuth';
 import { buildEntry, entriesOf, latestEntry, byRecency, flatMirror } from '../../src/utils/cellarReview';
@@ -269,7 +270,11 @@ export default function CellarWineDetail() {
   const [autoGenFailed, setAutoGenFailed] = useState(false);
   useEffect(() => {
     if (!wine || isWishlist || isArchived || refreshingValue) return;
-    const missingKeyIntel = wine.critic_score == null || wine.estimated_value == null;
+    // Re-generate when the score/value is missing, OR when the Inside Line is
+    // blank or still the jokey placeholder — so a wine whose note was written
+    // before the prompt was strengthened re-runs and gets a real line (a famous
+    // producer like Produttori del Barbaresco should never keep the joke).
+    const missingKeyIntel = wine.critic_score == null || wine.estimated_value == null || !hasRealInsiderNote(wine.insider_note);
     const fullyBare = wine.critic_score == null && wine.estimated_value == null && !wine.grape_variety;
     if (missingKeyIntel && autoGenRef.current !== wine.id) {
       autoGenRef.current = wine.id;
@@ -286,7 +291,7 @@ export default function CellarWineDetail() {
         .finally(() => setAutoGenerating(false));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, isWishlist, isArchived]);
+  }, [wine?.id, wine?.critic_score, wine?.estimated_value, wine?.grape_variety, wine?.insider_note, isWishlist, isArchived]);
 
   // After an auto-generate attempt, if Vinster still couldn't produce any intel
   // (no critic score and no value), it's almost always because the wine name is
