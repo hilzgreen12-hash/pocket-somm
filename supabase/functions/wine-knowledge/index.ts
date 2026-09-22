@@ -11,6 +11,9 @@ Deno.serve(async (req) => {
 
     const vintageStr = !vintage || vintage === 'NV' ? 'Non-Vintage' : vintage;
     const grapeStr = grape ? `\n- Grape(s): ${grape}` : '';
+    // Adjacent vintages, for the blend comparison in grapeProfile.
+    const vYear = Number(vintage);
+    const adjacentStr = Number.isFinite(vYear) ? `${vYear - 1} and ${vYear + 1}` : 'the vintages immediately before and after';
 
     const prompt = `You are a Master Sommelier and wine educator with deep, accurate knowledge of producers, regions, vintages, and grape varieties.
 
@@ -39,7 +42,7 @@ Return ONLY a valid JSON object with exactly this structure. Alongside each pros
     "comparableVintages": <two to four comparable vintage years for this region, comma-separated, e.g. "2010, 2016, 2019"; null if unsure>,
     "describedAs": <a two or three word summary of this vintage's character, e.g. "Structured & age-worthy", "Ripe and generous"; null if unsure>
   },
-  "grapeProfile": <2-4 sentences on the grape variety or blend: typical flavours, aromatics, structure, and how it expresses in this region.>,
+  "grapeProfile": <For a SINGLE grape variety: 2-4 sentences on typical flavours, aromatics, structure, and how it expresses in this region. For a BLEND (more than one grape in the Grape(s) field): FIRST state this vintage's approximate percentage breakdown of each grape (e.g. "roughly 60% Cabernet Sauvignon, 30% Merlot, 10% Cabernet Franc"), THEN compare that composition to the vintages immediately before and after (${adjacentStr}) — noting how each grape's proportion shifted and briefly why (growing-season weather, ripeness, house decision). Prefer approximate, clearly-hedged figures ("roughly", "around") over invented precision, and if you genuinely don't know the split, say the typical house proportions instead. For a Non-Vintage blend, give the typical house blend proportions. Keep it to 3-5 sentences.>,
   "grapeStats": {
     "characteristics": <the grape's typical characteristics in a few words, e.g. "Bold, tannic, dark fruit"; null if unknown>,
     "grownIn": <the top three countries this grape is grown in, comma-separated, most significant first, e.g. "France, USA, Chile"; null if unknown>

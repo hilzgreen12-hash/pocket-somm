@@ -45,9 +45,14 @@ export default function WineKnowledgeScreen() {
     if (!hasWine) return;
     // Cached profiles on the cellar row → instant. But a cache from before the
     // stats bars existed (no producerStats) is regenerated once so it upgrades
-    // to the richer shape.
-    if (cellarWine?.wine_knowledge && cellarWine.wine_knowledge.producerStats !== undefined) {
-      setKnowledge(cellarWine.wine_knowledge);
+    // to the richer shape. A blend's grape profile now carries a per-vintage
+    // percentage breakdown, so a pre-change blend cache (no "%" in grapeProfile)
+    // is likewise regenerated once.
+    const cachedK = cellarWine?.wine_knowledge;
+    const isBlend = /[,&]|\band\b/i.test(info.grape ?? '');
+    const blendStale = !!cachedK && isBlend && !(cachedK.grapeProfile ?? '').includes('%');
+    if (cachedK && cachedK.producerStats !== undefined && !blendStale) {
+      setKnowledge(cachedK);
       return;
     }
     let cancelled = false;
