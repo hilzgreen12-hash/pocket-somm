@@ -485,7 +485,7 @@ export default function ChosenWinesScreen() {
   // Deep-link params from Your Label Library's click-into-a-label popup (see
   // below). Read up here so the on-open review nudge can bow out when we've
   // arrived to open/create a specific review rather than for a plain visit.
-  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string; fromIntel?: string }>();
+  const params = useLocalSearchParams<{ openReview?: string; openCellarReview?: string; openCellarReviewInput?: string; seedAdd?: string; addManual?: string; sp?: string; sw?: string; sv?: string; sr?: string; sg?: string; slp?: string; slu?: string; sd?: string; backTo?: string; savedToast?: string; fromIntel?: string }>();
   const cameViaLabelLink = !!params.openReview || params.seedAdd === '1';
   // Broader "arrived via a deep link to a specific wine's review" flag — also
   // covers the cellar-review links (used by the Lineup wine list). Any of these
@@ -609,7 +609,7 @@ export default function ChosenWinesScreen() {
       const key = `add:${params.sp}|${params.sw}|${params.sv}`;
       if (handledParamRef.current === key) return;
       handledParamRef.current = key;
-      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null, date: params.sd || null });
+      setAddInitial({ producer: params.sp || null, wineName: params.sw || null, vintage: params.sv || null, region: params.sr || null, grape: params.sg || null, date: params.sd || null });
       // slu=1 → a fresh scan (Save to Reviews → Review now) whose label is still
       // a local uri in the label store; carry it so the +Add modal uploads it on
       // save. slp carries an already-uploaded storage path instead.

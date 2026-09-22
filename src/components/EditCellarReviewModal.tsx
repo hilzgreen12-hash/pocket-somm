@@ -11,7 +11,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useCellar } from '../hooks/useCellar';
 import { useAuth } from '../hooks/useAuth';
 import { LabelThumb } from './LabelThumb';
-import { ReviewCardHeader } from './ReviewCardHeader';
+import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
 import { WineReviewShareCard } from './WineReviewShareCard';
 import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
@@ -320,14 +320,13 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
               vintage={wine.vintage}
               region={wine.region}
               grape={wine.grape_variety}
-              dateIso={reviewDate}
-              location={[locName, locCity].filter(Boolean).join(', ')}
               thumbnail={wine.label_image_path
                 ? <LabelThumb path={wine.label_image_path} fallbackText={wine.wine_name} style={styles.headerThumb} radius={5} frame={0} />
                 : null}
             />
 
             <View style={styles.divider} />
+            <ReviewedStamp dateIso={reviewDate} location={[locName, locCity].filter(Boolean).join(', ')} />
 
             <WineReviewFields
               score={parsedScore}

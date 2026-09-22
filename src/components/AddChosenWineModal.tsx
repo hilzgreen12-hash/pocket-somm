@@ -12,7 +12,7 @@ import { LabelThumb } from './LabelThumb';
 import { DateInput } from './DateInput';
 import { LabelPhotoViewer } from './LabelPhotoViewer';
 import { WineIdentityHeader } from './WineIdentityHeader';
-import { ReviewCardHeader } from './ReviewCardHeader';
+import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
 import { WineReviewFields } from './WineReviewFields';
 import { WineSearchInput } from './WineSearchInput';
 import { useChosenWines } from '../hooks/useChosenWines';
@@ -442,8 +442,6 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                   vintage={vintage}
                   region={region}
                   grape={grape}
-                  dateIso={reviewDate}
-                  location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ')}
                   thumbnail={(() => {
                     // A retaken photo, else the local scanned-label uri carried in
                     // from Scan → Review (labelImageUri), else a stored label path,
@@ -469,6 +467,7 @@ export function AddChosenWineModal({ visible, onClose, onSaved, initial, labelIm
                 />
 
                 <View style={styles.divider} />
+                <ReviewedStamp dateIso={reviewDate} location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ')} />
               </>
             ) : (
               <>

@@ -5,7 +5,7 @@ import { showAlert } from '../../src/components/AppAlert';
 import { VinstersNoteHeading, VINSTERS_NOTE_EXPLAINER } from '../../src/components/VinstersNoteHeading';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
-import { ReviewCardHeader } from '../../src/components/ReviewCardHeader';
+import { ReviewCardHeader, ReviewedStamp } from '../../src/components/ReviewCardHeader';
 import { RangeWineNoteSheet } from '../../src/components/RangeWineNoteSheet';
 import { NoIntelPrompt } from '../../src/components/NoIntelPrompt';
 import { router, useLocalSearchParams } from 'expo-router';
@@ -1627,6 +1627,8 @@ export default function LabelResultsScreen() {
             if (wine.wineName) qs.set('sw', wine.wineName);
             if (wine.vintage) qs.set('sv', wine.vintage);
             if (wine.region) qs.set('sr', wine.region);
+            // Carry the grape so it shows on the review header (sg = seed grape).
+            { const g = intel.grapeVariety ?? wine.grape; if (g) qs.set('sg', g); }
             // Carry the scanned label into the +Add review as a local uri to
             // upload on save (slu = seed label uri, read from the label store).
             if (imageUri) qs.set('slu', '1');
@@ -2188,11 +2190,10 @@ export default function LabelResultsScreen() {
                 vintage={wine.vintage}
                 region={wine.region}
                 grape={intel.grapeVariety ?? wine.grape}
-                dateIso={new Date().toISOString()}
-                location={[reviewRestaurant.trim(), reviewCity.trim()].filter(Boolean).join(', ')}
                 thumbnail={imageUri ? <Image source={{ uri: imageUri }} style={styles.reviewHeaderThumb} resizeMode="cover" /> : null}
               />
               <View style={styles.titleRule} />
+              <ReviewedStamp dateIso={new Date().toISOString()} location={[reviewRestaurant.trim(), reviewCity.trim()].filter(Boolean).join(', ')} />
 
               <Text style={styles.modalLabel}>Tasting note</Text>
               <TextInput
