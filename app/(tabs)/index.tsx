@@ -351,11 +351,25 @@ export default function ScanLandingScreen() {
             <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Label</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel{'\n'}Review &amp; Cellar</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
             <Feather name="upload" size={11} color={colors.gold} />
             <Text style={styles.tileBannerText}>upload instead</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Search a Wine → predictive typeahead (no upload equivalent) */}
+        <View style={styles.tile}>
+          <TouchableOpacity style={styles.tileMain} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
+            <Ionicons name="search-outline" size={30} color={colors.gold} style={styles.tileIcon} />
+            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
+            <View style={styles.tileDivider} />
+            <Text style={styles.tileDesc} numberOfLines={2}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.tileBanner} onPress={handleManualInput} activeOpacity={0.7}>
+            <Feather name="edit-3" size={11} color={colors.gold} />
+            <Text style={styles.tileBannerText}>manual input</Text>
           </TouchableOpacity>
         </View>
 
@@ -389,7 +403,7 @@ export default function ScanLandingScreen() {
             <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Lineup</Text>
             <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Archive a Night{'\n'}Add to your collection</Text>
+            <Text style={styles.tileDesc} numberOfLines={2}>Add to Your Collection{'\n'}&amp; Archive a Night</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={handleUploadLineup} activeOpacity={0.7}>
             <Feather name="upload" size={11} color={colors.gold} />
@@ -397,19 +411,6 @@ export default function ScanLandingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Search a Wine → predictive typeahead (no upload equivalent) */}
-        <View style={styles.tile}>
-          <TouchableOpacity style={styles.tileMain} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
-            <Ionicons name="search-outline" size={30} color={colors.gold} style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
-            <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Wine Intel{'\n'}Review &amp; Cellar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tileBanner} onPress={handleManualInput} activeOpacity={0.7}>
-            <Feather name="edit-3" size={11} color={colors.gold} />
-            <Text style={styles.tileBannerText}>manual input</Text>
-          </TouchableOpacity>
-        </View>
       </View>
 
       {/* Dictate-to-search is shelved for now: on-device speech-to-text mangles
