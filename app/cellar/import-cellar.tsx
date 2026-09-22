@@ -543,9 +543,8 @@ export default function ImportCellarScreen() {
         // filed loose in the location.
         if (locationId && isCased(w)) {
           try {
-            const kind = 'complete' as const;
             const name = caseSummary(w, bottleSizeCl);
-            const created = await createStorageCase(userId, { storageLocationId: locationId, name, kind });
+            const created = await createStorageCase(userId, { storageLocationId: locationId, name });
             await assignWineToCase(saved.id, created.id);
           } catch { /* wine stays loose in the location */ }
         }

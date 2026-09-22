@@ -4,20 +4,15 @@ import { showAlert } from './AppAlert';
 import { MicButton } from './MicButton';
 import {
   fetchStorageLocationCases, createStorageCase, assignWineToCase,
-  caseKindLabel, type CaseKind,
 } from '../api/storageLocations';
 import type { StorageCase } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // "How is this wine packaged?" — shown whenever a wine lands in an Other Home
-// Storage location. Offers Loose Bottles, a new case (Mixed / Non-OWC / OWC), or
-// filing into an existing case in that location. Files the wine via case_id;
-// Loose leaves it uncased. The caller invalidates via onDone.
-const NEW_KINDS: { kind: CaseKind; label: string }[] = [
-  { kind: 'mixed', label: 'Mixed Case' },
-  { kind: 'complete', label: 'Complete Case' },
-];
+// Storage location. Offers Loose Bottle(s), filing into an existing case, or
+// creating a brand-new case (name + note). Files the wine via case_id; Loose
+// leaves it uncased. The caller invalidates via onDone.
 
 interface Props {
   visible: boolean;
@@ -30,7 +25,6 @@ interface Props {
 
 export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, onDone }: Props) {
   const [step, setStep] = useState<'choose' | 'newCase' | 'existing'>('choose');
-  const [kind, setKind] = useState<CaseKind>('mixed');
   const [caseName, setCaseName] = useState('');
   const [caseNote, setCaseNote] = useState('');
   const [cases, setCases] = useState<StorageCase[]>([]);
@@ -38,7 +32,7 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
 
   useEffect(() => {
     if (!visible) return;
-    setStep('choose'); setKind('mixed'); setCaseName(''); setCaseNote('');
+    setStep('choose'); setCaseName(''); setCaseNote('');
     if (locationId) fetchStorageLocationCases(locationId).then(setCases).catch(() => setCases([]));
   }, [visible, locationId]);
 
@@ -56,17 +50,16 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
     }
   }
 
-  function chooseKind(k: CaseKind) {
-    setKind(k);
+  function startNewCase() {
     setCaseName('');
     setCaseNote('');
     setStep('newCase');
   }
 
   function saveNewCase() {
-    if (!caseName.trim()) { showAlert({ title: 'Name the case', body: `Give this ${caseKindLabel(kind)} a name so you can find it.` }); return; }
+    if (!caseName.trim()) { showAlert({ title: 'Name the case', body: 'Give this case a name so you can find it.' }); return; }
     void finish(async () => {
-      const created = await createStorageCase(userId, { storageLocationId: locationId!, name: caseName, kind, note: caseNote });
+      const created = await createStorageCase(userId, { storageLocationId: locationId!, name: caseName, note: caseNote });
       await assignWineToCase(wineId!, created.id);
     });
   }
@@ -79,23 +72,21 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
             <>
               <Text style={styles.title}>How is this wine packaged?</Text>
               <TouchableOpacity style={styles.optBtn} onPress={() => finish(() => assignWineToCase(wineId!, null))} disabled={saving} activeOpacity={0.85}>
-                <Text style={styles.optText}>Loose Bottles</Text>
+                <Text style={styles.optText}>Loose Bottle(s)</Text>
               </TouchableOpacity>
-              {NEW_KINDS.map((o) => (
-                <TouchableOpacity key={o.kind} style={styles.optBtn} onPress={() => chooseKind(o.kind)} activeOpacity={0.85}>
-                  <Text style={styles.optText}>{o.label}</Text>
-                </TouchableOpacity>
-              ))}
               <TouchableOpacity style={[styles.optBtn, !cases.length && styles.optBtnDisabled]} onPress={() => cases.length && setStep('existing')} disabled={!cases.length} activeOpacity={0.85}>
                 <Text style={[styles.optText, !cases.length && styles.optTextDisabled]}>Add to Existing Case{cases.length ? '' : ' (none yet)'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.optBtn} onPress={startNewCase} activeOpacity={0.85}>
+                <Text style={styles.optText}>Create New Case</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.cancel} onPress={onClose}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
             </>
           ) : step === 'newCase' ? (
             <>
-              <Text style={styles.title}>{caseKindLabel(kind)}</Text>
+              <Text style={styles.title}>Create New Case</Text>
               <Text style={styles.fieldLabel}>Case name</Text>
-              <TextInput style={styles.input} value={caseName} onChangeText={setCaseName} placeholder={kind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. OWC'} placeholderTextColor={colors.textMuted} autoFocus />
+              <TextInput style={styles.input} value={caseName} onChangeText={setCaseName} placeholder="e.g. Mixed Burgundy" placeholderTextColor={colors.textMuted} autoFocus />
               <Text style={styles.fieldLabel}>Note (optional)</Text>
               <View style={styles.noteRow}>
                 <TextInput style={[styles.input, styles.noteInput]} value={caseNote} onChangeText={setCaseNote} placeholder="e.g. bought en primeur" placeholderTextColor={colors.textMuted} multiline />
@@ -113,7 +104,6 @@ export function PackagingPrompt({ visible, wineId, locationId, userId, onClose, 
                 {cases.map((c) => (
                   <TouchableOpacity key={c.id} style={styles.caseRow} onPress={() => finish(() => assignWineToCase(wineId!, c.id))} disabled={saving} activeOpacity={0.7}>
                     <Text style={styles.caseName} numberOfLines={1}>{c.name}</Text>
-                    <Text style={styles.caseKind}>{caseKindLabel(c.kind)}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>

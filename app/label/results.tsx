@@ -676,17 +676,13 @@ export default function LabelResultsScreen() {
   const [bottleCount, setBottleCount] = useState(() =>
     Math.max(1, useLabelStore.getState().wineDetailsConfirmed?.quantity ?? 1)
   );
-  const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count' | 'packaging'>(null);
-  // How a wine is packaged in an Other Home Storage location. Loose = no case;
-  // the rest create a storage_cases row of that kind (migration 073).
-  const PACKAGING = [
-    { k: 'loose', label: 'Loose Bottle(s)' },
-    { k: 'mixed', label: 'Mixed Case' },
-    { k: 'complete', label: 'Complete Case' },
-  ] as const;
-  // Case storage (add-to-location flow). 'loose' files the wine straight into the
-  // location; 'mixed'/'complete' also box it in a named case.
-  const [storageKind, setStorageKind] = useState<'loose' | 'mixed' | 'complete'>('loose');
+  const [openField, setOpenField] = useState<null | 'storage' | 'bottle' | 'count'>(null);
+  // How a wine is packaged in an Other Home Storage location. 'loose' files the
+  // wine straight in; 'existing' drops it into an already-created case (picked
+  // below); 'new' creates a fresh named case (name + note) for it. Cases no
+  // longer carry a "mixed / complete" type — a case is just a named box.
+  const [storageKind, setStorageKind] = useState<'loose' | 'existing' | 'new'>('loose');
+  const [existingCaseId, setExistingCaseId] = useState<string | null>(null);
   const [caseName, setCaseName] = useState('');
   const [caseNote, setCaseNote] = useState('');
   const [customSizeMode, setCustomSizeMode] = useState(false);
@@ -709,10 +705,9 @@ export default function LabelResultsScreen() {
     enabled: !!session?.user.id,
   });
 
-  // Existing case names in the target location, offered as quick-pick chips when
-  // naming a case — so a user can drop a wine into a case they've already made
-  // (e.g. add another bottle to "Meyney Case"). Empty cases are auto-removed, so
-  // only cases that still hold wine appear here.
+  // Existing cases in the target location, offered by the "Add to Existing Case"
+  // picker — so a user can drop a wine into a case they've already made (e.g. add
+  // another bottle to "Meyney Case"). Cases persist until explicitly deleted.
   const { data: locationCases = [] } = useQuery({
     queryKey: ['storage-location-cases', pendingStorageLocationId],
     queryFn: () => fetchStorageLocationCases(pendingStorageLocationId!),
@@ -1180,20 +1175,18 @@ export default function LabelResultsScreen() {
         updates: { quantity: mode === 'merge' ? baseQuantity + locQty : locQty },
       });
       // Resolve/create the case — the grouping lives on the placement, not the
-      // wine. Mixed cases can merge into an existing same-name case; complete
-      // cases are always their own. Non-fatal: a failure just files them loose.
+      // wine. 'existing' files into the picked case; 'new' creates a fresh named
+      // case. Non-fatal: a failure just files the bottles loose.
       let placementCaseId: string | null = pendingCaseId ?? null;
       try {
-        if (!placementCaseId && storageKind !== 'loose' && session?.user.id) {
-          const wanted = caseName.trim().toLowerCase();
-          const existingCase = wanted && storageKind === 'mixed'
-            ? locationCases.find((c) => c.kind === 'mixed' && c.name.trim().toLowerCase() === wanted)
-            : undefined;
-          placementCaseId = existingCase
-            ? existingCase.id
-            : (await createStorageCase(session.user.id, {
-                storageLocationId: pendingStorageLocationId, name: caseName, kind: storageKind, note: caseNote,
-              })).id;
+        if (!placementCaseId && session?.user.id) {
+          if (storageKind === 'existing' && existingCaseId) {
+            placementCaseId = existingCaseId;
+          } else if (storageKind === 'new' && caseName.trim()) {
+            placementCaseId = (await createStorageCase(session.user.id, {
+              storageLocationId: pendingStorageLocationId, name: caseName, note: caseNote,
+            })).id;
+          }
         }
       } catch { placementCaseId = pendingCaseId ?? null; }
       // File the bottles into the alt cellar as a placement (merges into an
@@ -1535,12 +1528,28 @@ export default function LabelResultsScreen() {
     }
   }
 
+  // "Add to Existing Case" — a follow-up popup listing the cases already in this
+  // location; picking one files the wine into it. No cases yet → nudge to create.
+  function openExistingCasePicker() {
+    if (!locationCases.length) {
+      showAlert({ title: 'No cases yet', body: 'Create a new case first, then you can add wines to it.' });
+      return;
+    }
+    showAlert({
+      title: 'Add to which case?',
+      buttons: [
+        ...locationCases.map((c) => ({ text: c.name, onPress: () => { setStorageKind('existing'); setExistingCaseId(c.id); setCaseName(''); setCaseNote(''); } })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+
   async function handleAddToCellar() {
     if (!session?.user.id) return;
-    // A case must be named — Vinster no longer silently saves it as "Case".
-    // Skipped when filing into an already-chosen case (pendingCaseId), which
-    // carries its own name.
-    if (context === 'add-location' && storageKind !== 'loose' && !pendingCaseId && !caseName.trim()) {
+    // A new case must be named — Vinster no longer silently saves it as "Case".
+    // Skipped when filing into an already-chosen case (pendingCaseId) or an
+    // existing case, both of which carry their own name.
+    if (context === 'add-location' && storageKind === 'new' && !pendingCaseId && !caseName.trim()) {
       showAlert({ title: 'Case name needed', body: 'Give this case a name before adding — e.g. "Mixed Burgundy".' });
       return;
     }
@@ -1619,14 +1628,7 @@ export default function LabelResultsScreen() {
           ]
         : openField === 'count'
           ? Array.from({ length: 12 }, (_, i) => ({ label: String(i + 1), value: i + 1, onSelect: () => setBottleCount(i + 1) }))
-          : openField === 'packaging'
-            ? PACKAGING.map((p) => ({ label: p.label, value: p.k, onSelect: () => {
-                setStorageKind(p.k);
-                // Always start the case name blank — the user names their own
-                // case (short & snappy), never prefilled with the wine name.
-                setCaseName('');
-              } }))
-            : [];
+          : [];
 
   const windowM = windowMeta(intel.drinkingWindowStatus);
 
@@ -2579,38 +2581,42 @@ export default function LabelResultsScreen() {
                 ) : (
                   <>
                     <Text style={styles.modalLabel}>How is this wine packaged?</Text>
-                    <TouchableOpacity style={styles.fieldSelect} onPress={() => setOpenField('packaging')} activeOpacity={0.7}>
-                      <Text style={styles.fieldSelectValue}>{PACKAGING.find((p) => p.k === storageKind)?.label ?? 'Loose Bottle(s)'}</Text>
-                      <Text style={styles.fieldSelectArrow}>▾</Text>
+                    <TouchableOpacity
+                      style={[styles.pkgBubble, storageKind === 'loose' && styles.pkgBubbleActive]}
+                      onPress={() => { setStorageKind('loose'); setExistingCaseId(null); setCaseName(''); setCaseNote(''); }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.pkgBubbleText, storageKind === 'loose' && styles.pkgBubbleTextActive]}>Loose Bottle(s)</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.pkgBubble, storageKind === 'existing' && styles.pkgBubbleActive]}
+                      onPress={openExistingCasePicker}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.pkgBubbleText, storageKind === 'existing' && styles.pkgBubbleTextActive]}>
+                        {storageKind === 'existing' && existingCaseId
+                          ? `In case: ${locationCases.find((c) => c.id === existingCaseId)?.name ?? 'Case'}`
+                          : 'Add to Existing Case'}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.pkgBubble, storageKind === 'new' && styles.pkgBubbleActive]}
+                      onPress={() => { setStorageKind('new'); setExistingCaseId(null); }}
+                      activeOpacity={0.85}
+                    >
+                      <Text style={[styles.pkgBubbleText, storageKind === 'new' && styles.pkgBubbleTextActive]}>Create New Case</Text>
                     </TouchableOpacity>
 
-                    {storageKind !== 'loose' && (
+                    {storageKind === 'new' && (
                       <>
                         <Text style={styles.modalLabel}>Case name <Text style={styles.modalLabelHint}>(short &amp; snappy)</Text></Text>
                         <TextInput
                           style={styles.caseInput}
                           value={caseName}
                           onChangeText={setCaseName}
-                          placeholder={storageKind === 'mixed' ? 'e.g. Mixed Burgundy' : 'e.g. Musar 2010'}
+                          placeholder="e.g. Mixed Burgundy"
                           placeholderTextColor={colors.textSubtle}
                         />
-                        {/* Quick-pick from existing MIXED case names in this
-                            location — only mixed cases can take another wine, so
-                            complete/OWC cases are never offered as a destination.
-                            (deduped, excluding the one being typed). */}
-                        {storageKind === 'mixed' && (() => {
-                          const names = Array.from(new Set(locationCases.filter((c) => c.kind === 'mixed').map((c) => c.name.trim()).filter(Boolean)))
-                            .filter((n) => n.toLowerCase() !== caseName.trim().toLowerCase());
-                          return names.length ? (
-                            <View style={styles.caseSuggestRow}>
-                              {names.map((s) => (
-                                <TouchableOpacity key={s} style={styles.caseSuggestChip} onPress={() => setCaseName(s)} activeOpacity={0.7}>
-                                  <Text style={styles.caseSuggestText}>{s}</Text>
-                                </TouchableOpacity>
-                              ))}
-                            </View>
-                          ) : null;
-                        })()}
                         <Text style={styles.modalLabel}>Note <Text style={styles.modalLabelHint}>(optional)</Text></Text>
                         <View style={styles.caseNoteRow}>
                           <TextInput
@@ -2674,7 +2680,7 @@ export default function LabelResultsScreen() {
         <TouchableOpacity style={styles.fieldModalOverlay} activeOpacity={1} onPress={() => setOpenField(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.fieldModalSheet} onPress={() => {}}>
             <Text style={styles.fieldModalTitle}>
-              {openField === 'storage' ? 'Storage location' : openField === 'bottle' ? 'Bottle size' : openField === 'packaging' ? 'How is this wine packaged?' : 'Number of bottles'}
+              {openField === 'storage' ? 'Storage location' : openField === 'bottle' ? 'Bottle size' : 'Number of bottles'}
             </Text>
             <ScrollView style={{ maxHeight: 320 }}>
               {fieldOptions.map((opt) => (
@@ -2948,6 +2954,13 @@ const styles = StyleSheet.create({
   // Lower-case bracketed hint inside an uppercase label, e.g. "(adjust for accuracy)".
   modalLabelHint: { fontFamily: fonts.bodyItalic, fontSize: 11, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 },
   caseAddingNote: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, marginBottom: spacing.md },
+  // Gold "bubble" packaging choices (Loose / Add to Existing / Create New). The
+  // selected one fills gold with dark text; the modal's own white Cancel sits at
+  // the very bottom of the sheet.
+  pkgBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm + 2, alignItems: 'center', marginBottom: spacing.sm },
+  pkgBubbleActive: { backgroundColor: colors.gold },
+  pkgBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  pkgBubbleTextActive: { color: colors.surface },
   caseKindRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   caseKindBtn: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingVertical: spacing.sm, alignItems: 'center', backgroundColor: colors.surface },
   caseKindBtnOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.14)' },

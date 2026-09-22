@@ -130,35 +130,20 @@ export async function assignWineToStorageLocation(wineId: string, locationId: st
 
 const CASE_COLS = 'id, user_id, storage_location_id, name, kind, note, created_at';
 
-// Case packaging kinds (migration 073). Loose is a UI-only choice (no case row).
-// Two case types only now: a mixed case (several different wines) or a complete
-// case (a full case of one wine). Legacy 'owc' / 'non_owc' / 'single' rows are
-// treated as complete.
-export type CaseKind = 'mixed' | 'complete';
-
-// Normalise any stored kind (incl. the retired owc/non_owc/single) to the two
-// current types.
-export function normalizeCaseKind(kind: string | null | undefined): CaseKind {
-  return kind === 'mixed' ? 'mixed' : 'complete';
-}
-
-// User-facing label for a case's type, shared across the add flow, the location
-// card chips and the Cases filter so the wording stays in sync.
-export function caseKindLabel(kind: string): string {
-  return normalizeCaseKind(kind) === 'mixed' ? 'Mixed Case' : 'Complete Case';
-}
-
+// A case is just a named box of bottles inside a location — no "type" anymore
+// (the retired mixed / complete / owc / non_owc labelling is gone). The
+// storage_cases.kind column still exists in the DB with a NOT NULL default, so
+// we simply stop setting it; any legacy value is ignored by the app.
 export async function createStorageCase(
   userId: string,
-  input: { storageLocationId: string; name: string; kind: CaseKind; note?: string | null },
+  input: { storageLocationId: string; name: string; note?: string | null },
 ): Promise<StorageCase> {
   const { data, error } = await supabase
     .from('storage_cases')
     .insert({
       user_id: userId,
       storage_location_id: input.storageLocationId,
-      name: input.name.trim() || (input.kind === 'mixed' ? 'Mixed Case' : 'Case'),
-      kind: input.kind,
+      name: input.name.trim() || 'Case',
       note: input.note?.trim() || null,
     })
     .select(CASE_COLS)
