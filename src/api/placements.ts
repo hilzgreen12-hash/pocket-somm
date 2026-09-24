@@ -151,6 +151,17 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
 // The DB no longer mirrors the legacy storage_location_id into these rows
 // (migration 106), so they must be cleared explicitly or the wine lingers as a
 // ghost line in the alt cellar it left.
+// File an existing alt-cellar placement into a case (or out of one with null).
+// Alt-cellar case membership lives on the placement, not the legacy
+// cellar_wines.case_id, so "Add from This Cellar List" sets it here.
+export async function setPlacementCase(placementId: string, caseId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from('cellar_placements')
+    .update({ case_id: caseId })
+    .eq('id', placementId);
+  if (error) throw error;
+}
+
 export async function clearLocationPlacements(wineId: string): Promise<void> {
   const { error } = await supabase
     .from('cellar_placements')

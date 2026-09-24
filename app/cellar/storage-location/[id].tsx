@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchStorageLocation, fetchStorageLocationWines, deleteStorageLocation, renameStorageLocation, assignWineToStorageLocation, assignWineToCase, fetchStorageLocationCases, createStorageCase, updateStorageCase, deleteStorageCase, setStorageLocationPhoto, setStorageLocationExternal } from '../../../src/api/storageLocations';
-import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement } from '../../../src/api/placements';
+import { fetchLocationPlacementRows, decrementPlacement, addLocationPlacement, setPlacementCase } from '../../../src/api/placements';
 import type { StorageCase, CellarWine } from '../../../src/types/wine';
 import { foldAccents } from '../../../src/utils/wineIdentity';
 import { archiveCellarWine, deleteCellarWine, updateCellarWine, addCellarWine } from '../../../src/api/cellar';
@@ -359,7 +359,7 @@ export default function StorageLocationScreen() {
       title: 'Add a wine to this location',
       buttons: [
         { text: 'Scan a Label', onPress: () => handleScan() },
-        { text: 'Upload Photo', onPress: () => handleUpload() },
+        { text: 'Upload a Label', onPress: () => handleUpload() },
         { text: 'Select from Cellar List', onPress: () => setCellarPickerOpen(true) },
         { text: 'Manual Input', onPress: () => handleManual() },
         { text: 'Cancel', style: 'cancel' },
@@ -763,17 +763,52 @@ export default function StorageLocationScreen() {
   const [addBottlesQty, setAddBottlesQty] = useState(1);
 
   function openAddToCase(c: StorageCase) {
-    // A case is just a named box — any wine can join it.
+    // A case is just a named box — any wine can join it, whether it's already in
+    // this cellar (file it in) or a new bottle (scan / upload / manual).
     showAlert({
       title: `Add a wine to ${c.name}`,
-      body: 'Add another wine to this case.',
       buttons: [
+        { text: 'Add from This Cellar List', onPress: () => openAddExistingToCase(c) },
         { text: 'Scan a Label', onPress: () => handleScan(c.id) },
-        { text: 'Upload Photo', onPress: () => handleUpload(c.id) },
+        { text: 'Upload a Label', onPress: () => handleUpload(c.id) },
         { text: 'Manual Input', onPress: () => handleManual(c.id) },
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  // "Add from This Cellar List" — file a wine already in this alt cellar into the
+  // case by setting its placement's case (no new bottle created).
+  function openAddExistingToCase(c: StorageCase) {
+    const candidates = wines.filter((w) => (w as any).case_id !== c.id);
+    if (candidates.length === 0) {
+      showAlert({ title: 'Nothing to add', body: `Every wine in ${location?.name ?? 'this cellar'} is already in ${c.name}.` });
+      return;
+    }
+    const cap = 12;
+    showAlert({
+      title: `Add to ${c.name}`,
+      body: candidates.length > cap ? `Choose a wine already in this cellar (showing the first ${cap}).` : 'Choose a wine already in this cellar to file into the case.',
+      buttons: [
+        ...candidates.slice(0, cap).map((w) => ({
+          text: wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'Wine'),
+          onPress: () => void addExistingToCase(w, c),
+        })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  async function addExistingToCase(w: CellarWine, c: StorageCase) {
+    try {
+      const placementId = (w as any).placement_id as string | undefined;
+      if (placementId) await setPlacementCase(placementId, c.id);
+      else await assignWineToCase(w.id, c.id);
+      qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
+      qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+    } catch (err) {
+      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
   }
 
   async function confirmAddBottles() {
@@ -1109,32 +1144,44 @@ export default function StorageLocationScreen() {
           )
         ) : (
           <View style={styles.listSection}>
-            {caseGroups.map((g) => (
-              <View key={g.box.id} style={styles.caseGroup}>
-                <TouchableOpacity
-                  style={styles.caseHeader}
-                  onPress={() => { if (!selectMode) openAddToCase(g.box); }}
-                  onLongPress={() => { if (!selectMode) openCaseMenu(g.box); }}
-                  delayLongPress={350}
-                  activeOpacity={0.75}
-                >
-                  <View style={{ flex: 1 }}>
-                    <View style={styles.caseTitleRow}>
-                      <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
-                    </View>
-                    {g.box.note ? <Text style={styles.caseNoteText} numberOfLines={2}>{g.box.note}</Text> : null}
-                  </View>
-                  {!selectMode ? <Text style={styles.caseAdd}>+ Add</Text> : null}
-                </TouchableOpacity>
-                {g.wines.map(renderWine)}
-              </View>
-            ))}
-            {looseFiltered.length > 0 ? (
-              <>
-                {caseGroups.length > 0 ? <Text style={styles.looseHeader}>Loose bottles</Text> : null}
-                {looseFiltered.map(renderWine)}
-              </>
-            ) : null}
+            {/* Only cases that actually hold wines are shown here. An empty case
+                is created + managed from the chip carousel, so we no longer
+                surface it (with an add-a-wine popup) in the grouped list. */}
+            {(() => {
+              const filledCases = caseGroups.filter((g) => g.wines.length > 0);
+              return (
+                <>
+                  {filledCases.length === 0 ? (
+                    <Text style={styles.emptyList}>No wines have been placed in cases yet.</Text>
+                  ) : (
+                    filledCases.map((g) => (
+                      <View key={g.box.id} style={styles.caseGroup}>
+                        <TouchableOpacity
+                          style={styles.caseHeader}
+                          onLongPress={() => { if (!selectMode) openCaseMenu(g.box); }}
+                          delayLongPress={350}
+                          activeOpacity={0.75}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <View style={styles.caseTitleRow}>
+                              <Text style={styles.caseName} numberOfLines={1}>{g.box.name}</Text>
+                            </View>
+                            {g.box.note ? <Text style={styles.caseNoteText} numberOfLines={2}>{g.box.note}</Text> : null}
+                          </View>
+                        </TouchableOpacity>
+                        {g.wines.map(renderWine)}
+                      </View>
+                    ))
+                  )}
+                  {looseFiltered.length > 0 ? (
+                    <>
+                      {filledCases.length > 0 ? <Text style={styles.looseHeader}>Loose bottles</Text> : null}
+                      {looseFiltered.map(renderWine)}
+                    </>
+                  ) : null}
+                </>
+              );
+            })()}
           </View>
         )}
       </KeyboardAwareScrollView>

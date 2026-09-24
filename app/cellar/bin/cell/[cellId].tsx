@@ -438,7 +438,7 @@ export default function BinCellScreen() {
               <Text style={styles.chooserBtnText}>Select from Cellar List</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('library')} activeOpacity={0.8}>
-              <Text style={styles.chooserBtnText}>Upload Photo</Text>
+              <Text style={styles.chooserBtnText}>Upload a Label</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.chooserBtn} onPress={() => startBinAdd('manual')} activeOpacity={0.8}>
               <Text style={styles.chooserBtnText}>Manual Input</Text>
