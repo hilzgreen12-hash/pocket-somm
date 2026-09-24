@@ -177,10 +177,6 @@ export default function RackGridScreen() {
   const [addMoreWine, setAddMoreWine] = useState<{ wineId: string; wineName: string } | null>(null);
   const [cellarPickerOpen, setCellarPickerOpen] = useState(false);
   const [slotUploading, setSlotUploading] = useState(false);
-  // "Add a Lineup" setup: pick the start slot before scanning. Lineups always
-  // run horizontally (left to right) from that slot, so there's no orientation
-  // question — extra bottles of a wine stack down its column.
-  const [lineupSetup, setLineupSetup] = useState(false);
   // Edit-rack modal — Wipe Contents / Rename / Resize / Delete.
   const [editOpen, setEditOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -245,21 +241,24 @@ export default function RackGridScreen() {
     }
   }
 
-  // Arrived via "Add a Lineup" from the Cellar List (?lineup=1) — auto-enter the
-  // slot/orientation setup once the rack has loaded (once per mount).
+  // Arrived via "Add a Lineup" from the Cellar List (?lineup=1) — go straight to
+  // the lineup scanner (once per mount). Slots are chosen AFTER the scan.
   const lineupParamHandled = useRef(false);
   useEffect(() => {
     if (lineup === '1' && rack && !lineupParamHandled.current) {
       lineupParamHandled.current = true;
-      setLineupSetup(true);
+      startLineup();
     }
   }, [lineup, rack]);
 
-  // Start the "Add a Lineup" flow — pick the start slot, then scan up to 6
-  // bottles. Lineups are always horizontal (left to right).
+  // Start the "Add a Lineup" flow — scan up to 6 bottles first, confirm the list,
+  // then return here to tap a slot for each bottle in order (no pre-chosen start
+  // slot). `start(rackId)` with no setPlacement leaves startSlot null, which the
+  // scanner reads as this "place by tapping" mode.
   function startLineup() {
     if (!rack) return;
-    setLineupSetup(true);
+    useLineupStore.getState().start(rackId);
+    router.push('/cellar/scan-lineup' as any);
   }
 
   // Inter-rack swipe — mirrors the pattern in TabSwipeView: horizontal
@@ -514,8 +513,15 @@ export default function RackGridScreen() {
   // Total bottles = occupied slots (each slot is one bottle).
   const rackBottleCount = useMemo(() => winesInRack.reduce((sum, w) => sum + w.count, 0), [winesInRack]);
 
-  // Bottles moved into THIS rack (e.g. by Voice Command) that have no slot yet.
-  const awaitingWines = useMemo(() => wines.filter((w) => w.awaiting_placement_unit_id === rackId), [wines, rackId]);
+  // Bottles moved into THIS rack (e.g. by Voice Command, or a scanned Lineup)
+  // that have no slot yet. Ordered oldest-first so a Lineup's bottles queue up in
+  // the order they were scanned (left to right) — each tap fills the next one.
+  const awaitingWines = useMemo(
+    () => wines
+      .filter((w) => w.awaiting_placement_unit_id === rackId)
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()),
+    [wines, rackId],
+  );
   const awaitingBottles = awaitingWines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
 
   // Bottles awaiting a slot are placed ONE at a time — each tapped empty slot
@@ -595,7 +601,7 @@ export default function RackGridScreen() {
   // Long-press a slot: an occupied slot opens its action sheet (add-more /
   // move / archive); an empty slot starts (or extends) a multi-slot selection.
   function onLongPressSlot(row: number, col: number) {
-    if (lineupSetup || moving || awaitingBottles > 0) return;
+    if (moving || awaitingBottles > 0) return;
     const slot = slotMap[`${row},${col}`];
     if (slot?.cellar_wine_id) { pickUpSlot(row, col); return; }
     setMultiSlots((prev) => {
@@ -671,17 +677,6 @@ export default function RackGridScreen() {
     // Multi-select in progress (new wine OR "add more bottles"): taps toggle
     // empty slots in/out of the set rather than opening or navigating.
     if (multiSelectMode || addMoreWine) { toggleMultiSlot(row, col); return; }
-    // Lineup setup: the user is choosing the starting slot for "Add a Lineup".
-    // Only an empty slot can be the start; record it, then go to scan/upload —
-    // which places the whole lineup horizontally from here.
-    if (lineupSetup) {
-      if (slotMap[`${row},${col}`]) return; // occupied — must start on a free slot
-      useLineupStore.getState().start(rackId);
-      useLineupStore.getState().setPlacement({ row, col }, 'Horizontal');
-      setLineupSetup(false);
-      router.push('/cellar/scan-lineup');
-      return;
-    }
     // If we're in the middle of a move, treat this tap as the drop target.
     if (moving) {
       // Tapping the source slot (on its own rack) cancels the move.
@@ -1604,18 +1599,8 @@ export default function RackGridScreen() {
             <Text style={styles.rackHintBullet}>•  Short press a thumbnail: Wine Intel</Text>
             <Text style={styles.rackHintBullet}>•  Long Press a slot: Add same-wine multiples</Text>
             <Text style={styles.rackHintBullet}>•  Long Press a thumbnail: Edit</Text>
-            <Text style={styles.rackHintBullet}>•  Add A Lineup: Up to 6 different bottles <Text style={styles.rackHintLink} onPress={startLineup}>Here</Text></Text>
+            <Text style={styles.rackHintBullet}>•  Add A Lineup (up to 6 bottles): <Text style={styles.rackHintLink} onPress={startLineup}>Scan</Text></Text>
           </View>
-          {lineupSetup && (
-            <View style={styles.lineupPrompt}>
-              <Text style={styles.lineupPromptText}>
-                {rack.storage_type === 'fridge'
-                  ? 'Select the slot for the first bottle of the lineup, to place in your fridge from left to right.'
-                  : 'Select the slot for the first bottle of the lineup — bottles place left to right from there.'}
-              </Text>
-              <Text style={styles.lineupPromptCancel} onPress={() => setLineupSetup(false)}>Cancel</Text>
-            </View>
-          )}
         </>
       )}
 

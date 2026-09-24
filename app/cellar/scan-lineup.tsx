@@ -100,8 +100,13 @@ export default function ScanLineupScreen() {
   const { setWineDetails } = useLabelStore();
 
   // Rack-placement lineup: launched from a rack with a chosen start slot — the
-  // whole lineup is placed into the rack at once (no per-wine intel detour).
+  // whole lineup is auto-placed into the rack at once (legacy path).
   const isRackPlacement = startSlot != null && !!originRackId;
+  // New default: launched from a rack with NO start slot — after confirming the
+  // list the bottles return to the rack "awaiting placement", and the user taps
+  // an empty slot for each one in order. Both use the same tickable review list.
+  const isManualPlace = startSlot == null && !!originRackId;
+  const isRackLineup = !!originRackId;
   const [placing, setPlacing] = useState(false);
   // Quick batch confirm: each row is ticked once reviewed/edited; "Add Bottles"
   // unlocks when all are ticked.
@@ -550,6 +555,97 @@ export default function ScanLineupScreen() {
     }
   }
 
+  // Manual-placement lineup (no start slot): create each confirmed bottle as a
+  // new row "awaiting placement" in the rack — with its cropped label thumbnail —
+  // then hand back to the rack, where the user taps an empty slot for each one in
+  // scan order. Each wine is its OWN awaiting row (no silent merge) so the rack's
+  // one-tap-per-bottle placement counts them correctly.
+  async function placeAsAwaiting() {
+    if (!isManualPlace || !originRackId || placing) return;
+    const userId = session?.user.id;
+    if (!userId) { showAlert({ title: 'Could not add lineup', body: 'Please try again.' }); return; }
+    const kept = lineupWines;
+    if (kept.length === 0) return;
+    setPlacing(true);
+    try {
+      // Original lineup image dimensions, for cropping per-bottle thumbnails.
+      let imgDims: { width: number; height: number } | null = null;
+      if (imageUri) {
+        try { const d = await ImageManipulator.manipulateAsync(imageUri, [], {}); imgDims = { width: d.width, height: d.height }; } catch { /* skip thumbnails */ }
+      }
+      for (const b of kept) {
+        const count = b.quantity ?? 1;
+        const saved = await addWine.mutateAsync({
+          user_id: userId,
+          wine_name: b.wineName || b.producer,
+          producer: b.producer,
+          region: b.region ?? null,
+          vintage: b.vintage ?? null,
+          quantity: count,
+          storage_location: null,
+          date_received: new Date().toISOString().split('T')[0],
+          critic_score: null,
+          critic_score_note: null,
+          drinking_window_from: null,
+          drinking_window_to: null,
+          drinking_window_status: 'unknown',
+          tasting_notes: null,
+          grape_variety: null,
+          label_image_path: null,
+          user_notes: null,
+          is_wishlist: false,
+          estimated_value: null,
+          estimated_value_currency: null,
+          estimated_value_at: null,
+          estimated_value_source: null,
+          purchase_price: null,
+          purchase_price_currency: null,
+          bottle_size_ml: b.bottleSizeMl ?? 750,
+          awaiting_placement: true,
+          awaiting_placement_unit_id: originRackId,
+        } as any);
+        const targetId = saved.id;
+        // Thumbnail: a re-scanned label (edit sheet) wins; else crop this bottle
+        // from the lineup photo. Non-fatal.
+        if (b.overrideImageUri) {
+          try {
+            const path = await uploadLabelImage(userId, b.overrideImageUri, targetId);
+            await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
+          } catch { /* non-fatal */ }
+        } else if (b.box && imageUri && imgDims) {
+          try {
+            const { x, y, w, h } = b.box;
+            const pad = 0.05;
+            const fx = Math.max(0, x - pad);
+            const fy = Math.max(0, y - pad);
+            const fw = Math.min(1 - fx, w + pad * 2);
+            const fh = Math.min(1 - fy, h + pad * 2);
+            const originX = Math.max(0, Math.round(fx * imgDims.width));
+            const originY = Math.max(0, Math.round(fy * imgDims.height));
+            const cw = Math.min(imgDims.width - originX, Math.round(fw * imgDims.width));
+            const ch = Math.min(imgDims.height - originY, Math.round(fh * imgDims.height));
+            if (cw > 10 && ch > 10) {
+              const cropped = await ImageManipulator.manipulateAsync(
+                imageUri,
+                [{ crop: { originX, originY, width: cw, height: ch } }],
+                { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG },
+              );
+              const path = await uploadLabelImage(userId, cropped.uri, targetId);
+              await updateWine.mutateAsync({ id: targetId, updates: { label_image_path: path } });
+            }
+          } catch { /* non-fatal — placed without a thumbnail */ }
+        }
+      }
+      qc.invalidateQueries({ queryKey: ['cellar', userId] });
+      qc.invalidateQueries({ queryKey: ['rack-slots', originRackId] });
+      useLineupStore.getState().clear();
+      router.replace(`/cellar/rack/${originRackId}` as any);
+    } catch (err) {
+      showAlert({ title: 'Could not add lineup', body: err instanceof Error ? err.message : 'Please try again.' });
+      setPlacing(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -595,9 +691,9 @@ export default function ScanLineupScreen() {
           <ActivityIndicator color={colors.gold} />
           <Text style={styles.hint}>Vinster is reading your bottles…</Text>
         </View>
-      ) : isRackPlacement ? (
-        // Rack-placement review: tick each bottle to confirm (or Edit it), then
-        // "Add Bottles" places the whole lineup into the rack.
+      ) : isRackLineup ? (
+        // Rack-lineup review: tick each bottle to confirm (or Edit it), then place
+        // it into the rack — auto (legacy start-slot) or by tapping slots in order.
         <ScrollView contentContainerStyle={styles.content}>
           {lineupWines.length === 0 ? (
             <>
@@ -649,14 +745,19 @@ export default function ScanLineupScreen() {
               })}
               <TouchableOpacity
                 style={[styles.primaryBtn, (placing || !allConfirmed) && { opacity: 0.4 }]}
-                onPress={placeAll}
+                onPress={isManualPlace ? placeAsAwaiting : placeAll}
                 disabled={placing || !allConfirmed}
                 activeOpacity={0.85}
               >
                 <Text style={styles.primaryBtnText}>
-                  {placing ? 'Placing…' : `Add ${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}`}
+                  {placing
+                    ? (isManualPlace ? 'Adding…' : 'Placing…')
+                    : `Add ${totalBottles} ${totalBottles === 1 ? 'Bottle' : 'Bottles'}`}
                 </Text>
               </TouchableOpacity>
+              {isManualPlace ? (
+                <Text style={styles.hint}>Next you'll tap an empty slot for each bottle, in order.</Text>
+              ) : null}
               {flipped ? (
                 <Text style={styles.hint}>Photo turned 180° so the labels read the right way up. Note this also reverses the left‑to‑right order — flip back if the preview looks wrong.</Text>
               ) : null}
