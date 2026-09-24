@@ -11,6 +11,7 @@ import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkSoonCarousel } from '../../src/components/DrinkSoonCarousel';
+import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -71,6 +72,7 @@ export default function ScanLandingScreen() {
   const pendingActionRef = useRef<(() => void) | null>(null);
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
@@ -388,6 +390,11 @@ export default function ScanLandingScreen() {
         <Text style={styles.searchBarText}>Manually Search a Wine</Text>
       </TouchableOpacity>
 
+      {/* Voice Command — discovery only (recommend / consult / wine intel). */}
+      <TouchableOpacity style={styles.voiceRow} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+        <Text style={styles.voiceLink}>Voice Command</Text>
+      </TouchableOpacity>
+
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Recent Scans</Text>
@@ -541,6 +548,8 @@ export default function ScanLandingScreen() {
         onContinue={continueWithoutAccount}
       />
 
+      <DiscoverVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+
     </ScrollView>
     </TabSwipeView>
   );
@@ -600,6 +609,9 @@ const styles = StyleSheet.create({
   carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
   carouselBleed: { marginHorizontal: -spacing.xl },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
+  // "Voice Command" link beneath the search bar.
+  voiceRow: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
+  voiceLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
   // Community Musings placeholder — faded dashed card until the feature ships.
   comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
   comingSoonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.xs },
