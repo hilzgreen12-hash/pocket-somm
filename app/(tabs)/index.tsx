@@ -392,6 +392,7 @@ export default function ScanLandingScreen() {
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Recent Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
+      <Text style={styles.discoverHint}>Listed by recency · Swipe to view →</Text>
 
       {/* Drink Soon — cellar bottles at their peak. */}
       <View style={styles.sectionSeparator} />
@@ -598,6 +599,7 @@ const styles = StyleSheet.create({
   sectionSeparator: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
   carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
   carouselBleed: { marginHorizontal: -spacing.xl },
+  discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // Community Musings placeholder — faded dashed card until the feature ships.
   comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
   comingSoonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.xs },

@@ -17,8 +17,8 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
-    title: 'How Scan Works',
-    body: 'Scan is your way in — and Vinster\'s home tab. Point the camera at a single wine label (or upload a photo) for instant Wine Intel: critic scores, tasting notes, drinking windows, and what the bottle is worth today — then save it straight to your reviews or your cellar. Scan a restaurant wine list and Vinster reads it with AI-powered optical character recognition, scores every wine against your preferences — wine type, style, budget, and food pairing — and surfaces your best match. Scan a lineup to add several bottles to your cellar at once, or to archive a night you\'ve drunk. No label to hand? Search a Wine finds the bottle in Vinster\'s catalogue, or you can type the details in yourself.',
+    title: 'How Discover Works',
+    body: 'Discover is your home tab. Point the camera at a single wine label (or upload a photo) for instant Wine Intel: critic scores, tasting notes, drinking windows, and what the bottle is worth today — then save it straight to your reviews or your cellar. Scan a restaurant wine list and Vinster reads it with AI-powered optical character recognition, scores every wine against your preferences — wine type, style, budget, and food pairing — and surfaces your best match. No label to hand? Manually Search a Wine to find the bottle in Vinster\'s catalogue, or type the details in yourself.\n\nBeneath, Discover keeps a carousel of your Recent Scans, a Drink Soon shelf of cellar bottles hitting their peak, and — coming soon — Community Musings from across the Vinster community.',
     subsections: [
       {
         title: 'How Recommendations Are Scored',
@@ -36,7 +36,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'How Cellar Works',
-    body: 'Scan a label or enter a wine by hand to add it to your cellar, and Vinster fills in the details on the spot — critic scores, drinking windows, grape variety, tasting notes, and what each bottle is worth today.\n\nBeyond tracking what you own, the Cellar gives you:\n\n• Your Wines At Home — virtual racks and fridges that mirror your real storage, so you always know where a bottle lives\n• Your Cellar Statistics — total bottles, what you paid versus what your cellar is worth today, and breakdowns by region and style\n• A per-bottle purchase price alongside Vinster\'s estimated current value\n• Personal notes and your own tasting reviews per bottle — dictated hands-free with Voice Command if you like\n• Your Wine Archive for bottles you\'ve drunk, gifted, or otherwise removed — with the date and a note on each\n• Drinking-window guidance so you always open a bottle at the right time',
+    body: 'Scan a label or enter a wine by hand to add it to your cellar, and Vinster fills in the details on the spot — critic scores, drinking windows, grape variety, tasting notes, and what each bottle is worth today.\n\nBeyond tracking what you own, the Cellar gives you:\n\n• Your Wines At Home — virtual racks and fridges that mirror your real storage, so you always know where a bottle lives\n• Your Cellar Statistics — total bottles, what you paid versus what your cellar is worth today, and breakdowns by region and style\n• A per-bottle purchase price alongside Vinster\'s estimated current value\n• Personal notes and your own tasting reviews per bottle — dictated hands-free with Voice Command if you like\n• Your Cellar Archive for bottles you\'ve drunk, gifted, or otherwise removed — with the date and a note on each\n• Drinking-window guidance so you always open a bottle at the right time',
     subsections: [
       {
         title: 'How Your Wines At Home Works',
@@ -60,7 +60,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'Your Preferences',
-    body: 'The wine and recipe preferences you save on the You tab — Your Wine Preferences and Your Recipe Requirements — are used as the default parameters across Scan and Pair whenever Vinster generates a recommendation. You can override them on any individual search, depending on your one-off requirements.',
+    body: 'The wine and recipe preferences you save on the You tab — Your Wine Preferences and Your Recipe Requirements — are used as the default parameters across Discover and Pair whenever Vinster generates a recommendation. You can override them on any individual search, depending on your one-off requirements.',
   },
   {
     title: 'Privacy & Data',

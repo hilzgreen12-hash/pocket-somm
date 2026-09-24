@@ -12,8 +12,13 @@ import { fonts } from '../constants/fonts';
 // A unified "recent scan" — either a single-bottle label→intel scan or a wine-
 // list scan — merged by recency for the Discover tab carousel.
 type Recent =
-  | { kind: 'label'; ts: number; title: string; meta: string; imageUri: string | null; open: () => void }
-  | { kind: 'list'; ts: number; title: string; meta: string; path: string | null; open: () => void };
+  | { kind: 'label'; ts: number; title: string; stamp: string; imageUri: string | null; open: () => void }
+  | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void };
+
+// Shared date format for the "date · location" stamp beneath each thumbnail.
+function stampDate(d: Date): string {
+  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
 
 function RecentCard({ item }: { item: Recent }) {
   // Label scans carry a local file:// photo; list scans carry a storage path.
@@ -29,7 +34,7 @@ function RecentCard({ item }: { item: Recent }) {
         )}
       </View>
       <Text style={styles.cardName} numberOfLines={2}>{item.title}</Text>
-      {item.meta ? <Text style={styles.cardMeta} numberOfLines={1}>{item.meta}</Text> : null}
+      {item.stamp ? <Text style={styles.cardStamp} numberOfLines={1}>{item.stamp}</Text> : null}
     </TouchableOpacity>
   );
 }
@@ -41,8 +46,8 @@ export function RecentScansCarousel() {
   const labelItems: Recent[] = recent.map((r) => ({
     kind: 'label',
     ts: r.ts,
-    title: formatWineTitle({ producer: r.wine.producer, wineName: r.wine.wineName, region: r.wine.region, vintage: r.wine.vintage }),
-    meta: r.intel?.criticScore != null ? `${r.intel.criticScore} pts` : (r.wine.region ?? ''),
+    title: formatWineTitle({ producer: r.wine.producer, wineName: r.wine.wineName, vintage: r.wine.vintage }),
+    stamp: [stampDate(new Date(r.ts)), (r.wine.region ?? '').trim()].filter(Boolean).join(' · '),
     imageUri: r.imageUri,
     open: () => {
       const ls = useLabelStore.getState();
@@ -55,12 +60,12 @@ export function RecentScansCarousel() {
 
   const listItems: Recent[] = archive.map((a) => {
     const d = a.capturedAt ? new Date(a.capturedAt) : null;
-    const dateStr = d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+    const dateStr = d ? stampDate(d) : '';
     return {
       kind: 'list' as const,
       ts: a.capturedAt ? new Date(a.capturedAt).getTime() : 0,
       title: a.restaurantName?.trim() || 'Wine list',
-      meta: [dateStr, a.city?.trim()].filter(Boolean).join(' · '),
+      stamp: [dateStr, a.city?.trim()].filter(Boolean).join(' · '),
       path: a.restaurantPhotoPath,
       open: () => {
         const ss = useScanStore.getState();
@@ -102,7 +107,7 @@ const styles = StyleSheet.create({
   thumbImg: { width: '100%', height: '100%' },
   thumbFallback: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
-  cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
+  cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginTop: 3 },
   emptyCard: { height: 110, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, alignItems: 'center', justifyContent: 'center', padding: spacing.md },
   emptyText: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 18 },
 });
