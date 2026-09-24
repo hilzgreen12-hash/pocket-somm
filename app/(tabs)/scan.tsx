@@ -145,5 +145,5 @@ const styles = StyleSheet.create({
   // Gold "X Lineups · View All Lineups →" line (matches Cookbook stats).
   lineupStats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Separator bar between the stats line and the lineups carousel.
-  statsSep: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  statsSep: { height: 1, backgroundColor: colors.divider, marginHorizontal: 0, marginTop: spacing.md, marginBottom: spacing.sm },
 });
