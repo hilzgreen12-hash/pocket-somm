@@ -11,17 +11,10 @@ import { useConsultStore } from '../stores/consultStore';
 import { useLabelStore } from '../stores/labelStore';
 import { useLastIntelStore } from '../stores/lastIntelStore';
 import { generateWineIntel } from '../services/pricing';
+import { correctWineTerms } from '../utils/wineDictation';
 import type { WineDetailsComplete } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
-
-// Light dictation fix-ups for common wine mishears (mirrors the cellar voice).
-function correctWineTerms(t: string): string {
-  return t
-    .replace(/\bseller\b/gi, 'cellar')
-    .replace(/\bboar?[\s-]?doe?\b/gi, 'Bordeaux')
-    .replace(/\bsah[\s-]?rah\b/gi, 'Syrah');
-}
 
 const SUGGESTIONS = [
   "It's cold and I want something red — choose from my cellar",

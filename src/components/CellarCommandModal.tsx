@@ -13,6 +13,7 @@ import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
 import { moveBottlesToLocation, clearLocationPlacements } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
+import { correctWineTerms } from '../utils/wineDictation';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
@@ -26,24 +27,6 @@ function wineLabel(w: CellarWine | undefined): string {
   return [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' · ');
 }
 
-// Speech-to-text routinely mishears wine vocabulary ("seller" for "cellar",
-// etc.). Nudge the obvious ones back. Applied to the MIC's output only — manual
-// edits in the input field are left exactly as the user types them.
-function correctWineTerms(text: string): string {
-  const fixes: Array<[RegExp, string]> = [
-    [/\bsellers?\b/gi, 'cellar'],
-    [/\bsellars?\b/gi, 'cellar'],
-    [/\bcella\b/gi, 'cellar'],
-    [/\bwould store\b/gi, 'wood store'],
-    [/\bwood stall\b/gi, 'wood store'],
-    [/\bshably\b/gi, 'Chablis'],
-    [/\bbore doe\b/gi, 'Bordeaux'],
-    [/\bsee rah\b/gi, 'Syrah'],
-    [/\bgren(a|ai)sh\b/gi, 'Grenache'],
-    [/\bmag num\b/gi, 'magnum'],
-  ];
-  return fixes.reduce((s, [re, rep]) => s.replace(re, rep), text);
-}
 
 // True if the spoken command names a vintage (a 19xx/20xx year) or explicitly
 // flags a non-vintage bottle ("non-vintage" / "NV"). Move / archive / add all
