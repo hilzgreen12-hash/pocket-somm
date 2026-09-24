@@ -1,4 +1,4 @@
-import { View, Image, Text, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { View, Image, Text, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -37,7 +37,11 @@ export function LabelThumb({ path, fallbackText, style, radius = 6, frame = 4, f
           resizeMode={resizeMode}
         />
       ) : loading ? (
-        <View style={[styles.fallback, { borderRadius: radius }]} />
+        // The photo is being fetched (signed URL + download) — a quiet swirl on
+        // the cream tile so a slow label reads as "loading", not "no photo".
+        <View style={[styles.fallback, { borderRadius: radius }]}>
+          <ActivityIndicator size="small" color={colors.gold} />
+        </View>
       ) : (
         <View style={[styles.fallback, { borderRadius: radius }]}>
           <Text style={[styles.fallbackText, { fontSize: fallbackFontSize }]} numberOfLines={3}>

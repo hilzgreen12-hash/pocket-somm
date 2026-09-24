@@ -152,6 +152,11 @@ export default function RackGridScreen() {
   const [placeCount, setPlaceCount] = useState('1');
   const [placeOrientation, setPlaceOrientation] = useState<'Vertical' | 'Horizontal'>('Vertical');
   const [placing, setPlacing] = useState(false);
+  // Optimistic slot fills — "row,col" → the wine, shown INSTANTLY on tap (with a
+  // placing swirl) so the thumbnail lands immediately instead of after the slot
+  // write + cellar update + rack-slots refetch round-trips. Cleared once the
+  // refetch confirms the real slot (or on error).
+  const [optimisticSlots, setOptimisticSlots] = useState<Record<string, CellarWine>>({});
   // "Add More Bottles" asks how many UP FRONT (one pop-up), then a single tap
   // places that many — no second modal after the tap. addMoreUpfront drives the
   // upfront pop-up; placePrechosen flags that the count's already chosen so the
@@ -518,19 +523,27 @@ export default function RackGridScreen() {
   // of the wine has a slot. No "how many?" prompt, no second instruction bubble.
   const slotsForWine = (wineId: string) => Object.values(slotMap).filter((s) => (s as { cellar_wine_id?: string } | undefined)?.cellar_wine_id === wineId).length;
   async function placeAwaitingBottle(w: typeof wines[number], row: number, col: number) {
+    const key = `${row},${col}`;
+    // Show the bottle in the slot straight away (with a placing swirl).
+    setOptimisticSlots((m) => ({ ...m, [key]: w as unknown as CellarWine }));
+    const placedNow = slotsForWine(w.id) + 1;
+    const remaining = Math.max(0, (w.quantity ?? 1) - placedNow);
+    setSavedMsg(remaining > 0 ? `Bottle placed — ${remaining} to go` : 'Bottle placed');
     try {
       await assignSlot(rackId, row, col, w.id);
-      const placedNow = slotsForWine(w.id) + 1;
+      // Clearing the awaiting flag isn't needed for the thumbnail — fire it off
+      // in the background so the swirl doesn't wait on a second round-trip.
       if (placedNow >= (w.quantity ?? 1)) {
-        await updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } });
+        void updateWine.mutateAsync({ id: w.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } })
+          .then(() => qc.invalidateQueries({ queryKey: ['cellar'] }))
+          .catch(() => {});
       }
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
-      qc.invalidateQueries({ queryKey: ['cellar'] });
-      const remaining = Math.max(0, (w.quantity ?? 1) - placedNow);
-      setSavedMsg(remaining > 0 ? `Bottle placed — ${remaining} to go` : 'Bottle placed');
+      await qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
+    } finally {
+      setOptimisticSlots((m) => { const n = { ...m }; delete n[key]; return n; });
     }
   }
 
@@ -925,6 +938,7 @@ export default function RackGridScreen() {
     if (!at) return;
     const requested = Math.max(1, parseInt(placeCount, 10) || 1);
     setPlacing(true);
+    let placedKeys: string[] = [];
     try {
       const slots = computePlacementSlots(at.row, at.col, requested, placeOrientation);
       // Skip any slots that are already occupied — assign one at a time
@@ -935,28 +949,32 @@ export default function RackGridScreen() {
         setPlacing(false);
         return;
       }
+      const wine = wines.find((w) => w.id === at.wineId);
+      // Fill the chosen slots instantly (with a placing swirl) — the thumbnails
+      // land now, not after the write + refetch round-trips.
+      placedKeys = freeSlots.map((s) => `${s.row},${s.col}`);
+      if (wine) setOptimisticSlots((m) => { const n = { ...m }; placedKeys.forEach((k) => { n[k] = wine; }); return n; });
       await assignSlots(rackId, freeSlots, at.wineId);
 
-      const wine = wines.find((w) => w.id === at.wineId);
-      // A voice-moved bottle "awaiting placement" in this rack is now filed —
-      // clear the flag so it drops out of the awaiting list.
+      // These cellar-wine updates aren't needed for the thumbnails to show —
+      // run them in the background so the swirl doesn't wait on extra round-trips.
       if (wine?.awaiting_placement) {
-        await updateWine.mutateAsync({ id: wine.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } });
+        void updateWine.mutateAsync({ id: wine.id, updates: { awaiting_placement: false, awaiting_placement_unit_id: null } }).catch(() => {});
       }
       if (pendingAddMode && wine) {
         // "+ Add bottles" flow — the wine already exists with N bottles,
         // we're adding M more. Increment quantity by the placed count.
-        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity + freeSlots.length } });
+        void updateWine.mutateAsync({ id: wine.id, updates: { quantity: wine.quantity + freeSlots.length } }).catch(() => {});
       } else if (wine && freeSlots.length > wine.quantity) {
         // First-time placement of a newly-added wine — the wine was saved
         // at qty=1 in the Add Wine modal, so a multi-bottle placement here
         // effectively backfills the count.
-        await updateWine.mutateAsync({ id: wine.id, updates: { quantity: freeSlots.length } });
+        void updateWine.mutateAsync({ id: wine.id, updates: { quantity: freeSlots.length } }).catch(() => {});
       }
 
-      qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
       qc.invalidateQueries({ queryKey: ['cellar'] });
+      await qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       setPendingWineId(null);
       setPlacingAt(null);
       setPlacePrechosen(false);
@@ -970,6 +988,9 @@ export default function RackGridScreen() {
     } catch (err) {
       showAlert({ title: 'Could not place', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
+      // Real slots have landed from the refetch (or the write failed) — drop the
+      // optimistic overlay for the slots this placement touched.
+      if (placedKeys.length) setOptimisticSlots((m) => { const n = { ...m }; placedKeys.forEach((k) => delete n[k]); return n; });
       setPlacing(false);
     }
   }
@@ -1442,8 +1463,13 @@ export default function RackGridScreen() {
           style={[styles.gridRow, { gap: GAP, marginBottom: GAP }, isLargeFormat && { marginBottom: GAP * 2 }]}
         >
           {Array.from({ length: rowDef.cols }, (_, col) => {
-            const slot = slotMap[`${rowDef.rowIndex},${col}`];
-            const wine = slot?.wine as CellarWine | null | undefined;
+            const slotKey = `${rowDef.rowIndex},${col}`;
+            const slot = slotMap[slotKey];
+            const optimisticWine = optimisticSlots[slotKey];
+            // The optimistic fill shows instantly on tap; `placingHere` keeps a
+            // swirl on it until the real slot arrives from the refetch.
+            const placingHere = !slot && !!optimisticWine;
+            const wine = (slot?.wine as CellarWine | null | undefined) ?? optimisticWine ?? undefined;
             const isHighlighted = !!wine && highlightedIds.has(wine.id);
             const isDimmed = highlightedIds.size > 0 && !!wine && !highlightedIds.has(wine.id);
             const isMovingSource = !!moving && moving.sourceRackId === rackId && moving.row === rowDef.rowIndex && moving.col === col;
@@ -1466,14 +1492,21 @@ export default function RackGridScreen() {
                 activeOpacity={0.8}
               >
                 {wine ? (
-                  <LabelThumb
-                    path={wine.label_image_path}
-                    fallbackText={wine.wine_name}
-                    style={styles.slotThumb}
-                    radius={2}
-                    frame={2}
-                    fallbackFontSize={fallbackFont}
-                  />
+                  <>
+                    <LabelThumb
+                      path={wine.label_image_path}
+                      fallbackText={wine.wine_name}
+                      style={styles.slotThumb}
+                      radius={2}
+                      frame={2}
+                      fallbackFontSize={fallbackFont}
+                    />
+                    {placingHere && (
+                      <View style={styles.slotPlacingOverlay} pointerEvents="none">
+                        <ActivityIndicator size="small" color={colors.gold} />
+                      </View>
+                    )}
+                  </>
                 ) : (
                   <Text style={[styles.slotPlus, isMultiSelected && styles.slotPlusSelected]}>{isMultiSelected ? '✓' : '+'}</Text>
                 )}
@@ -2420,6 +2453,8 @@ const styles = StyleSheet.create({
   // cell's own border/padding and let the thumb fill it edge to edge.
   slotFilled: { borderWidth: 0, padding: 0, backgroundColor: 'transparent' },
   slotThumb: { width: '100%', height: '100%' },
+  // Swirl over a just-tapped slot while the placement write + refetch complete.
+  slotPlacingOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.35)', borderRadius: 2 },
   // Search highlight — a gold ring around the matched bottle.
   slotHighlightRing: { borderWidth: 2, borderColor: colors.gold },
   // Cream backdrop the whole rack sits on — the "boxing" that frames it.
