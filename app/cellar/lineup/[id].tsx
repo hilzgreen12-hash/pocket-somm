@@ -10,6 +10,8 @@ import { useAuth } from '../../../src/hooks/useAuth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getLineupArchive, lineupSignedUrl, setLineupNote, updateLineupStamp, setLineupWines, setLineupRestaurant, setLineupName, replaceLineupImage, type LineupWine } from '../../../src/api/lineups';
 import * as ImagePicker from 'expo-image-picker';
+import { CellarWinePicker } from '../../../src/components/CellarWinePicker';
+import type { CellarWine } from '../../../src/types/wine';
 import { ensureMediaPermission } from '../../../src/utils/mediaPermissions';
 import { useScanHistory } from '../../../src/hooks/useScanHistory';
 import { detectLineup, prepareImageBase64, fetchAutoLabelUri } from '../../../src/api/label';
@@ -73,12 +75,17 @@ export default function LineupDetailScreen() {
   // Shows a subtle "Done" beneath the inline venue while it's being edited, so
   // there's a clear way to confirm and dismiss the keyboard.
   const [venueFocused, setVenueFocused] = useState(false);
+  // Inline "Title" field (the lineup's name), saved on blur.
+  const [name, setName] = useState('');
+  // Which wine row (index) is being matched to a cellar wine via the picker.
+  const [cellarPickerFor, setCellarPickerFor] = useState<number | null>(null);
   const hydrated = useRef(false);
   useEffect(() => {
     if (lineup && !hydrated.current) {
       hydrated.current = true;
       setNote(lineup.note ?? '');
       setVenue(lineup.venue ?? '');
+      setName(lineup.name ?? '');
       lineupSignedUrl(lineup.image_path).then(setPhotoUrl);
     }
   }, [lineup]);
@@ -113,6 +120,63 @@ export default function LineupDetailScreen() {
     } catch (err) {
       showAlert({ title: 'Could not save venue', body: err instanceof Error ? err.message : 'Please try again.' });
     }
+  }
+
+  // Inline "Title" save (on blur) — the lineup's name.
+  async function saveNameInline() {
+    if (!lineup) return;
+    if ((name.trim() || null) === (lineup.name?.trim() || null)) return; // unchanged
+    try {
+      await setLineupName(lineup.id, name);
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+    } catch (err) {
+      showAlert({ title: 'Could not save title', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Inline "brief thoughts" save (on blur).
+  async function saveNoteInline() {
+    if (!lineup) return;
+    if ((note.trim() || null) === (lineup.note?.trim() || null)) return; // unchanged
+    try {
+      await setLineupNote(lineup.id, note.trim() || null);
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+    } catch (err) {
+      showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+
+  // Persist an updated wines array (used by tick-to-confirm and cellar-matching).
+  async function persistWines(next: LineupWine[]) {
+    if (!lineup) return;
+    try {
+      await setLineupWines(lineup.id, next);
+      qc.invalidateQueries({ queryKey: ['lineup', id] });
+      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+  }
+  // Tick / untick "this read is correct" on a wine.
+  function toggleWineConfirmed(index: number) {
+    if (!lineup) return;
+    const current: LineupWine[] = lineup.wines ?? [];
+    persistWines(current.map((w, i) => (i === index ? { ...w, confirmed: !w.confirmed } : w)));
+  }
+  // "This is in my cellar" → link a lineup wine to a chosen cellar wine, adopting
+  // its identity (so its review/intel/archiving all resolve correctly).
+  function pickCellarForWine(cw: CellarWine) {
+    if (cellarPickerFor == null || !lineup) { setCellarPickerFor(null); return; }
+    const current: LineupWine[] = lineup.wines ?? [];
+    const idx = cellarPickerFor;
+    setCellarPickerFor(null);
+    persistWines(current.map((w, i) => (
+      i === idx
+        ? { ...w, cellar_wine_id: cw.id, producer: cw.producer, wine_name: cw.wine_name, vintage: cw.vintage, confirmed: true }
+        : w
+    )));
   }
 
   // Edit the date + location stamp (tap the stamp below the photo).
@@ -541,10 +605,22 @@ export default function LineupDetailScreen() {
             <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Export'}</Text>
           </TouchableOpacity>
         </View>
-        {/* Screen title — tap to rename this lineup. */}
-        <TouchableOpacity onPress={openNameEdit} hitSlop={{ top: 6, bottom: 6, left: 12, right: 12 }} activeOpacity={0.7}>
-          <Text style={styles.headerTitle} numberOfLines={1}>{lineup.name?.trim() || 'Your Lineup'}</Text>
-        </TouchableOpacity>
+        {/* Fixed screen title for the review flow. */}
+        <Text style={styles.headerTitle} numberOfLines={1}>Capturing Your Lineup</Text>
+        {/* Title — the lineup's own name, saved on blur. */}
+        <TextInput
+          style={styles.titleInput}
+          value={name}
+          onChangeText={setName}
+          onEndEditing={saveNameInline}
+          onSubmitEditing={saveNameInline}
+          placeholder="Title"
+          placeholderTextColor={colors.textMuted}
+          returnKeyType="done"
+          textAlign="center"
+          spellCheck={false}
+          autoCorrect={false}
+        />
         {/* Date · City below the title (tap to edit date/city). */}
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
           <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}</Text>
@@ -611,24 +687,18 @@ export default function LineupDetailScreen() {
             </View>
           </View>
 
-          {/* Note — reads as plain text once saved; "Edit" reopens the input in a
-              popup, and saving there converts it back to text. */}
+          {/* Brief thoughts — an always-visible input, saved on blur. */}
           <View style={styles.noteBlock}>
-            <View style={styles.noteHeadRow}>
-              <Text style={styles.noteHeadLabel}>Your note</Text>
-              {note.trim() ? (
-                <TouchableOpacity onPress={openNoteEditor} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <Text style={styles.viewLink}>Edit</Text>
-                </TouchableOpacity>
-              ) : null}
-            </View>
-            {note.trim() ? (
-              <Text style={styles.noteText}>{note}</Text>
-            ) : (
-              <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
-                <Text style={styles.addNoteLink}>+ Add a note</Text>
-              </TouchableOpacity>
-            )}
+            <Text style={styles.noteHeadLabel}>Record some brief thoughts about this lineup</Text>
+            <TextInput
+              style={styles.thoughtsInput}
+              value={note}
+              onChangeText={setNote}
+              onEndEditing={saveNoteInline}
+              placeholder="A few words about the night…"
+              placeholderTextColor={colors.textMuted}
+              multiline
+            />
           </View>
 
           {/* Wines */}
@@ -653,25 +723,35 @@ export default function LineupDetailScreen() {
                 return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.wineName} numberOfLines={2}>
-                      {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
-                    </Text>
+                    {/* Tap the name (or Edit) to correct a mis-read. */}
+                    <TouchableOpacity onPress={() => openWineEdit(i, w)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
+                      <Text style={styles.wineName} numberOfLines={2}>
+                        {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
+                      </Text>
+                    </TouchableOpacity>
                     <View style={styles.tagRow}>
                       {/* One status stamp: Your Cellar (matched) or Off Cellar. */}
                       <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Your Cellar' : 'Off Cellar'}</Text>
-                      {/* Add/View Review · View Wine Intel — no underlines, a
-                          middle-dot separator like the stats bars. Editing a
-                          wine now happens in the Confirm Wines popup, not here. */}
-                      <TouchableOpacity
-                        onPress={() => goToWineReview(w, conn)}
-                        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                      >
+                      <TouchableOpacity onPress={() => goToWineReview(w, conn)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>Add/View Review</Text>
                       </TouchableOpacity>
                       <Text style={styles.tagDot}>·</Text>
                       <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>View Wine Intel</Text>
                       </TouchableOpacity>
+                      <Text style={styles.tagDot}>·</Text>
+                      <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.viewLink}>Edit</Text>
+                      </TouchableOpacity>
+                      {/* Off-cellar wine wrongly read? Link it to the real cellar wine. */}
+                      {!w.cellar_wine_id ? (
+                        <>
+                          <Text style={styles.tagDot}>·</Text>
+                          <TouchableOpacity onPress={() => setCellarPickerFor(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                            <Text style={styles.viewLink}>This is in my cellar</Text>
+                          </TouchableOpacity>
+                        </>
+                      ) : null}
                       {/* A cellar bottle you drank but haven't archived — archive it here. */}
                       {w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id) ? (
                         <>
@@ -682,7 +762,14 @@ export default function LineupDetailScreen() {
                         </>
                       ) : null}
                     </View>
+                    {!w.confirmed ? (
+                      <Text style={styles.confirmHint}>Tick to confirm this read — or tap the name to correct it.</Text>
+                    ) : null}
                   </View>
+                  {/* Confirmation tick on the right. */}
+                  <TouchableOpacity style={styles.wineCheck} onPress={() => toggleWineConfirmed(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Text style={[styles.wineCheckText, w.confirmed && styles.wineCheckTextOn]}>{w.confirmed ? '☑' : '☐'}</Text>
+                  </TouchableOpacity>
                 </View>
                 );
               })}
@@ -690,6 +777,14 @@ export default function LineupDetailScreen() {
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* "This is in my cellar" — pick the real cellar wine for a mis-read bottle. */}
+      <CellarWinePicker
+        visible={cellarPickerFor != null}
+        onClose={() => setCellarPickerFor(null)}
+        onSelect={pickCellarForWine}
+        allowPlaced
+      />
 
       {/* Edit the date + location stamp. */}
       <Modal visible={stampOpen} transparent animationType="fade" onRequestClose={() => setStampOpen(false)}>
@@ -919,6 +1014,8 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   headerTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.lg },
+  // "Title" — the lineup's own name, centred input beneath the page title.
+  titleInput: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.gold, textAlign: 'center', paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
   venueRow: { alignItems: 'center', marginTop: spacing.xs, paddingHorizontal: spacing.xl },
   venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, textAlign: 'center', paddingVertical: 2, alignSelf: 'stretch' },
@@ -972,9 +1069,11 @@ const styles = StyleSheet.create({
   dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   // Section headers — yellow, all-caps, matching the stats-bar type.
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
-  noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm },
+  noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
   noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8 },
+  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
+  // Always-visible "brief thoughts" input on the review form.
+  thoughtsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 80, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlignVertical: 'top' },
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
   noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },
@@ -993,6 +1092,12 @@ const styles = StyleSheet.create({
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   wineName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
   tagRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
+  // Right-hand confirmation tick on each wine row.
+  wineCheck: { paddingLeft: spacing.sm },
+  wineCheckText: { fontSize: 22, color: colors.textMuted },
+  wineCheckTextOn: { color: colors.gold },
+  // Prompt under an un-ticked wine — confirm it or correct it.
+  confirmHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 4 },
   intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.85)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).

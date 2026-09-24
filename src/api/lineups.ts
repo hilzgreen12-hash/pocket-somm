@@ -16,6 +16,8 @@ export interface LineupWine {
   cellar_wine_id: string | null;
   archived: boolean;
   count: number;
+  // Ticked by the user in the lineup review to confirm the read is correct.
+  confirmed?: boolean;
 }
 
 export interface LineupArchive {
