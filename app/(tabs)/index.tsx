@@ -340,6 +340,13 @@ export default function ScanLandingScreen() {
         Wine Searcher Market API + Vinster Intel and Customisation offer the most comprehensive results in wine exploration.
       </Text>
 
+      {/* Voice Command — in the header (matches Cellar + home storage screens):
+          beneath the blurb, above the separator. Discovery only (recommend /
+          consult / wine intel). */}
+      <TouchableOpacity style={styles.voiceBubble} onPress={() => setVoiceOpen(true)} activeOpacity={0.7}>
+        <Text style={styles.voiceBubbleText}>Voice Command</Text>
+      </TouchableOpacity>
+
       <View style={styles.blurbSeparator} />
 
       {/* 2×2 grid of scan actions. Each scan tile carries an "upload instead"
@@ -389,11 +396,6 @@ export default function ScanLandingScreen() {
       <TouchableOpacity style={styles.searchBar} onPress={() => setSearchModalOpen(true)} activeOpacity={0.7}>
         <Feather name="search" size={18} color={colors.textMuted} style={styles.searchBarIcon} />
         <Text style={styles.searchBarText}>Manually Search a Wine</Text>
-      </TouchableOpacity>
-
-      {/* Voice Command — discovery only (recommend / consult / wine intel). */}
-      <TouchableOpacity style={styles.voiceBubble} onPress={() => setVoiceOpen(true)} activeOpacity={0.7}>
-        <Text style={styles.voiceBubbleText}>Voice Command</Text>
       </TouchableOpacity>
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}
@@ -616,7 +618,7 @@ const styles = StyleSheet.create({
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
-  voiceBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Community Musings placeholder — faded dashed card until the feature ships.
   comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },

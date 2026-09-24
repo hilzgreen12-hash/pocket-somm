@@ -66,7 +66,7 @@ export function LineupsCarousel({ requireAccount }: { requireAccount?: (action: 
       {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
       <TouchableOpacity style={styles.addCard} onPress={() => gate(() => router.push('/cellar/archive-night'))} activeOpacity={0.85}>
         <Text style={styles.addCardIcon}>＋</Text>
-        <Text style={styles.addCardText}>Add a lineup</Text>
+        <Text style={styles.addCardText}>Add</Text>
       </TouchableOpacity>
     </ScrollView>
   );
