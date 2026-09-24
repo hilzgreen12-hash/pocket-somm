@@ -33,7 +33,7 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-const SCAN_HELP = `Scan is your way in. Point the camera at a single label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — then save it to your reviews or cellar. Scan a wine list for tailored bottle picks from the menu, or a lineup to add several bottles at once. No label to hand? Search a Wine finds it from Vinster's catalogue, or type the details in yourself.`;
+const SCAN_HELP = `Scan is your way in. Point the camera at a single label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — then save it to your reviews or cellar. Scan a wine list for tailored bottle picks from the menu. No label to hand? Manually Search a Wine to find it from Vinster's catalogue, or type the details in yourself.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
@@ -332,7 +332,7 @@ export default function ScanLandingScreen() {
         <HelpTitle label="Scan" title="How Scan works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
       <Text style={styles.blurb}>
-        Generate wine intel from labels, bottle recommendations from wine lists, and archive your vinous exploits — Vinster keeps a record of it all for you.
+        Wine Searcher Market API + Vinster Intel and Customisation offer the most comprehensive results in wine exploration.
       </Text>
 
       <View style={styles.blurbSeparator} />
@@ -359,20 +359,6 @@ export default function ScanLandingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Search a Wine → predictive typeahead (no upload equivalent) */}
-        <View style={styles.tile}>
-          <TouchableOpacity style={styles.tileMain} onPress={() => setSearchModalOpen(true)} activeOpacity={0.85}>
-            <Ionicons name="search-outline" size={30} color={colors.gold} style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Search a Wine</Text>
-            <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tileBanner} onPress={handleManualInput} activeOpacity={0.7}>
-            <Feather name="edit-3" size={11} color={colors.gold} />
-            <Text style={styles.tileBannerText}>manual input</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Scan a Wine List → recommendations */}
         <View style={styles.tile}>
           <TouchableOpacity
@@ -392,26 +378,15 @@ export default function ScanLandingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Scan a Lineup → a popup chooses Add-to-Cellar vs Archive; the banner
-            offers the same two, opened straight into the library picker. */}
-        <View style={styles.tile}>
-          <TouchableOpacity
-            style={styles.tileMain}
-            onPress={handleScanLineup}
-            activeOpacity={0.85}
-          >
-            <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
-            <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Lineup</Text>
-            <View style={styles.tileDivider} />
-            <Text style={styles.tileDesc} numberOfLines={2}>Add to Your Collection{'\n'}&amp; Archive a Night</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.tileBanner} onPress={handleUploadLineup} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color={colors.gold} />
-            <Text style={styles.tileBannerText}>upload instead</Text>
-          </TouchableOpacity>
-        </View>
-
       </View>
+
+      {/* Separator, then a search bar that opens the wine typeahead. Adding /
+          archiving a lineup now lives on the Review and Cellar tabs. */}
+      <View style={styles.searchBarSeparator} />
+      <TouchableOpacity style={styles.searchBar} onPress={() => setSearchModalOpen(true)} activeOpacity={0.7}>
+        <Feather name="search" size={18} color={colors.textMuted} style={styles.searchBarIcon} />
+        <Text style={styles.searchBarText}>Manually Search a Wine</Text>
+      </TouchableOpacity>
 
       {/* Dictate-to-search is shelved for now: on-device speech-to-text mangles
           foreign/proper wine names (e.g. "Heidsieck" → "Isaac"), which then risks
@@ -471,7 +446,7 @@ export default function ScanLandingScreen() {
       <Modal visible={searchModalOpen} transparent animationType="fade" onRequestClose={() => setSearchModalOpen(false)}>
         <KeyboardAvoidingView style={styles.searchModalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
           <View style={styles.searchModalSheet}>
-            <Text style={styles.searchModalTitle}>Search a Wine</Text>
+            <Text style={styles.searchModalTitle}>Manually Search a Wine</Text>
             <View style={styles.searchRow}>
               <Feather name="search" size={18} color={colors.textMuted} style={styles.searchIcon} />
               <TextInput
@@ -596,6 +571,11 @@ const styles = StyleSheet.create({
   tileDesc: { fontFamily: fonts.headingSemibold, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 18, minHeight: 36 },
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
   tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  // Separator + "Manually Search a Wine" bar beneath the two scan tiles.
+  searchBarSeparator: { height: 1, backgroundColor: colors.divider, marginTop: spacing.xl, marginBottom: spacing.xl },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: colors.surface },
+  searchBarIcon: { marginRight: 2 },
+  searchBarText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.textMuted, letterSpacing: 0.3 },
 
 
   // Search-a-Wine prompt (opened from the Search tile).
