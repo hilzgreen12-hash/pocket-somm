@@ -27,19 +27,12 @@ export function CookbookFoldersCarousel() {
           pairing bubbles above it (same 22px title font). */}
       <Text style={styles.cookbookTitle}>Your Cookbook</Text>
       <Text style={styles.blurb}>Recipes you generate can be saved and organised here. Create folders and record your pairing notes.</Text>
-      <View style={styles.summaryRow}>
-        {/* The arrow is absolutely positioned so only "View Your Cookbook" is
-            centred — the arrow hangs to its right without shifting the text. */}
-        <TouchableOpacity onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 30 }}>
-          <View style={styles.viewLinkWrap}>
-            <Text style={styles.viewLink}>View Your Cookbook</Text>
-            <Text style={styles.viewLinkArrow}>→</Text>
-          </View>
-        </TouchableOpacity>
+      <TouchableOpacity style={styles.summaryRow} onPress={() => router.push('/chef/archive' as any)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
         <Text style={styles.summaryText}>
-          {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'}
+          {recipeCount} {recipeCount === 1 ? 'Recipe' : 'Recipes'} · {collections.length} {collections.length === 1 ? 'Folder' : 'Folders'} · View All →
         </Text>
-      </View>
+      </TouchableOpacity>
+      <View style={styles.statsSep} />
 
       {/* Folders as boxes — mirrors the Cellar storage / Review carousels. */}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
@@ -81,8 +74,10 @@ const styles = StyleSheet.create({
   // Stats bar — the "View Your Cookbook" link sits above the recipe · folder
   // count (mirrors Your Cellar Archive), between full-width gold rules.
   // No top rule; a single faded-yellow separator line below (not a boxed bar).
-  summaryRow: { marginVertical: spacing.sm, paddingVertical: spacing.sm, alignItems: 'center', gap: spacing.xs, borderBottomWidth: 1, borderBottomColor: colors.divider },
+  summaryRow: { marginTop: spacing.sm, paddingVertical: spacing.xs, alignItems: 'center' },
   summaryText: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  // Separator bar between the stats line and the folders carousel.
+  statsSep: { height: 1, backgroundColor: colors.divider, marginTop: spacing.sm, marginBottom: spacing.xs },
   filterHint: { paddingHorizontal: spacing.xl, paddingTop: spacing.xs, fontSize: 12, fontFamily: fonts.bodyItalic, color: colors.textMuted, letterSpacing: 0.3 },
 
   // Box tiles — matched to the Cellar storage carousel (HomeStorageSection).

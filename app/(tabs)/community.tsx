@@ -98,6 +98,7 @@ export default function CommunityTab() {
           <Text style={styles.journalEmail} onPress={() => Linking.openURL('mailto:tellme@vinsterapp.com')}>tellme@vinsterapp.com</Text>
         </Text>
       </View>
+      <View style={{ height: spacing.md }} />
       <JournalCarousel />
 
       <SignInPromptModal

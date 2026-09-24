@@ -7,6 +7,8 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { LineupsCarousel } from '../../src/components/LineupsCarousel';
+import { useQuery } from '@tanstack/react-query';
+import { listLineupArchives } from '../../src/api/lineups';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -19,6 +21,13 @@ export default function ScanTab() {
   const { height } = useWindowDimensions();
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
+  // Count for the "X Lineups · View All Lineups →" stats line. Same query key as
+  // LineupsCarousel, so react-query dedupes it (no extra fetch).
+  const { data: lineups = [] } = useQuery({
+    queryKey: ['lineup-archives', session?.user.id],
+    queryFn: () => listLineupArchives(session!.user.id!),
+    enabled: !!session?.user.id,
+  });
 
   const [signInPromptVisible, setSignInPromptVisible] = useState(false);
   const pendingActionRef = useRef<(() => void) | null>(null);
@@ -77,14 +86,25 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Your Lineups — the Archive-a-Night thumbnail carousel. */}
+      {/* Your Lineups — Archive-a-Night carousel, with a top-left "+ Add" and a
+          sort/swipe hint beneath it. */}
       <View style={styles.section}>
-        <Text style={styles.sectionHeader}>Your Lineups</Text>
+        <View style={styles.lineupHeaderRow}>
+          <TouchableOpacity style={styles.addTopLeft} onPress={() => requireAccount(() => router.push('/cellar/archive-night'))} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} activeOpacity={0.7}>
+            <Text style={styles.addTopRightText}>+ Add</Text>
+          </TouchableOpacity>
+          <Text style={styles.sectionHeader}>Your Lineups</Text>
+        </View>
         <Text style={styles.sketchBlurb}>
           Record, Review and Share your most epic wine exploits.
         </Text>
+        <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/lineups'))} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+          <Text style={styles.lineupStats}>{lineups.length} {lineups.length === 1 ? 'Lineup' : 'Lineups'} · View All Lineups →</Text>
+        </TouchableOpacity>
       </View>
+      <View style={styles.statsSep} />
       <LineupsCarousel requireAccount={requireAccount} />
+      <Text style={styles.lineupHint}>Listed by recently added · Swipe to add and view lineups</Text>
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -106,6 +126,11 @@ const styles = StyleSheet.create({
   // "+ Add" pinned to the top-right of the title row so the title stays centred.
   addTopRight: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
   addTopRightText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // "Your Lineups" header row: heading centred, "+ Add" pinned top-left.
+  lineupHeaderRow: { justifyContent: 'center', alignItems: 'center', marginBottom: spacing.xs },
+  addTopLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  // Sort/swipe caption beneath the lineups carousel.
+  lineupHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },
@@ -116,5 +141,9 @@ const styles = StyleSheet.create({
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Elegant Cormorant, matching the Review header blurb above. Extra bottom
   // margin gives the alter-ego carousel room to breathe beneath it.
-  sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },
+  sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
+  // Gold "X Lineups · View All Lineups →" line (matches Cookbook stats).
+  lineupStats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  // Separator bar between the stats line and the lineups carousel.
+  statsSep: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
 });
