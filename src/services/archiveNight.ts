@@ -2,7 +2,7 @@ import type { CellarWine } from '../types/wine';
 import type { DetectedBottle } from '../api/label';
 import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/cellar';
 import { clearWineFromRacks, removeSlotsForWine } from '../api/racks';
-import { wineNameKey } from '../utils/wineIdentity';
+import { wineNameKey, looseWineMatch } from '../utils/wineIdentity';
 
 export interface NightMatch {
   wine: CellarWine;
@@ -41,7 +41,7 @@ export function matchLineupToCellar(detected: DetectedBottle[], cellar: CellarWi
     // the strongest signal; otherwise fall back to the producer or name lining
     // up on its own (mirrors the original looser rule, now accent/punctuation/
     // article/order tolerant).
-    const candidates = cellar.filter((w) => {
+    let candidates = cellar.filter((w) => {
       if (dKey && dKey === wineNameKey(w.producer, w.wine_name)) return true;
       const wProducerKey = wineNameKey(w.producer, null);
       const wNameKey = wineNameKey(null, w.wine_name);
@@ -49,6 +49,16 @@ export function matchLineupToCellar(detected: DetectedBottle[], cellar: CellarWi
       const nameHit = !!dNameKey && (wNameKey === dNameKey || wProducerKey === dNameKey);
       return producerHit || nameHit;
     });
+    // Fallback (mirrors the scan-lineup placement path): the same wine scanned
+    // twice can split producer / name / grape across fields differently, so the
+    // strict key misses it. Accept a looser token-subset match, gated on a
+    // matching vintage, before declaring the bottle "not in your cellar".
+    if (candidates.length === 0) {
+      candidates = cellar.filter((w) => looseWineMatch(
+        { producer: b.producer, wineName: b.wineName, vintage: b.vintage },
+        { producer: w.producer, wineName: w.wine_name, grape: w.grape_variety, vintage: w.vintage },
+      ));
+    }
 
     // Prefer an exact vintage match when the detection has a vintage.
     let match: CellarWine | undefined;
