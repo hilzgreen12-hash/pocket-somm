@@ -220,3 +220,43 @@ export async function moveBottlesToLocation(
     await addLocationPlacement(source.id, destLocationId, null, n);
   }
 }
+
+// Heal wines left in the legacy-only state by an OLD move: a row that names a
+// home alt cellar in `storage_location_id` but has NO matching 'location'
+// placement. Since migration 106 the DB stopped mirroring that legacy field, so
+// such a bottle is invisible in the alt cellar AND shows as a split line in the
+// Full Cellar List (the "moved to fridge and back, now 1 + 3" bug). Each orphan
+// is folded back via moveBottlesToLocation, which merges it onto the wine's
+// existing line in that cellar (consolidating the split to one line, correct
+// count) and drops the leftover row.
+//
+// Deliberately narrow + idempotent: only ACTIVE, non-wishlist rows that (a) point
+// at one of the given HOME location ids, (b) aren't awaiting a unit slot, and
+// (c) have no location placement yet. External/imported cellars are excluded by
+// the caller so a big import is never bulk-rewritten. Returns how many it healed.
+export async function reconcileLegacyLocationWines(
+  userId: string, homeLocationIds: string[],
+): Promise<number> {
+  const homeSet = new Set(homeLocationIds.filter(Boolean));
+  if (homeSet.size === 0) return 0;
+  const { data: rows, error } = await supabase
+    .from('cellar_wines')
+    .select('id, producer, wine_name, vintage, bottle_size_ml, quantity, storage_location_id')
+    .eq('user_id', userId)
+    .is('archived_at', null)
+    .eq('is_wishlist', false)
+    .is('awaiting_placement_unit_id', null)
+    .not('storage_location_id', 'is', null);
+  if (error) throw error;
+  const candidates = (rows ?? []).filter((r: any) => homeSet.has(r.storage_location_id));
+  if (candidates.length === 0) return 0;
+  const placed = await fetchPlacementsForWines(candidates.map((r: any) => r.id));
+  const hasLoc = new Set(placed.filter((p) => p.kind === 'location').map((p) => p.cellar_wine_id));
+  let healed = 0;
+  for (const r of candidates) {
+    if (hasLoc.has(r.id)) continue; // already has a real placement — leave it
+    await moveBottlesToLocation(r as any, r.storage_location_id, r.quantity ?? 1);
+    healed++;
+  }
+  return healed;
+}

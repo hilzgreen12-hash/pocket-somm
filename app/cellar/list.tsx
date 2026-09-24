@@ -22,7 +22,7 @@ import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWin
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { fetchPlacementsForWines, type CellarPlacement } from '../../src/api/placements';
+import { fetchPlacementsForWines, reconcileLegacyLocationWines, type CellarPlacement } from '../../src/api/placements';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -112,6 +112,7 @@ export default function FullCellarListScreen() {
     void backfillMissingMaturities(wines, () => qc.invalidateQueries({ queryKey: ['cellar', userId] }));
   }, [userId, wines.length, qc]);
 
+
   // Cellar-wide "Location" filters (custom_filters with rack_id NULL).
   const { data: locations = [] } = useQuery({
     queryKey: ['cellar-locations', userId],
@@ -129,6 +130,28 @@ export default function FullCellarListScreen() {
     queryFn: () => fetchStorageLocations(userId!),
     enabled: !!userId,
   });
+
+  // One-time self-heal for wines an OLD move left pointing at a home alt cellar
+  // without a real placement (invisible there, and split into a duplicate line
+  // here). Folds each back onto its existing line in that cellar. Idempotent —
+  // once healed there's nothing left to fix. Home locations only, so a large
+  // external import is never touched.
+  const reconciledRef = useRef(false);
+  useEffect(() => {
+    if (reconciledRef.current || !userId || wines.length === 0 || storageLocations.length === 0) return;
+    reconciledRef.current = true;
+    const homeIds = storageLocations.filter((s) => !s.is_external).map((s) => s.id);
+    if (homeIds.length === 0) return;
+    void reconcileLegacyLocationWines(userId, homeIds)
+      .then((healed) => {
+        if (healed > 0) {
+          qc.invalidateQueries({ queryKey: ['cellar', userId] });
+          qc.invalidateQueries({ queryKey: ['placements-list'] });
+          qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+        }
+      })
+      .catch(() => { /* non-fatal — reconcile is best-effort */ });
+  }, [userId, wines.length, storageLocations.length, qc]);
 
   // Long-press a bespoke Location chip in the filter → manage it, mirroring the
   // rack filter menu: Add/Remove Wines · Rename Filter · Delete.
