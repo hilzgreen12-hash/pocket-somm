@@ -588,13 +588,19 @@ export default function StorageLocationScreen() {
   // Long-press a wine → a per-wine action pop-up (replaces the select-mode dark
   // bar), for consistency with the rack/fridge grids.
   function openWineActions(w: CellarWine) {
+    const qty = w.quantity ?? 1;
+    const cl = bottleSizeCl(w.bottle_size_ml ?? 750);
+    const region = (w.region ?? '').trim();
+    // Header = wine + vintage; body = region and the bottle count/format HERE.
+    const bottleLine = `${qty} x ${cl}cl in ${location?.name ?? 'this cellar'}`;
     showAlert({
       title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      body: [region, bottleLine].filter(Boolean).join('\n'),
       buttons: [
+        { text: 'Move Bottles', onPress: () => openMoveBottlesMenu(w) },
         { text: 'Edit Wine Details', onPress: () => router.push(`/cellar/edit-wine/${w.id}` as any) },
-        { text: 'Move Wine/Bottles', onPress: () => openMoveWine(w) },
         { text: 'Archive Wine', onPress: () => openArchiveWine(w) },
-        { text: 'Delete', style: 'destructive', onPress: () => showAlert({
+        { text: 'Delete Wine', style: 'destructive', onPress: () => showAlert({
           title: 'Delete this wine?',
           body: "Permanently remove it from your cellar, but keep your reviews. This can't be undone.",
           buttons: [
@@ -605,6 +611,43 @@ export default function StorageLocationScreen() {
         { text: 'Cancel', style: 'cancel' },
       ],
     });
+  }
+
+  // "Move Bottles" → a submenu: file this wine into / out of a case here, or move
+  // it (some or all bottles) to a different storage location.
+  function openMoveBottlesMenu(w: CellarWine) {
+    showAlert({
+      title: wineHeaderLine(w.producer, w.wine_name, w.vintage),
+      buttons: [
+        { text: 'Add/Move to Case', onPress: () => openMoveToCase(w) },
+        { text: 'Remove from Case', onPress: () => removeFromCase(w) },
+        { text: 'Move Storage Locations', onPress: () => openMoveWine(w) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  // Pick a case in this cellar to file the wine into (setting its placement case).
+  function openMoveToCase(w: CellarWine) {
+    const current = (w as any).case_id as string | null | undefined;
+    const targets = cases.filter((c) => c.id !== current);
+    if (targets.length === 0) {
+      showAlert({ title: cases.length === 0 ? 'No cases yet' : 'Already filed', body: cases.length === 0 ? 'Create a case first from the case carousel (+ Add Case).' : 'This wine is already in your only case.' });
+      return;
+    }
+    showAlert({
+      title: 'Add / move to case',
+      buttons: [
+        ...targets.map((c) => ({ text: c.name, onPress: () => addExistingToCase(w, c) })),
+        { text: 'Cancel', style: 'cancel' as const },
+      ],
+    });
+  }
+  function removeFromCase(w: CellarWine) {
+    if (!(w as any).case_id) {
+      showAlert({ title: 'Not in a case', body: `${wineHeaderLine(w.producer, w.wine_name, w.vintage) || 'This wine'} is loose in ${location?.name ?? 'this cellar'} — it isn't in a case.` });
+      return;
+    }
+    void fileWineIntoCase(w, null);
   }
 
   // "Move Wine/Bottles" → first ask HOW MANY of this location's bottles to move
@@ -798,18 +841,23 @@ export default function StorageLocationScreen() {
       ],
     });
   }
-  async function addExistingToCase(w: CellarWine, c: StorageCase) {
+  // File a wine into a case (or out of one with null) by setting its placement's
+  // case — the alt-cellar case membership lives on the placement, not the legacy
+  // cellar_wines.case_id. Shared by "Add from This Cellar List" and the per-wine
+  // Move Bottles → Add/Move to Case / Remove from Case menu.
+  async function fileWineIntoCase(w: CellarWine, caseId: string | null) {
     try {
       const placementId = (w as any).placement_id as string | undefined;
-      if (placementId) await setPlacementCase(placementId, c.id);
-      else await assignWineToCase(w.id, c.id);
+      if (placementId) await setPlacementCase(placementId, caseId);
+      else await assignWineToCase(w.id, caseId);
       qc.invalidateQueries({ queryKey: ['storage-location-wines', id] });
       qc.invalidateQueries({ queryKey: ['storage-location-cases', id] });
       qc.invalidateQueries({ queryKey: ['cellar', userId] });
     } catch (err) {
-      showAlert({ title: 'Could not add', body: err instanceof Error ? err.message : 'Please try again.' });
+      showAlert({ title: 'Could not update', body: err instanceof Error ? err.message : 'Please try again.' });
     }
   }
+  function addExistingToCase(w: CellarWine, c: StorageCase) { void fileWineIntoCase(w, c.id); }
 
   async function confirmAddBottles() {
     const c = addBottlesCase;
