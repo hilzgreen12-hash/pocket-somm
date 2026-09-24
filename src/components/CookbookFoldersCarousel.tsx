@@ -65,7 +65,7 @@ const styles = StyleSheet.create({
   // "Your Cookbook" plain title (terracotta), the blurb, then a "View Your
   // Cookbook →" link line, then the stats bar and carousel.
   cookbookTitle: { fontSize: 20, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginTop: spacing.md, marginBottom: spacing.sm },
-  blurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 22, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: colors.textMuted, lineHeight: 26, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // The text sizes the wrap; the arrow is absolute (left: 100%) so it doesn't
   // count toward the centred width.
   viewLinkWrap: { alignItems: 'center', justifyContent: 'center' },
