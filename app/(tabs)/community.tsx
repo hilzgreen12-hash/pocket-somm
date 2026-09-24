@@ -125,7 +125,7 @@ const styles = StyleSheet.create({
   // Section headers ("The Journal", "Other Features Arriving Soon") — match the
   // 22pt white headers on the other tabs (Your Wines At Home, Review of You).
   sectionHeader: { fontSize: 22, fontFamily: fonts.headingSemibold, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
-  journalBlurb: { fontSize: 16, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 22 },
+  journalBlurb: { fontSize: 17, fontFamily: fonts.headingRegular, color: '#FFFFFF', textAlign: 'center', lineHeight: 24 },
   journalEmail: { color: colors.gold, textDecorationLine: 'underline' },
   // Sized to match the Pair-tab buttons (slimmer vertical padding).
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
