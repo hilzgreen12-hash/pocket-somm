@@ -11,6 +11,7 @@ import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkSoonCarousel } from '../../src/components/DrinkSoonCarousel';
+import { RecentReviewsCarousel } from '../../src/components/RecentReviewsCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -399,6 +400,11 @@ export default function ScanLandingScreen() {
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Recent Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
+
+      {/* Recent Reviews — wine + restaurant reviews, most recent first. */}
+      <View style={styles.sectionSeparator} />
+      <Text style={styles.carouselHeader}>Recent Reviews</Text>
+      <View style={styles.carouselBleed}><RecentReviewsCarousel /></View>
 
       {/* Drink Soon — cellar bottles at their peak. */}
       <View style={styles.sectionSeparator} />
