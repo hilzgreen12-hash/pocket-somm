@@ -17,7 +17,7 @@ export function DrinkSoonCarousel() {
     return (
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
         <View style={[styles.card, styles.emptyCard]}>
-          <Text style={styles.emptyText}>Bottles at their peak will appear here as your cellar grows.</Text>
+          <Text style={styles.emptyText}>Bottles from your cellar and approaching their peak will appear here as your collection grows</Text>
         </View>
       </ScrollView>
     );
