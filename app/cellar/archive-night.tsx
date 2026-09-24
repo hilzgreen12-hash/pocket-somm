@@ -241,6 +241,37 @@ export default function ArchiveNightScreen() {
     }
   }
 
+  // Capture-flow save: read the bottles, record them on the lineup (matched wines
+  // keep their cellar link so the detail screen can show "Your Cellar" vs "Off
+  // Cellar"), save the photo, and drop the user into the lineup to review. NOTHING
+  // is archived or reviewed here — that all happens later in the lineup detail.
+  async function saveLineup(uri: string) {
+    if (!session?.user.id) return;
+    setStage('analyzing');
+    try {
+      const base64 = await prepareImageBase64(uri);
+      const { bottles } = await detectLineup(base64);
+      const capped = (bottles ?? []).slice(0, 8);
+      const result = matchLineupToCellar(capped, wines);
+      const lineupWines: LineupWine[] = [
+        ...result.matched.map((m) => ({ producer: m.wine.producer, wine_name: m.wine.wine_name, vintage: m.wine.vintage, cellar_wine_id: m.wine.id, archived: false, count: m.count })),
+        ...result.unmatched.map((b) => ({ producer: b.producer ?? null, wine_name: b.wineName, vintage: b.vintage, cellar_wine_id: null, archived: false, count: b.quantity ?? 1 })),
+      ];
+      const bottleCount = lineupWines.reduce((s, w) => s + (w.count ?? 1), 0);
+      const row = await saveLineupArchive(session.user.id, uri, bottleCount, { wines: lineupWines });
+      qc.invalidateQueries({ queryKey: ['lineup-archives', session.user.id] });
+      // Straight into the lineup to review the wines.
+      router.replace(`/cellar/lineup/${row.id}` as any);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      showAlert({
+        title: 'Could not save the lineup',
+        body: /minute|too many|rate limit/i.test(msg) ? msg : 'Please check the photo is clear with front labels facing forward (up to 8 bottles), and try again.',
+      });
+      setStage('preview');
+    }
+  }
+
   function adjust(wineId: string, delta: number, maxQty: number) {
     setCounts((prev) => {
       const next = Math.max(0, Math.min(maxQty, (prev[wineId] ?? 0) + delta));
@@ -626,7 +657,7 @@ export default function ArchiveNightScreen() {
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
           </TouchableOpacity>
-          <Text style={styles.title}>Archive a Night</Text>
+          <Text style={styles.title}>Capturing Your Lineup</Text>
           <View style={styles.headerSpacer} />
         </View>
       ) : null}
@@ -668,11 +699,10 @@ export default function ArchiveNightScreen() {
               confirm screen — 'cover' cropped most of the bottles out. */}
           {imageUri ? <Image source={{ uri: imageUri }} style={StyleSheet.absoluteFill} resizeMode="contain" /> : null}
           <View style={styles.previewActions}>
-            <TouchableOpacity style={styles.previewNeutral} onPress={() => { if (imageUri) void analyze(imageUri); }} activeOpacity={0.85}>
-              <Text style={styles.previewNeutralText}>Review Now & Save</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.previewNeutral} onPress={() => { if (imageUri) void analyze(imageUri, 'later'); }} activeOpacity={0.85}>
-              <Text style={styles.previewNeutralText}>Save & Review Later</Text>
+            {/* Capture just saves the lineup — the user reviews the wines later
+                from the lineup itself (in Your Lineups). */}
+            <TouchableOpacity style={styles.previewNeutral} onPress={() => { if (imageUri) void saveLineup(imageUri); }} activeOpacity={0.85}>
+              <Text style={styles.previewNeutralText}>Save Lineup</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.previewSecondary} onPress={() => { setImageUri(null); setStage('capture'); }} activeOpacity={0.85}>
               <Text style={styles.previewSecondaryText}>Retake</Text>
