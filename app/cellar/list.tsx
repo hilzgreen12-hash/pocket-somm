@@ -521,7 +521,7 @@ export default function FullCellarListScreen() {
   // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
   // to archived wines only and hides the Archived filter chip so nothing
   // outside the archive can ever show.
-  const { archived, added } = useLocalSearchParams<{ archived?: string; added?: string }>();
+  const { archived, added, add } = useLocalSearchParams<{ archived?: string; added?: string; add?: string }>();
   const isArchiveView = archived === '1';
   const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
@@ -551,6 +551,16 @@ export default function FullCellarListScreen() {
   const [addWineOpen, setAddWineOpen] = useState(false);
   const [scanningLabel, setScanningLabel] = useState(false);
   const { setImage, setWineDetails, setError, reset: resetLabelStore } = useLabelStore();
+
+  // Opened from the Cellar tab's "Add Wines" button (?add=1) — pop the same
+  // Scan / Upload / Manual chooser straight away, once.
+  const addParamRef = useRef(false);
+  useEffect(() => {
+    if (add === '1' && !isArchiveView && !addParamRef.current) {
+      addParamRef.current = true;
+      setAddWineOpen(true);
+    }
+  }, [add, isArchiveView]);
 
   async function handleUpload() {
     if (!(await ensureMediaPermission('library'))) return;
@@ -871,14 +881,8 @@ export default function FullCellarListScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <View style={styles.headerActions}>
-          {!isArchiveView ? (
-            <TouchableOpacity
-              onPress={() => setAddWineOpen(true)}
-              hitSlop={{ top: 10, bottom: 6, left: 8, right: 8 }}
-            >
-              <Text style={styles.addLink}>+ Add</Text>
-            </TouchableOpacity>
-          ) : null}
+          {/* Adding wines now starts from the "Add Wines" button on the Cellar
+              tab (which opens this list with ?add=1 and the same chooser). */}
           <TouchableOpacity
             onPress={handleShareList}
             disabled={sharingList || sorted.length === 0}

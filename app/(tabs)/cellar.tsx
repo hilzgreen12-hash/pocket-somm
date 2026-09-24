@@ -85,10 +85,16 @@ export default function CellarTab() {
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
-      {/* Voice Command — directly beneath the blurb, above the first separator. */}
-      <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
-        <Text style={styles.voiceBubbleText}>Voice Command</Text>
-      </TouchableOpacity>
+      {/* Voice Command + Add Wines — a left-indented row of two matching pills.
+          Add Wines opens the Full Cellar List's scan/upload/manual chooser. */}
+      <View style={styles.actionRow}>
+        <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.actionBtn}>
+          <Text style={styles.actionBtnText}>Voice Command</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.actionBtn}>
+          <Text style={styles.actionBtnText}>Add Wines</Text>
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.divider} />
 
@@ -137,6 +143,12 @@ const styles = StyleSheet.create({
   titleSide: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },
   // Voice Command — gold bubble (matches the app-wide treatment).
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.xs },
+  // Left-indented row of two matching gold pills (Voice Command · Add Wines).
+  // Metrics mirror buttonFull exactly (radius 14, paddingVertical sm, 14px text)
+  // so they're the same height as the buttons below.
+  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
+  actionBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
+  actionBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   importLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
