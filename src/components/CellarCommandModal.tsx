@@ -11,6 +11,7 @@ import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/ce
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
+import { moveBottlesToLocation, clearLocationPlacements } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
@@ -252,23 +253,31 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           ? (locations.find((l) => l.id === chosenWine.storage_location_id)?.name ?? 'your cellar')
           : 'your cellar';
         const toName = destName ?? 'its new location';
-        // A rack/fridge/bin destination flags the bottle "awaiting placement" in
-        // that unit (no slot yet); an Alt Cellar keeps storage_location_id and
-        // is flagged awaiting placement too (the user can "ignore" it there).
-        const destFields = result?.unitId
-          ? { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: true, awaiting_placement_unit_id: result.unitId }
-          : { storage_location_id: result!.locationId, case_id: null, bin_cell_id: null, awaiting_placement: true, awaiting_placement_unit_id: null };
 
-        if (whole) {
-          await clearWineFromRacks(chosenWine.id);
-          await updateCellarWine(chosenWine.id, destFields);
+        if (result?.locationId) {
+          // Destination is an alt cellar — go placement-native + merge-aware so
+          // the bottles actually land there (and consolidate onto an existing
+          // line, e.g. bumping a 3-bottle count to 4) instead of vanishing.
+          await moveBottlesToLocation(chosenWine, result.locationId, count);
         } else {
-          // Partial move: free that many source slots, decrement the source, and
-          // clone a destination row carrying the moved bottles (awaiting placement).
-          await removeSlotsForWine(chosenWine.id, count);
-          await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
-          const { id, created_at, updated_at, ...rest } = chosenWine;
-          await addCellarWine({ ...rest, quantity: count, is_wishlist: false, ...destFields });
+          // Destination is a rack/fridge/bin unit — flag the bottles "awaiting
+          // placement" there (no slot chosen yet). The destination screen surfaces
+          // awaiting-placement bottles so they're never invisible.
+          const destFields = { storage_location_id: null, case_id: null, bin_cell_id: null, awaiting_placement: true, awaiting_placement_unit_id: result!.unitId };
+          if (whole) {
+            // Free the wine from every current spot — rack slots AND any alt-cellar
+            // placements — or it lingers as a ghost line where it used to live.
+            await clearWineFromRacks(chosenWine.id);
+            await clearLocationPlacements(chosenWine.id);
+            await updateCellarWine(chosenWine.id, destFields);
+          } else {
+            // Partial move: free that many source slots, decrement the source, and
+            // clone a destination row carrying the moved bottles (awaiting placement).
+            await removeSlotsForWine(chosenWine.id, count);
+            await updateCellarWine(chosenWine.id, { quantity: chosenWine.quantity - count });
+            const { id, created_at, updated_at, ...rest } = chosenWine;
+            await addCellarWine({ ...rest, quantity: count, is_wishlist: false, ...destFields });
+          }
         }
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
         qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
@@ -284,7 +293,7 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           action: 'move',
           wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
           meta: [chosenWine.region, chosenWine.vintage].filter(Boolean).join(' · '),
-          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} · from ${fromName} to ${toName} — awaiting placement`,
+          detail: `${count} ${count === 1 ? 'bottle' : 'bottles'} · from ${fromName} to ${toName}${result?.unitId ? ' — awaiting placement' : ''}`,
           viewLabel: `View in ${toName}`,
           viewRoute,
         });

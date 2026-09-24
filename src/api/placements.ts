@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { removeSlotsForWine } from './racks';
 
 // A single placement of some of a wine's bottles in ONE spot — a rack slot, a
 // bin cell, or an alt cellar (optionally in a case). Introduced by the unified
@@ -143,4 +144,79 @@ export async function fetchLocationPlacementRows(locationId: string): Promise<an
     if (!w || w.archived_at || w.is_wishlist) return [];
     return [{ ...w, quantity: p.quantity, case_id: p.case_id, placement_id: p.id }];
   });
+}
+
+// Delete ALL of a wine's alt-cellar (location) placements — used when a wine
+// leaves every alt cellar at once (e.g. a whole-wine move into a rack/fridge).
+// The DB no longer mirrors the legacy storage_location_id into these rows
+// (migration 106), so they must be cleared explicitly or the wine lingers as a
+// ghost line in the alt cellar it left.
+export async function clearLocationPlacements(wineId: string): Promise<void> {
+  const { error } = await supabase
+    .from('cellar_placements')
+    .delete()
+    .eq('cellar_wine_id', wineId)
+    .eq('kind', 'location');
+  if (error) throw error;
+}
+
+// Move `count` bottles of a wine INTO an alt-cellar location — placement-native
+// and merge-aware. This is the correct path for any "move to an alt cellar"
+// (voice or manual): it frees the bottles from wherever they sit now (rack/fridge
+// slots first, then the source's own OTHER alt-cellar placements) and lands them
+// in the destination. Crucially it consolidates onto the wine identity's existing
+// line there — so a bottle returning from the fridge bumps the alt cellar's
+// count (3 → 4) on ONE row instead of vanishing (no location placement was ever
+// written) or spawning a duplicate line. An emptied source row is removed.
+export async function moveBottlesToLocation(
+  source: {
+    id: string; producer: string | null; wine_name: string | null;
+    vintage: string | null; bottle_size_ml: number | null; quantity: number;
+  },
+  destLocationId: string,
+  count: number,
+): Promise<void> {
+  const n = Math.max(1, Math.min(count, source.quantity ?? 1));
+
+  // 1. Free `n` bottles from the source's current storage: rack/fridge slots
+  //    first, then its own alt-cellar placements OTHER than the destination
+  //    (a cellar-to-cellar move) — never rob from the destination itself.
+  let toFree = n - (await removeSlotsForWine(source.id, n));
+  if (toFree > 0) {
+    const srcLocs = (await fetchPlacementsForWine(source.id))
+      .filter((p) => p.kind === 'location' && p.storage_location_id !== destLocationId);
+    for (const p of srcLocs) {
+      if (toFree <= 0) break;
+      const take = Math.min(toFree, p.quantity ?? 0);
+      if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; }
+    }
+  }
+
+  // 2. Merge into an existing line for this wine identity in the destination if
+  //    one exists; otherwise place the bottles on the source row itself.
+  const here = await fetchLocationPlacementRows(destLocationId);
+  const sameIdentity = (r: any) =>
+    (r.producer ?? '') === (source.producer ?? '') &&
+    (r.wine_name ?? '') === (source.wine_name ?? '') &&
+    (r.vintage ?? null) === (source.vintage ?? null) &&
+    (r.bottle_size_ml ?? 750) === (source.bottle_size_ml ?? 750);
+  const twin = here.find((r) => r.id !== source.id && sameIdentity(r));
+
+  if (twin) {
+    // Bump the twin's line + its row total, and shed the moved bottles from the
+    // source (delete the row when it empties — e.g. a fridge clone returning
+    // home), so the wine shows a single consolidated line.
+    await addLocationPlacement(twin.id, destLocationId, null, n);
+    const { data: twRow } = await supabase
+      .from('cellar_wines').select('quantity').eq('id', twin.id).maybeSingle();
+    await supabase.from('cellar_wines')
+      .update({ quantity: (twRow?.quantity ?? 0) + n }).eq('id', twin.id);
+    const srcQty = (source.quantity ?? 0) - n;
+    if (srcQty <= 0) await supabase.from('cellar_wines').delete().eq('id', source.id);
+    else await supabase.from('cellar_wines').update({ quantity: srcQty }).eq('id', source.id);
+  } else {
+    // First bottles of this wine here — keep them on the source row; we only
+    // relocated existing bottles, so the row's total is unchanged.
+    await addLocationPlacement(source.id, destLocationId, null, n);
+  }
 }
