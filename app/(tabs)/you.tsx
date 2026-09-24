@@ -5,14 +5,11 @@ import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
-import * as Linking from 'expo-linking';
 import * as Application from 'expo-application';
 import { router } from 'expo-router';
+import { AlterEgoCarousel } from '../../src/components/AlterEgoCarousel';
 import { useAuth } from '../../src/hooks/useAuth';
-import { usePreferences } from '../../src/hooks/usePreferences';
 import { supabase } from '../../src/api/supabase';
-import { backfillMissingGrapes, countGrapelessReviews } from '../../src/services/grapeBackfill';
-import { CURRENCIES } from '../../src/constants/currency';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -27,117 +24,13 @@ export default function YouScreen() {
   // Match the other tabs' header placement exactly (same dynamic top inset).
   const paddingTop = Math.max(55, height * 0.095);
   const { session } = useAuth();
-  const { preferences, updatePreferences } = usePreferences();
   const currentUsername = session?.user.user_metadata?.display_name ?? '';
   const currentEmail = session?.user.email ?? '';
 
-  const [editingIdentity, setEditingIdentity] = useState(false);
-  const [usernameDraft, setUsernameDraft] = useState(currentUsername);
-  const [emailDraft, setEmailDraft] = useState(currentEmail);
-  const [savingIdentity, setSavingIdentity] = useState(false);
-
-  const [notifyUpdates, setNotifyUpdates] = useState<boolean>(
-    session?.user.user_metadata?.notify_updates ?? true
-  );
-  const [currencyOpen, setCurrencyOpen] = useState(false);
-
-  // One-off backfill: fill the grape variety on reviews saved without one
-  // (chiefly the Vivino imports). Resolved in bulk by AI, then written back.
-  const [grapeBackfilling, setGrapeBackfilling] = useState(false);
-  const [grapeProgress, setGrapeProgress] = useState<{ done: number; total: number }>({ done: 0, total: 0 });
-  async function runGrapeBackfill() {
-    const userId = session?.user.id;
-    if (!userId || grapeBackfilling) return;
-    const missing = await countGrapelessReviews(userId).catch(() => 0);
-    if (missing === 0) {
-      showAlert({ title: 'All set', body: 'Every one of your reviews already has a grape variety.' });
-      return;
-    }
-    showAlert({
-      title: `Fill in ${missing} grape ${missing === 1 ? 'variety' : 'varieties'}?`,
-      body: 'Vinster will look up the grape for each review that’s missing one and fill it in. This can take a few minutes for a large collection — keep the app open.',
-      buttons: [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Fill Them In', onPress: async () => {
-          setGrapeProgress({ done: 0, total: missing });
-          setGrapeBackfilling(true);
-          try {
-            const { filled } = await backfillMissingGrapes(userId, (done, total) => setGrapeProgress({ done, total }));
-            showAlert({ title: 'Grapes filled in', body: `Vinster added a grape variety to ${filled} ${filled === 1 ? 'review' : 'reviews'}.` });
-          } catch (err) {
-            showAlert({ title: 'Could not finish', body: err instanceof Error ? err.message : 'Please try again.' });
-          } finally {
-            setGrapeBackfilling(false);
-          }
-        } },
-      ],
-    });
-  }
-  const currentCurrency = preferences?.defaultCurrency ?? 'GBP';
-  const currentCurrencyLabel = CURRENCIES.find((c) => c.code === currentCurrency)?.label ?? currentCurrency;
-
-  async function updateNotifySetting(key: string, value: boolean, revert: (v: boolean) => void) {
-    try {
-      const { error } = await supabase.auth.updateUser({ data: { [key]: value } });
-      if (error) throw new Error(error.message);
-    } catch (err) {
-      revert(!value);
-      showAlert({
-        title: "Couldn't save preference",
-        body: err instanceof Error ? err.message : 'Please try again.',
-      });
-    }
-  }
-
-  function openIdentityEdit() {
-    setUsernameDraft(currentUsername);
-    setEmailDraft(currentEmail);
-    setEditingIdentity(true);
-  }
-
-  function cancelIdentityEdit() {
-    setUsernameDraft(currentUsername);
-    setEmailDraft(currentEmail);
-    setEditingIdentity(false);
-  }
-
-  async function handleIdentitySave() {
-    // Dismiss the keyboard explicitly so the iOS first-tap-eats-the-tap
-    // bug can't strand the user with focused username/email inputs.
-    Keyboard.dismiss();
-    const usernameTrim = usernameDraft.trim();
-    const emailTrim = emailDraft.trim();
-    const usernameChanged = usernameTrim !== (currentUsername ?? '').trim() && usernameTrim.length > 0;
-    const emailChanged = emailTrim !== currentEmail.trim() && emailTrim.length > 0;
-    if (!usernameChanged && !emailChanged) {
-      setEditingIdentity(false);
-      return;
-    }
-    setSavingIdentity(true);
-    try {
-      if (usernameChanged) {
-        const { error } = await supabase.auth.updateUser({ data: { display_name: usernameTrim } });
-        if (error) throw new Error(`username: ${error.message}`);
-      }
-      if (emailChanged) {
-        const redirectTo = Linking.createURL('auth/callback');
-        const { error } = await supabase.auth.updateUser(
-          { email: emailTrim },
-          { emailRedirectTo: redirectTo },
-        );
-        if (error) throw new Error(`email: ${error.message}`);
-        showAlert({
-          title: 'Check both inboxes',
-          body: 'Confirmation links have been sent to your current and new email address. Tap both links to complete the change.',
-        });
-      }
-      setEditingIdentity(false);
-    } catch (err) {
-      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSavingIdentity(false);
-    }
-  }
+  // Account controls (currency, email, username, email preferences) now live on
+  // the dedicated Your Settings screen. The alter-ego carousel takes a gate; on
+  // this account-gated screen the session always exists, so it just runs.
+  const requireAccount = (action: () => void) => action();
 
   const [signingOut, setSigningOut] = useState(false);
 
@@ -239,93 +132,21 @@ export default function YouScreen() {
         <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/recipe')} activeOpacity={0.7}>
           <Text style={styles.prefButtonText}>Your Recipe Requirements</Text>
         </TouchableOpacity>
-        {/* Moved here from the Share tab — how you appear to the community. */}
-        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/community/profile')} activeOpacity={0.7}>
-          <Text style={styles.prefButtonText}>Your Community Profile</Text>
-        </TouchableOpacity>
-        {/* One-off maintenance: fill grape varieties on reviews that lack one. */}
-        <TouchableOpacity style={styles.prefButton} onPress={() => void runGrapeBackfill()} activeOpacity={0.7} disabled={grapeBackfilling}>
-          <Text style={styles.prefButtonText}>Fill In Missing Grape Varieties</Text>
+        <TouchableOpacity style={styles.prefButton} onPress={() => router.push('/profile/settings')} activeOpacity={0.7}>
+          <Text style={styles.prefButtonText}>Your Settings</Text>
         </TouchableOpacity>
       </View>
-
-      <Modal visible={grapeBackfilling} transparent animationType="fade">
-        <View style={styles.grapeOverlay}>
-          <View style={styles.grapeSheet}>
-            <ActivityIndicator size="large" color={colors.gold} />
-            <Text style={styles.grapeTitle}>Filling in grape varieties…</Text>
-            <Text style={styles.grapeCount}>{grapeProgress.done} of {grapeProgress.total}</Text>
-            <Text style={styles.grapeHint}>Please keep the app open.</Text>
-          </View>
-        </View>
-      </Modal>
 
       <View style={styles.divider} />
 
-      {/* Account details — moved below the preference buttons. */}
-      <View style={styles.block}>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Currency</Text>
-          <TouchableOpacity onPress={() => setCurrencyOpen(true)} activeOpacity={0.7}>
-            <Text style={styles.rowValueLink}>{currentCurrencyLabel} ▾</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.row}>
-          <Text style={styles.rowLabel}>Email</Text>
-          <Text style={[styles.rowValue, styles.rowValueSmall]} numberOfLines={1}>{currentEmail}</Text>
-        </View>
-        {!editingIdentity ? (
-          <TouchableOpacity onPress={openIdentityEdit} style={styles.editLinkBtn}>
-            <Text style={styles.editLinkText}>Edit username or email</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={styles.editPanel}>
-            <Text style={styles.fieldLabel}>Username</Text>
-            <TextInput
-              style={styles.input}
-              value={usernameDraft}
-              onChangeText={setUsernameDraft}
-              placeholder="Username"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="words"
-              editable={!savingIdentity}
-            />
-            <Text style={styles.fieldLabel}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={emailDraft}
-              onChangeText={setEmailDraft}
-              placeholder="you@example.com"
-              placeholderTextColor={colors.textMuted}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              editable={!savingIdentity}
-            />
-            <View style={styles.editActions}>
-              <TouchableOpacity onPress={cancelIdentityEdit} disabled={savingIdentity}>
-                <Text style={[styles.cancelText, savingIdentity && { opacity: 0.4 }]}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.saveBtn} onPress={handleIdentitySave} disabled={savingIdentity}>
-                {savingIdentity
-                  ? <ActivityIndicator color={colors.gold} size="small" />
-                  : <Text style={styles.saveBtnText}>Save</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-      </View>
-
-      <View style={styles.block}>
-        <Text style={styles.blockHeading}>Email preferences</Text>
-        <View style={styles.toggleRow}>
-          <Text style={styles.toggleLabel}>Vinster will email you from time to time regarding app updates and offers.</Text>
-          <Switch
-            value={notifyUpdates}
-            onValueChange={(v) => { setNotifyUpdates(v); updateNotifySetting('notify_updates', v, setNotifyUpdates); }}
-            trackColor={{ false: 'rgba(255,255,255,0.15)', true: colors.gold }}
-            thumbColor="#FFFFFF"
-          />
-        </View>
+      {/* Vinster's Review of You — the alter-ego sketch carousel, moved here from
+          the Review tab; sits below the Settings button. */}
+      <Text style={styles.sectionHeader}>Vinster's Review of You</Text>
+      <Text style={styles.sketchBlurb}>
+        As you scan, cellar, rate and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that evolves as you use the app. Share it with friends or the community.
+      </Text>
+      <View style={styles.carouselBleed}>
+        <AlterEgoCarousel requireAccount={requireAccount} />
       </View>
 
       <View style={styles.divider} />
@@ -395,35 +216,6 @@ export default function YouScreen() {
 
 
 
-      <Modal visible={currencyOpen} transparent animationType="fade" onRequestClose={() => setCurrencyOpen(false)}>
-        <TouchableOpacity style={styles.currencyOverlay} activeOpacity={1} onPress={() => setCurrencyOpen(false)}>
-          <TouchableOpacity activeOpacity={1} style={styles.currencySheet} onPress={() => {}}>
-            <Text style={styles.currencySheetTitle}>Choose currency</Text>
-            <ScrollView style={{ maxHeight: 360 }}>
-              {CURRENCIES.map((c) => {
-                const active = currentCurrency === c.code;
-                return (
-                  <TouchableOpacity
-                    key={c.code}
-                    style={[styles.currencyOption, active && styles.currencyOptionActive]}
-                    onPress={() => {
-                      updatePreferences({ defaultCurrency: c.code });
-                      setCurrencyOpen(false);
-                    }}
-                    activeOpacity={0.7}
-                  >
-                    <Text style={[styles.currencyOptionText, active && styles.currencyOptionTextActive]}>{c.label}</Text>
-                    {active && <Text style={styles.currencyCheck}>✓</Text>}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-            <TouchableOpacity style={styles.currencyClose} onPress={() => setCurrencyOpen(false)}>
-              <Text style={styles.currencyCloseText}>Cancel</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
       </View>
     </KeyboardAwareScrollView>
     </TabSwipeView>
@@ -451,6 +243,11 @@ const styles = StyleSheet.create({
   blockHeading: { fontSize: 13, fontFamily: fonts.headingSemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 },
   prefButton: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, paddingVertical: 10, alignItems: 'center', marginBottom: spacing.sm },
   prefButtonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
+  // "Vinster's Review of You" carousel section (moved from the Review tab).
+  sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
+  sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 16, color: colors.textMuted, textAlign: 'center', lineHeight: 23, marginBottom: spacing.lg, paddingHorizontal: spacing.sm },
+  // Let the carousel scroll edge-to-edge, breaking out of the body's h-padding.
+  carouselBleed: { marginHorizontal: -spacing.xl },
   grapeOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.7)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl },
   grapeSheet: { width: '100%', maxWidth: 340, borderRadius: 16, backgroundColor: colors.background, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, alignItems: 'center', gap: spacing.sm },
   grapeTitle: { fontFamily: fonts.headingSemibold, fontSize: 18, color: colors.text, textAlign: 'center' },

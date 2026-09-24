@@ -6,14 +6,14 @@ import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
-import { AlterEgoCarousel } from '../../src/components/AlterEgoCarousel';
+import { LineupsCarousel } from '../../src/components/LineupsCarousel';
 import { useAuth } from '../../src/hooks/useAuth';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 
 const SCAN_HELP = `Your wine and restaurant reviews live here. Restaurants you record, and wines you pick from a restaurant's list, appear here automatically for you to review.
 
-And "Vinster's Review of You" — your Vinster alter-ego, a witty character sketch Vinster draws from how you drink, cook and rate. Share it with friends or the community, and watch it evolve.`;
+And Your Lineups — archive a night of wines with a photo, a note and the bottle list, to revisit and share your most epic wine exploits.`;
 
 export default function ScanTab() {
   const { height } = useWindowDimensions();
@@ -77,14 +77,14 @@ export default function ScanTab() {
 
       <View style={styles.divider} />
 
-      {/* Vinster's Review of You — a carousel of alter-ego sketches. */}
+      {/* Your Lineups — the Archive-a-Night thumbnail carousel. */}
       <View style={styles.section}>
-        <Text style={styles.sectionHeader}>Vinster's Review of You</Text>
+        <Text style={styles.sectionHeader}>Your Lineups</Text>
         <Text style={styles.sketchBlurb}>
-          As you scan, cellar, rate and cook, Vinster sketches your alter-ego — a witty character profile drawn from your tastes that evolves as you use the app. Share it with friends or the community.
+          Record, Review and Share your most epic wine exploits.
         </Text>
       </View>
-      <AlterEgoCarousel requireAccount={requireAccount} />
+      <LineupsCarousel requireAccount={requireAccount} />
 
       <SignInPromptModal
         visible={signInPromptVisible}

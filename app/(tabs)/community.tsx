@@ -72,19 +72,6 @@ export default function CommunityTab() {
 
       <View style={styles.divider} />
 
-      {/* The Journal — Vinster's own blog; public to read. Header + blurb, then a
-          3-box carousel of entries (mirrors "Vinster's Review of You"). */}
-      <View style={styles.section}>
-        <Text style={styles.sectionHeader}>The Journal</Text>
-        <Text style={styles.journalBlurb}>
-          Thoughts and musings on wine, food, and the places and people who share our passion. Written by you. Submit entries to{' '}
-          <Text style={styles.journalEmail} onPress={() => Linking.openURL('mailto:tellme@vinsterapp.com')}>tellme@vinsterapp.com</Text>
-        </Text>
-      </View>
-      <JournalCarousel />
-
-      <View style={styles.divider} />
-
       {/* Other Features Arriving Soon — the community-sharing features, shown
           faded as unbuilt (Wine / Restaurant community feeds, Connections). */}
       <View style={styles.section}>
@@ -99,6 +86,19 @@ export default function CommunityTab() {
           <Text style={styles.buttonText}>Your Connections</Text>
         </TouchableOpacity>
       </View>
+
+      <View style={styles.divider} />
+
+      {/* The Journal — Vinster's own blog; public to read. Header + blurb, then a
+          3-box carousel of entries (mirrors "Vinster's Review of You"). */}
+      <View style={styles.section}>
+        <Text style={styles.sectionHeader}>The Journal</Text>
+        <Text style={styles.journalBlurb}>
+          Thoughts and musings on wine, food, and the places and people who share our passion. Written by you. Submit entries to{' '}
+          <Text style={styles.journalEmail} onPress={() => Linking.openURL('mailto:tellme@vinsterapp.com')}>tellme@vinsterapp.com</Text>
+        </Text>
+      </View>
+      <JournalCarousel />
 
       <SignInPromptModal
         visible={signInPromptVisible}

@@ -199,6 +199,7 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/mood-picks" />
             <Stack.Screen name="profile/wine" />
             <Stack.Screen name="profile/recipe" />
+            <Stack.Screen name="profile/settings" />
             <Stack.Screen name="profile/personality" />
             <Stack.Screen name="profile/personality-archive" />
             <Stack.Screen name="wines/chosen" />

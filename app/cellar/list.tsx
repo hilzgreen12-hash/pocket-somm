@@ -856,7 +856,7 @@ export default function FullCellarListScreen() {
 
       {/* Title sits on its own line, brought down below the back / Add / Export
           row so it doesn't crowd the top of the screen. */}
-      <Text style={styles.title}>{isArchiveView ? 'Your Cellar Archive' : 'Full Cellar List'}</Text>
+      <Text style={styles.title}>{isArchiveView ? 'Cellar Archive' : 'Full Cellar List'}</Text>
       </View>
 
       {/* Transient "added" toast — auto-fades, no action to dismiss. */}

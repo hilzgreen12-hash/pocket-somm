@@ -100,8 +100,8 @@ export default function CellarTab() {
         <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/stats'))}>
           <Text style={styles.buttonText}>Your Cellar Statistics</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/wine-archive' as any))}>
-          <Text style={styles.buttonText}>Your Wine Archive</Text>
+        <TouchableOpacity style={[styles.buttonFull, { marginTop: spacing.xs }]} onPress={() => requireAuth(() => router.push('/cellar/list?archived=1' as any))}>
+          <Text style={styles.buttonText}>Your Cellar Archive</Text>
         </TouchableOpacity>
       </View>
 
