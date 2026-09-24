@@ -759,20 +759,21 @@ export default function FullCellarListScreen() {
     const opts: Opt[] = [{ value: 'All', label: 'All locations' }];
     // Bespoke cellar-wide Location filters stay at the top level.
     for (const l of locations) opts.push({ value: `loc:${l.id}`, label: l.name });
-    // At-home group — the racks/fridges, home Alt Cellars, then the unplaced.
-    opts.push({ value: 'home', label: 'All Wines At Home', group: true });
+    // At-home group — a non-selectable title, then "View All" (all home wines),
+    // then the racks/fridges, home Alt Cellars, and the unplaced.
+    opts.push({ value: 'home_header', label: 'All Wines At Home', group: true, header: true });
+    opts.push({ value: 'home', label: 'View All', indent: true });
     for (const r of racks) opts.push({ value: r.id, label: r.name, indent: true });
     for (const s of homeCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
     opts.push({ value: 'Unassigned', label: 'Loose Bottles', indent: true });
-    // External group — always offered at the bottom; specific external cellars
-    // are listed beneath it when any exist.
-    // Non-selectable section header — the external cellars list beneath it, or a
-    // "Nothing here yet" placeholder until the user imports one. (Tapping the
-    // header itself is disabled: it previously routed to a broken filter view.)
-    opts.push({ value: 'external', label: 'All Wines Stored Externally', group: true, header: true });
+    // External group — a non-selectable title (tapping it routed to a broken view).
+    // Once any external cellars exist, "View All" (all external wines) leads, then
+    // each cellar; until then a "Nothing here yet" placeholder.
+    opts.push({ value: 'external_header', label: 'All Wines Stored Externally', group: true, header: true });
     if (externalCellars.length === 0) {
       opts.push({ value: '__external_empty__', label: 'Nothing here yet', indent: true, disabled: true });
     } else {
+      opts.push({ value: 'external', label: 'View All', indent: true });
       for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
     }
     return opts;
@@ -780,7 +781,13 @@ export default function FullCellarListScreen() {
 
   const locationLabel = locationFilter === 'All'
     ? 'All'
-    : (locationOptions.find((o) => o.value === locationFilter)?.label ?? 'All');
+    // "View All" options share their group's meaning — show the group name on the
+    // chip rather than the generic "View All".
+    : locationFilter === 'home'
+      ? 'All Wines At Home'
+      : locationFilter === 'external'
+        ? 'All Wines Stored Externally'
+        : (locationOptions.find((o) => o.value === locationFilter)?.label ?? 'All');
   const priceActive = PRICE_SORTS.includes(sortMode);
   const scoreActive = SCORE_SORTS.includes(sortMode);
   const priceLabel = priceActive ? (PRICE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label ?? 'Any') : 'Any';
