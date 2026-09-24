@@ -590,7 +590,7 @@ const styles = StyleSheet.create({
   // VinsterHeader, big centred title, blurb beneath).
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
-  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: spacing.lg },
+  blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: 0 },
   // Rule between the intro blurb and the 2×2 grid.
   blurbSeparator: { height: 1, backgroundColor: colors.divider, marginBottom: spacing.xl },
 
@@ -624,7 +624,7 @@ const styles = StyleSheet.create({
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
-  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.lg },
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.xs },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Community Musings placeholder — faded dashed card until the feature ships.
   comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
