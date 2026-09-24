@@ -302,7 +302,7 @@ export default function LineupDetailScreen() {
   // Add/View Review → the wine's review in Your Wine Reviews (one canonical
   // place), with Back returning to THIS lineup. Cellar bottles open their cellar
   // review; off-cellar wines open the existing chosen review or a seeded new one.
-  function goToWineReview(w: LineupWine, conn: ReturnType<typeof findWineConnections>) {
+  async function goToWineReview(w: LineupWine, conn: ReturnType<typeof findWineConnections>) {
     const hasReview = conn.reviewCount > 0;
     if (w.cellar_wine_id) {
       const param = hasReview ? 'openCellarReview' : 'openCellarReviewInput';
@@ -313,7 +313,16 @@ export default function LineupDetailScreen() {
       (a, b) => new Date(b.chosen_at ?? 0).getTime() - new Date(a.chosen_at ?? 0).getTime(),
     )[0];
     if (chosen) { router.push(`/wines/chosen?openReview=${chosen.id}${backToLineup}` as any); return; }
-    router.push(`/wines/chosen?seedAdd=1&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}${backToLineup}` as any);
+    // Brand-new off-cellar review — auto-fetch a web label so the review card gets
+    // a thumbnail rather than a blank one (the user can swap it later). Carried via
+    // slu=1 (the label store's uri, uploaded on save).
+    setGenIntel(true);
+    let img: string | null = null;
+    try { img = await fetchAutoLabelUri(w.producer, w.wine_name); } catch { /* non-fatal */ }
+    setGenIntel(false);
+    useLabelStore.getState().setImageUri(img);
+    const sl = img ? '&slu=1' : '';
+    router.push(`/wines/chosen?seedAdd=1${sl}&sp=${encodeURIComponent(w.producer ?? '')}&sw=${encodeURIComponent(w.wine_name ?? '')}&sv=${encodeURIComponent(w.vintage != null ? String(w.vintage) : '')}${backToLineup}` as any);
   }
 
   // View Wine Intel → generate on demand and open the intel card. Lineup wines
