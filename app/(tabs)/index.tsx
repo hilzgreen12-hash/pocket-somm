@@ -340,7 +340,7 @@ export default function ScanLandingScreen() {
         <HelpTitle label="Discover" title="How Discover works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
       <Text style={styles.blurb}>
-        Wine Searcher Market API + Vinster Intel and Customisation offer the most comprehensive results in wine exploration.
+        Vinster Training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
       </Text>
 
       {/* Voice Command — in the header (matches Cellar + home storage screens):
