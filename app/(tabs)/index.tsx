@@ -332,7 +332,10 @@ export default function ScanLandingScreen() {
     <TabSwipeView style={styles.container}>
     <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.scroll, { paddingTop }]} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-      <VinsterHeader />
+      {/* This scroll has paddingHorizontal (other tabs pad per-section), which
+          would push the mark inward — pull it back to the screen edge so the V
+          sits where it does on every other tab. */}
+      <View style={styles.headerBleed}><VinsterHeader /></View>
       <View style={styles.titleRow}>
         <HelpTitle label="Discover" title="How Discover works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
@@ -566,6 +569,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Brand block sits higher now (no hamburger row above it) — moderate top pad.
   scroll: { flexGrow: 1, paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
+  // Cancels the scroll's horizontal padding so the Vinster mark aligns with the
+  // other tabs (whose scrolls have no horizontal padding).
+  headerBleed: { marginLeft: -spacing.xl },
 
   hero: { alignItems: 'center', marginBottom: spacing.sm },
   // Welcome overlay — centred brand sheet on first landing.
