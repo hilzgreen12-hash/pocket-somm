@@ -9,6 +9,8 @@ import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
+import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
+import { DrinkSoonCarousel } from '../../src/components/DrinkSoonCarousel';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
 import { useLabelStore } from '../../src/stores/labelStore';
@@ -33,7 +35,7 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-const SCAN_HELP = `Scan is your way in. Point the camera at a single label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — then save it to your reviews or cellar. Scan a wine list for tailored bottle picks from the menu. No label to hand? Manually Search a Wine to find it from Vinster's catalogue, or type the details in yourself.`;
+const SCAN_HELP = `Discover is your home base. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Manually Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
@@ -329,7 +331,7 @@ export default function ScanLandingScreen() {
 
       <VinsterHeader />
       <View style={styles.titleRow}>
-        <HelpTitle label="Scan" title="How Scan works" body={SCAN_HELP} textStyle={styles.appName} />
+        <HelpTitle label="Discover" title="How Discover works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
       <Text style={styles.blurb}>
         Wine Searcher Market API + Vinster Intel and Customisation offer the most comprehensive results in wine exploration.
@@ -380,13 +382,29 @@ export default function ScanLandingScreen() {
 
       </View>
 
-      {/* Separator, then a search bar that opens the wine typeahead. Adding /
-          archiving a lineup now lives on the Review and Cellar tabs. */}
-      <View style={styles.searchBarSeparator} />
+      {/* Search bar directly beneath the two scan tiles (above the separator). */}
       <TouchableOpacity style={styles.searchBar} onPress={() => setSearchModalOpen(true)} activeOpacity={0.7}>
         <Feather name="search" size={18} color={colors.textMuted} style={styles.searchBarIcon} />
         <Text style={styles.searchBarText}>Manually Search a Wine</Text>
       </TouchableOpacity>
+
+      {/* Recent Scans — mixed label + list scans, most recent first. */}
+      <View style={styles.sectionSeparator} />
+      <Text style={styles.carouselHeader}>Recent Scans</Text>
+      <View style={styles.carouselBleed}><RecentScansCarousel /></View>
+
+      {/* Drink Soon — cellar bottles at their peak. */}
+      <View style={styles.sectionSeparator} />
+      <Text style={styles.carouselHeader}>Drink Soon</Text>
+      <View style={styles.carouselBleed}><DrinkSoonCarousel /></View>
+
+      {/* Community Musings — coming soon (recently shared reviews, journal). */}
+      <View style={styles.sectionSeparator} />
+      <Text style={styles.carouselHeader}>Community Musings</Text>
+      <View style={styles.comingSoonCard}>
+        <Text style={styles.comingSoonText}>Coming soon</Text>
+        <Text style={styles.comingSoonSub}>Recently shared wine &amp; restaurant reviews, journal entries and more from the Vinster community.</Text>
+      </View>
 
       {/* Dictate-to-search is shelved for now: on-device speech-to-text mangles
           foreign/proper wine names (e.g. "Heidsieck" → "Isaac"), which then risks
@@ -572,10 +590,18 @@ const styles = StyleSheet.create({
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
   tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   // Separator + "Manually Search a Wine" bar beneath the two scan tiles.
-  searchBarSeparator: { height: 1, backgroundColor: colors.divider, marginTop: spacing.xl, marginBottom: spacing.xl },
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: colors.surface },
+  searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: colors.surface, marginTop: spacing.md },
   searchBarIcon: { marginRight: 2 },
   searchBarText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.textMuted, letterSpacing: 0.3 },
+  // Discover carousels — section header, full-width separator, and a bleed
+  // wrapper so each carousel scrolls edge-to-edge past the scroll's h-padding.
+  sectionSeparator: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
+  carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
+  carouselBleed: { marginHorizontal: -spacing.xl },
+  // Community Musings placeholder — faded dashed card until the feature ships.
+  comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
+  comingSoonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.xs },
+  comingSoonSub: { fontFamily: fonts.headingRegular, fontSize: 14, color: colors.textMuted, textAlign: 'center', lineHeight: 20 },
 
 
   // Search-a-Wine prompt (opened from the Search tile).

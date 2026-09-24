@@ -384,8 +384,8 @@ const styles = StyleSheet.create({
   styleBtnTextActive: { color: colors.gold },
   button: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%' },
   buttonText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
-  // Yellow "View Last Result" bubble beneath Find Pairing — same footprint as the
-  // Find Pairing button, gold outline + text.
-  lastResultBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
-  lastResultBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 15 },
+  // White "View Last Result" bubble beneath Find Pairing — same footprint as the
+  // Find Pairing button, white outline + text.
+  lastResultBtn: { borderWidth: 1, borderColor: '#FFFFFF', borderRadius: 12, padding: spacing.sm, alignItems: 'center', width: '100%', marginTop: spacing.sm },
+  lastResultBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 15 },
 });
