@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   // Elegant Cormorant, matching the Review header blurb above. Extra bottom
   // margin gives the alter-ego carousel room to breathe beneath it.
-  sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 19, color: colors.textMuted, textAlign: 'center', lineHeight: 26, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
+  sketchBlurb: { fontFamily: fonts.headingRegular, fontSize: 17, color: colors.textMuted, textAlign: 'center', lineHeight: 24, marginBottom: spacing.sm, paddingHorizontal: spacing.sm },
   // Gold "X Lineups · View All Lineups →" line (matches Cookbook stats).
   lineupStats: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Separator bar between the stats line and the lineups carousel.
