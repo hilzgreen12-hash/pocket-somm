@@ -813,6 +813,7 @@ export default function StorageLocationScreen() {
     showAlert({
       title: c.name,
       buttons: [
+        { text: 'Add Wines', onPress: () => openAddToCase(c) },
         { text: 'Rename Case', onPress: () => { setCaseEditName(c.name); setCaseEditNote(c.note ?? ''); setCaseEdit(c); } },
         { text: 'Delete Case (contents land as loose bottles)', style: 'destructive', onPress: () => confirmDissolveCase(c) },
         { text: 'Cancel', style: 'cancel' },
