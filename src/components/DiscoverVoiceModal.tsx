@@ -99,7 +99,8 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
         const intel = await generateWineIntel(confirmed, currency);
         ls.setIntelligence(intel);
         ls.setImageUri(null);
-        useLastIntelStore.getState().setLast(confirmed, intel);
+        // A voice-command wine query isn't a "scan" — keep it out of Recent Scans.
+        useLastIntelStore.getState().setLast(confirmed, intel, { recordRecent: false });
         handleClose();
         router.push('/label/results?context=intel&fresh=1&confirmed=1' as any);
         return;

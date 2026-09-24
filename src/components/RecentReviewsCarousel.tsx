@@ -1,13 +1,13 @@
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Text, TouchableOpacity, StyleSheet, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
-import { LabelThumb } from './LabelThumb';
+import { WineCardThumb } from './WineCardThumb';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-type Review = { key: string; ts: number; title: string; stamp: string; path: string | null; open: () => void };
+type Review = { key: string; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; open: () => void };
 
 function stampDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -25,7 +25,7 @@ function restaurantReviewed(a: ScanArchiveItem): boolean {
 function ReviewCard({ item }: { item: Review }) {
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>
-      <LabelThumb path={item.path} fallbackText={item.title} style={styles.thumb} radius={10} frame={4} />
+      <WineCardThumb path={item.path} producer={item.producer} wineName={item.wineName} fallbackText={item.title} />
       <Text style={styles.cardName} numberOfLines={2}>{item.title}</Text>
       {item.stamp ? <Text style={styles.cardStamp} numberOfLines={1}>{item.stamp}</Text> : null}
     </TouchableOpacity>
@@ -44,6 +44,8 @@ export function RecentReviewsCarousel() {
     title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'Wine'),
     stamp: [w.chosen_at ? stampDate(new Date(w.chosen_at)) : '', (w.restaurant_name || w.city || '').trim()].filter(Boolean).join(' · '),
     path: w.label_image_path,
+    producer: w.producer ?? null,
+    wineName: w.wine_name ?? null,
     open: () => router.push(`/wines/chosen?openReview=${w.id}` as any),
   }));
 
@@ -53,6 +55,8 @@ export function RecentReviewsCarousel() {
     title: a.restaurantName?.trim() || 'Restaurant',
     stamp: [a.capturedAt ? stampDate(new Date(a.capturedAt)) : '', a.city?.trim()].filter(Boolean).join(' · '),
     path: a.restaurantPhotoPath,
+    producer: null,
+    wineName: null,
     open: () => router.push(`/restaurants/reviews?openSession=${a.id}` as any),
   }));
 

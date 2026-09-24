@@ -1,10 +1,10 @@
-import { View, Text, TouchableOpacity, Image, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
-import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
+import { WineCardThumb } from './WineCardThumb';
 import { useLastIntelStore } from '../stores/lastIntelStore';
 import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
-import { useScanHistory } from '../hooks/useScanHistory';
+import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
 import { formatWineTitle } from '../utils/wineTitle';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -12,7 +12,7 @@ import { fonts } from '../constants/fonts';
 // A unified "recent scan" — either a single-bottle label→intel scan or a wine-
 // list scan — merged by recency for the Discover tab carousel.
 type Recent =
-  | { kind: 'label'; ts: number; title: string; stamp: string; imageUri: string | null; open: () => void }
+  | { kind: 'label'; ts: number; title: string; stamp: string; imageUri: string | null; producer: string | null; wineName: string | null; open: () => void }
   | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void };
 
 // Shared date format for the "date · location" stamp beneath each thumbnail.
@@ -20,19 +20,26 @@ function stampDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+// A session the user has RATED or noted is a restaurant review — it belongs in
+// Recent Reviews, not Recent Scans (even though it may also carry a scanned list).
+function restaurantReviewed(a: ScanArchiveItem): boolean {
+  return !!(
+    a.ratingOverall != null || a.ratingFood != null || a.ratingService != null ||
+    a.ratingWineList != null || a.ratingAtmosphere != null || a.ratingValue != null ||
+    (a.restaurantNote && a.restaurantNote.trim())
+  );
+}
+
 function RecentCard({ item }: { item: Recent }) {
-  // Label scans carry a local file:// photo; list scans carry a storage path.
-  const resolved = useLabelImageUrl(item.kind === 'list' ? item.path : null);
-  const uri = item.kind === 'label' ? item.imageUri : resolved;
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>
-      <View style={styles.thumb}>
-        {uri ? (
-          <Image source={{ uri }} style={styles.thumbImg} resizeMode="cover" />
-        ) : (
-          <Text style={styles.thumbFallback} numberOfLines={3}>{item.title}</Text>
-        )}
-      </View>
+      <WineCardThumb
+        localUri={item.kind === 'label' ? item.imageUri : null}
+        path={item.kind === 'list' ? item.path : null}
+        producer={item.kind === 'label' ? item.producer : null}
+        wineName={item.kind === 'label' ? item.wineName : null}
+        fallbackText={item.title}
+      />
       <Text style={styles.cardName} numberOfLines={2}>{item.title}</Text>
       {item.stamp ? <Text style={styles.cardStamp} numberOfLines={1}>{item.stamp}</Text> : null}
     </TouchableOpacity>
@@ -49,6 +56,8 @@ export function RecentScansCarousel() {
     title: formatWineTitle({ producer: r.wine.producer, wineName: r.wine.wineName, vintage: r.wine.vintage }),
     stamp: [stampDate(new Date(r.ts)), (r.wine.region ?? '').trim()].filter(Boolean).join(' · '),
     imageUri: r.imageUri,
+    producer: r.wine.producer ?? null,
+    wineName: r.wine.wineName ?? null,
     open: () => {
       const ls = useLabelStore.getState();
       ls.setWineDetailsConfirmed(r.wine);
@@ -58,9 +67,9 @@ export function RecentScansCarousel() {
     },
   }));
 
-  // Only genuine wine-list scans (they extracted wines) — a pure restaurant
-  // review has none and belongs in Recent Reviews, not Recent Scans.
-  const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0).map((a) => {
+  // Only genuine wine-list scans that HAVEN'T been reviewed — a scanned list the
+  // user then rated/noted is a restaurant review and belongs in Recent Reviews.
+  const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0 && !restaurantReviewed(a)).map((a) => {
     const d = a.capturedAt ? new Date(a.capturedAt) : null;
     const dateStr = d ? stampDate(d) : '';
     return {

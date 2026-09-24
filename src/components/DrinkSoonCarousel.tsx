@@ -2,7 +2,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
 import { effectiveMaturity } from '../utils/maturity';
-import { LabelThumb } from './LabelThumb';
+import { WineCardThumb } from './WineCardThumb';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -34,7 +34,7 @@ export function DrinkSoonCarousel() {
           : 'At peak';
         return (
           <TouchableOpacity key={w.id} style={styles.card} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.85}>
-            <LabelThumb path={w.label_image_path} fallbackText={w.wine_name} style={styles.thumb} radius={10} frame={4} />
+            <WineCardThumb path={w.label_image_path} producer={w.producer} wineName={w.wine_name} fallbackText={w.wine_name} />
             <Text style={styles.cardName} numberOfLines={2}>{wineHeaderLine(w.producer, w.wine_name, w.vintage)}</Text>
             <Text style={styles.cardMeta} numberOfLines={1}>Drink {windowStr}</Text>
           </TouchableOpacity>

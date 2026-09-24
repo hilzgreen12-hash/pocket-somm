@@ -403,17 +403,17 @@ export default function ScanLandingScreen() {
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Recent Scans</Text>
+      <Text style={styles.carouselHeader}>Your Recent Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
 
       {/* Recent Reviews — wine + restaurant reviews, most recent first. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Recent Reviews</Text>
+      <Text style={styles.carouselHeader}>Your Recent Reviews</Text>
       <View style={styles.carouselBleed}><RecentReviewsCarousel /></View>
 
       {/* Drink Soon — cellar bottles at their peak. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Drink Soon</Text>
+      <Text style={styles.carouselHeader}>Your Cellar - Drink Soon</Text>
       <View style={styles.carouselBleed}><DrinkSoonCarousel /></View>
 
       {/* Community Musings — coming soon (recently shared reviews, journal). */}
