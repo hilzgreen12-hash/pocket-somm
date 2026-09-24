@@ -409,8 +409,8 @@ export default function BinDetailScreen() {
       </View>
 
       {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
-      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
-        <Text style={styles.voiceLink}>Voice Command</Text>
+      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
+        <Text style={styles.voiceBubbleText}>Voice Command</Text>
       </TouchableOpacity>
       <View style={styles.headerDivider} />
 
@@ -626,8 +626,8 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
-  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   // Equal-width back / Edit so the flex-1 title is truly screen-centred.
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 50 },

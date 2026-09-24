@@ -385,7 +385,8 @@ export default function RestaurantReviewsScreen() {
       ls.setWineDetailsConfirmed(details as any);
       ls.setIntelligence(intel);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      useLastIntelStore.getState().setLast(details as any, intel);
+      // Not a Scan-a-Label result — keep it out of Discover's Recent Scans.
+      useLastIntelStore.getState().setLast(details as any, intel, { recordRecent: false });
       // Route the intel screen's Back to reopen THIS restaurant visit (a modal,
       // so we reopen it via the ?openSession deep link) instead of the cellar.
       const backTo = returnToSession ? `&backTo=${encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`)}` : '';

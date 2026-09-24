@@ -320,13 +320,11 @@ export default function LineupLibraryScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>Your Lineup Library</Text>
-        <TouchableOpacity onPress={() => setAddOpen(true)} hitSlop={{ top: 10, bottom: 10, left: 8, right: 8 }}>
-          <Text style={styles.addLink}>+ Add</Text>
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       <Text style={styles.blurb}>
-        A visual record of your vinous exploits. Lineups photographed in Archive a Night will appear here, or add lineups directly.
+        A visual record of your vinous adventures for you to revisit, review, and share.
       </Text>
 
       {isLoading ? (
@@ -342,7 +340,7 @@ export default function LineupLibraryScreen() {
       ) : lineups.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyTitle}>No lineups yet</Text>
-          <Text style={styles.emptyBody}>Tap + Add to save a lineup photo straight to your library, or use Archive a Night in your Cellar to photograph and log a bottle lineup.</Text>
+          <Text style={styles.emptyBody}>Add a lineup from the Review tab's Your Lineups, or Scan a Lineup — your photographed bottle lineups will appear here.</Text>
         </View>
       ) : (
         <>

@@ -730,7 +730,7 @@ export default function FullCellarListScreen() {
     [storageLocations],
   );
   const locationOptions = useMemo(() => {
-    type Opt = { value: string; label: string; indent?: boolean; group?: boolean };
+    type Opt = { value: string; label: string; indent?: boolean; group?: boolean; header?: boolean; disabled?: boolean };
     const homeCellars = storageLocations.filter((s) => !s.is_external);
     const externalCellars = storageLocations.filter((s) => s.is_external);
     const opts: Opt[] = [{ value: 'All', label: 'All locations' }];
@@ -743,8 +743,15 @@ export default function FullCellarListScreen() {
     opts.push({ value: 'Unassigned', label: 'Loose Bottles', indent: true });
     // External group — always offered at the bottom; specific external cellars
     // are listed beneath it when any exist.
-    opts.push({ value: 'external', label: 'All Wines Stored Externally', group: true });
-    for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
+    // Non-selectable section header — the external cellars list beneath it, or a
+    // "Nothing here yet" placeholder until the user imports one. (Tapping the
+    // header itself is disabled: it previously routed to a broken filter view.)
+    opts.push({ value: 'external', label: 'All Wines Stored Externally', group: true, header: true });
+    if (externalCellars.length === 0) {
+      opts.push({ value: '__external_empty__', label: 'Nothing here yet', indent: true, disabled: true });
+    } else {
+      for (const s of externalCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
+    }
     return opts;
   }, [racks, locations, storageLocations]);
 
@@ -764,7 +771,7 @@ export default function FullCellarListScreen() {
         ?? SCORE_SORT_OPTIONS.find((o) => o.value === sortMode)?.label
         ?? 'Recently Added');
 
-  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string; indent?: boolean; group?: boolean }[]; selected: string; onSelect: (v: string) => void } | null {
+  function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string; indent?: boolean; group?: boolean; header?: boolean; disabled?: boolean }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'location') {
       return {
         title: 'Filter by location',
@@ -1183,6 +1190,15 @@ export default function FullCellarListScreen() {
                     const active = activeDropdown.selected === opt.value;
                     // Bespoke locations (loc:…) can be managed via long-press.
                     const isLocation = openDropdown === 'location' && opt.value.startsWith('loc:');
+                    // Section headers and the "Nothing here yet" placeholder are
+                    // labels, not choices — render them as plain, non-tappable rows.
+                    if (opt.header || opt.disabled) {
+                      return (
+                        <View key={opt.value} style={[styles.modalOption, opt.indent && styles.modalOptionIndent]}>
+                          <Text style={[styles.modalOptionText, opt.group && styles.modalOptionGroupText, opt.disabled && styles.modalOptionDisabledText]}>{opt.label}</Text>
+                        </View>
+                      );
+                    }
                     return (
                       <TouchableOpacity
                         key={opt.value}
@@ -1427,6 +1443,7 @@ const styles = StyleSheet.create({
   modalOptionText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
   // Group headers ("All wines at home" / "…externally") — bold, uppercase.
   modalOptionGroupText: { fontFamily: fonts.headingBold, textTransform: 'uppercase', letterSpacing: 0.5, fontSize: 14, color: colors.gold },
+  modalOptionDisabledText: { fontFamily: fonts.bodyItalic, fontSize: 14, color: colors.textMuted, textTransform: 'none', letterSpacing: 0 },
   modalOptionTextActive: { color: colors.gold },
   // Inter — check glyph
   modalOptionCheck: { fontFamily: fonts.bodyBold, fontSize: 18, color: colors.gold, marginLeft: spacing.sm },

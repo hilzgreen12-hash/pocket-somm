@@ -914,8 +914,8 @@ export default function StorageLocationScreen() {
       </View>
 
       {/* Voice Command — beneath the title, above the separator (mirrors Cellar tab). */}
-      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
-        <Text style={styles.voiceLink}>Voice Command</Text>
+      <TouchableOpacity onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
+        <Text style={styles.voiceBubbleText}>Voice Command</Text>
       </TouchableOpacity>
       <View style={styles.headerDivider} />
 
@@ -1336,8 +1336,8 @@ const styles = StyleSheet.create({
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Voice Command row + its own divider (the separator moved off the header so
   // the row can sit between the title and the line, matching the Cellar tab).
-  voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.md },
-  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginBottom: spacing.md },
+  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   headerDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   // Equal-width side cells so the flex-1 titleNav is truly screen-centred.

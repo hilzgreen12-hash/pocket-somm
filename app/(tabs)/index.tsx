@@ -391,15 +391,14 @@ export default function ScanLandingScreen() {
       </TouchableOpacity>
 
       {/* Voice Command — discovery only (recommend / consult / wine intel). */}
-      <TouchableOpacity style={styles.voiceRow} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-        <Text style={styles.voiceLink}>Voice Command</Text>
+      <TouchableOpacity style={styles.voiceBubble} onPress={() => setVoiceOpen(true)} activeOpacity={0.7}>
+        <Text style={styles.voiceBubbleText}>Voice Command</Text>
       </TouchableOpacity>
 
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Recent Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
-      <Text style={styles.discoverHint}>Listed by recency · Swipe to view →</Text>
 
       {/* Drink Soon — cellar bottles at their peak. */}
       <View style={styles.sectionSeparator} />
@@ -584,8 +583,8 @@ const styles = StyleSheet.create({
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.
   grid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', rowGap: spacing.md },
-  tile: { width: '48%', aspectRatio: 0.8, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
-  tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  tile: { width: '48%', aspectRatio: 1.0, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 16, overflow: 'hidden', backgroundColor: colors.surface, shadowColor: '#000000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  tileMain: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.md, paddingVertical: spacing.xs },
   // Fixed line box so every tile's icon occupies the SAME vertical space — the
   // search vs camera glyphs have different metrics, which pushed the Search a
   // Wine title higher than its neighbours. A constant height keeps all four
@@ -600,7 +599,7 @@ const styles = StyleSheet.create({
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
   tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   // Separator + "Manually Search a Wine" bar beneath the two scan tiles.
-  searchBar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.md, backgroundColor: colors.surface, marginTop: spacing.md },
+  searchBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginTop: spacing.md },
   searchBarIcon: { marginRight: 2 },
   searchBarText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.textMuted, letterSpacing: 0.3 },
   // Discover carousels — section header, full-width separator, and a bleed
@@ -609,9 +608,10 @@ const styles = StyleSheet.create({
   carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
   carouselBleed: { marginHorizontal: -spacing.xl },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
-  // "Voice Command" link beneath the search bar.
-  voiceRow: { alignSelf: 'center', paddingVertical: spacing.sm, marginTop: spacing.xs },
-  voiceLink: { fontSize: 14, fontFamily: fonts.headingSemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  // "Voice Command" gold bubble beneath the search bar (matches the search bar
+  // footprint). This same yellow-bubble treatment is used app-wide.
+  voiceBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm },
+  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Community Musings placeholder — faded dashed card until the feature ships.
   comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
   comingSoonText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.5, marginBottom: spacing.xs },

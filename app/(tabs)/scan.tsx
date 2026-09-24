@@ -90,21 +90,21 @@ export default function ScanTab() {
           sort/swipe hint beneath it. */}
       <View style={styles.section}>
         <View style={styles.lineupHeaderRow}>
-          <TouchableOpacity style={styles.addTopLeft} onPress={() => requireAccount(() => router.push('/cellar/archive-night'))} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.sectionHeader}>Your Lineups</Text>
+          <TouchableOpacity style={styles.addLineupRight} onPress={() => requireAccount(() => router.push('/cellar/archive-night'))} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }} activeOpacity={0.7}>
             <Text style={styles.addTopRightText}>+ Add</Text>
           </TouchableOpacity>
-          <Text style={styles.sectionHeader}>Your Lineups</Text>
         </View>
         <Text style={styles.sketchBlurb}>
-          Record, Review and Share your most epic wine exploits.
+          A record of your most epic wine exploits.
         </Text>
         <TouchableOpacity onPress={() => requireAccount(() => router.push('/cellar/lineups'))} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
           <Text style={styles.lineupStats}>{lineups.length} {lineups.length === 1 ? 'Lineup' : 'Lineups'} · View All Lineups →</Text>
         </TouchableOpacity>
       </View>
       <View style={styles.statsSep} />
+      <Text style={styles.lineupHint}>Listed by recency · Swipe to view →</Text>
       <LineupsCarousel requireAccount={requireAccount} />
-      <Text style={styles.lineupHint}>Listed by recently added · Swipe to add and view lineups</Text>
 
       <SignInPromptModal
         visible={signInPromptVisible}
@@ -128,9 +128,9 @@ const styles = StyleSheet.create({
   addTopRightText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
   // "Your Lineups" header row: heading centred, "+ Add" pinned top-left.
   lineupHeaderRow: { justifyContent: 'center', alignItems: 'center', marginBottom: spacing.xs },
-  addTopLeft: { position: 'absolute', left: 0, top: 0, bottom: 0, justifyContent: 'center' },
-  // Sort/swipe caption beneath the lineups carousel.
-  lineupHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
+  addLineupRight: { position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  // Sort/swipe caption — left-indented, above the carousel (beneath the separator).
+  lineupHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'left', paddingLeft: spacing.xl, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
   topBlurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, marginBottom: spacing.xs, textAlign: 'center' },

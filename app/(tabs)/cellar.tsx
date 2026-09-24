@@ -86,8 +86,8 @@ export default function CellarTab() {
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
       {/* Voice Command — directly beneath the blurb, above the first separator. */}
-      <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceRow}>
-        <Text style={styles.voiceLink}>Voice Command</Text>
+      <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.voiceBubble}>
+        <Text style={styles.voiceBubbleText}>Voice Command</Text>
       </TouchableOpacity>
 
       <View style={styles.divider} />
@@ -135,10 +135,9 @@ const styles = StyleSheet.create({
   // Side cells balance the centred title: an empty spacer on the left, the
   // "+ Import" link on the right, both the same width so "Cellar" stays centred.
   titleSide: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },
-  // Voice Command — its own line at the top, right-aligned, gold heading font.
-  voiceRow: { alignSelf: 'stretch', alignItems: 'center', paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.xs },
-  // Matches the "Your Wines At Home" stats-bar words: uppercase gold, bodySemibold.
-  voiceLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8 },
+  // Voice Command — gold bubble (matches the app-wide treatment).
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.xs },
+  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   importLink: { fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   // Italic blurb under the "Cellar" title — kept Cormorant per spec
   // ("blurbs below the headers on the tab screens").

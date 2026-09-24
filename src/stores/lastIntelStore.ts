@@ -30,7 +30,10 @@ interface LastIntelState {
   wine: WineDetailsComplete | null;
   intel: WineIntelligence | null;
   recent: RecentIntel[];
-  setLast: (wine: WineDetailsComplete, intel: WineIntelligence) => void;
+  // opts.recordRecent === false updates the single "last" result but does NOT
+  // add to the recent list — used by review/lineup flows so Recent Scans stays
+  // limited to genuine Scan-a-Label results.
+  setLast: (wine: WineDetailsComplete, intel: WineIntelligence, opts?: { recordRecent?: boolean }) => void;
   clear: () => void;
 }
 
@@ -44,7 +47,8 @@ export const useLastIntelStore = create<LastIntelState>()(
       // intel-generation paths funnel through here, so the carousel stays fed
       // without instrumenting each call site. The label photo is snapshotted
       // from the active scan in labelStore (null for searched/typed wines).
-      setLast: (wine, intel) => set((state) => {
+      setLast: (wine, intel, opts) => set((state) => {
+        if (opts?.recordRecent === false) return { wine, intel };
         let imageUri: string | null = null;
         try { imageUri = useLabelStore.getState().imageUri ?? null; } catch { imageUri = null; }
         const key = recentKey(wine);

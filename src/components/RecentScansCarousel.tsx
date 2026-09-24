@@ -58,7 +58,9 @@ export function RecentScansCarousel() {
     },
   }));
 
-  const listItems: Recent[] = archive.map((a) => {
+  // Only genuine wine-list scans (they extracted wines) — a pure restaurant
+  // review has none and belongs in Recent Reviews, not Recent Scans.
+  const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0).map((a) => {
     const d = a.capturedAt ? new Date(a.capturedAt) : null;
     const dateStr = d ? stampDate(d) : '';
     return {

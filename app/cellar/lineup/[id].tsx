@@ -279,7 +279,8 @@ export default function LineupDetailScreen() {
       ls.setImageUri(img);
       ls.setWineDetailsConfirmed(details as any);
       ls.setIntelligence(intel);
-      useLastIntelStore.getState().setLast(details as any, intel);
+      // Lineup wine, not a Scan-a-Label result — keep out of Recent Scans.
+      useLastIntelStore.getState().setLast(details as any, intel, { recordRecent: false });
       // confirmed=1: this wine is already established in the lineup — the intel
       // screen must NOT ask "which wine is this?".
       router.push(`/label/results?context=intel&confirmed=1${backToLineup}` as any);
