@@ -335,8 +335,8 @@ const styles = StyleSheet.create({
   intro: { fontSize: 17, fontFamily: fontsSpectral.headingRegular, color: colors.textMuted, lineHeight: 24, textAlign: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // Stats bar — green outline + light-green fill (matches the "upload instead"
   // banner and the other inverted pages).
-  // Stats BAR — full-width, green rule top and bottom running edge to edge.
-  stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderTopWidth: 1, borderBottomWidth: 1, borderTopColor: colors.divider, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
+  // Stats BAR — full-width green rule beneath only (no top rule).
+  stats: { marginVertical: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.divider, fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center' },
   // Full-width faded separators framing the stats bar.
   fadedRule: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.md },
   // Left-indented italic hint pointing to the carousel's "+ Add" card, sitting
