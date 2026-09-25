@@ -9,7 +9,7 @@ import { fonts } from '../constants/fonts';
 // Order + routes match TabSwipeView / the (tabs) navigator, left-to-right.
 // 'index' is the Scan landing tab (the group's index route, '/(tabs)').
 const TABS = [
-  { key: 'index', label: 'Discover' },
+  { key: 'index', label: 'Home' },
   { key: 'scan', label: 'Review' },
   { key: 'chef', label: 'Pair' },
   { key: 'cellar', label: 'Cellar' },

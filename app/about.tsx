@@ -17,8 +17,8 @@ interface Section {
 
 const SECTIONS: Section[] = [
   {
-    title: 'How Discover Works',
-    body: 'Discover is your home tab. Point the camera at a single wine label (or upload a photo) for instant Wine Intel: critic scores, tasting notes, drinking windows, and what the bottle is worth today — then save it straight to your reviews or your cellar. Scan a restaurant wine list and Vinster reads it with AI-powered optical character recognition, scores every wine against your preferences — wine type, style, budget, and food pairing — and surfaces your best match. No label to hand? Manually Search a Wine to find the bottle in Vinster\'s catalogue, or type the details in yourself.\n\nBeneath, Discover keeps a carousel of your Recent Scans, a Drink Soon shelf of cellar bottles hitting their peak, and — coming soon — Community Musings from across the Vinster community.',
+    title: 'How Home Works',
+    body: 'Home is your main tab. Point the camera at a single wine label (or upload a photo) for instant Wine Intel: critic scores, tasting notes, drinking windows, and what the bottle is worth today — then save it straight to your reviews or your cellar. Scan a restaurant wine list and Vinster reads it with AI-powered optical character recognition, scores every wine against your preferences — wine type, style, budget, and food pairing — and surfaces your best match. No label to hand? Manually Search a Wine to find the bottle in Vinster\'s catalogue, or type the details in yourself.\n\nBeneath, Home keeps a carousel of your Recent Scans, a Drink Soon shelf of cellar bottles hitting their peak, and — coming soon — Community Musings from across the Vinster community.',
     subsections: [
       {
         title: 'How Recommendations Are Scored',
@@ -60,7 +60,7 @@ const SECTIONS: Section[] = [
   },
   {
     title: 'Your Preferences',
-    body: 'The wine and recipe preferences you save on the You tab — Your Wine Preferences and Your Recipe Requirements — are used as the default parameters across Discover and Pair whenever Vinster generates a recommendation. You can override them on any individual search, depending on your one-off requirements.',
+    body: 'The wine and recipe preferences you save on the You tab — Your Wine Preferences and Your Recipe Requirements — are used as the default parameters across Home and Pair whenever Vinster generates a recommendation. You can override them on any individual search, depending on your one-off requirements.',
   },
   {
     title: 'Privacy & Data',

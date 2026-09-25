@@ -37,7 +37,7 @@ let welcomeShownThisSession = false;
 
 // "How Scan works" — the help body behind the underlined Scan title, matching
 // the other tabs' tappable titles.
-const SCAN_HELP = `Discover is your home base. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Manually Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
+const SCAN_HELP = `Home is your starting point. Scan a label for instant Wine Intel — critic scores, tasting notes, drinking windows and today's value — or scan a wine list for tailored picks from the menu. No label to hand? Manually Search a Wine from Vinster's catalogue. Below, revisit your Recent Scans, see which cellar bottles are drinking now, and catch up on Community Musings.`;
 
 // The Scan landing — the app's home tab. A 2×2 grid of scan actions (each with
 // an "upload instead" banner) plus a Search tile, then the Your Lineup Archive
@@ -337,7 +337,7 @@ export default function ScanLandingScreen() {
           sits where it does on every other tab. */}
       <View style={styles.headerBleed}><VinsterHeader /></View>
       <View style={styles.titleRow}>
-        <HelpTitle label="Discover" title="How Discover works" body={SCAN_HELP} textStyle={styles.appName} />
+        <HelpTitle label="Home" title="How Home works" body={SCAN_HELP} textStyle={styles.appName} />
       </View>
       <Text style={styles.blurb}>
         Vinster Training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
@@ -592,7 +592,10 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: 0 },
   // Rule between the intro blurb and the 2×2 grid.
-  blurbSeparator: { height: 1, backgroundColor: colors.divider, marginBottom: spacing.xl },
+  // 18 above (voiceBubble.marginBottom) + rule + 18 below keeps the tiles exactly
+  // where they were (was xs + xl = 37) while centring the rule between the button
+  // and the tiles.
+  blurbSeparator: { height: 1, backgroundColor: colors.divider, marginBottom: 18 },
 
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.
@@ -624,7 +627,10 @@ const styles = StyleSheet.create({
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
   // footprint). This same yellow-bubble treatment is used app-wide.
-  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, alignItems: 'center', marginTop: spacing.sm, marginBottom: spacing.xs },
+  // Full-width to match the "Manually Search a Wine" bar (no alignSelf: stretches
+  // across the padded content). marginBottom pairs with blurbSeparator to centre
+  // the rule beneath it.
+  voiceBubble: { borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, alignItems: 'center', marginTop: spacing.sm, marginBottom: 18 },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // Community Musings placeholder — faded dashed card until the feature ships.
   comingSoonCard: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.borderWhite, borderRadius: 14, paddingVertical: spacing.lg, paddingHorizontal: spacing.lg, alignItems: 'center', opacity: 0.85 },
