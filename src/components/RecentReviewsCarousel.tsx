@@ -1,7 +1,7 @@
 import { Text, TouchableOpacity, StyleSheet, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
-import { CarouselPlaceholder } from './CarouselPlaceholder';
+import { ExamplePlaceholder, type PlaceholderCard } from './ExamplePlaceholder';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
 import { wineHeaderLine } from '../utils/wineHeader';
@@ -22,6 +22,13 @@ function restaurantReviewed(a: ScanArchiveItem): boolean {
     (a.restaurantNote && a.restaurantNote.trim())
   );
 }
+
+// Example cards shown when a new user has no reviews yet.
+const REVIEW_EXAMPLES: PlaceholderCard[] = [
+  { kind: 'icon', icon: 'restaurant-outline', title: 'La Steakhouse', stamp: '20 Dec 2029 · London', overlay: 'Your first review replaces this content' },
+  { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '30 Jan 2030 · La Steakhouse', overlay: 'Your second review replaces this content' },
+  { kind: 'label', producer: 'Château Haut-Brion', wineName: 'Haut-Brion Blanc', title: 'Haut-Brion Blanc 2012', stamp: '14 Dec 2029 · Maison Jules', overlay: 'Your third review replaces this content' },
+];
 
 // Totals for the "XX Wines · XX Restaurants" stats line under the header.
 export function useRecentReviewCounts(): { wines: number; restaurants: number } {
@@ -73,7 +80,7 @@ export function RecentReviewsCarousel() {
   const merged = [...wineItems, ...restaurantItems].sort((a, b) => b.ts - a.ts).slice(0, 12);
 
   if (merged.length === 0) {
-    return <CarouselPlaceholder caption="Your wine & restaurant reviews will appear here." icon="star-outline" />;
+    return <ExamplePlaceholder cards={REVIEW_EXAMPLES} />;
   }
 
   return (
