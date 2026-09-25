@@ -369,13 +369,13 @@ export default function ScanLandingScreen() {
             onLongPress={() => requireAccount(handleViewLastIntel)}
             activeOpacity={0.85}
           >
-            <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
+            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a Label</Text>
             <View style={styles.tileDivider} />
             <Text style={styles.tileDesc} numberOfLines={2}>Generate Wine Intel{'\n'}Review &amp; Cellar</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => requireAuth(handleUploadLabel)} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color={colors.gold} />
+            <Feather name="upload" size={11} color="#FFFFFF" />
             <Text style={styles.tileBannerText}>upload instead</Text>
           </TouchableOpacity>
         </View>
@@ -388,13 +388,13 @@ export default function ScanLandingScreen() {
             onLongPress={() => requireAccount(handleViewLastListResult)}
             activeOpacity={0.85}
           >
-            <Ionicons name="camera-outline" size={30} color={colors.gold} style={styles.tileIcon} />
+            <Ionicons name="camera-outline" size={30} color="#FFFFFF" style={styles.tileIcon} />
             <Text style={styles.tileTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>Scan a List</Text>
             <View style={styles.tileDivider} />
             <Text style={styles.tileDesc} numberOfLines={2}>Tailored bottle picks from a wine menu</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.tileBanner} onPress={() => router.push('/scan/wine-list?upload=1')} activeOpacity={0.7}>
-            <Feather name="upload" size={11} color={colors.gold} />
+            <Feather name="upload" size={11} color="#FFFFFF" />
             <Text style={styles.tileBannerText}>upload instead</Text>
           </TouchableOpacity>
         </View>
@@ -616,14 +616,14 @@ const styles = StyleSheet.create({
   // Wine title higher than its neighbours. A constant height keeps all four
   // titles on the same line.
   tileIcon: { marginBottom: spacing.sm, height: 34, lineHeight: 34, textAlign: 'center' },
-  tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: colors.gold, letterSpacing: 1, textAlign: 'center' },
+  tileTitle: { fontFamily: fonts.headingBold, fontSize: 19, color: '#FFFFFF', letterSpacing: 1, textAlign: 'center' },
   tileDivider: { width: 34, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: spacing.xs },
   // Fixed two-line height so every tile's blurb occupies the same space — a
   // one-line blurb (Scan a Lineup) would otherwise shift its title down out of
   // line with the two-line tiles beside it. Font is +1pt (14) per request.
-  tileDesc: { fontFamily: fonts.headingSemibold, fontSize: 14, color: 'rgba(255,255,255,0.85)', textAlign: 'center', lineHeight: 18, minHeight: 36 },
+  tileDesc: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, textAlign: 'center', lineHeight: 18, minHeight: 36 },
   tileBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 7, borderTopWidth: 1, borderTopColor: 'rgba(224,184,74,0.4)', backgroundColor: 'rgba(224,184,74,0.12)' },
-  tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  tileBannerText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: '#FFFFFF', letterSpacing: 0.3 },
   // Separator + "Manually Search a Wine" bar beneath the two scan tiles.
   searchBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.borderWhite, borderRadius: 14, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.surface, marginTop: spacing.md },
   searchBarIcon: { marginRight: 2 },
