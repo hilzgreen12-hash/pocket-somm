@@ -233,7 +233,9 @@ export default function ScanLandingScreen() {
         fetchLabelThumb(confirmed.producer, confirmed.wineName),
       ]);
       setIntelligence(intel);
-      useLastIntelStore.getState().setLast(confirmed, intel);
+      // Manually Search a Wine is NOT a tile scan — keep it out of Recent Scans
+      // (still update the "last result").
+      useLastIntelStore.getState().setLast(confirmed, intel, { recordRecent: false });
       setGeneratingIntel(false);
       // confirmed=1: the user already picked this exact wine from the search
       // list, so the intel screen must NOT re-ask "which wine is this?".

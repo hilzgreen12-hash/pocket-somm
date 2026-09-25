@@ -376,7 +376,10 @@ export default function LabelConfirmScreen() {
       setIntelligence(intel);
       // Persist as the "last result" so the Cellar tab's View last result link
       // survives an app restart (separate from the transient label store).
-      useLastIntelStore.getState().setLast(confirmed, intel);
+      // Manual/typed entries (Manually Search, Manual Input) are NOT tile label
+      // scans, so they update the last result but stay OUT of Recent Scans; a
+      // genuine scanned-label confirmation still records.
+      useLastIntelStore.getState().setLast(confirmed, intel, { recordRecent: !isManual });
       // Mark a FRESH Scan Wine Label result (only the intel flow) so the intel
       // card can offer "Add label to Label Library?" exactly once — and never
       // on a later "View last result" revisit (which pushes without fresh=1).
