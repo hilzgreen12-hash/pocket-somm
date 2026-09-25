@@ -367,39 +367,25 @@ export default function RestaurantReviewsScreen() {
       wineName: cw.wine_name || null,
       vintage: cw.vintage != null ? String(cw.vintage) : 'NV',
     };
-    setGenIntel(true);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const intel = await generateWineIntel(details as any, currency);
-      const ls = useLabelStore.getState();
-      // Show THIS wine's own label (if it was added by scan) — NOT whatever label
-      // was last left in the store by an earlier scan. When the wine has no photo
-      // of its own (a manual restaurant pick), auto-fetch a web label so the
-      // intel card still gets a thumbnail (mirrors the Confirm-details auto-fetch).
+    const ls = useLabelStore.getState();
+    ls.reset();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ls.setWineDetailsConfirmed(details as any);
+    ls.setIntelligence(null);
+    ls.setImageUri(null);
+    // Header image in the background: this wine's own label if it has one, else a
+    // web label. Best-effort — title-only until it lands.
+    void (async () => {
       try {
         let img = cw.label_image_path ? await labelSignedUrl(cw.label_image_path) : null;
         if (!img) img = await fetchAutoLabelUri(cw.producer, cw.wine_name);
-        ls.setImageUri(img);
-      } catch { ls.setImageUri(null); }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ls.setWineDetailsConfirmed(details as any);
-      ls.setIntelligence(intel);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      // Not a Scan-a-Label result — keep it out of Discover's Recent Scans.
-      useLastIntelStore.getState().setLast(details as any, intel, { recordRecent: false });
-      // Route the intel screen's Back to reopen THIS restaurant visit (a modal,
-      // so we reopen it via the ?openSession deep link) instead of the cellar.
-      const backTo = returnToSession ? `&backTo=${encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`)}` : '';
-      router.push(`/label/results?context=intel${backTo}` as any);
-    } catch (err) {
-      // Intel failed and we'd already closed the review to let it open — reopen
-      // the same visit so the user isn't dead-ended on the bare restaurant list.
-      const visit = returnToSession ? archive.find((a) => a.id === returnToSession) : null;
-      if (visit) setEditing(visit);
-      showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setGenIntel(false);
-    }
+        if (img) useLabelStore.getState().setImageUri(img);
+      } catch { /* photoless */ }
+    })();
+    // gen=1: build intel on the results screen (instant shell). confirmed=1: known
+    // wine, no "which wine?" prompt. noRecent=1: a review view isn't a scan.
+    const backTo = returnToSession ? `&backTo=${encodeURIComponent(`/restaurants/reviews?openSession=${returnToSession}`)}` : '';
+    router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backTo}` as any);
   }
 
   // Long-press a wine on a restaurant card (or the Delete option in the review

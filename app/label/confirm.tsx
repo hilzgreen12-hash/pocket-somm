@@ -360,31 +360,25 @@ export default function LabelConfirmScreen() {
   async function proceedIntel(confirmed: WineDetailsComplete) {
     setLoading(true);
     try {
-      // generateWineIntel queries Wine-Searcher first (real market price +
-      // WS-anchored critic score, converted to the user's currency), falling
-      // back to the Claude estimate on a no-match. In parallel, auto-fetch a
-      // label so a manual entry still shows a thumbnail on the intel card.
-      // Only the value-intel flow (Search A Wine / Scan Label) offers to switch
-      // to the local currency abroad; cellar/wishlist adds keep the home default.
-      const intelCurrency = context === 'intel'
-        ? await resolveIntelCurrency(preferences?.defaultCurrency)
-        : (preferences?.defaultCurrency ?? 'GBP');
+      // Intel flow: navigate to the results screen NOW (instant shell + swirls)
+      // and let it build the intel. Auto-fetch a label in the background so a
+      // manual entry still gets a header thumbnail. Manual/typed entries aren't
+      // tile scans → noRecent keeps them out of Recent Scans.
+      if (context === 'intel') {
+        setIntelligence(null);
+        void ensureAutoLabel(confirmed.producer, confirmed.wineName);
+        router.replace(`/label/results${contextQuery}&fresh=1&gen=1${isManual ? '&noRecent=1' : ''}`);
+        return;
+      }
+      // Non-intel adds (cellar / wishlist) keep the home default and generate now.
+      const intelCurrency = preferences?.defaultCurrency ?? 'GBP';
       const [intel] = await Promise.all([
         generateWineIntel(confirmed, intelCurrency),
         ensureAutoLabel(confirmed.producer, confirmed.wineName),
       ]);
       setIntelligence(intel);
-      // Persist as the "last result" so the Cellar tab's View last result link
-      // survives an app restart (separate from the transient label store).
-      // Manual/typed entries (Manually Search, Manual Input) are NOT tile label
-      // scans, so they update the last result but stay OUT of Recent Scans; a
-      // genuine scanned-label confirmation still records.
       useLastIntelStore.getState().setLast(confirmed, intel, { recordRecent: !isManual });
-      // Mark a FRESH Scan Wine Label result (only the intel flow) so the intel
-      // card can offer "Add label to Label Library?" exactly once — and never
-      // on a later "View last result" revisit (which pushes without fresh=1).
-      const freshFlag = context === 'intel' ? '&fresh=1' : '';
-      router.replace(`/label/results${contextQuery}${freshFlag}`);
+      router.replace(`/label/results${contextQuery}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load wine details');
       showAlert({ title: 'Error', body: 'Could not load wine details. Please try again.' });

@@ -336,32 +336,26 @@ export default function LineupDetailScreen() {
       wineName: w.wine_name || null,
       vintage: w.vintage != null ? String(w.vintage) : 'NV',
     });
-    setGenIntel(true);
-    try {
-      const intel = await generateWineIntel(details as any, currency);
-      const ls = useLabelStore.getState();
-      // Give the intel card a thumbnail like every other generate-intel flow:
-      // reuse the matched cellar wine's own label photo if it has one, else
-      // auto-fetch a web label. (Best-effort — a miss just leaves it photoless.)
+    const ls = useLabelStore.getState();
+    ls.reset();
+    ls.setWineDetailsConfirmed(details as any);
+    ls.setIntelligence(null);
+    ls.setImageUri(null);
+    // Header image in the background: reuse the matched cellar wine's own label if
+    // it has one, else auto-fetch a web label. Best-effort — the card shows title-
+    // only until it lands.
+    void (async () => {
       let img: string | null = null;
       if (w.cellar_wine_id) {
         const cw = cellarWines.find((c) => c.id === w.cellar_wine_id);
         if (cw?.label_image_path) { try { img = await labelSignedUrl(cw.label_image_path); } catch { /* fall through */ } }
       }
-      if (!img) img = await fetchAutoLabelUri(w.producer, w.wine_name);
-      ls.setImageUri(img);
-      ls.setWineDetailsConfirmed(details as any);
-      ls.setIntelligence(intel);
-      // Lineup wine, not a Scan-a-Label result — keep out of Recent Scans.
-      useLastIntelStore.getState().setLast(details as any, intel, { recordRecent: false });
-      // confirmed=1: this wine is already established in the lineup — the intel
-      // screen must NOT ask "which wine is this?".
-      router.push(`/label/results?context=intel&confirmed=1${backToLineup}` as any);
-    } catch (err) {
-      showAlert({ title: 'Could not load intel', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setGenIntel(false);
-    }
+      if (!img) { try { img = await fetchAutoLabelUri(w.producer, w.wine_name); } catch { /* photoless */ } }
+      if (img) useLabelStore.getState().setImageUri(img);
+    })();
+    // gen=1: build intel on the results screen (instant shell). confirmed=1: known
+    // wine, no "which wine?" prompt. noRecent=1: a lineup view isn't a scan.
+    router.push(`/label/results?context=intel&confirmed=1&gen=1&noRecent=1${backToLineup}` as any);
   }
 
   async function saveWineEdit() {

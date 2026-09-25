@@ -222,27 +222,14 @@ export default function ScanLandingScreen() {
       quantity: 1,
     });
     setWineDetailsConfirmed(confirmed);
-    setGeneratingIntel(true);
-    try {
-      const currency = await resolveIntelCurrency(preferences?.defaultCurrency);
-      const [intel] = await Promise.all([
-        generateWineIntel(confirmed, currency),
-        fetchLabelThumb(confirmed.producer, confirmed.wineName),
-      ]);
-      setIntelligence(intel);
-      // Manually Search a Wine is NOT a tile scan — keep it out of Recent Scans
-      // (still update the "last result").
-      useLastIntelStore.getState().setLast(confirmed, intel, { recordRecent: false });
-      setGeneratingIntel(false);
-      // confirmed=1: the user already picked this exact wine from the search
-      // list, so the intel screen must NOT re-ask "which wine is this?".
-      router.push(`/label/results?context=intel&fresh=1&confirmed=1&backTo=${encodeURIComponent('/(tabs)')}`);
-    } catch (err) {
-      setGeneratingIntel(false);
-      setError(err instanceof Error ? err.message : 'Failed to generate intel');
-      // Fall back to the confirm screen so it's never a dead end.
-      router.push(`/label/confirm?manual=1&context=intel&seed=${encodeURIComponent(wine.producer)}&backTo=${encodeURIComponent('/(tabs)')}`);
-    }
+    setIntelligence(null);
+    // Fetch a web label in the background so the shell gets a header image; it
+    // sets the store's imageUri when it lands. Navigate immediately.
+    void fetchLabelThumb(confirmed.producer, confirmed.wineName);
+    // gen=1: build the intel ON the results screen (instant shell + swirls).
+    // confirmed=1: the user picked this exact wine, so don't re-ask "which wine".
+    // noRecent=1: Manually Search isn't a tile scan — keep it out of Recent Scans.
+    router.push(`/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1&backTo=${encodeURIComponent('/(tabs)')}`);
   }
 
   // "Scan a Lineup" now offers two destinations: add the bottles to the cellar
@@ -319,11 +306,11 @@ export default function ScanLandingScreen() {
         return;
       }
 
-      const intel = await generateWineIntel(confirmed, currency);
-      setIntelligence(intel);
-      useLastIntelStore.getState().setLast(confirmed, intel);
+      // Verified — build the intel ON the results screen (instant shell + swirls).
+      // A label upload IS a tile scan, so it records to Recent Scans (no noRecent).
+      setIntelligence(null);
       setScanningLabel(false);
-      router.push(`/label/results?context=intel&via=upload&fresh=1&backTo=${backTo}`);
+      router.push(`/label/results?context=intel&via=upload&fresh=1&gen=1&backTo=${backTo}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to scan label');
       setScanningLabel(false);

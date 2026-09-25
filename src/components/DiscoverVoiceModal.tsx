@@ -74,7 +74,6 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
 
       if (res.intent === 'intel' && res.wine) {
         const w = res.wine;
-        setThinkingText('Generating Wine Intel…');
         const confirmed: WineDetailsComplete = {
           producer: w.producer,
           region: w.region ?? '',
@@ -88,14 +87,12 @@ export function DiscoverVoiceModal({ visible, onClose }: { visible: boolean; onC
         const ls = useLabelStore.getState();
         ls.reset();
         ls.setWineDetailsConfirmed(confirmed);
-        const currency = preferences?.defaultCurrency ?? 'GBP';
-        const intel = await generateWineIntel(confirmed, currency);
-        ls.setIntelligence(intel);
+        ls.setIntelligence(null);
         ls.setImageUri(null);
-        // A voice-command wine query isn't a "scan" — keep it out of Recent Scans.
-        useLastIntelStore.getState().setLast(confirmed, intel, { recordRecent: false });
+        // gen=1: build the intel on the results screen (instant shell). noRecent=1:
+        // a voice query isn't a scan — keep it out of Recent Scans.
         handleClose();
-        router.push('/label/results?context=intel&fresh=1&confirmed=1' as any);
+        router.push('/label/results?context=intel&fresh=1&confirmed=1&gen=1&noRecent=1' as any);
         return;
       }
 

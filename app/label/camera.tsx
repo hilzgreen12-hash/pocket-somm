@@ -156,10 +156,11 @@ export default function LabelCameraScreen() {
         return;
       }
 
-      const intel = await generateWineIntel(confirmed, currency);
-      setIntelligence(intel);
-      useLastIntelStore.getState().setLast(confirmed, intel);
-      router.replace(`/label/results${contextQuery}&fresh=1`);
+      // Verified — generate on the results screen (instant shell + swirls). The
+      // captured photo is already the header image; it's a tile scan, so it
+      // records to Recent Scans (no noRecent).
+      setIntelligence(null);
+      router.replace(`/label/results${contextQuery}&fresh=1&gen=1`);
     } catch {
       router.replace(`/label/confirm${contextQuery}`);
     }

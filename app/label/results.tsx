@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
@@ -94,7 +94,7 @@ const EMPTY_INTEL: WineIntelligence = {
 };
 
 export default function LabelResultsScreen() {
-  const { context, fresh, backTo, via, confirm, labelId, confirmed } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string; confirmed?: string }>();
+  const { context, fresh, backTo, via, confirm, labelId, confirmed, gen, noRecent } = useLocalSearchParams<{ context?: string; fresh?: string; backTo?: string; via?: string; confirm?: string; labelId?: string; confirmed?: string; gen?: string; noRecent?: string }>();
   // A caller (e.g. a lineup wine) that KNOWS the identity — never disambiguate.
   const identityConfirmed = confirmed === '1';
   const isUploadFlow = via === 'upload';
@@ -189,6 +189,32 @@ export default function LabelResultsScreen() {
   // tolerant matches and only generate the card once the user picks or confirms
   // their read — so Vinster never builds a card for a misread/fictional wine.
   const [awaitingConfirm, setAwaitingConfirm] = useState(confirm === '1' && !identityConfirmed);
+  // Skeleton mode: the caller navigated here BEFORE generating intel (gen=1) so the
+  // user sees the card shell instantly; we generate on this screen and swirl the
+  // score/price/window + Inside Line until it lands. genError surfaces a retry.
+  const [genError, setGenError] = useState(false);
+  const genStartedRef = useRef(false);
+  // True while we're building intel for a skeleton arrival — drives the swirls.
+  const intelLoading = isIntelOnlyFlow && gen === '1' && !intelligence && !awaitingConfirm && !genError;
+  // Generate the intel on THIS screen (skeleton arrival). Records to Recent Scans
+  // unless the caller passed noRecent=1 (Manually Search / voice / lineup / reviews).
+  const runGenerate = useCallback(async () => {
+    if (!wineDetailsConfirmed) return;
+    setGenError(false);
+    try {
+      const generated = await generateWineIntel(wineDetailsConfirmed, userCurrency);
+      setIntelligence(generated);
+      useLastIntelStore.getState().setLast(wineDetailsConfirmed, generated, { recordRecent: noRecent !== '1' });
+    } catch {
+      setGenError(true);
+    }
+  }, [wineDetailsConfirmed, userCurrency, noRecent, setIntelligence]);
+  useEffect(() => {
+    if (!isIntelOnlyFlow || gen !== '1' || intelligence || awaitingConfirm || !wineDetailsConfirmed || genStartedRef.current) return;
+    genStartedRef.current = true;
+    void runGenerate();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [confirmOptions, setConfirmOptions] = useState<WineCandidate[]>([]);
   // Single-select index into the confirm list (0 = the wine as read, always the
   // first row). The user taps to select, then presses Confirm.
@@ -936,14 +962,21 @@ export default function LabelResultsScreen() {
   }, [wineDetailsConfirmed, wines, matchingExisting]);
 
   // The Add flow legitimately has no intel; the confirm-first step deliberately
-  // has none yet; every other flow needs it.
-  if (!wineDetailsConfirmed || (!intelligence && !isAddFlow && !awaitingConfirm)) {
+  // has none yet; a skeleton arrival (intelLoading) is generating and falls
+  // through to the card shell; every other flow needs intel.
+  if (!wineDetailsConfirmed || (!intelligence && !isAddFlow && !awaitingConfirm && !intelLoading)) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>No results available.</Text>
-        <TouchableOpacity onPress={() => router.replace('/label/camera')}>
-          <Text style={styles.linkText}>Scan a label</Text>
-        </TouchableOpacity>
+        <Text style={styles.errorText}>{genError ? "Vinster couldn't generate this wine's intel just now." : 'No results available.'}</Text>
+        {genError ? (
+          <TouchableOpacity onPress={() => { void runGenerate(); }}>
+            <Text style={styles.linkText}>Try again</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity onPress={() => router.replace('/label/camera')}>
+            <Text style={styles.linkText}>Scan a label</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   }
@@ -2048,22 +2081,28 @@ export default function LabelResultsScreen() {
               short "why" popup. */}
           <View style={styles.statBarRule} />
           <View style={styles.statBar}>
-            <TouchableOpacity style={styles.statBarItem} onPress={openScoreInfo} disabled={intel.criticScore == null} activeOpacity={0.7}>
-              <Text style={[styles.statBarValueGold, intel.criticScore == null && styles.statBarValueMuted]}>
-                {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
-              </Text>
+            <TouchableOpacity style={styles.statBarItem} onPress={openScoreInfo} disabled={intelLoading || intel.criticScore == null} activeOpacity={0.7}>
+              {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : (
+                <Text style={[styles.statBarValueGold, intel.criticScore == null && styles.statBarValueMuted]}>
+                  {intel.criticScore != null ? `${intel.criticScore}/100` : '—'}
+                </Text>
+              )}
             </TouchableOpacity>
             <Text style={styles.statBarSepGold}>·</Text>
-            <TouchableOpacity style={styles.statBarItem} onPress={openValueInfo} disabled={intel.estimatedValue == null} activeOpacity={0.7}>
-              <Text style={[styles.statBarValueGold, intel.estimatedValue == null && styles.statBarValueMuted]}>
-                {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
-              </Text>
+            <TouchableOpacity style={styles.statBarItem} onPress={openValueInfo} disabled={intelLoading || intel.estimatedValue == null} activeOpacity={0.7}>
+              {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : (
+                <Text style={[styles.statBarValueGold, intel.estimatedValue == null && styles.statBarValueMuted]}>
+                  {intel.estimatedValue != null ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 }) : '—'}
+                </Text>
+              )}
             </TouchableOpacity>
             <Text style={styles.statBarSepGold}>·</Text>
-            <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown'} activeOpacity={0.7}>
-              <Text style={[styles.statBarValueGold, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
-                {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom} - ${intel.drinkingWindowTo}` : '—'}
-              </Text>
+            <TouchableOpacity style={styles.statBarItem} onPress={openWindowInfo} disabled={intelLoading || (!(intel.drinkingWindowFrom && intel.drinkingWindowTo) && intel.drinkingWindowStatus === 'unknown')} activeOpacity={0.7}>
+              {intelLoading ? <ActivityIndicator size="small" color={colors.gold} /> : (
+                <Text style={[styles.statBarValueGold, !(intel.drinkingWindowFrom && intel.drinkingWindowTo) && styles.statBarValueMuted]}>
+                  {intel.drinkingWindowFrom && intel.drinkingWindowTo ? `${intel.drinkingWindowFrom} - ${intel.drinkingWindowTo}` : '—'}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
           {/* Affordance INSIDE the bar — below the stats, above the lower rule.
