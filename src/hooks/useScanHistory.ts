@@ -180,9 +180,12 @@ export function useScanHistory() {
             if (geo) {
               const rawCity = geo.city ?? geo.subregion ?? geo.region ?? null;
               city = rawCity ? normaliseCity(rawCity) : null;
-              // Use the establishment name if the geocoder returns one (e.g. "The Clove Club")
-              // Falls back to null — user can fill it in on the results screen
-              restaurantName = (geo.name && geo.name !== geo.street && geo.name !== geo.streetNumber) ? geo.name : null;
+              // Deliberately DON'T derive a venue/restaurant name from reverse-
+              // geocoding. It returns the NEAREST business (e.g. "Porte Noire"),
+              // which is frequently not where the user is — and it was silently
+              // stamping venues onto scans and the wine reviews saved from them
+              // that the user never typed. The venue is left blank for the user to
+              // fill in; a user-typed name (restaurantNameOverride) still applies.
             }
           }
         }

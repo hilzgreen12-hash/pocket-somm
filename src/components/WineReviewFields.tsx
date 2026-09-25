@@ -149,7 +149,7 @@ export function WineReviewFields({
                 style={[styles.locInput, styles.locInputSecond]}
                 value={locationName}
                 onChangeText={onLocationName}
-                placeholder="Restaurant, home, other… (optional)"
+                placeholder="Restaurant, home, other…"
                 placeholderTextColor={colors.textMuted}
               />
             </View>
