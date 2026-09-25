@@ -3,10 +3,17 @@ import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
-import { CarouselPlaceholder } from './CarouselPlaceholder';
+import { ExamplePlaceholder, type PlaceholderCard } from './ExamplePlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+
+// Example cards shown when a new user has no bottles approaching peak yet.
+const DRINK_SOON_EXAMPLES: PlaceholderCard[] = [
+  { kind: 'label', producer: 'Charles Heidsieck', wineName: 'Brut Vintage', title: 'Charles Heidsieck 1995', stamp: 'Drink now – 2030', overlay: 'Your first cellar bottle replaces this content' },
+  { kind: 'label', producer: "Dow's", wineName: 'Vintage Port', title: "Dow's 1970", stamp: 'Drink now – 2040', overlay: 'Your second cellar bottle replaces this content' },
+  { kind: 'label', producer: 'Mas Doix', wineName: 'Doix', title: 'Mas Doix 2005', stamp: 'Drink now – 2028', overlay: 'Your third cellar bottle replaces this content' },
+];
 
 // Total for the "XX Wines Approaching Peak" stats line under the header.
 export function useDrinkSoonCount(): number {
@@ -21,7 +28,7 @@ export function DrinkSoonCarousel() {
   const peak = wines.filter((w) => effectiveMaturity(w) === 'peak');
 
   if (peak.length === 0) {
-    return <CarouselPlaceholder caption="Bottles from your cellar and approaching their peak will appear here as your collection grows" icon="wine-outline" />;
+    return <ExamplePlaceholder cards={DRINK_SOON_EXAMPLES} />;
   }
 
   return (

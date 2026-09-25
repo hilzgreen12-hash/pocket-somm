@@ -1,10 +1,28 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { supabase } from '../api/supabase';
 import { useAuth } from './useAuth';
+import { useScanStore } from '../stores/scanStore';
+import { uploadRestaurantPhoto } from '../api/labelPhotos';
 import type { ExtractedWine, RecommendationResponse } from '../types/wine';
 import { normaliseCity } from '../utils/city';
+
+// Crop the TOP landscape strip of a scanned wine list for its card thumbnail —
+// the top usually carries the restaurant name, which reads well at card size.
+async function cropWineListTop(uri: string): Promise<string> {
+  const meta = await ImageManipulator.manipulateAsync(uri, [], {});
+  const w = meta.width;
+  const h = meta.height;
+  const cropH = Math.min(h, Math.max(1, Math.round(w * 0.72))); // ~landscape strip
+  const out = await ImageManipulator.manipulateAsync(
+    uri,
+    [{ crop: { originX: 0, originY: 0, width: w, height: cropH } }, { resize: { width: 640 } }],
+    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG },
+  );
+  return out.uri;
+}
 
 const STORAGE_KEY = 'vinster_scan_history';
 const MAX_LOCAL = 3;
@@ -228,6 +246,19 @@ export function useScanHistory() {
       if (!verify) {
         throw new Error(`scan_sessions row ${sessionId} not visible after insert — RLS read policy may be rejecting your own rows.`);
       }
+
+      // Save a top-strip of the scanned wine list as this session's card
+      // thumbnail (the top usually carries the restaurant name). Non-fatal — the
+      // scan still archives without a photo, and a photo added later in a review
+      // overwrites this at the same storage path.
+      try {
+        const scanUri = useScanStore.getState().imageUri ?? useScanStore.getState().imageUris?.[0] ?? null;
+        if (scanUri) {
+          const cropped = await cropWineListTop(scanUri);
+          const path = await uploadRestaurantPhoto(session.user.id, cropped, sessionId!);
+          await supabase.from('scan_sessions').update({ restaurant_photo_path: path }).eq('id', sessionId!);
+        }
+      } catch { /* non-fatal — archived without a thumbnail */ }
 
       const newItem: ScanHistoryItem = {
         id: Date.now().toString(),
