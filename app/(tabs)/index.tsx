@@ -10,7 +10,7 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel, useRecentScanCounts } from '../../src/components/RecentScansCarousel';
-import { DrinkSoonCarousel } from '../../src/components/DrinkSoonCarousel';
+import { DrinkSoonCarousel, useDrinkSoonCount } from '../../src/components/DrinkSoonCarousel';
 import { RecentReviewsCarousel, useRecentReviewCounts } from '../../src/components/RecentReviewsCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -77,6 +77,7 @@ export default function ScanLandingScreen() {
   // True totals for the carousel stats lines.
   const scanCounts = useRecentScanCounts();
   const reviewCounts = useRecentReviewCounts();
+  const drinkSoonCount = useDrinkSoonCount();
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
@@ -419,6 +420,7 @@ export default function ScanLandingScreen() {
       {/* Drink Soon — cellar bottles at their peak. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Cellar - Drink Soon</Text>
+      <Text style={styles.carouselStats}>{drinkSoonCount} Wines Approaching Peak</Text>
       <View style={styles.carouselBleed}><DrinkSoonCarousel /></View>
 
       {/* Community Musings — coming soon (recently shared reviews, journal). */}

@@ -8,6 +8,12 @@ import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
+// Total for the "XX Wines Approaching Peak" stats line under the header.
+export function useDrinkSoonCount(): number {
+  const { wines } = useCellar();
+  return wines.filter((w) => effectiveMaturity(w) === 'peak').length;
+}
+
 // "Drink Soon" — active cellar bottles sitting in their peak drinking window,
 // so the Discover tab nudges you toward what to open now. Tap → the wine card.
 export function DrinkSoonCarousel() {

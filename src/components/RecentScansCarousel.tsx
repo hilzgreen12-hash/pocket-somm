@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
-import { CarouselPlaceholder } from './CarouselPlaceholder';
+import { RecentScansPlaceholder } from './RecentScansPlaceholder';
 import { useLastIntelStore } from '../stores/lastIntelStore';
 import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
@@ -105,7 +105,7 @@ export function RecentScansCarousel() {
   const merged = [...labelItems, ...listItems].sort((a, b) => b.ts - a.ts).slice(0, 12);
 
   if (merged.length === 0) {
-    return <CarouselPlaceholder caption="Scan a label or a wine list — your scans appear here." icon="camera-outline" />;
+    return <RecentScansPlaceholder />;
   }
 
   return (
