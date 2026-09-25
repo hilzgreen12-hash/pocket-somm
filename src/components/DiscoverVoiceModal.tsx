@@ -184,7 +184,7 @@ const styles = StyleSheet.create({
   inputText: { fontFamily: fonts.bodyRegular, fontSize: 16, color: colors.text, textAlignVertical: 'top' },
   editHint: { fontFamily: fonts.bodyItalic, fontSize: 12, color: colors.textMuted, marginTop: 4, marginBottom: spacing.md },
   suggestions: { gap: spacing.xs, marginBottom: spacing.lg },
-  suggestion: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
+  suggestion: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.gold, textAlign: 'center', lineHeight: 19 },
   primaryBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center' },
   btnDisabled: { opacity: 0.4 },
   primaryBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
