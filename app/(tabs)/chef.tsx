@@ -5,6 +5,7 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { CookbookFoldersCarousel } from '../../src/components/CookbookFoldersCarousel';
+import { PairVoiceModal } from '../../src/components/PairVoiceModal';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useFoodPairingStore } from '../../src/stores/foodPairingStore';
 import { useChefLabelHistory, useChefPairingHistory } from '../../src/hooks/useChefHistory';
@@ -29,6 +30,7 @@ export default function ChefTab() {
   const { sessions: labelSessions } = useChefLabelHistory();
   const { sessions: pairingSessions } = useChefPairingHistory();
   const [message, setMessage] = useState<AppMessage | null>(null);
+  const [voiceOpen, setVoiceOpen] = useState(false);
 
   function handleViewLastPairing() {
     if (generalResult || cellarResult) {
@@ -92,6 +94,11 @@ export default function ChefTab() {
         </Text>
       </View>
 
+      {/* Voice Command — beneath the blurb, matching the other tabs. */}
+      <TouchableOpacity style={styles.voiceBubble} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+        <Text style={styles.voiceBubbleText}>Voice Command</Text>
+      </TouchableOpacity>
+
       <View style={styles.divider} />
 
       {/* The two pairing flows — tap to start; press-and-hold to revisit the
@@ -119,6 +126,8 @@ export default function ChefTab() {
           folders rendered as boxes (see CookbookFoldersCarousel). */}
       <CookbookFoldersCarousel />
 
+      <PairVoiceModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
+
       <Modal visible={!!message} transparent animationType="fade" onRequestClose={() => setMessage(null)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setMessage(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
@@ -141,6 +150,9 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
+  // Voice Command — centred gold pill, matching the home-storage screens.
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.xs },
+  voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
   // "Your Cookbook" header — matches Cellar / Review section headers.
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
