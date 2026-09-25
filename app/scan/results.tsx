@@ -24,6 +24,7 @@ import { fetchPricing } from '../../src/services/pricing';
 import { fetchVinsterReview } from '../../src/api/label';
 import { SearchProgress } from '../../src/components/SearchProgress';
 import { ChosenWineModal } from '../../src/components/ChosenWineModal';
+import { PickReveal } from '../../src/components/PickReveal';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
@@ -960,7 +961,7 @@ export default function ResultsScreen() {
           // (gold) and Grape (gold) on their own lines — the app-wide format.
           const regionalPlacement = joinPlace(wine.appellation, effRegion);
           return (
-            <View key={wine.name + i} style={styles.card}>
+            <PickReveal key={wine.name + i} delay={isFromHistory ? 0 : i * 450} style={styles.card}>
               <View style={styles.cardInner}>
 
                 {/* Gold "Select This Wine" bar above the name — mirrors the
@@ -1135,7 +1136,7 @@ export default function ResultsScreen() {
                 )}
 
               </View>
-            </View>
+            </PickReveal>
           );
         })}
       </View>
