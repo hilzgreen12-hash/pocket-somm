@@ -15,17 +15,26 @@ const DRINK_SOON_EXAMPLES: PlaceholderCard[] = [
   { kind: 'label', producer: 'Mas Doix', wineName: 'Doix', title: 'Mas Doix 2005', stamp: 'Drink now – 2028', overlay: 'Your third cellar bottle replaces this content' },
 ];
 
+// "Drink soon" = the drinking window closes (best-before year) within the next 5
+// years and hasn't already passed — so bottles cruising until 2040 don't show.
+function isDrinkingSoon(w: { drinking_window_to: number | null }): boolean {
+  const to = w.drinking_window_to;
+  if (to == null) return false;
+  const nowYear = new Date().getFullYear();
+  return to >= nowYear && to <= nowYear + 5;
+}
+
 // Total for the "XX Wines Approaching Peak" stats line under the header.
 export function useDrinkSoonCount(): number {
   const { wines } = useCellar();
-  return wines.filter((w) => effectiveMaturity(w) === 'peak').length;
+  return wines.filter(isDrinkingSoon).length;
 }
 
-// "Drink Soon" — active cellar bottles sitting in their peak drinking window,
-// so the Discover tab nudges you toward what to open now. Tap → the wine card.
+// "Drink Soon" — cellar bottles whose window closes within 5 years, so the Home
+// tab nudges you toward what to open. Tap → the wine card.
 export function DrinkSoonCarousel() {
   const { wines } = useCellar();
-  const peak = wines.filter((w) => effectiveMaturity(w) === 'peak');
+  const peak = wines.filter(isDrinkingSoon);
   // Real bottles fill from the left, replacing placeholder tiles in order; the
   // remaining example tiles stay until there are at least three.
   const fill = peak.length < DRINK_SOON_EXAMPLES.length ? DRINK_SOON_EXAMPLES.slice(peak.length) : [];

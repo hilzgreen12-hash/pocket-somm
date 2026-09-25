@@ -109,6 +109,7 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bsan[\s-]?sair\b/gi, 'Sancerre'],
   [/\bpwee\s+foo[\s-]?may\b/gi, 'Pouilly-Fumé'],
   [/\bal[\s-]?zass\b/gi, 'Alsace'],
+  [/\bal[\s-]?sass\b/gi, 'Alsace'],
   [/\brone\b/gi, 'Rhône'],
   [/\ber[\s-]?mit[\s-]?age\b/gi, 'Hermitage'],
   [/\bcote?\s+ro[\s-]?tee\b/gi, 'Côte-Rôtie'],
