@@ -96,7 +96,9 @@ export default function CellarTab() {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.divider} />
+      {/* 18 above (actionRow.marginBottom) + rule + 18 below — matches the Home tab
+          spacing between the Voice Command button, separator and first button. */}
+      <View style={[styles.divider, styles.voiceDivider]} />
 
       {/* Your Cellar List (the full list) and Your Cellar Statistics. */}
       <View style={styles.section}>
@@ -146,7 +148,9 @@ const styles = StyleSheet.create({
   // Left-indented row of two matching gold pills (Voice Command · Add Wines).
   // Metrics mirror buttonFull exactly (radius 14, paddingVertical sm, 14px text)
   // so they're the same height as the buttons below.
-  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: spacing.md },
+  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: 18 },
+  // First divider after the Voice Command row — 18 above/below to match Home.
+  voiceDivider: { marginTop: 0, marginBottom: 18 },
   actionBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
   actionBtnText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },

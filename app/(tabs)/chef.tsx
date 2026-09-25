@@ -99,7 +99,8 @@ export default function ChefTab() {
         <Text style={styles.voiceBubbleText}>Voice Command</Text>
       </TouchableOpacity>
 
-      <View style={styles.divider} />
+      {/* 18 above (voiceBubble.marginBottom) + rule + 18 below — matches Home. */}
+      <View style={[styles.divider, styles.voiceDivider]} />
 
       {/* The two pairing flows — tap to start; press-and-hold to revisit the
           last result. */}
@@ -151,8 +152,10 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // Voice Command — centred gold pill, matching the home-storage screens.
-  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: spacing.xs },
+  voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: 18 },
   voiceBubbleText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold },
+  // First divider after the Voice Command button — 18 above/below to match Home.
+  voiceDivider: { marginTop: 0, marginBottom: 18 },
   // "Your Cookbook" header — matches Cellar / Review section headers.
   sectionHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: '#FFFFFF', textAlign: 'center', letterSpacing: 0.5, marginBottom: spacing.xs },
   section: { paddingHorizontal: spacing.xl, gap: spacing.sm },
