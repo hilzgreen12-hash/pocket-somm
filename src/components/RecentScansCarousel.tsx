@@ -34,7 +34,7 @@ function restaurantReviewed(a: ScanArchiveItem): boolean {
 // Example cards shown when a new user has no scans yet.
 const SCAN_EXAMPLES: PlaceholderCard[] = [
   { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030 · At Home', overlay: 'Your first scan replaces this content' },
-  { kind: 'icon', icon: 'list-outline', title: 'Wine list', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your second scan replaces this content' },
+  { kind: 'winelist', title: 'Wine list', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your second scan replaces this content' },
   { kind: 'label', producer: 'Kistler', wineName: 'Cuvée Cathleen Chardonnay', title: 'Kistler Cuvée Cathleen Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your third scan replaces this content' },
 ];
 
