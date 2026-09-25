@@ -1,6 +1,7 @@
 import { Text, TouchableOpacity, StyleSheet, ScrollView, View } from 'react-native';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
+import { CarouselPlaceholder } from './CarouselPlaceholder';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
 import { wineHeaderLine } from '../utils/wineHeader';
@@ -72,13 +73,7 @@ export function RecentReviewsCarousel() {
   const merged = [...wineItems, ...restaurantItems].sort((a, b) => b.ts - a.ts).slice(0, 12);
 
   if (merged.length === 0) {
-    return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-        <View style={[styles.card, styles.emptyCard]}>
-          <Text style={styles.emptyText}>Your wine & restaurant reviews will appear here.</Text>
-        </View>
-      </ScrollView>
-    );
+    return <CarouselPlaceholder caption="Your wine & restaurant reviews will appear here." icon="star-outline" />;
   }
 
   return (

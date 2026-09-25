@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
+import { CarouselPlaceholder } from './CarouselPlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -14,13 +15,7 @@ export function DrinkSoonCarousel() {
   const peak = wines.filter((w) => effectiveMaturity(w) === 'peak');
 
   if (peak.length === 0) {
-    return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-        <View style={[styles.card, styles.emptyCard]}>
-          <Text style={styles.emptyText}>Bottles from your cellar and approaching their peak will appear here as your collection grows</Text>
-        </View>
-      </ScrollView>
-    );
+    return <CarouselPlaceholder caption="Bottles from your cellar and approaching their peak will appear here as your collection grows" icon="wine-outline" />;
   }
 
   return (
