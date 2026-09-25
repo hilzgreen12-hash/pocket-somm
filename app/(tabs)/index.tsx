@@ -9,9 +9,9 @@ import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
-import { RecentScansCarousel, useRecentScanCounts } from '../../src/components/RecentScansCarousel';
+import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
 import { DrinkSoonCarousel, useDrinkSoonCount } from '../../src/components/DrinkSoonCarousel';
-import { RecentReviewsCarousel, useRecentReviewCounts } from '../../src/components/RecentReviewsCarousel';
+import { RecentReviewsCarousel } from '../../src/components/RecentReviewsCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -74,9 +74,6 @@ export default function ScanLandingScreen() {
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  // True totals for the carousel stats lines.
-  const scanCounts = useRecentScanCounts();
-  const reviewCounts = useRecentReviewCounts();
   const drinkSoonCount = useDrinkSoonCount();
 
   // The Scan tab always shows its normal compact header. On the first landing
@@ -410,13 +407,13 @@ export default function ScanLandingScreen() {
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Recent Scans</Text>
-      <Text style={styles.carouselStats}>{scanCounts.labels} Wine Labels · {scanCounts.lists} Wine Lists</Text>
+      <Text style={styles.carouselStats}>Last 8 Wine Label and List Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
 
       {/* Recent Reviews — wine + restaurant reviews, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Recent Reviews</Text>
-      <Text style={styles.carouselStats}>{reviewCounts.wines} Wines · {reviewCounts.restaurants} Restaurants</Text>
+      <Text style={styles.carouselStats}>Last 8 Wine & Restaurant Reviews</Text>
       <View style={styles.carouselBleed}><RecentReviewsCarousel /></View>
 
       {/* Drink Soon — cellar bottles at their peak. */}

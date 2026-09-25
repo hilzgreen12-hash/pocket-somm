@@ -109,7 +109,7 @@ export function RecentScansCarousel() {
     };
   });
 
-  const merged = [...labelItems, ...listItems].sort((a, b) => b.ts - a.ts).slice(0, 12);
+  const merged = [...labelItems, ...listItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
   // Real scans fill the carousel from the left, replacing placeholder tiles in
   // order; the remaining example tiles stay until there are at least three.
   const fill = merged.length < SCAN_EXAMPLES.length ? SCAN_EXAMPLES.slice(merged.length) : [];

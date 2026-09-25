@@ -86,7 +86,7 @@ export function RecentReviewsCarousel() {
     open: () => router.push(`/restaurants/reviews?openSession=${a.id}` as any),
   }));
 
-  const merged = [...wineItems, ...restaurantItems].sort((a, b) => b.ts - a.ts).slice(0, 12);
+  const merged = [...wineItems, ...restaurantItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
   // Real reviews fill from the left, replacing placeholder tiles in order; the
   // remaining example tiles stay until there are at least three.
   const fill = merged.length < REVIEW_EXAMPLES.length ? REVIEW_EXAMPLES.slice(merged.length) : [];
