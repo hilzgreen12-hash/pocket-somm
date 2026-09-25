@@ -3,16 +3,12 @@ import { Modal, View, Text, TextInput, TouchableOpacity, ScrollView, ActivityInd
 import { router } from 'expo-router';
 import { MicButton } from './MicButton';
 import { useCellar } from '../hooks/useCellar';
-import { usePreferences } from '../hooks/usePreferences';
 import { useChefLabelHistory } from '../hooks/useChefHistory';
 import { classifyPairVoice } from '../api/pairVoice';
 import { isNetworkError } from '../api/invokeResilient';
-import { findFoodWinePairing, generatePairings } from '../api/label';
-import { useFoodPairingStore, type CellarRecommendation } from '../stores/foodPairingStore';
-import { useLabelStore } from '../stores/labelStore';
+import { useConsultStore } from '../stores/consultStore';
 import { correctWineTerms } from '../utils/wineDictation';
 import type { ChefLabelSession } from '../api/chef';
-import type { WineDetailsComplete } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -52,7 +48,6 @@ function findCookbookMatch(sessions: ChefLabelSession[], dishQuery?: string | nu
 export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { height: winH } = useWindowDimensions();
   const { wines } = useCellar();
-  const { preferences } = usePreferences();
   const { sessions } = useChefLabelHistory();
 
   const [phase, setPhase] = useState<'speak' | 'thinking' | 'error'>('speak');
@@ -73,67 +68,14 @@ export function PairVoiceModal({ visible, onClose }: { visible: boolean; onClose
     setThinkingText('Working out what you need…');
     setPhase('thinking');
     try {
-      const res = await classifyPairVoice(transcript);
+      const res = await classifyPairVoice(transcript, wines);
 
-      // 1. Wine from the user's cellar for a dish.
-      if (res.intent === 'cellar_pairing' && res.dish?.trim()) {
-        setThinkingText('Finding wines from your cellar…');
-        const cellarSummary = wines.map((w) => ({
-          id: w.id,
-          wine_name: w.wine_name,
-          producer: w.producer,
-          region: w.region,
-          vintage: w.vintage,
-          grape_variety: w.grape_variety,
-          drinking_window_status: w.drinking_window_status,
-          purchase_price: w.purchase_price ?? null,
-          purchase_price_currency: w.purchase_price_currency ?? null,
-        }));
-        const result = await findFoodWinePairing(res.dish.trim(), 'cellar', cellarSummary, undefined, null, null, null) as any;
-        const fp = useFoodPairingStore.getState();
-        fp.setDish(res.dish.trim());
-        fp.setMode('cellar');
-        fp.setCellarResult((result?.recommendations ?? []) as CellarRecommendation[]);
+      // 1 & 2. Broad wine-for-a-dish or dish-for-a-wine advice — a quick shortcut
+      // (the full Pair tools remain the deep dive). Show it on the consult screen.
+      if ((res.intent === 'cellar_pairing' || res.intent === 'dish_suggestion') && res.advice?.trim()) {
+        useConsultStore.getState().set(res.question?.trim() || transcript.trim(), res.advice.trim());
         handleClose();
-        router.push('/chef/pairing-results' as any);
-        return;
-      }
-
-      // 2. A dish / recipe for a named wine.
-      if (res.intent === 'dish_suggestion' && res.wine) {
-        setThinkingText('Finding a dish to pair…');
-        const w = res.wine;
-        const wineDetails: WineDetailsComplete = {
-          producer: w.producer ?? '',
-          region: w.region ?? '',
-          wineName: w.wineName,
-          vintage: (w.vintage ?? '').trim() || 'NV',
-          style: w.style ?? null,
-          grape: w.grape ?? null,
-          bottleSizeMl: null,
-          quantity: 1,
-        };
-        const filters = {
-          dietary: null,
-          allergens: [],
-          customAllergen: '',
-          dietaryNote: null,
-          course: null,
-          difficulty: null,
-          timeConsideration: null,
-          specificConcerns: null,
-          regionalPreferences: preferences?.regionalPreferences ?? [],
-          nutritionalPreferences: preferences?.nutritionalPreferences ?? [],
-          servings: null,
-        };
-        const pairings = await generatePairings(wineDetails as any, filters as any);
-        const ls = useLabelStore.getState();
-        ls.reset();
-        ls.setWineDetailsConfirmed(wineDetails);
-        ls.setPairings(pairings);
-        ls.setFilters(filters as Record<string, unknown>);
-        handleClose();
-        router.replace('/chef/results' as any);
+        router.push('/discover/consult' as any);
         return;
       }
 
