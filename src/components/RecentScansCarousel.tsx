@@ -1,7 +1,7 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
-import { ExamplePlaceholder, type PlaceholderCard } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { useLastIntelStore } from '../stores/lastIntelStore';
 import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
@@ -110,14 +110,14 @@ export function RecentScansCarousel() {
   });
 
   const merged = [...labelItems, ...listItems].sort((a, b) => b.ts - a.ts).slice(0, 12);
-
-  if (merged.length === 0) {
-    return <ExamplePlaceholder cards={SCAN_EXAMPLES} />;
-  }
+  // Real scans fill the carousel from the left, replacing placeholder tiles in
+  // order; the remaining example tiles stay until there are at least three.
+  const fill = merged.length < SCAN_EXAMPLES.length ? SCAN_EXAMPLES.slice(merged.length) : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {merged.map((item, i) => <RecentCard key={`${item.kind}-${i}`} item={item} />)}
+      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}
     </ScrollView>
   );
 }

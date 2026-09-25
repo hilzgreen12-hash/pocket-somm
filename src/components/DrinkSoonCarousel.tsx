@@ -3,7 +3,7 @@ import { router } from 'expo-router';
 import { useCellar } from '../hooks/useCellar';
 import { effectiveMaturity } from '../utils/maturity';
 import { WineCardThumb } from './WineCardThumb';
-import { ExamplePlaceholder, type PlaceholderCard } from './ExamplePlaceholder';
+import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -26,10 +26,9 @@ export function useDrinkSoonCount(): number {
 export function DrinkSoonCarousel() {
   const { wines } = useCellar();
   const peak = wines.filter((w) => effectiveMaturity(w) === 'peak');
-
-  if (peak.length === 0) {
-    return <ExamplePlaceholder cards={DRINK_SOON_EXAMPLES} />;
-  }
+  // Real bottles fill from the left, replacing placeholder tiles in order; the
+  // remaining example tiles stay until there are at least three.
+  const fill = peak.length < DRINK_SOON_EXAMPLES.length ? DRINK_SOON_EXAMPLES.slice(peak.length) : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
@@ -48,6 +47,7 @@ export function DrinkSoonCarousel() {
           </TouchableOpacity>
         );
       })}
+      {fill.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />)}
     </ScrollView>
   );
 }

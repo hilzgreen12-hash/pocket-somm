@@ -11,29 +11,27 @@ export type PlaceholderCard =
   | { kind: 'label'; producer: string; wineName: string; title: string; stamp: string; overlay: string }
   | { kind: 'icon'; icon: keyof typeof Ionicons.glyphMap; title: string; stamp: string; overlay: string };
 
-// New-user preview for an empty Home carousel: example cards in the real card
-// shape (thumbnail + name + date · location stamp), each scrimmed with a "your
-// [scan/review] replaces this content" note so it never reads as real data.
-export function ExamplePlaceholder({ cards }: { cards: PlaceholderCard[] }) {
+// A single example/placeholder card in the real card shape (thumbnail + name +
+// date · location stamp), scrimmed with a "your [scan/review] replaces this
+// content" note so it never reads as real data. Carousels render their real cards
+// first, then pad with these — so a real item replaces the FIRST placeholder,
+// leaving the later placeholders intact until the carousel fills up.
+export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-      {cards.map((c, i) => (
-        <View key={i} style={styles.card}>
-          <View style={styles.thumbWrap}>
-            {c.kind === 'label' ? (
-              <WineCardThumb producer={c.producer} wineName={c.wineName} fallbackText={c.title} />
-            ) : (
-              <View style={styles.iconThumb}><Ionicons name={c.icon} size={40} color={colors.gold} style={styles.icon} /></View>
-            )}
-            <View style={styles.overlay} pointerEvents="none">
-              <Text style={styles.overlayText}>{c.overlay}</Text>
-            </View>
-          </View>
-          <Text style={styles.cardName} numberOfLines={2}>{c.title}</Text>
-          <Text style={styles.cardStamp} numberOfLines={1}>{c.stamp}</Text>
+    <View style={styles.card}>
+      <View style={styles.thumbWrap}>
+        {card.kind === 'label' ? (
+          <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.title} />
+        ) : (
+          <View style={styles.iconThumb}><Ionicons name={card.icon} size={40} color={colors.gold} style={styles.icon} /></View>
+        )}
+        <View style={styles.overlay} pointerEvents="none">
+          <Text style={styles.overlayText}>{card.overlay}</Text>
         </View>
-      ))}
-    </ScrollView>
+      </View>
+      <Text style={styles.cardName} numberOfLines={2}>{card.title}</Text>
+      <Text style={styles.cardStamp} numberOfLines={1}>{card.stamp}</Text>
+    </View>
   );
 }
 
