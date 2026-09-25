@@ -22,6 +22,15 @@ function restaurantReviewed(a: ScanArchiveItem): boolean {
   );
 }
 
+// Totals for the "XX Wines · XX Restaurants" stats line under the header.
+export function useRecentReviewCounts(): { wines: number; restaurants: number } {
+  const { chosenWines } = useChosenWines();
+  const { archive } = useScanHistory();
+  const wines = chosenWines.length;
+  const restaurants = archive.filter(restaurantReviewed).length;
+  return { wines, restaurants };
+}
+
 function ReviewCard({ item }: { item: Review }) {
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>

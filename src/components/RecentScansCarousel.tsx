@@ -30,6 +30,15 @@ function restaurantReviewed(a: ScanArchiveItem): boolean {
   );
 }
 
+// Totals for the "XX Wine Labels · XX Wine Lists" stats line under the header.
+export function useRecentScanCounts(): { labels: number; lists: number } {
+  const recent = useLastIntelStore((s) => s.recent);
+  const { archive } = useScanHistory();
+  const labels = recent.length;
+  const lists = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0 && !restaurantReviewed(a)).length;
+  return { labels, lists };
+}
+
 function RecentCard({ item }: { item: Recent }) {
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>

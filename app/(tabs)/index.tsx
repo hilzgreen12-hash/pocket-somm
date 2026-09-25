@@ -9,9 +9,9 @@ import { SignInPromptModal } from '../../src/components/SignInPromptModal';
 import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
-import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
+import { RecentScansCarousel, useRecentScanCounts } from '../../src/components/RecentScansCarousel';
 import { DrinkSoonCarousel } from '../../src/components/DrinkSoonCarousel';
-import { RecentReviewsCarousel } from '../../src/components/RecentReviewsCarousel';
+import { RecentReviewsCarousel, useRecentReviewCounts } from '../../src/components/RecentReviewsCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -74,6 +74,9 @@ export default function ScanLandingScreen() {
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
+  // True totals for the carousel stats lines.
+  const scanCounts = useRecentScanCounts();
+  const reviewCounts = useRecentReviewCounts();
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
@@ -404,11 +407,13 @@ export default function ScanLandingScreen() {
       {/* Recent Scans — mixed label + list scans, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Recent Scans</Text>
+      <Text style={styles.carouselStats}>{scanCounts.labels} Wine Labels · {scanCounts.lists} Wine Lists</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
 
       {/* Recent Reviews — wine + restaurant reviews, most recent first. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Recent Reviews</Text>
+      <Text style={styles.carouselStats}>{reviewCounts.wines} Wines · {reviewCounts.restaurants} Restaurants</Text>
       <View style={styles.carouselBleed}><RecentReviewsCarousel /></View>
 
       {/* Drink Soon — cellar bottles at their peak. */}
@@ -623,6 +628,8 @@ const styles = StyleSheet.create({
   // wrapper so each carousel scrolls edge-to-edge past the scroll's h-padding.
   sectionSeparator: { height: 1, backgroundColor: colors.divider, marginVertical: spacing.lg },
   carouselHeader: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.text, letterSpacing: 0.5, textAlign: 'center', marginBottom: spacing.md },
+  // Gold stats line under a carousel header (matches the app-wide stats bars).
+  carouselStats: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, textAlign: 'center', marginTop: -spacing.sm, marginBottom: spacing.md },
   carouselBleed: { marginHorizontal: -spacing.xl },
   discoverHint: { fontFamily: fonts.headingItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', marginTop: spacing.sm, paddingHorizontal: spacing.xl },
   // "Voice Command" gold bubble beneath the search bar (matches the search bar
