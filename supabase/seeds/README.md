@@ -21,3 +21,7 @@ Every batch is **idempotent**:
 - `catalog_lebanon_greece.sql` — Lebanon + Greece
 - `catalog_oregon_washington_bc.sql` — Oregon, Washington, British Columbia
 - `catalog_loire.sql` — Loire Valley (full sweep)
+- `catalog_south_africa.sql` — South Africa (Swartland, Stellenbosch, Hemel-en-Aarde, Constantia…)
+- `catalog_australia.sql` — Australia (Barossa, Clare, McLaren Vale, Coonawarra, Margaret River, Victoria, Hunter)
+- `catalog_new_zealand.sql` — New Zealand (Central Otago, Marlborough, Hawke's Bay, Martinborough…)
+- `catalog_germany_austria.sql` — Germany (Mosel, Nahe, Rheingau, Rheinhessen, Pfalz) + Austria (Wachau, Kamptal, Burgenland)
