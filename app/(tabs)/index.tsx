@@ -211,22 +211,16 @@ export default function ScanLandingScreen() {
     if (!wine) return;
     setVintageWine(null);
     resetLabelStore();
-    const confirmed: WineDetailsComplete = {
-      ...withBordeauxInfo({
-        producer: wine.producer,
-        region: wine.region ?? '',
-        wineName: wine.wineName,
-        vintage: vintage.trim() || 'NV',
-        style: wine.style ?? null,
-        grape: wine.grape ?? null,
-        bottleSizeMl: null,
-        quantity: 1,
-      }),
-      // Carry the verified Wine-Searcher anchor from the catalog pick so intel
-      // queries WS by the exact canonical name.
-      wsWineName: wine.wsWineName ?? null,
-      wsWineId: wine.wsWineId ?? null,
-    };
+    const confirmed: WineDetailsComplete = withBordeauxInfo({
+      producer: wine.producer,
+      region: wine.region ?? '',
+      wineName: wine.wineName,
+      vintage: vintage.trim() || 'NV',
+      style: wine.style ?? null,
+      grape: wine.grape ?? null,
+      bottleSizeMl: null,
+      quantity: 1,
+    });
     setWineDetailsConfirmed(confirmed);
     setIntelligence(null);
     // Fetch a web label in the background so the shell gets a header image; it

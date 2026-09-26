@@ -77,11 +77,6 @@ export interface WineSearchResult {
   // before matching the (vintage-less) catalog, then carried onto every result so
   // picking one fills the vintage too. Null when the query had no vintage.
   vintage: string | null;
-  // Canonical Wine-Searcher anchor for this catalog wine (once verified by the
-  // catalog-backfill-ws job). Carried into the intel flow so the WS lookup is
-  // exact rather than a fuzzy re-resolve. Null until the row has been anchored.
-  wsWineId: string | null;
-  wsWineName: string | null;
 }
 
 // Predictive wine typeahead for manual entry — returns real wines matching the
@@ -106,15 +101,13 @@ export async function searchWines(query: string): Promise<WineSearchResult[]> {
   try {
     const { data, error } = await supabase.rpc('search_wines_catalog', { q, lim: 8 });
     if (error || !Array.isArray(data)) return [];
-    return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; grape: string | null; ws_wine_id?: string | null; ws_wine_name?: string | null }) => ({
+    return data.map((r: { producer: string; wine_name: string | null; region: string | null; style: string | null; grape: string | null }) => ({
       producer: r.producer,
       wineName: r.wine_name ?? null,
       region: r.region ?? null,
       style: r.style ?? null,
       grape: r.grape ?? null,
       vintage,
-      wsWineId: r.ws_wine_id ?? null,
-      wsWineName: r.ws_wine_name ?? null,
     }));
   } catch {
     return [];
