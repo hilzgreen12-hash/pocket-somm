@@ -589,7 +589,7 @@ const styles = StyleSheet.create({
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   // Voice Command — top-right text link, vertically centred on the title (matches
   // the Reviews "Add +"). Absolute so it never shifts the centred title.
-  voiceLink: { position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  voiceLink: { position: 'absolute', right: 0, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: 0 },
   // Rule between the intro blurb and the 2×2 grid (Voice Command now lives in the

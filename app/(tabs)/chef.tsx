@@ -152,7 +152,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
   // Voice Command — top-right text link, vertically centred on the title (matches
   // the Reviews "Add +"). Absolute so it never shifts the centred title.
-  voiceLink: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
+  voiceLink: { position: 'absolute', right: spacing.xl, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // Voice Command — centred gold pill, matching the home-storage screens.

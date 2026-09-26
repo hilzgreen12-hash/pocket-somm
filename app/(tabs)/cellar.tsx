@@ -250,7 +250,7 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
   // Voice Command — top-right text link, vertically centred on the title (matches
   // the Reviews "Add +"). Absolute so it never shifts the centred title.
-  voiceLink: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
+  voiceLink: { position: 'absolute', right: spacing.xl, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Full-width gold rule above the Import/Export buttons at the tab's foot.
   goldSeparator: { height: 1, backgroundColor: colors.gold, marginVertical: spacing.lg },
