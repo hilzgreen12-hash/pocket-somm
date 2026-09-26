@@ -312,6 +312,27 @@ Deno.serve(async (req) => {
       console.error('[wine-searcher-proxy] pricing_cache upsert failed:', cacheErr);
     }
 
+    // 3b) Persist the STABLE facts permanently (region / grape / critic score),
+    // split from the 30-day price cache above so this match's lasting value
+    // survives price expiry — every WS credit spent leaves something behind. Any
+    // failure here (e.g. table not yet migrated) is swallowed: enrichment must
+    // NEVER affect the price response.
+    if (result.region || result.grape || result.criticScore != null) {
+      try {
+        const { error: factsErr } = await supabase.from('wine_facts').upsert({
+          wine_key: wineKey,
+          region: result.region ?? null,
+          grape: result.grape ?? null,
+          critic_score: result.criticScore ?? null,
+          score_as_of: new Date().toISOString().slice(0, 10),
+          verified_at: new Date().toISOString(),
+        }, { onConflict: 'wine_key' });
+        if (factsErr) console.error('[wine-searcher-proxy] wine_facts upsert skipped:', factsErr.message);
+      } catch (e) {
+        console.error('[wine-searcher-proxy] wine_facts upsert threw:', e instanceof Error ? e.message : 'error');
+      }
+    }
+
     // pricing_cache (above) holds native USD; the response converts to the
     // user's currency. fxRate is USD→cur, applied to the USD prices.
     return new Response(JSON.stringify({
