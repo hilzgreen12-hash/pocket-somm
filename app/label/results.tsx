@@ -225,6 +225,8 @@ export default function LabelResultsScreen() {
   // Once we've auto-skipped a one-option confirm we don't do it again (until the
   // confirm is re-entered fresh). Reset wherever confirmTriedRef is reset.
   const autoConfirmedRef = useRef(false);
+  // Once we've written this scan to the cloud `labels` table we don't write again.
+  const cloudSavedRef = useRef(false);
   // Tap-to-enlarge the label photo on the confirm screen (pinch/zoom/pan).
   const [zoomOpen, setZoomOpen] = useState(false);
   // Vinster's Note + Vinster's Map are collapsible, both reduced by default.
@@ -639,6 +641,31 @@ export default function LabelResultsScreen() {
       finally { setProducerRangeLoading(false); }
     })();
   }, [isIntelOnlyFlow, awaitingConfirm, wineDetailsConfirmed]);
+
+  // Cloud-back each genuine label scan: on a completed fresh Scan-a-Label / Upload
+  // intel result, write it to the `labels` table (photo + identity + intel
+  // snapshot) so Recent Scans survives reinstalls and shows across devices. Fires
+  // once per scan. Same gate as the local Recent list — review/lineup/manual-search
+  // flows pass noRecent=1, and history/library opens carry a labelId.
+  useEffect(() => {
+    if (!isIntelOnlyFlow || noRecent === '1' || fresh !== '1' || labelId) return;
+    if (awaitingConfirm || !intelligence || !wineDetailsConfirmed) return;
+    if (cloudSavedRef.current || !session?.user.id) return;
+    cloudSavedRef.current = true;
+    (async () => {
+      try {
+        const created = await createLabel.mutateAsync({
+          imageUri: imageUri ?? null,
+          producer: wineDetailsConfirmed.producer,
+          wineName: wineDetailsConfirmed.wineName,
+          vintage: wineDetailsConfirmed.vintage,
+          region: wineDetailsConfirmed.region,
+          intel: intelligence,
+        });
+        savedLabelIdRef.current = created.id;
+      } catch { cloudSavedRef.current = false; /* allow a later retry */ }
+    })();
+  }, [isIntelOnlyFlow, noRecent, fresh, labelId, awaitingConfirm, intelligence, wineDetailsConfirmed, session]);
 
   // Share the wine intel as plain text (identity + the three headline numbers +
   // Vinster's note), with the standard install footer. Mirrors the review-share

@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { AppBottomBar } from '../src/components/AppBottomBar';
 import { WsIdBackfillRunner } from '../src/components/WsIdBackfillRunner';
+import { ScanCloudBackfillRunner } from '../src/components/ScanCloudBackfillRunner';
 import * as SplashScreen from 'expo-splash-screen';
 import { AuthProvider } from '../src/hooks/useAuth';
 import * as Font from 'expo-font';
@@ -221,6 +222,7 @@ export default function RootLayout() {
           </View>
           <AppBottomBar />
           <WsIdBackfillRunner />
+          <ScanCloudBackfillRunner />
           </View>
           <StatusBar style="light" />
           <AppAlertHost />

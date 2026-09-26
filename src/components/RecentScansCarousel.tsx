@@ -2,18 +2,21 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-nati
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
-import { useLastIntelStore } from '../stores/lastIntelStore';
+import { useLabels } from '../hooks/useLabels';
 import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
+import { getCachedLabelUri } from '../api/labelImageCache';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
 import { formatWineTitle } from '../utils/wineTitle';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
 // A unified "recent scan" — either a single-bottle label→intel scan or a wine-
-// list scan — merged by recency for the Discover tab carousel.
+// list scan — merged by recency for the Home tab carousel. Both now read from the
+// cloud (labels table + scan_sessions), so scans survive reinstalls and appear
+// across devices; the thumbnail resolves from the stored photo path.
 type Recent =
-  | { kind: 'label'; ts: number; title: string; stamp: string; imageUri: string | null; producer: string | null; wineName: string | null; open: () => void }
+  | { kind: 'label'; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; open: () => void }
   | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void };
 
 // Shared date format for the "date · location" stamp beneath each thumbnail.
@@ -38,21 +41,24 @@ const SCAN_EXAMPLES: PlaceholderCard[] = [
   { kind: 'label', producer: 'Kistler', wineName: 'Chardonnay', title: 'Kistler Chardonnay 2020', stamp: '18 Dec 2029', overlay: 'Your third scan replaces this content' },
 ];
 
-// Totals for the "XX Wine Labels · XX Wine Lists" stats line under the header.
+// Identity key for de-duping re-scans of the same wine (newest kept).
+function labelKey(producer: string | null, wineName: string | null, vintage: number | null): string {
+  return [producer, wineName, vintage].map((s) => (s ?? '').toString().trim().toLowerCase()).join('|');
+}
+
+// Totals for the stats line under the header.
 export function useRecentScanCounts(): { labels: number; lists: number } {
-  const recent = useLastIntelStore((s) => s.recent);
+  const { labels } = useLabels();
   const { archive } = useScanHistory();
-  const labels = recent.length;
   const lists = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0 && !restaurantReviewed(a)).length;
-  return { labels, lists };
+  return { labels: labels.length, lists };
 }
 
 function RecentCard({ item }: { item: Recent }) {
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>
       <WineCardThumb
-        localUri={item.kind === 'label' ? item.imageUri : null}
-        path={item.kind === 'list' ? item.path : null}
+        path={item.path}
         producer={item.kind === 'label' ? item.producer : null}
         wineName={item.kind === 'label' ? item.wineName : null}
         fallbackText={item.title}
@@ -64,25 +70,48 @@ function RecentCard({ item }: { item: Recent }) {
 }
 
 export function RecentScansCarousel() {
-  const recent = useLastIntelStore((s) => s.recent);
+  const { labels } = useLabels();
   const { archive } = useScanHistory();
 
-  const labelItems: Recent[] = recent.map((r) => ({
-    kind: 'label',
-    ts: r.ts,
-    title: formatWineTitle({ producer: r.wine.producer, wineName: r.wine.wineName, vintage: r.wine.vintage }),
-    stamp: [stampDate(new Date(r.ts)), (r.wine.region ?? '').trim()].filter(Boolean).join(' · '),
-    imageUri: r.imageUri,
-    producer: r.wine.producer ?? null,
-    wineName: r.wine.wineName ?? null,
-    open: () => {
-      const ls = useLabelStore.getState();
-      ls.setWineDetailsConfirmed(r.wine);
-      ls.setIntelligence(r.intel);
-      ls.setImageUri(r.imageUri ?? null);
-      router.push('/label/results?context=intel');
-    },
-  }));
+  // Cloud label scans → Recent label cards, de-duped by identity (labels arrive
+  // newest-first, so the first occurrence of each wine is the most recent).
+  const seen = new Set<string>();
+  const labelItems: Recent[] = [];
+  for (const l of labels) {
+    const key = labelKey(l.producer, l.wine_name, l.vintage);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    labelItems.push({
+      kind: 'label',
+      ts: new Date(l.created_at).getTime(),
+      title: formatWineTitle({ producer: l.producer, wineName: l.wine_name, vintage: l.vintage != null ? String(l.vintage) : null }),
+      stamp: [stampDate(new Date(l.created_at)), (l.region ?? '').trim(), (l.captured_place ?? '').trim()].filter(Boolean).slice(0, 2).join(' · '),
+      path: l.label_image_path,
+      producer: l.producer,
+      wineName: l.wine_name,
+      open: async () => {
+        const ls = useLabelStore.getState();
+        ls.setWineDetailsConfirmed({
+          producer: l.producer ?? '',
+          region: l.region ?? '',
+          wineName: l.wine_name,
+          vintage: l.vintage != null ? String(l.vintage) : 'NV',
+          grape: l.intel?.grapeVariety ?? null,
+          bottleSizeMl: null,
+          quantity: 1,
+        });
+        ls.setIntelligence(l.intel ?? null);
+        // Resolve the stored photo to a local uri for the hero image.
+        let uri: string | null = null;
+        try { uri = await getCachedLabelUri(l.label_image_path); } catch { /* no photo */ }
+        ls.setImageUri(uri);
+        // labelId is carried so the screen won't re-write a cloud row; when the
+        // snapshot is missing we regenerate intel (gen=1) without recording anew.
+        const suffix = l.intel ? '' : '&gen=1&confirmed=1&noRecent=1';
+        router.push(`/label/results?context=intel&labelId=${l.id}${suffix}`);
+      },
+    });
+  }
 
   // Only genuine wine-list scans that HAVEN'T been reviewed — a scanned list the
   // user then rated/noted is a restaurant review and belongs in Recent Reviews.
