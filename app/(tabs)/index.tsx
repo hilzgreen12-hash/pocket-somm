@@ -328,17 +328,15 @@ export default function ScanLandingScreen() {
       <View style={styles.headerBleed}><VinsterHeader /></View>
       <View style={styles.titleRow}>
         <HelpTitle label="Home" title="How Home works" body={SCAN_HELP} textStyle={styles.appName} />
+        {/* Voice Command — top-right text link (matches the Reviews "Add +").
+            Discovery only (recommend / consult / wine intel). */}
+        <TouchableOpacity style={styles.voiceLink} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.voiceLinkText}>Voice Command</Text>
+        </TouchableOpacity>
       </View>
       <Text style={styles.blurb}>
         Vinster Training + Wine Searcher Market API result in the most comprehensive and customized experience in wine exploration.
       </Text>
-
-      {/* Voice Command — in the header (matches Cellar + home storage screens):
-          beneath the blurb, above the separator. Discovery only (recommend /
-          consult / wine intel). */}
-      <TouchableOpacity style={styles.voiceBubble} onPress={() => setVoiceOpen(true)} activeOpacity={0.7}>
-        <Text style={styles.voiceBubbleText}>Voice Command</Text>
-      </TouchableOpacity>
 
       <View style={styles.blurbSeparator} />
 
@@ -583,12 +581,14 @@ const styles = StyleSheet.create({
   // VinsterHeader, big centred title, blurb beneath).
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: spacing.sm },
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
+  // Voice Command — top-right text link, vertically centred on the title (matches
+  // the Reviews "Add +"). Absolute so it never shifts the centred title.
+  voiceLink: { position: 'absolute', right: 0, top: 0, bottom: 0, justifyContent: 'center' },
+  voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   blurb: { fontSize: 19, fontFamily: fonts.headingRegular, color: '#FFFFFF', lineHeight: 26, textAlign: 'center', marginBottom: 0 },
-  // Rule between the intro blurb and the 2×2 grid.
-  // 18 above (voiceBubble.marginBottom) + rule + 18 below keeps the tiles exactly
-  // where they were (was xs + xl = 37) while centring the rule between the button
-  // and the tiles.
-  blurbSeparator: { height: 1, backgroundColor: colors.divider, marginBottom: 18 },
+  // Rule between the intro blurb and the 2×2 grid (Voice Command now lives in the
+  // header, so the grid moves up into the reclaimed space).
+  blurbSeparator: { height: 1, backgroundColor: colors.divider, marginTop: 18, marginBottom: 18 },
 
   // 2×2 grid of tiles — motif/icon, gold title, short divider, italic blurb,
   // and (on scan tiles) an "upload instead" banner across the bottom.

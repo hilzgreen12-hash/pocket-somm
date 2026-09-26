@@ -86,6 +86,10 @@ export default function ChefTab() {
 
       <View style={styles.titleRow}>
         <HelpTitle label="Pair" title="How Pair works" body={CHEF_HELP} textStyle={styles.appName} />
+        {/* Voice Command — top-right text link (matches the Reviews "Add +"). */}
+        <TouchableOpacity style={styles.voiceLink} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.voiceLinkText}>Voice Command</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.section}>
@@ -94,12 +98,8 @@ export default function ChefTab() {
         </Text>
       </View>
 
-      {/* Voice Command — beneath the blurb, matching the other tabs. */}
-      <TouchableOpacity style={styles.voiceBubble} onPress={() => setVoiceOpen(true)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-        <Text style={styles.voiceBubbleText}>Voice Command</Text>
-      </TouchableOpacity>
-
-      {/* 18 above (voiceBubble.marginBottom) + rule + 18 below — matches Home. */}
+      {/* Rule between the blurb and the pairing flows (Voice Command now lives in
+          the header, so the flows move up into the reclaimed space). */}
       <View style={[styles.divider, styles.voiceDivider]} />
 
       {/* The two pairing flows — tap to start; press-and-hold to revisit the
@@ -150,6 +150,10 @@ const styles = StyleSheet.create({
   // Big "Chef" tab title — header, Cormorant.
   appName: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
   titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, marginBottom: spacing.sm },
+  // Voice Command — top-right text link, vertically centred on the title (matches
+  // the Reviews "Add +"). Absolute so it never shifts the centred title.
+  voiceLink: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
+  voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   divider: { height: 1, backgroundColor: colors.divider, marginHorizontal: spacing.xl, marginVertical: spacing.lg },
   // Voice Command — centred gold pill, matching the home-storage screens.
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.md, marginBottom: 18 },
