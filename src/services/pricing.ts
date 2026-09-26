@@ -188,7 +188,10 @@ export async function generateWineIntel(
   // Classified Bordeaux: fill classification (wine name) + appellation (region)
   // when blank, so intel is complete on EVERY path (scan, lineup, search…).
   const wine = withBordeauxInfo(wineIn);
-  const queryName = wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
+  // A verified catalog pick carries the canonical Wine-Searcher name — query by it
+  // for an exact first-try match instead of a fuzzy re-resolve. Falls back to the
+  // producer+cuvée query when there's no anchor (scans, unverified picks).
+  const queryName = wineIn.wsWineName?.trim() || wineQueryName(wine.producer, wine.wineName) || (wine.wineName ?? '');
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;

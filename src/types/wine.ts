@@ -117,6 +117,12 @@ export interface WineDetailsComplete {
   bottleSizeMl?: number | null;
   // Carried through from a batched lineup entry to seed the cellar quantity.
   quantity?: number;
+  // Canonical Wine-Searcher anchor when this identity came from a verified catalog
+  // pick (see wines_catalog / catalog-backfill-ws). When present, the intel flow
+  // queries Wine-Searcher by this exact name for a precise match instead of a
+  // fuzzy re-resolve. Null/absent on scans and unverified picks.
+  wsWineName?: string | null;
+  wsWineId?: string | null;
 }
 
 // A single named critic's published score. `critic` is a short
