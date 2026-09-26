@@ -222,6 +222,9 @@ export default function LabelResultsScreen() {
   const [confirmLoading, setConfirmLoading] = useState(false);
   const [confirmGenerating, setConfirmGenerating] = useState(false);
   const confirmTriedRef = useRef(false);
+  // Once we've auto-skipped a one-option confirm we don't do it again (until the
+  // confirm is re-entered fresh). Reset wherever confirmTriedRef is reset.
+  const autoConfirmedRef = useRef(false);
   // Tap-to-enlarge the label photo on the confirm screen (pinch/zoom/pan).
   const [zoomOpen, setZoomOpen] = useState(false);
   // Vinster's Note + Vinster's Map are collapsible, both reduced by default.
@@ -355,6 +358,22 @@ export default function LabelResultsScreen() {
     })();
   }, [awaitingConfirm, wineDetailsConfirmed]);
 
+  // The confirm list is only worth showing when the producer range surfaces
+  // genuine ALTERNATIVES to the wine as read — options Vinster truly can't decide
+  // between. When the read is the only option, the "Select Your Wine" step is
+  // busywork: skip it and build intel for the read directly. Only on the INITIAL
+  // confirm (no card yet) — "Not this wine?" re-searches always keep the list.
+  useEffect(() => {
+    if (!awaitingConfirm || intelligence) return;            // initial confirm only
+    if (!confirmTriedRef.current || confirmLoading) return;  // wait for candidates to settle
+    if (confirmGenerating || autoConfirmedRef.current || !wineDetailsConfirmed) return;
+    const normName = (s?: string | null) => (s ?? '').trim().toLowerCase();
+    const extra = confirmOptions.filter((c) => normName(c.wineName) !== normName(wineDetailsConfirmed.wineName));
+    if (extra.length > 0) return;                             // real options → show the list
+    autoConfirmedRef.current = true;
+    resolveConfirm(wineDetailsConfirmed);
+  }, [awaitingConfirm, intelligence, confirmLoading, confirmGenerating, confirmOptions, wineDetailsConfirmed]);
+
   // Resolve the confirm step: generate the card for the chosen identity (a picked
   // match, or the read as-is) and drop out of the confirm state.
   async function resolveConfirm(identity: WineDetailsComplete) {
@@ -451,6 +470,7 @@ export default function LabelResultsScreen() {
 
   function openManualConfirm() {
     confirmTriedRef.current = false;
+    autoConfirmedRef.current = false;
     setConfirmOptions([]);
     setAwaitingConfirm(true);
   }
@@ -508,6 +528,7 @@ export default function LabelResultsScreen() {
       } else {
         setIntelligence(null);
         confirmTriedRef.current = false;
+        autoConfirmedRef.current = false;
         setConfirmOptions([]);
         setAwaitingConfirm(true);
       }
@@ -998,6 +1019,10 @@ export default function LabelResultsScreen() {
       { wineName: wine.wineName ?? '', region: wine.region ?? null, style: null },
       ...confirmExtraOptions,
     ];
+    // The read is unambiguous (no alternative bottlings) — the auto-skip effect is
+    // about to build intel directly, so show the building loader instead of a
+    // pointless one-row list.
+    const willAutoSkip = !intelligence && !confirmLoading && confirmExtraOptions.length === 0;
     return (
       <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
         <TouchableOpacity
@@ -1024,7 +1049,7 @@ export default function LabelResultsScreen() {
         ) : null}
 
         <View style={styles.section}>
-          {confirmGenerating ? (
+          {confirmGenerating || willAutoSkip ? (
             <View style={styles.confirmLoading}>
               <ActivityIndicator color={colors.gold} />
               <Text style={styles.confirmLoadingText}>Building your wine intel…</Text>
