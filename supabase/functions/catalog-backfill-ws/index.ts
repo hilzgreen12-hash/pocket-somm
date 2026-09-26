@@ -1,16 +1,18 @@
-// Verify wines_catalog rows against Wine-Searcher and stamp the canonical
-// ws_wine_id / ws_wine_name anchor (a real match also PROVES the row is a real
-// wine — a non-match flags a likely hallucination for the audit pass).
+// Verify wines_catalog rows against Wine-Searcher and make the most of idle API
+// quota. For each unchecked row it does ONE all-vintage lookup via the deployed
+// wine-searcher-proxy (which CACHES the result ~30 days — so a real user's later
+// lookup is a free, instant cache hit), then records the outcome:
+//   * ws_matched  — true if WS knows the wine (real; cache now warm), false if not
+//                   (a hallucination candidate for cleanup)
+//   * region / grape — filled from WS when the catalog row was blank (enrichment)
+//   * ws_checked_at — always stamped, so nothing is re-queried (resumable)
 //
-// Runs with the service role (writes bypass RLS). Quota-friendly + resumable: it
-// processes a batch of rows still missing an id that haven't been checked yet
-// (most-searched first via the mig-108 partial index), calls the deployed
-// wine-searcher-proxy for each — whose 30-day cache makes repeats free — and
-// ALWAYS stamps ws_checked_at so an unmatched wine is never re-queried on the next
-// pass. Call it in a loop from the client/CLI until `remaining` reaches 0.
+// Optionally (warmYears > 0) it also queries a window of recent vintages per wine
+// to pre-warm the pricing cache for the exact (wine, vintage) lookups intel makes
+// — this multiplies API calls by ~warmYears, so it's off unless asked for.
 //
-// POST body: { limit?: number }  (batch size, default 25, capped at 60 so a batch
-// stays inside the function timeout given ~1–3s per live Wine-Searcher lookup).
+// Service role (writes bypass RLS). Call in a loop until remaining = 0.
+// POST body: { limit?: number (1–60, default 30), warmYears?: number (0–15, default 0) }
 
 import { createClient } from 'npm:@supabase/supabase-js';
 
@@ -18,38 +20,38 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const admin = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-interface CatalogRow { id: string; producer: string | null; wine_name: string | null; display: string }
+interface CatalogRow { id: string; display: string; region: string | null; grape: string | null }
+interface WsResult { matched: boolean; region: string | null; grape: string | null }
 
-// Resolve one wine's WS anchor via the deployed proxy (server-to-server call,
-// authorised with the service role). vintage null = all-vintage lookup, matching
-// how the catalog is vintage-agnostic.
-async function resolveAnchor(display: string): Promise<{ wsWineId: string | null; wsWineName: string | null }> {
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/wine-searcher-proxy`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${SERVICE_ROLE}`,
-      apikey: SERVICE_ROLE,
-    },
-    body: JSON.stringify({ wineName: display, vintage: null }),
-  });
-  if (!res.ok) return { wsWineId: null, wsWineName: null };
-  const data = await res.json().catch(() => ({}));
-  if (data?.source === 'wine-searcher' && data?.matched !== false && data?.wsWineId) {
-    return { wsWineId: String(data.wsWineId), wsWineName: data.wsWineName ? String(data.wsWineName) : null };
+async function proxyLookup(display: string, vintage: number | null): Promise<WsResult> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/wine-searcher-proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${SERVICE_ROLE}`,
+        apikey: SERVICE_ROLE,
+      },
+      body: JSON.stringify({ wineName: display, vintage }),
+    });
+    if (!res.ok) return { matched: false, region: null, grape: null };
+    const d = await res.json().catch(() => ({}));
+    const matched = d?.source === 'wine-searcher' && d?.matched !== false;
+    return { matched, region: d?.region ?? null, grape: d?.grape ?? null };
+  } catch {
+    return { matched: false, region: null, grape: null };
   }
-  return { wsWineId: null, wsWineName: null };
 }
 
 Deno.serve(async (req) => {
   try {
-    const { limit } = await req.json().catch(() => ({}));
-    const batch = Math.min(Math.max(Number(limit) || 25, 1), 60);
+    const { limit, warmYears } = await req.json().catch(() => ({}));
+    const batch = Math.min(Math.max(Number(limit) || 30, 1), 60);
+    const years = Math.min(Math.max(Number(warmYears) || 0, 0), 15);
 
     const { data: rows, error } = await admin
       .from('wines_catalog')
-      .select('id, producer, wine_name, display')
-      .is('ws_wine_id', null)
+      .select('id, display, region, grape')
       .is('ws_checked_at', null)
       .order('hit_count', { ascending: false })
       .order('created_at', { ascending: true })
@@ -58,33 +60,39 @@ Deno.serve(async (req) => {
 
     const work = (rows ?? []) as CatalogRow[];
     let matched = 0;
+    let apiCalls = 0;
+    let enriched = 0;
     const now = new Date().toISOString();
+    const nowYear = new Date().getFullYear();
 
-    // Sequential — keeps the Wine-Searcher request rate gentle (its own daily
-    // quota is the real constraint; the proxy retries transient failures).
+    // Sequential — keeps the Wine-Searcher request rate gentle.
     for (const r of work) {
       const query = (r.display ?? '').trim();
-      let anchor = { wsWineId: null as string | null, wsWineName: null as string | null };
-      if (query) {
-        try { anchor = await resolveAnchor(query); } catch { /* leave unmatched */ }
-      }
-      const patch: Record<string, unknown> = { ws_checked_at: now };
-      if (anchor.wsWineId) {
-        patch.ws_wine_id = anchor.wsWineId;
-        if (anchor.wsWineName) patch.ws_wine_name = anchor.wsWineName;
+      if (!query) { await admin.from('wines_catalog').update({ ws_checked_at: now, ws_matched: false }).eq('id', r.id); continue; }
+
+      const ws = await proxyLookup(query, null);
+      apiCalls++;
+      const patch: Record<string, unknown> = { ws_checked_at: now, ws_matched: ws.matched };
+      if (ws.matched) {
         matched++;
+        // Enrich only blanks — never overwrite curated data.
+        if (!r.region && ws.region) { patch.region = ws.region; enriched++; }
+        if (!r.grape && ws.grape) { patch.grape = ws.grape; }
+        // Pre-warm the pricing cache for the vintage lookups intel actually makes.
+        for (let y = nowYear - 1; y >= nowYear - years; y--) {
+          await proxyLookup(query, y);
+          apiCalls++;
+        }
       }
       await admin.from('wines_catalog').update(patch).eq('id', r.id);
     }
 
-    // How many still need checking after this batch.
     const { count: remaining } = await admin
       .from('wines_catalog')
       .select('id', { count: 'exact', head: true })
-      .is('ws_wine_id', null)
       .is('ws_checked_at', null);
 
-    return json({ checked: work.length, matched, unmatched: work.length - matched, remaining: remaining ?? 0 }, 200);
+    return json({ checked: work.length, matched, unmatched: work.length - matched, enriched, apiCalls, remaining: remaining ?? 0 }, 200);
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : String(err) }, 500);
   }
