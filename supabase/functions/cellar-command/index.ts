@@ -60,16 +60,17 @@ ${locBlock}
 Their placement units (racks, fridges, bins):
 ${unitBlock}
 
-Match the spoken wine to ONE wine id from the list above using producer, wine name, vintage and region. Speech is imperfect — allow for mishearings and partial names (e.g. "the Barolo", "the Produttori"). If several wines match equally well, list their ids in "candidates" and set needs to "wine". If nothing plausibly matches, set needs to "wine" with empty candidates.`;
+Match the spoken wine to ONE wine id from the list above. The words come from phone speech-to-text, which OFTEN MANGLES unfamiliar producer, region and cuvée names — so match PHONETICALLY, by how the words SOUND when read aloud, NOT by exact spelling. Examples of the kind of mangling to see through: "tallo bo" or "tolo boot" → "Tollot-Beaut"; "the produttori" → "Produttori del Barolo"; "gevray shamber tan" → "Gevrey-Chambertin"; "shato nerf do pap" → "Châteauneuf-du-Pape"; "veev cliko" → "Veuve Clicquot"; "kissler" → "Kistler". Use producer, wine name, region AND any spoken vintage year together to narrow it. Partial names are fine ("the Barolo", "the '20 Chablis"). Only put ids in "candidates" (needs "wine") when two or more wines are GENUINELY as close as each other by sound; only set needs "wine" with EMPTY candidates when the cellar is empty or nothing is even remotely close.`;
 
   let task = '';
   if (action === 'move') {
-    task = `Match the DESTINATION the user named to ONE place — either a storage location (Alt Cellar) OR a placement unit (rack / fridge / bin). Set "locationId" when it is a storage location, or "unitId" when it is a rack/fridge/bin — never both. A source they mention ("from the small rack") is context only; resolve the DESTINATION ("to my wine fridge"). If no destination clearly matches either list, set needs to "location".
+    task = `The wine being moved is one they already OWN, so it IS in the list above — prefer the single closest-sounding match for "wineId" and make your best guess rather than giving up (the message lets them confirm).
+Match the DESTINATION the user named to ONE place — either a storage location (Alt Cellar) OR a placement unit (rack / fridge / bin). Set "locationId" when it is a storage location, or "unitId" when it is a rack/fridge/bin — never both. A source they mention ("from the small rack") is context only; resolve the DESTINATION ("to my wine fridge"). If no destination clearly matches either list, set needs to "location".
 Also parse how many bottles to move from the words ("3 bottles", "a bottle", "all of them") — null means all bottles of that wine.
 Return JSON:
 {"wineId": "<id or null>", "locationId": "<id or null>", "unitId": "<id or null>", "quantity": <integer or null>, "add": null, "candidates": ["<id>", ...], "needs": "wine" | "location" | null, "message": "<one short sentence describing what you understood, e.g. 'Move 3 bottles of Château d'Yquem to your wine fridge.'>"}`;
   } else if (action === 'archive') {
-    task = `Parse how many bottles to archive from the words ("two bottles", "a bottle", "all of them"). Use null to mean all bottles of that wine.
+    task = `The user has chosen to ARCHIVE a wine they already OWN, so the wine IS in the list above — PREFER the single closest-sounding match and make your best guess rather than giving up (the message you return lets them confirm before anything happens). Parse how many bottles to archive from the words ("two bottles", "a bottle", "all of them"). Use null to mean all bottles of that wine.
 Return JSON:
 {"wineId": "<id or null>", "locationId": null, "quantity": <integer or null>, "add": null, "candidates": ["<id>", ...], "needs": "wine" | null, "message": "<one short sentence, e.g. 'Archive 2 bottles of Chablis 2021.'>"}`;
   } else {

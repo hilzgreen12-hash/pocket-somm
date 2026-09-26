@@ -29,6 +29,28 @@ const FIXES: Array<[RegExp, string]> = [
   [/\bten[\s-]?oo?ta\b/gi, 'Tenuta'],
   [/\bvine[\s-]?wine[\s-]?goot\b/gi, 'Weingut'],
 
+  // ---- Named producers (STT mangles unfamiliar names the worst) -------------
+  // Distinctive phonetic mis-hears only — anchored so ordinary words are safe.
+  [/\btal+o[\s-]?bo+t?\b/gi, 'Tollot-Beaut'],
+  [/\btol+o+t?[\s-]?bo+t?\b/gi, 'Tollot-Beaut'],
+  [/\bpro[\s-]?doo?[\s-]?tor+ee?\b/gi, 'Produttori del Barolo'],
+  [/\bproduttori\b/gi, 'Produttori del Barolo'],
+  [/\bv(?:eu|oo)ve?\s+cli(?:c|k)+o\b/gi, 'Veuve Clicquot'],
+  [/\bkiss?[\s-]?ler\b/gi, 'Kistler'],
+  [/\bday\s+var[\s-]?jee\b/gi, "d'Auvenay"],
+  [/\bro[\s-]?man+ee?[\s-]?con[\s-]?tee\b/gi, 'Romanée-Conti'],
+  [/\bd\.?\s*r\.?\s*c\.?\b/gi, 'DRC'],
+  [/\bmar[\s-]?go\b/gi, 'Margaux'],
+  [/\bee?[\s-]?kem\b/gi, "d'Yquem"],
+  [/\bpe[\s-]?tr(?:us|iss)\b/gi, 'Pétrus'],
+  [/\bsass+ee?[\s-]?kai+a\b/gi, 'Sassicaia'],
+  [/\bor+[\s-]?nel+[\s-]?ai+a\b/gi, 'Ornellaia'],
+  [/\bgaj+a\b/gi, 'Gaja'],
+  [/\bsol+[\s-]?dair+a\b/gi, 'Soldera'],
+  [/\bkon[\s-]?ter+no\b/gi, 'Conterno'],
+  [/\bhar[\s-]?lan\b/gi, 'Harlan'],
+  [/\bshave[\s-]?val[\s-]?ay\b/gi, 'Cheval Blanc'],
+
   // ---- Sparkling -----------------------------------------------------------
   [/\b(?:sham|champ)[\s-]?pain\b/gi, 'Champagne'],
   [/\bpro[\s-]?secco\b/gi, 'Prosecco'],
