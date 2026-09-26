@@ -101,10 +101,11 @@ export default function CellarTab() {
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
-      {/* Add Wines — opens the Full Cellar List's scan/upload/manual chooser. */}
+      {/* Add Wines — a full-width gold button (same size as "Your Cellar List"
+          below), opening the Full Cellar List's scan/upload/manual chooser. */}
       <View style={styles.actionRow}>
-        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.actionBtn}>
-          <Text style={styles.actionBtnText}>Add Wines</Text>
+        <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} activeOpacity={0.85} style={styles.buttonVivino}>
+          <Text style={styles.buttonVivinoText}>Add Wines</Text>
         </TouchableOpacity>
       </View>
 
@@ -174,10 +175,9 @@ const styles = StyleSheet.create({
   titleSide: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },
   // Voice Command — gold bubble (matches the app-wide treatment).
   voiceBubble: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: 8, paddingHorizontal: spacing.lg, marginTop: spacing.sm, marginBottom: spacing.xs },
-  // Left-indented row of two matching gold pills (Voice Command · Add Wines).
-  // Metrics mirror buttonFull exactly (radius 14, paddingVertical sm, 14px text)
-  // so they're the same height as the buttons below.
-  actionRow: { flexDirection: 'row', gap: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: 18 },
+  // Wrapper for the full-width gold "Add Wines" button (same padding as the
+  // sections below, so it lines up exactly with "Your Cellar List").
+  actionRow: { paddingHorizontal: spacing.xl, marginTop: spacing.sm, marginBottom: 18 },
   // First divider after the Voice Command row — 18 above/below to match Home.
   voiceDivider: { marginTop: 0, marginBottom: 18 },
   actionBtn: { flex: 1, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.md, alignItems: 'center' },
