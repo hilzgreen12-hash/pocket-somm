@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
 import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
-import { fetchRangeWineNote, type RangeWineNote } from '../api/label';
+import { useQuery } from '@tanstack/react-query';
+import { fetchRangeWineNote } from '../api/label';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
@@ -16,19 +16,25 @@ export function RangeWineNoteSheet({
   visible: boolean;
   onClose: () => void;
 }) {
-  const [loading, setLoading] = useState(false);
-  const [note, setNote] = useState<RangeWineNote | null>(null);
-  const [failed, setFailed] = useState(false);
-
-  useEffect(() => {
-    if (!visible || !wineName) return;
-    let active = true;
-    setLoading(true); setNote(null); setFailed(false);
-    fetchRangeWineNote({ producer, wineName, region })
-      .then((r) => { if (!active) return; if (r) setNote(r); else setFailed(true); })
-      .finally(() => { if (active) setLoading(false); });
-    return () => { active = false; };
-  }, [visible, wineName, producer, region]);
+  // Cache the inside line by wine identity so re-opening the same wine (even after
+  // closing) is instant — Vinster generates it once, not on every open. staleTime
+  // keeps it warm for the whole session (and well beyond).
+  const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
+  const enabled = visible && !!(wineName && wineName.trim());
+  const { data: note, isFetching, isError } = useQuery({
+    queryKey: ['range-wine-note', norm(producer), norm(wineName), norm(region)],
+    queryFn: async () => {
+      const r = await fetchRangeWineNote({ producer, wineName, region });
+      if (!r) throw new Error('no inside line'); // don't cache an empty result — let a retry re-fetch
+      return r;
+    },
+    enabled,
+    staleTime: 1000 * 60 * 60,
+    gcTime: 1000 * 60 * 60,
+    retry: 1,
+  });
+  const loading = enabled && isFetching && note == null && !isError;
+  const failed = enabled && isError && !isFetching;
 
   const details = note ? [note.grape, note.region, note.style].filter(Boolean).join(' · ') : '';
 
