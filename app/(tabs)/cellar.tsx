@@ -56,11 +56,26 @@ export default function CellarTab() {
     });
   }
 
-  // Top-right "+ Import" — bring in an existing CELLAR list (photo / screenshot /
-  // file). Reviews (Vivino etc.) are imported from Your Wine Reviews, not here —
-  // they're not cellar stock.
+  // "Import Cellar" (bottom of the tab) — bring in an existing CELLAR list (photo /
+  // screenshot / file). Reviews (Vivino etc.) are imported from Your Wine Reviews,
+  // not here — they're not cellar stock.
   function openImportMenu() {
     openImportChooser();
+  }
+
+  // "Export Cellar" (bottom of the tab) — the whole list, or one location. Both
+  // run on the Full Cellar List screen (it owns the location filtering + the
+  // PDF/share machinery); we just tell it what to export.
+  function openExportMenu() {
+    showAlert({
+      title: 'Export Cellar',
+      body: 'Choose what to export.',
+      buttons: [
+        { text: 'Export Full Cellar List', onPress: () => router.push('/cellar/list?exportScope=all' as any) },
+        { text: 'Export by Location', onPress: () => router.push('/cellar/list?exportPick=1' as any) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
   }
 
   function continueWithoutAccount() {
@@ -77,27 +92,23 @@ export default function CellarTab() {
       <VinsterHeader />
 
       <View style={styles.titleRow}>
-        <View style={styles.titleSide} />
         <HelpTitle label="Cellar" title="How Cellar works" body={CELLAR_HELP} textStyle={styles.title} />
-        <TouchableOpacity style={styles.titleSide} onPress={() => requireAuth(openImportMenu)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.importLink}>+ Import</Text>
+        {/* Voice Command — top-right text link (matches the Reviews "Add +").
+            Import + Export now live as buttons at the bottom of the tab. */}
+        <TouchableOpacity style={styles.voiceLink} onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
+          <Text style={styles.voiceLinkText}>Voice Command</Text>
         </TouchableOpacity>
       </View>
       <Text style={styles.subtitle}>Gain quick insights into bottles and manage your collection. The only thing Vinster can't do with a bottle of wine is drink it.</Text>
 
-      {/* Voice Command + Add Wines — a left-indented row of two matching pills.
-          Add Wines opens the Full Cellar List's scan/upload/manual chooser. */}
+      {/* Add Wines — opens the Full Cellar List's scan/upload/manual chooser. */}
       <View style={styles.actionRow}>
-        <TouchableOpacity onPress={() => requireAuth(() => setVoiceOpen(true))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.actionBtn}>
-          <Text style={styles.actionBtnText}>Voice Command</Text>
-        </TouchableOpacity>
         <TouchableOpacity onPress={() => requireAuth(() => router.push('/cellar/list?add=1' as any))} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7} style={styles.actionBtn}>
           <Text style={styles.actionBtnText}>Add Wines</Text>
         </TouchableOpacity>
       </View>
 
-      {/* 18 above (actionRow.marginBottom) + rule + 18 below — matches the Home tab
-          spacing between the Voice Command button, separator and first button. */}
+      {/* 18 above (actionRow.marginBottom) + rule + 18 below — matches the Home tab. */}
       <View style={[styles.divider, styles.voiceDivider]} />
 
       {/* Your Cellar List (the full list) and Your Cellar Statistics. */}
@@ -119,6 +130,18 @@ export default function CellarTab() {
           the old standalone Home Wine Storage page). */}
       <HomeStorageSection requireAuth={requireAuth} />
 
+      {/* Import / Export the whole cellar — a full-width gold rule beneath the
+          carousel's swipe hint, then the two gold buttons. */}
+      <View style={styles.goldSeparator} />
+      <View style={styles.section}>
+        <TouchableOpacity style={styles.buttonVivino} onPress={() => requireAuth(openImportMenu)} activeOpacity={0.85}>
+          <Text style={styles.buttonVivinoText}>Import Cellar</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.buttonVivino, { marginTop: spacing.xs }]} onPress={() => requireAuth(openExportMenu)} activeOpacity={0.85}>
+          <Text style={styles.buttonVivinoText}>Export Cellar</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* "Archive a Lineup" and "Your Lineups" now live on the Scan tab. */}
 
       <CellarCommandModal visible={voiceOpen} onClose={() => setVoiceOpen(false)} />
@@ -139,7 +162,13 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   // Big "Cellar" tab title.
   title: { fontSize: 42, fontFamily: fonts.headingBold, color: '#FFFFFF', letterSpacing: 1.5, textAlign: 'center' },
-  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, marginBottom: spacing.xs },
+  // Voice Command — top-right text link, vertically centred on the title (matches
+  // the Reviews "Add +"). Absolute so it never shifts the centred title.
+  voiceLink: { position: 'absolute', right: spacing.xl, top: 0, bottom: 0, justifyContent: 'center' },
+  voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
+  // Full-width gold rule above the Import/Export buttons at the tab's foot.
+  goldSeparator: { height: 1, backgroundColor: colors.gold, marginVertical: spacing.lg },
   // Side cells balance the centred title: an empty spacer on the left, the
   // "+ Import" link on the right, both the same width so "Cellar" stays centred.
   titleSide: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },

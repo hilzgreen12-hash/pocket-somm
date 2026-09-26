@@ -521,10 +521,16 @@ export default function FullCellarListScreen() {
   // "View Your Archive" reuses this screen via ?archived=1 — it locks the list
   // to archived wines only and hides the Archived filter chip so nothing
   // outside the archive can ever show.
-  const { archived, added, add } = useLocalSearchParams<{ archived?: string; added?: string; add?: string }>();
+  const { archived, added, add, exportScope, exportPick } = useLocalSearchParams<{ archived?: string; added?: string; add?: string; exportScope?: string; exportPick?: string }>();
   const isArchiveView = archived === '1';
   const [archivedFilter, setArchivedFilter] = useState<ArchivedFilter>(isArchiveView ? 'only' : 'hide');
   const [openDropdown, setOpenDropdown] = useState<FilterField>(null);
+  // Export driven from the Cellar tab: exportScope=all|<filter> auto-exports;
+  // exportPick=1 opens the location picker, then exports the chosen location.
+  const [exportPending, setExportPending] = useState(false);
+  const pickThenExportRef = useRef(false);
+  const exportParamHandledRef = useRef(false);
+  const exportRanRef = useRef(false);
   const [search, setSearch] = useState('');
 
   // Brief "Added to your cellar list" toast after an add flow lands here — shows
@@ -741,6 +747,30 @@ export default function FullCellarListScreen() {
     }
   }
 
+  // Handle the export params from the Cellar tab (once). exportScope=all|<filter>
+  // applies the filter and exports; exportPick=1 opens the location picker and
+  // arms a "export the chosen location" flag consumed in the dropdown's onSelect.
+  useEffect(() => {
+    if (exportParamHandledRef.current) return;
+    if (exportScope) {
+      exportParamHandledRef.current = true;
+      setLocationFilter(exportScope === 'all' ? 'All' : exportScope);
+      setExportPending(true);
+    } else if (exportPick === '1') {
+      exportParamHandledRef.current = true;
+      pickThenExportRef.current = true;
+      setOpenDropdown('location');
+    }
+  }, [exportScope, exportPick]);
+
+  // Run a pending export once the chosen filter has settled into `sorted`.
+  useEffect(() => {
+    if (!exportPending || isLoading || sharingList || exportRanRef.current) return;
+    exportRanRef.current = true;
+    setExportPending(false);
+    void handleShareList();
+  }, [exportPending, isLoading, sharingList, sorted]);
+
   // Keep multi-select honest: when the filters/search change, drop any selected
   // wines that are no longer visible so a bulk action can only ever touch what's
   // on screen (previously the selection silently survived filter changes).
@@ -814,10 +844,17 @@ export default function FullCellarListScreen() {
   function dropdownConfig(field: FilterField): { title: string; options: { value: string; label: string; indent?: boolean; group?: boolean; header?: boolean; disabled?: boolean }[]; selected: string; onSelect: (v: string) => void } | null {
     if (field === 'location') {
       return {
-        title: 'Filter by location',
+        title: pickThenExportRef.current ? 'Export a location' : 'Filter by location',
         options: locationOptions,
         selected: locationFilter,
-        onSelect: (v) => setLocationFilter(v),
+        onSelect: (v) => {
+          setLocationFilter(v);
+          // "Export by Location" flow: the pick becomes the export scope.
+          if (pickThenExportRef.current) {
+            pickThenExportRef.current = false;
+            setExportPending(true);
+          }
+        },
       };
     }
     if (field === 'country') {
@@ -880,23 +917,14 @@ export default function FullCellarListScreen() {
         <TouchableOpacity onPress={() => router.back()}>
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        <View style={styles.headerActions}>
-          {/* Adding wines now starts from the "Add Wines" button on the Cellar
-              tab (which opens this list with ?add=1 and the same chooser). */}
-          <TouchableOpacity
-            onPress={handleShareList}
-            disabled={sharingList || sorted.length === 0}
-            hitSlop={{ top: 6, bottom: 10, left: 8, right: 8 }}
-          >
-            <Text style={[styles.shareLink, (sharingList || sorted.length === 0) && { color: colors.textMuted }]}>
-              {sharingList ? 'Preparing…' : 'Export'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        {/* Adding + exporting now start from the Cellar tab ("Add Wines" opens
+            this list with ?add=1; "Export Cellar" with ?exportScope / ?exportPick).
+            While an export the tab requested is preparing, show a hint here. */}
+        {sharingList ? <Text style={styles.shareLink}>Preparing…</Text> : <View style={{ width: 40 }} />}
       </View>
 
-      {/* Title sits on its own line, brought down below the back / Add / Export
-          row so it doesn't crowd the top of the screen. */}
+      {/* Title sits on its own line, brought down below the back row so it doesn't
+          crowd the top of the screen. */}
       <Text style={styles.title}>{isArchiveView ? 'Cellar Archive' : 'Full Cellar List'}</Text>
       </View>
 
