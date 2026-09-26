@@ -1,5 +1,5 @@
 import { View, Image, Text, ActivityIndicator, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { useLabelImageUrl } from '../hooks/useLabelImageUrl';
+import { useLabelImageState } from '../hooks/useLabelImageUrl';
 import { useAutoLabel } from '../hooks/useAutoLabel';
 import { colors } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -19,12 +19,15 @@ export function WineCardThumb({
   style?: StyleProp<ViewStyle>;
   resizeMode?: 'cover' | 'contain';
 }) {
-  const resolved = useLabelImageUrl(path ?? null);
+  const { uri: resolved, pending } = useLabelImageState(path ?? null);
   const stored = localUri ?? resolved;
-  const auto = useAutoLabel(producer, wineName, !stored);
+  // Only web-fetch a stand-in label when there is genuinely no stored photo. If a
+  // stored photo is still resolving (pending), wait for it — never flash a
+  // web label that then gets replaced by the user's own photo a moment later.
+  const auto = useAutoLabel(producer, wineName, !localUri && !path);
   const uri = stored ?? auto;
-  // A stored path still resolving to a signed URL — show a swirl, not the tile.
-  const loadingStored = !!path && !resolved && !localUri;
+  // The user's own stored photo is still downloading/caching — show a swirl.
+  const loadingStored = !localUri && pending;
   return (
     <View style={[styles.thumb, style]}>
       {uri ? (
