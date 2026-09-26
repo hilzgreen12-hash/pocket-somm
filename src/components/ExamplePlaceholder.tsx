@@ -14,16 +14,23 @@ export type PlaceholderCard =
   | { kind: 'winelist'; title: string; stamp: string; overlay: string };
 
 // A code-drawn "wine list" thumbnail (no image asset needed) — a heading plus a
-// few faint entry rows with prices, so the wine-list scan placeholder reads as a
+// few real menu entries with prices, so the wine-list scan placeholder reads as a
 // menu rather than a lone glyph.
+const WINE_LIST_ENTRIES: [string, string][] = [
+  ['Chablis 1er Cru', '48'],
+  ['Barolo, Piedmont', '72'],
+  ['Sancerre, Loire', '39'],
+  ['Rioja Reserva', '55'],
+];
+
 function WineListMock() {
   return (
     <View style={styles.listMock}>
       <Text style={styles.listMockHead}>WINE LIST</Text>
-      {[0, 1, 2, 3].map((i) => (
+      {WINE_LIST_ENTRIES.map(([name, price], i) => (
         <View key={i} style={styles.listMockRow}>
-          <View style={styles.listMockLine} />
-          <View style={styles.listMockPrice} />
+          <Text style={styles.listMockName} numberOfLines={1}>{name}</Text>
+          <Text style={styles.listMockPrice}>{`£${price}`}</Text>
         </View>
       ))}
     </View>
@@ -40,7 +47,7 @@ export function PlaceholderCardView({ card }: { card: PlaceholderCard }) {
     <View style={styles.card}>
       <View style={styles.thumbWrap}>
         {card.kind === 'label' ? (
-          <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.title} />
+          <WineCardThumb producer={card.producer} wineName={card.wineName} fallbackText={card.title} resizeMode="contain" />
         ) : card.kind === 'winelist' ? (
           <WineListMock />
         ) : (
@@ -63,13 +70,13 @@ const styles = StyleSheet.create({
   iconThumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center' },
   icon: { opacity: 0.5 },
   // Faux wine-list "menu" tile for the wine-list scan placeholder.
-  listMock: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, justifyContent: 'center', gap: 10 },
-  listMockHead: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, letterSpacing: 1.2, textAlign: 'center', marginBottom: 4, opacity: 0.8 },
-  listMockRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  listMockLine: { flex: 1, height: 7, borderRadius: 4, backgroundColor: 'rgba(224,184,74,0.28)' },
-  listMockPrice: { width: 30, height: 7, borderRadius: 4, backgroundColor: 'rgba(224,184,74,0.28)' },
-  overlay: { ...StyleSheet.absoluteFillObject, borderRadius: 12, backgroundColor: 'rgba(18,11,10,0.6)', alignItems: 'center', justifyContent: 'center', padding: spacing.md },
-  overlayText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', lineHeight: 18 },
+  listMock: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, paddingHorizontal: spacing.lg, justifyContent: 'center', gap: 9 },
+  listMockHead: { fontFamily: fonts.headingSemibold, fontSize: 12, color: colors.gold, letterSpacing: 1.2, textAlign: 'center', marginBottom: 4, opacity: 0.85 },
+  listMockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
+  listMockName: { flex: 1, fontFamily: fonts.bodyRegular, fontSize: 12, color: 'rgba(224,184,74,0.85)' },
+  listMockPrice: { fontFamily: fonts.bodySemibold, fontSize: 12, color: 'rgba(224,184,74,0.85)' },
+  overlay: { ...StyleSheet.absoluteFillObject, borderRadius: 12, backgroundColor: 'rgba(18,11,10,0.38)', alignItems: 'center', justifyContent: 'center', padding: spacing.md },
+  overlayText: { fontFamily: fonts.bodySemibold, fontSize: 13, color: 'rgba(255,255,255,0.82)', textAlign: 'center', lineHeight: 18 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginTop: 3 },
 });

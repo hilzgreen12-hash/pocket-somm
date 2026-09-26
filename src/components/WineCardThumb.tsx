@@ -9,7 +9,7 @@ import { fonts } from '../constants/fonts';
 // label. Only a card with no image AND no wine identity (e.g. a restaurant with
 // no photo) falls back to a name tile.
 export function WineCardThumb({
-  path, localUri, producer, wineName, fallbackText, style,
+  path, localUri, producer, wineName, fallbackText, style, resizeMode = 'cover',
 }: {
   path?: string | null;
   localUri?: string | null;
@@ -17,6 +17,7 @@ export function WineCardThumb({
   wineName?: string | null;
   fallbackText?: string | null;
   style?: StyleProp<ViewStyle>;
+  resizeMode?: 'cover' | 'contain';
 }) {
   const resolved = useLabelImageUrl(path ?? null);
   const stored = localUri ?? resolved;
@@ -27,7 +28,7 @@ export function WineCardThumb({
   return (
     <View style={[styles.thumb, style]}>
       {uri ? (
-        <Image source={{ uri }} style={styles.img} resizeMode="cover" />
+        <Image source={{ uri }} style={styles.img} resizeMode={resizeMode} />
       ) : loadingStored ? (
         <ActivityIndicator size="small" color={colors.gold} />
       ) : (
