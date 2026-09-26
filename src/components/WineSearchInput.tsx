@@ -101,7 +101,7 @@ export function WineSearchInput({ onSelect, initialQuery }: Props) {
                   const vm = typed.match(/\b(?:19|20)\d{2}\b/);
                   const v = vm ? vm[0] : null;
                   const name = v ? typed.replace(vm![0], ' ').replace(/\s{2,}/g, ' ').trim() : typed;
-                  choose({ producer: name || typed, wineName: null, region: null, style: null, grape: null, vintage: v });
+                  choose({ producer: name || typed, wineName: null, region: null, style: null, grape: null, vintage: v, wsWineId: null, wsWineName: null });
                 }} activeOpacity={0.7}>
                   <Text style={styles.optionName} numberOfLines={2}>Use “{query.trim()}”</Text>
                   <Text style={styles.optionMeta}>{results.length ? "Not listed? Add it as typed and edit below." : "No matches — add it as typed and edit the details below."}</Text>
