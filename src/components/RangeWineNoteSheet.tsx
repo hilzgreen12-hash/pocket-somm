@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, Pressable, StyleSheet, ActivityIndicator, ScrollView } from 'react-native';
 import { fetchRangeWineNote, type RangeWineNote } from '../api/label';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -34,8 +34,11 @@ export function RangeWineNoteSheet({
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={onClose}>
-        <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={() => {}}>
+      <View style={styles.overlay}>
+        {/* Tap-outside-to-close backdrop sits BEHIND the sheet so it never
+            competes with the note's ScrollView for touch/scroll gestures. */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={styles.sheet}>
           {producer ? <Text style={styles.producerLine} numberOfLines={1}>{producer}</Text> : null}
           <Text style={styles.title} numberOfLines={2}>{wineName ?? 'Wine'}</Text>
           {loading ? (
@@ -44,7 +47,13 @@ export function RangeWineNoteSheet({
               <Text style={styles.loadingText}>Pulling the inside line…</Text>
             </View>
           ) : note ? (
-            <ScrollView style={{ maxHeight: 320 }}>
+            <ScrollView
+              style={styles.noteScroll}
+              contentContainerStyle={styles.noteScrollContent}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+            >
               {details ? <Text style={styles.details}>{details}</Text> : null}
               <Text style={styles.note}>{note.note}</Text>
             </ScrollView>
@@ -54,8 +63,8 @@ export function RangeWineNoteSheet({
           <TouchableOpacity style={styles.closeBtn} onPress={onClose} activeOpacity={0.7}>
             <Text style={styles.closeText}>Close</Text>
           </TouchableOpacity>
-        </TouchableOpacity>
-      </TouchableOpacity>
+        </View>
+      </View>
     </Modal>
   );
 }
@@ -63,6 +72,8 @@ export function RangeWineNoteSheet({
 const styles = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   sheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
+  noteScroll: { maxHeight: 340 },
+  noteScrollContent: { paddingBottom: spacing.xs },
   producerLine: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: 2, letterSpacing: 0.3 },
   title: { fontFamily: fonts.headingBold, fontSize: 20, color: colors.text, textAlign: 'center', marginBottom: spacing.sm, letterSpacing: 0.3 },
   details: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textAlign: 'center', marginBottom: spacing.md, letterSpacing: 0.3 },
