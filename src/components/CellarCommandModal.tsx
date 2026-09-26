@@ -11,7 +11,7 @@ import { addCellarWine, addCellarWineRemoval, updateCellarWine } from '../api/ce
 import { getRacks, clearWineFromRacks, removeSlotsForWine } from '../api/racks';
 import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
-import { moveBottlesToLocation, clearLocationPlacements } from '../api/placements';
+import { moveBottlesToLocation, clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, placedCount } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
 import { correctWineTerms } from '../utils/wineDictation';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
@@ -294,6 +294,17 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
           const { id, created_at, updated_at, ...rest } = chosenWine;
           await addCellarWine({ ...rest, quantity: count, archived_at: removedAt, is_wishlist: false });
         }
+        // Free the archived bottles from their storage so a placement count never
+        // lingers above the wine's quantity (e.g. "3 bottles in Large Wine Rack"
+        // after archiving down to 2). Take from LOOSE/unplaced bottles first —
+        // only free actual placements (rack/fridge slots, then alt cellars) for
+        // any that exceed the loose count (mirrors the wine card's archive flow).
+        const winePlacements = await fetchPlacementsForWine(chosenWine.id);
+        const unplaced = Math.max(0, (chosenWine.quantity ?? 0) - placedCount(winePlacements));
+        const toRelease = Math.max(0, count - unplaced);
+        if (toRelease > 0) await releaseBottlesFromPlacements(chosenWine.id, toRelease);
+        qc.invalidateQueries({ queryKey: ['placements', chosenWine.id] });
+        qc.invalidateQueries({ queryKey: ['placements-list'] });
         qc.invalidateQueries({ queryKey: ['cellar', userId] });
         qc.invalidateQueries({ queryKey: ['cellar-archive', userId] });
         qc.invalidateQueries({ queryKey: ['cellar-removals', chosenWine.id] });

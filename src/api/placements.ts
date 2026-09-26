@@ -102,6 +102,26 @@ export async function addLocationPlacement(
 // Remove `by` bottles from ONE placement (a specific spot). Deletes the row when
 // that empties it. Used by the alt-cellar partial "Move Wine/Bottles" flow — the
 // moved bottles either become loose (Full Cellar List) or land in a new placement.
+// Free `n` bottles of a wine FROM wherever they're stored — rack/fridge slots
+// first, then alt-cellar location placements. Use when bottles leave the active
+// cellar (archive / removal) so a placement count (e.g. "3 bottles in Large Wine
+// Rack") never lingers above the wine's real quantity. Mirrors the freeing step of
+// moveBottlesToLocation. Returns how many bottles were actually freed.
+export async function releaseBottlesFromPlacements(wineId: string, n: number): Promise<number> {
+  if (n <= 0) return 0;
+  let freed = await removeSlotsForWine(wineId, n);
+  let toFree = n - freed;
+  if (toFree > 0) {
+    const locs = (await fetchPlacementsForWine(wineId)).filter((p) => p.kind === 'location');
+    for (const p of locs) {
+      if (toFree <= 0) break;
+      const take = Math.min(toFree, p.quantity ?? 0);
+      if (take > 0) { await decrementPlacement(p.id, take); toFree -= take; freed += take; }
+    }
+  }
+  return freed;
+}
+
 export async function decrementPlacement(placementId: string, by: number): Promise<void> {
   const { data, error } = await supabase
     .from('cellar_placements')
