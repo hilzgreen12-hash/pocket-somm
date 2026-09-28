@@ -113,9 +113,13 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 // Case-insensitive identity key. Producer + name are combined into one string
 // so a wine whose full name sits in `producer` (merchant lists) still matches
 // the same wine held as producer + wine_name (cellar rows / cuvée splits).
-function wineKey(w: { producer?: string | null; wineName?: string | null; wine_name?: string | null; vintage?: string | number | null }): string {
+function wineKey(w: { producer?: string | null; wineName?: string | null; wine_name?: string | null; vintage?: string | number | null; bottle_size_ml?: number | null; bottleSizeMl?: number | null }): string {
   const name = [w.producer, w.wineName ?? w.wine_name].map(norm).filter(Boolean).join(' ');
-  return `${name}|${String(w.vintage ?? '').trim()}`;
+  // Bottle SIZE is part of identity: the same wine + vintage in a different format
+  // (75cl vs a 600cl large format vs magnum) is a DISTINCT bottling, not a
+  // duplicate. Only same wine + vintage + size counts as a repeat.
+  const size = w.bottle_size_ml ?? w.bottleSizeMl ?? 750;
+  return `${name}|${String(w.vintage ?? '').trim()}|${size}`;
 }
 
 export default function ImportCellarScreen() {
@@ -759,7 +763,7 @@ export default function ImportCellarScreen() {
                       <View style={styles.rowMetaRow}>
                         {isCased(w) ? <Text style={styles.rowCase}>{caseSummary(w, bottleSizeCl)}</Text> : null}
                         {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
-                        {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? `Already in cellar · +${qty} to existing` : 'Repeated above'}</Text> : null}
+                        {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? `Already in cellar · +${qty} to existing` : 'Duplicate · tap to include'}</Text> : null}
                       </View>
                     </View>
                   </TouchableOpacity>
