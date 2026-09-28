@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback, type ComponentProps } from 'react';
 import { View, Text, ScrollView, TextInput, TouchableOpacity, StyleSheet, Modal, Image, ActivityIndicator, Share, BackHandler } from 'react-native';
 import { KeyboardAwareScrollView, KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { showAlert } from '../../src/components/AppAlert';
@@ -34,6 +34,10 @@ import { peekIntelCurrency } from '../../src/utils/localCurrency';
 import { getWineIntelligence, fetchWineCandidates, fetchProducerRange, prepareImageBase64, scanLabel, type WineCandidate, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { updateLabelIntel } from '../../src/api/labels';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
+import { WineIntelShareCard } from '../../src/components/WineIntelShareCard';
+import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { formatWineTitle } from '../../src/utils/wineTitle';
 import { regionWithCountry } from '../../src/utils/wineOrigin';
 import * as ImagePicker from 'expo-image-picker';
@@ -184,6 +188,8 @@ export default function LabelResultsScreen() {
   // The range wine the user tapped for its "inside line" note.
   const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const intelShareRef = useRef<View>(null);
+  const [intelSharePayload, setIntelSharePayload] = useState<ComponentProps<typeof WineIntelShareCard> | null>(null);
   // Confirm-first: when the scan couldn't be verified against Wine-Searcher,
   // camera.tsx routes here with confirm=1 and no intel yet. We show typo/OCR-
   // tolerant matches and only generate the card once the user picks or confirms
@@ -682,22 +688,48 @@ export default function LabelResultsScreen() {
     })();
   }, [isIntelOnlyFlow, noRecent, fresh, labelId, awaitingConfirm, intelligence, wineDetailsConfirmed, session]);
 
-  // Share the wine intel as plain text (identity + the three headline numbers +
-  // Vinster's note), with the standard install footer. Mirrors the review-share
-  // text path used elsewhere in the app.
+  // Share the wine intel as the branded cream card (identity + label photo + the
+  // three headline numbers + Vinster's note + App Store footer), captured from an
+  // off-screen WineIntelShareCard. Mirrors the cellar wine-card share so every
+  // Vinster share reads as one family. Falls back to plain text on devices
+  // without share-sheet support.
   async function handleShare() {
     if (sharing) return;
+    const w = wineDetailsConfirmed;
+    const header = [w?.producer, w?.wineName, w?.vintage].filter((s) => s && String(s).trim()).join(' ');
+    const drinkingWindow = intel.drinkingWindowFrom && intel.drinkingWindowTo
+      ? `${intel.drinkingWindowFrom}–${intel.drinkingWindowTo}`
+      : null;
+    const estimatedValue = intel.estimatedValue != null
+      ? formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })
+      : null;
+    setIntelSharePayload({
+      producer: w?.producer,
+      wineName: w?.wineName,
+      vintage: w?.vintage,
+      region: w?.region,
+      grape: intel.grapeVariety ?? null,
+      criticScore: intel.criticScore,
+      drinkingWindow,
+      estimatedValue,
+      tastingNote: intel.tastingNotes,
+      imageUri: imageUri ?? null,
+    });
     setSharing(true);
     try {
-      const w = wineDetailsConfirmed;
-      const header = [w?.producer, w?.wineName, w?.vintage].filter((s) => s && String(s).trim()).join(' ');
+      // One paint to let the off-screen card mount with the new props.
+      await new Promise((r) => setTimeout(r, 250));
+      if (intelShareRef.current && (await Sharing.isAvailableAsync())) {
+        const uri = await captureRef(intelShareRef, { format: 'png', quality: 1, result: 'tmpfile' });
+        await shareResult(uri, { sharerName: sharerNameFrom(session) });
+        return;
+      }
+      // Plain-text fallback for devices without share-sheet support.
       const scoreLine = intel.criticScore != null ? `\nScore: ${intel.criticScore}/100` : '';
-      const valueLine = intel.estimatedValue != null
-        ? `\nValue: ${formatCurrency(intel.estimatedValue, userCurrency, { decimals: 0 })}${intel.valueSource === 'vinster' ? ' (Vinster estimate)' : ''}`
+      const valueLine = estimatedValue
+        ? `\nValue: ${estimatedValue}${intel.valueSource === 'vinster' ? ' (Vinster estimate)' : ''}`
         : '';
-      const windowLine = intel.drinkingWindowFrom && intel.drinkingWindowTo
-        ? `\nDrinking window: ${intel.drinkingWindowFrom}–${intel.drinkingWindowTo}`
-        : '';
+      const windowLine = drinkingWindow ? `\nDrinking window: ${drinkingWindow}` : '';
       const noteLine = intel.tastingNotes?.trim() ? `\n\n"${intel.tastingNotes.trim()}"` : '';
       const message = `${header}${scoreLine}${valueLine}${windowLine}${noteLine}${VINSTER_TEXT_SHARE_FOOTER}`;
       await Share.share({ message, title: header || 'Wine Intel' });
@@ -705,6 +737,7 @@ export default function LabelResultsScreen() {
       showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
     } finally {
       setSharing(false);
+      setIntelSharePayload(null);
     }
   }
 
@@ -1910,6 +1943,7 @@ export default function LabelResultsScreen() {
   }
 
   return (
+    <>
     <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 80 }}>
       <TouchableOpacity
         style={styles.backRow}
@@ -2847,11 +2881,23 @@ export default function LabelResultsScreen() {
         </TouchableOpacity>
       </Modal>
     </ScrollView>
+
+    {/* Off-screen branded card for the Share button — mounted only while a
+        share is in flight, captured by react-native-view-shot. */}
+    {intelSharePayload && (
+      <View style={styles.shareCardWrap} pointerEvents="none">
+        <WineIntelShareCard ref={intelShareRef} {...intelSharePayload} />
+      </View>
+    )}
+    </>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
+  // Off-screen host for the share card — positioned far off-canvas so it renders
+  // for the captureRef snapshot but never appears on screen.
+  shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background },
   errorText: { color: colors.text, fontFamily: fonts.bodyRegular, fontSize: 16 },
   linkText: { color: colors.gold, fontFamily: fonts.headingSemibold, fontSize: 16, marginTop: spacing.md },
