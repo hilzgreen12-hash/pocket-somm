@@ -749,7 +749,11 @@ export default function ResultsScreen() {
   async function ensureReview(i: number) {
     const wine = recommendation?.wines?.[i];
     if (!wine) return;
-    if (wine.rationale || (reviewByIndex[i] && reviewByIndex[i].length > 0) || reviewLoading.has(i)) return;
+    // Fresh scans always generate on demand (deferred), even if the recommend
+    // call happened to include an inline rationale — so the review is the last
+    // thing to land and the results present quicker. History reuses the saved one.
+    const alreadyHave = (isFromHistory && wine.rationale) || (reviewByIndex[i] && reviewByIndex[i].length > 0);
+    if (alreadyHave || reviewLoading.has(i)) return;
     setReviewLoading((prev) => new Set(prev).add(i));
     try {
       const review = await fetchVinsterReview({
@@ -1122,18 +1126,22 @@ export default function ResultsScreen() {
                     <Text style={styles.whatsThisLink}>what's this</Text>
                   </TouchableOpacity>
                 </View>
-                {sommOpen && (
-                  (wine.rationale || reviewByIndex[i]) ? (
-                    <Text style={styles.sommNoteText}>{wine.rationale || reviewByIndex[i]}</Text>
+                {sommOpen && (() => {
+                  // A FRESH scan always defers to the on-demand fetch so the
+                  // results screen presents fast and the review reveals only once
+                  // ready — never pre-baked. History scans reuse the saved rationale.
+                  const reviewText = isFromHistory ? (wine.rationale || reviewByIndex[i]) : reviewByIndex[i];
+                  return reviewText ? (
+                    <Text style={styles.sommNoteText}>{reviewText}</Text>
                   ) : (
                     // Still generating (or a rare miss the user can retry by
-                    // collapsing + reopening) — no scary error, just the pour.
+                    // collapsing + reopening) — no scary error, just "Generating".
                     <View style={styles.sommLoadingRow}>
                       <ActivityIndicator color={colors.gold} />
-                      <Text style={styles.sommLoadingText}>Pouring Vinster's Review…</Text>
+                      <Text style={styles.sommLoadingText}>Generating Vinster's Review…</Text>
                     </View>
-                  )
-                )}
+                  );
+                })()}
 
               </View>
             </PickReveal>
