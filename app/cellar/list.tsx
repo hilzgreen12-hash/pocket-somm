@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Modal, TextInput, Share } from 'react-native';
 import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../src/utils/shareCard';
 import { captureRef } from 'react-native-view-shot';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -28,17 +27,14 @@ import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { RenameModal } from '../../src/components/RenameModal';
 import { LibraryFilterModal } from '../../src/components/LibraryFilterModal';
-import { CellarListShareCard } from '../../src/components/CellarListShareCard';
-import { buildCellarListHtml } from '../../src/utils/cellarListHtml';
 import { foldAccents } from '../../src/utils/wineIdentity';
-import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { wineHeaderLine } from '../../src/utils/wineHeader';
 import { inferWineStyle } from '../../src/utils/wineStyle';
 import { effectiveMaturity } from '../../src/utils/maturity';
 import { backfillMissingMaturities } from '../../src/services/maturityBackfill';
 import { inferCountry } from '../../src/utils/wineCountry';
 import { formatCurrency } from '../../src/constants/currency';
-import { bottleSizeCl, bottleSizeLabel } from '../../src/components/BottleSizePicker';
+import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import type { CellarWine } from '../../src/types/wine';
@@ -541,9 +537,6 @@ export default function FullCellarListScreen() {
 
   // Share the current (filtered) list as a branded PNG. Same off-screen-capture
   // pattern the wine card uses.
-  const shareListRef = useRef<View>(null);
-  const [sharingList, setSharingList] = useState(false);
-  const [listSharePayload, setListSharePayload] = useState<React.ComponentProps<typeof CellarListShareCard> | null>(null);
   // Add-wine chooser + scan overlay. Mirrors the Cellar tab's
   // "Add Wine / Generate Wine Intel" flow so the user can kick the
   // same scan / upload / manual entry path from this screen without
@@ -691,56 +684,6 @@ export default function FullCellarListScreen() {
     }
   }
 
-  async function handleShareList() {
-    if (sharingList || sorted.length === 0) return;
-    const items = sorted.map((w) => ({
-      producer: w.producer,
-      wineName: w.wine_name,
-      region: w.region,
-      vintage: w.vintage,
-      quantity: w.quantity ?? 1,
-      format: bottleSizeLabel(w.bottle_size_ml ?? 750),
-    }));
-    // Summarise the active filters for the card header (the simple chips only).
-    const bits: string[] = [];
-    if (countryFilter !== 'All') bits.push(countryFilter);
-    if (colourFilter !== 'All') bits.push(colourFilter);
-    if (maturityFilter !== 'All') bits.push(MATURITY_OPTIONS.find((m) => m.value === maturityFilter)?.label ?? maturityFilter);
-    const filterSummary = bits.length ? bits.join(' · ') : null;
-    const title = isArchiveView ? 'My Archive' : 'My Cellar';
-
-    setSharingList(true);
-    try {
-      // Share the cellar list as a PDF — crisp at any length and paginates,
-      // where a single tall PNG scaled down blurry. expo-print lazy-required
-      // for build safety.
-      const Print = require('expo-print');
-      const { uri } = await Print.printToFileAsync({
-        html: buildCellarListHtml({ title, items, wineCount: filtered.length, bottleCount: totalBottles, filterSummary }),
-      });
-      await shareResult(uri, { sharerName: sharerNameFrom(session), mimeType: 'application/pdf' });
-    } catch (err) {
-      // Plain-text fallback if PDF/printing or the share sheet isn't available.
-      try {
-        const lines = items.map((w) => {
-          const identity = [wineHeaderLine(w.producer, w.wineName, null), w.region, w.vintage]
-            .filter((p) => p && String(p).trim().length > 0)
-            .join(' · ');
-          return `• ${identity} — ${w.quantity} × ${w.format}`;
-        });
-        await Share.share({
-          message: `${title} (${filtered.length} ${filtered.length === 1 ? 'wine' : 'wines'} · ${totalBottles} ${totalBottles === 1 ? 'bottle' : 'bottles'})\n\n${lines.join('\n')}${VINSTER_TEXT_SHARE_FOOTER}`,
-          title,
-        });
-      } catch {
-        showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-      }
-    } finally {
-      setSharingList(false);
-      setListSharePayload(null);
-    }
-  }
-
   // Keep multi-select honest: when the filters/search change, drop any selected
   // wines that are no longer visible so a bulk action can only ever touch what's
   // on screen (previously the selection silently survived filter changes).
@@ -881,9 +824,8 @@ export default function FullCellarListScreen() {
           <Text accessibilityLabel="Back" style={[styles.back, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
         {/* Adding + exporting now start from the Cellar tab ("Add Wines" opens
-            this list with ?add=1; "Export Cellar" with ?exportScope / ?exportPick).
-            While an export the tab requested is preparing, show a hint here. */}
-        {sharingList ? <Text style={styles.shareLink}>Preparing…</Text> : <View style={{ width: 40 }} />}
+            this list with ?add=1; "Export Cellar" exports the branded PDF). */}
+        <View style={{ width: 40 }} />
       </View>
 
       {/* Title sits on its own line, brought down below the back row so it doesn't
@@ -895,13 +837,6 @@ export default function FullCellarListScreen() {
       {showAddedToast && (
         <View style={styles.addedToast} pointerEvents="none">
           <Text style={styles.addedToastText}>Added to your cellar list ✓</Text>
-        </View>
-      )}
-
-      {/* Off-screen branded share card, mounted only while a share is in flight. */}
-      {listSharePayload && (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <CellarListShareCard ref={shareListRef} {...listSharePayload} />
         </View>
       )}
 

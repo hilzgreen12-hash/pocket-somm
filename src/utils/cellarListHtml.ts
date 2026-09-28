@@ -1,6 +1,16 @@
-import type { CellarListLine } from '../components/CellarListShareCard';
 import { wineHeaderLine } from './wineHeader';
 import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
+
+// One row in the exported cellar list. (Previously lived on the now-removed
+// CellarListShareCard; the branded PDF is the single cellar-list export model.)
+export interface CellarListLine {
+  producer: string | null;
+  wineName: string | null;
+  region: string | null;
+  vintage: string | null;
+  quantity: number;
+  format: string;
+}
 
 // Build a print-ready HTML document for the Full Cellar List (rendered to a PDF
 // via expo-print). A PDF stays crisp and paginates however long the list is —
