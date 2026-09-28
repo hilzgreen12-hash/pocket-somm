@@ -21,6 +21,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useAuth } from '../hooks/useAuth';
 import { WineReviewShareCard } from './WineReviewShareCard';
+import { getCachedLabelUri } from '../api/labelImageCache';
 import { publishCommunityReview } from '../api/community';
 import { patchChosenWine, clearChosenReview } from '../api/chosenWines';
 import { addCellarWine } from '../api/cellar';
@@ -69,6 +70,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   const [wishlist, setWishlist] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [removeWishlistOpen, setRemoveWishlistOpen] = useState(false);
   // Edit-identity sheet (name / vintage / region + thumbnail).
@@ -325,6 +327,9 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
   async function handleShare() {
     if (!wine || sharing) return;
     Keyboard.dismiss();
+    let labelUri: string | null = null;
+    if (wine.label_image_path) { try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ } }
+    setShareLabelUri(labelUri);
     setSharing(true);
     try {
       await new Promise((r) => setTimeout(r, 250));
@@ -643,6 +648,7 @@ export function EditChosenWineModal({ wine, visible, onClose, onSaved, initialId
             date={wine.chosen_at ? new Date(wine.chosen_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
             location={wine.restaurant_name ?? null}
             isFavourite={wine.is_favourite}
+            imageUri={shareLabelUri}
           />
         </View>
       )}

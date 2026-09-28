@@ -13,6 +13,7 @@ import { useAuth } from '../hooks/useAuth';
 import { LabelThumb } from './LabelThumb';
 import { ReviewCardHeader, ReviewedStamp } from './ReviewCardHeader';
 import { WineReviewShareCard } from './WineReviewShareCard';
+import { getCachedLabelUri } from '../api/labelImageCache';
 import { publishCommunityReview } from '../api/community';
 import { syncReviewToCellar, syncEditToChosen, splitLocationString } from '../services/reviewSync';
 import { captureCity } from '../utils/captureCity';
@@ -67,6 +68,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
   const [posting, setPosting] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [shareLabelUri, setShareLabelUri] = useState<string | null>(null);
 
   const shareCardRef = useRef<View>(null);
 
@@ -243,6 +245,9 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
   async function handleShare() {
     if (!wine || sharing) return;
     Keyboard.dismiss();
+    let labelUri: string | null = null;
+    if (wine.label_image_path) { try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ } }
+    setShareLabelUri(labelUri);
     setSharing(true);
     try {
       await new Promise((r) => setTimeout(r, 250));
@@ -378,6 +383,7 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
             date={reviewDate ? new Date(reviewDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null}
             location={[locName.trim(), locCity.trim()].filter(Boolean).join(', ') || null}
             isFavourite={wine.is_favourite}
+            imageUri={shareLabelUri}
           />
         </View>
       )}
