@@ -601,6 +601,14 @@ export default function FullCellarListScreen() {
     : archivedFilter === 'include'
       ? [...wines, ...archivedWines]
       : wines;
+  // Alt Cellars split into home vs external (migration 097). Racks/fridges/bins are
+  // always home; only Alt Cellars (storage_locations) can be external. Declared
+  // BEFORE `filtered` — the Home/External filter branches read it, so a later
+  // declaration threw a temporal-dead-zone error ("something went wrong").
+  const externalLocIds = useMemo(
+    () => new Set(storageLocations.filter((s) => s.is_external).map((s) => s.id)),
+    [storageLocations],
+  );
   const filtered = baseWines.filter((w) => {
     if (locationFilter !== 'All') {
       const wp = placementsByWine.get(w.id) ?? [];
@@ -699,12 +707,6 @@ export default function FullCellarListScreen() {
 
   // Location dropdown: All · each rack/fridge · each custom location · Not in a
   // rack · "+ Add Location" (an action, handled specially in onSelect).
-  // Alt Cellars split into home vs external (migration 097). Racks/fridges/bins
-  // are always home; only Alt Cellars (storage_locations) can be external.
-  const externalLocIds = useMemo(
-    () => new Set(storageLocations.filter((s) => s.is_external).map((s) => s.id)),
-    [storageLocations],
-  );
   const locationOptions = useMemo(() => {
     type Opt = { value: string; label: string; indent?: boolean; group?: boolean; header?: boolean; disabled?: boolean };
     const homeCellars = storageLocations.filter((s) => !s.is_external);
@@ -718,7 +720,7 @@ export default function FullCellarListScreen() {
     opts.push({ value: 'home', label: 'View All', indent: true });
     for (const r of racks) opts.push({ value: r.id, label: r.name, indent: true });
     for (const s of homeCellars) opts.push({ value: `sloc:${s.id}`, label: s.name, indent: true });
-    opts.push({ value: 'Unassigned', label: 'Loose Bottles', indent: true });
+    opts.push({ value: 'Unassigned', label: 'Unplaced Bottles', indent: true });
     // External group — a non-selectable title (tapping it routed to a broken view).
     // Once any external cellars exist, "View All" (all external wines) leads, then
     // each cellar; until then a "Nothing here yet" placeholder.

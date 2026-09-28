@@ -145,6 +145,10 @@ export default function ImportCellarScreen() {
   // How many bottles were merged into wines already in the cellar (for the
   // done-screen summary). Set on a successful import.
   const [mergedBottles, setMergedBottles] = useState(0);
+  // Per-wine merge detail for the done screen: which existing wines gained bottles.
+  const [mergedList, setMergedList] = useState<Array<{ name: string; added: number; base: number }>>([]);
+  // The location this import was filed into (for the done-screen "view it here" line).
+  const [importedLocationName, setImportedLocationName] = useState<string | null>(null);
   // Existing cellar wines keyed by identity, so a 'cellar' duplicate can be
   // merged into its existing row (bottle count += imported qty) rather than
   // spawning a parallel cellar line.
@@ -516,6 +520,8 @@ export default function ImportCellarScreen() {
     // Running per-existing-wine target quantity, so several imported rows that
     // map to the same cellar wine accumulate instead of clobbering each other.
     const mergeTotals = new Map<string, number>();
+    // Per existing-wine merge detail (name, bottles added this import, prior count).
+    const mergedInfo = new Map<string, { name: string; added: number; base: number }>();
     try {
       // Bulk add identity + quantity + price. No per-wine AI enrichment here —
       // a cellar import can be dozens of wines; the user can generate intel on
@@ -531,6 +537,12 @@ export default function ImportCellarScreen() {
           const next = base + qty;
           mergeTotals.set(existing.id, next);
           await updateCellarWine(existing.id, { quantity: next });
+          const info = mergedInfo.get(existing.id);
+          mergedInfo.set(existing.id, {
+            name: [existing.producer, existing.wine_name, existing.vintage].filter(Boolean).join(' '),
+            added: (info?.added ?? 0) + qty,
+            base: info?.base ?? (existing.quantity ?? 0),
+          });
           succeeded.push(i);
           bottlesAdded += qty;
           mergedBottlesRun += qty;
@@ -586,6 +598,8 @@ export default function ImportCellarScreen() {
       }
       setAddedCount((prev) => prev + bottlesAdded);
       setMergedBottles((prev) => prev + mergedBottlesRun);
+      setMergedList(Array.from(mergedInfo.values()));
+      setImportedLocationName(locationId ? (locations.find((l) => l.id === locationId)?.name ?? null) : null);
       setStage('done');
     } catch (err) {
       console.warn('import-cellar: partial failure after', succeeded.length, 'of', keptIndices.length, err);
@@ -724,10 +738,19 @@ export default function ImportCellarScreen() {
         <View style={styles.centerBlock}>
           <Text style={styles.doneTitle}>Cellar imported</Text>
           <Text style={styles.hint}>
-            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}. Open each wine in your Cellar List to place the wines, or add them to a Location filter.
+            {addedCount} bottle{addedCount === 1 ? '' : 's'} added{mergedBottles > 0 ? ` — ${mergedBottles} of them merged into wines already in your cellar` : ''}.{'\n\n'}This import can be viewed in Your Cellar List{importedLocationName ? ` in your ${importedLocationName} folder` : ''}.
           </Text>
+          {mergedList.length > 0 ? (
+            <View style={styles.mergedBlock}>
+              {mergedList.map((m, i) => (
+                <Text key={i} style={styles.mergedLine} numberOfLines={2}>
+                  {m.name} — {m.added} bottle{m.added === 1 ? '' : 's'} added to {m.base} in your cellar
+                </Text>
+              ))}
+            </View>
+          ) : null}
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/cellar/list')} activeOpacity={0.85}>
-            <Text style={styles.doneBtnText}>View Cellar List</Text>
+            <Text style={styles.doneBtnText}>View Full Cellar List</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.doneBtn} onPress={() => router.replace('/(tabs)/cellar')} activeOpacity={0.85}>
             <Text style={styles.doneBtnText}>Done</Text>
@@ -839,6 +862,8 @@ const styles = StyleSheet.create({
   doneBtnText: { color: '#FFFFFF', fontFamily: fonts.headingSemibold, fontSize: 14, textAlign: 'center' },
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, letterSpacing: 1.2, textTransform: 'uppercase', marginBottom: spacing.sm },
   doneTitle: { fontFamily: fonts.headingBold, fontSize: 26, color: colors.text, textAlign: 'center' },
+  mergedBlock: { alignSelf: 'stretch', gap: spacing.xs, marginTop: spacing.xs },
+  mergedLine: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.text, textAlign: 'center', lineHeight: 20 },
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
   rowOff: { opacity: 0.4 },
   checkbox: { fontSize: 22, color: colors.textMuted },
