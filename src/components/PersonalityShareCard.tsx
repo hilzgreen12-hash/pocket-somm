@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { colors, share } from '../constants/theme';
 import { personalityBlurb } from '../utils/personalityText';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 
@@ -50,16 +50,16 @@ const PADDING = 90;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
     padding: 28,
   },
   inner: {
     borderWidth: 4,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 36,
     paddingHorizontal: PADDING,
     paddingVertical: PADDING - 16,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
   },
   topRow: {
     alignItems: 'center',
@@ -67,25 +67,25 @@ const styles = StyleSheet.create({
   brand: {
     fontFamily: 'CormorantGaramond_700Bold',
     fontSize: 64,
-    color: '#FFFFFF',
+    color: share.ink,
     letterSpacing: 12,
   },
   brandTagline: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 29,
-    color: 'rgba(255,255,255,0.55)',
+    color: share.inkMuted,
     marginTop: 6,
     letterSpacing: 1.5,
   },
   divider: {
     height: 1,
-    backgroundColor: 'rgba(224,184,74,0.55)',
+    backgroundColor: share.brandDim,
     marginVertical: 36,
   },
   subhead: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 32,
-    color: 'rgba(224,184,74,0.85)',
+    color: share.gold,
     textTransform: 'uppercase',
     letterSpacing: 6,
     textAlign: 'center',
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
   blurb: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 30,
-    color: 'rgba(255,255,255,0.75)',
+    color: share.ink,
     lineHeight: 42,
     textAlign: 'center',
     marginBottom: 36,
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   title: {
     fontFamily: 'CormorantGaramond_700Bold',
     fontSize: 80,
-    color: colors.gold,
+    color: share.brand,
     letterSpacing: 1,
     lineHeight: 90,
     textAlign: 'center',
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   body: {
     fontFamily: 'CormorantGaramond_400Regular',
     fontSize: 36,
-    color: '#FFFFFF',
+    color: share.ink,
     lineHeight: 56,
   },
   footer: {
@@ -121,20 +121,20 @@ const styles = StyleSheet.create({
   footerLine: {
     fontFamily: 'CormorantGaramond_700Bold',
     fontSize: 26,
-    color: colors.gold,
+    color: share.brand,
     letterSpacing: 4,
   },
   footerCta: {
     fontFamily: 'CormorantGaramond_400Regular_Italic',
     fontSize: 24,
-    color: 'rgba(255,255,255,0.70)',
+    color: share.inkMuted,
     marginTop: 8,
     textAlign: 'center',
   },
   footerUrl: {
     fontFamily: 'CormorantGaramond_600SemiBold',
     fontSize: 26,
-    color: '#FFFFFF',
+    color: share.ink,
     marginTop: 8,
     letterSpacing: 0.5,
   },

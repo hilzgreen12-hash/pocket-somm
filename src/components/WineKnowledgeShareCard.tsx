@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { colors, share } from '../constants/theme';
 import { VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 
 // Branded card for sharing a wine's "Dive Deeper" knowledge — the four
@@ -68,29 +68,29 @@ const CARD_WIDTH = 1080;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
     padding: 28,
   },
   inner: {
     borderWidth: 4,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 36,
     paddingHorizontal: 72,
     paddingVertical: 72,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
   },
   topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: '#FFFFFF', letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: 'rgba(255,255,255,0.70)', marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: 36 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: colors.gold, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
-  wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: '#FFFFFF', lineHeight: 52, textAlign: 'center' },
-  grapeLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: colors.gold, lineHeight: 38, textAlign: 'center', marginTop: 6 },
-  shortDivider: { width: 80, height: 1, backgroundColor: 'rgba(224,184,74,0.55)', alignSelf: 'center', marginVertical: 40 },
+  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
+  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
+  divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 36 },
+  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
+  wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: share.ink, lineHeight: 52, textAlign: 'center' },
+  grapeLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.brand, lineHeight: 38, textAlign: 'center', marginTop: 6 },
+  shortDivider: { width: 80, height: 1, backgroundColor: share.brandDim, alignSelf: 'center', marginVertical: 40 },
   section: { marginBottom: 36 },
-  sectionLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: colors.gold, textTransform: 'uppercase', letterSpacing: 5, marginBottom: 12 },
-  body: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: 'rgba(255,255,255,0.92)', lineHeight: 42 },
+  sectionLabel: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: share.brand, textTransform: 'uppercase', letterSpacing: 5, marginBottom: 12 },
+  body: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: share.ink, lineHeight: 42 },
   footer: { alignItems: 'center', marginTop: 12 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },
+  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
+  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
 });

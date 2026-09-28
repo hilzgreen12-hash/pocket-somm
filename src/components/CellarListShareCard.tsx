@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { colors, share } from '../constants/theme';
 import { VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 import { wineHeaderLine } from '../utils/wineHeader';
 
@@ -76,36 +76,36 @@ const CARD_WIDTH = 1080;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
     padding: 28,
   },
   inner: {
     borderWidth: 4,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 36,
     paddingHorizontal: 64,
     paddingVertical: 64,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
   },
   topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: '#FFFFFF', letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: 'rgba(255,255,255,0.70)', marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: 32 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 38, color: colors.gold, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center' },
-  countLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginTop: 10 },
-  filterLine: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: 'rgba(224,184,74,0.85)', textAlign: 'center', marginTop: 6, textTransform: 'uppercase', letterSpacing: 2 },
+  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
+  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
+  divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 32 },
+  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 38, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center' },
+  countLine: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.ink, textAlign: 'center', marginTop: 10 },
+  filterLine: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.gold, textAlign: 'center', marginTop: 6, textTransform: 'uppercase', letterSpacing: 2 },
   list: {
     borderWidth: 2,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 22,
     marginTop: 32,
     paddingVertical: 8,
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    backgroundColor: 'rgba(127,79,76,0.06)',
   },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 16, paddingHorizontal: 28, gap: 20 },
-  rowName: { flex: 1, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: '#FFFFFF', lineHeight: 36 },
-  rowQty: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold },
+  rowName: { flex: 1, fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: share.ink, lineHeight: 36 },
+  rowQty: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand },
   footer: { alignItems: 'center', marginTop: 36 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },
+  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
+  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
 });

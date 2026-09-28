@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { colors, share } from '../constants/theme';
 import { currencySymbol } from '../constants/currency';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 import type { WineRecommendation } from '../types/wine';
@@ -105,48 +105,48 @@ const CARD_WIDTH = 1080;
 const styles = StyleSheet.create({
   card: {
     width: CARD_WIDTH,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
     padding: 28,
   },
   inner: {
     borderWidth: 4,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 36,
     paddingHorizontal: 72,
     paddingVertical: 72,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
   },
   topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: '#FFFFFF', letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: 'rgba(255,255,255,0.70)', marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: 36 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: colors.gold, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 24 },
+  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
+  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
+  divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 36 },
+  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 24 },
   stamp: { alignItems: 'center', marginBottom: 36 },
-  stampDate: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: colors.gold, textTransform: 'uppercase', letterSpacing: 2.5 },
-  stampLocation: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: 'rgba(255,255,255,0.85)', marginTop: 8 },
+  stampDate: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: share.brand, textTransform: 'uppercase', letterSpacing: 2.5 },
+  stampLocation: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.ink, marginTop: 8 },
   // No flex / justify-center here — content sits at its natural height so
   // the card grows to fit, no empty vertical space to fill.
   wines: { gap: 32 },
   wineRow: {
     borderWidth: 2,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 22,
     paddingHorizontal: 36,
     paddingVertical: 32,
-    backgroundColor: 'rgba(0,0,0,0.12)',
+    backgroundColor: 'rgba(127,79,76,0.06)',
   },
   rankRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 14 },
-  rankLabel: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, textTransform: 'uppercase', letterSpacing: 3 },
+  rankLabel: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, textTransform: 'uppercase', letterSpacing: 3 },
   scoreCol: { alignItems: 'flex-end' },
-  scoreText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 40, color: '#FFFFFF' },
-  scoreUnit: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 26, color: 'rgba(255,255,255,0.75)' },
-  priceText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 30, color: 'rgba(255,255,255,0.85)', marginTop: 4 },
-  wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: '#FFFFFF', lineHeight: 52, marginBottom: 8 },
-  wineDetail: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: 'rgba(255,255,255,0.85)', lineHeight: 38 },
-  wineFlavour: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 28, color: colors.gold, lineHeight: 36, marginTop: 14 },
-  wineStandout: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 27, color: 'rgba(255,255,255,0.9)', lineHeight: 35, marginTop: 12 },
+  scoreText: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 40, color: share.gold },
+  scoreUnit: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 26, color: share.gold },
+  priceText: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 30, color: share.gold, marginTop: 4 },
+  wineName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: share.ink, lineHeight: 52, marginBottom: 8 },
+  wineDetail: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 30, color: share.ink, lineHeight: 38 },
+  wineFlavour: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 28, color: share.brand, lineHeight: 36, marginTop: 14 },
+  wineStandout: { fontFamily: 'CormorantGaramond_400Regular', fontSize: 27, color: share.ink, lineHeight: 35, marginTop: 12 },
   footer: { alignItems: 'center', marginTop: 44 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },
-  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: '#FFFFFF', marginTop: 8, letterSpacing: 0.5 },
+  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
+  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
+  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 28, color: share.ink, marginTop: 8, letterSpacing: 0.5 },
 });

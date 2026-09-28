@@ -1,6 +1,6 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { colors } from '../constants/theme';
+import { colors, share } from '../constants/theme';
 import { VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
 
 // Branded card for sharing an archived night's lineup: the photo + a date (and
@@ -58,32 +58,32 @@ export const LineupShareCard = forwardRef<View, Props>(
 const CARD_WIDTH = 1080;
 
 const styles = StyleSheet.create({
-  card: { width: CARD_WIDTH, backgroundColor: colors.background, padding: 28 },
+  card: { width: CARD_WIDTH, backgroundColor: share.bg, padding: 28 },
   inner: {
     borderWidth: 4,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 36,
     paddingHorizontal: 64,
     paddingVertical: 64,
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
   },
   topRow: { alignItems: 'center' },
-  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: '#FFFFFF', letterSpacing: 14 },
-  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: 'rgba(255,255,255,0.70)', marginTop: 8, letterSpacing: 1.5 },
-  divider: { height: 1, backgroundColor: 'rgba(224,184,74,0.55)', marginVertical: 32 },
-  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 38, color: colors.gold, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center' },
-  stamp: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: 'rgba(255,255,255,0.85)', textAlign: 'center', marginTop: 10 },
+  brand: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 72, color: share.brand, letterSpacing: 14 },
+  brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
+  divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 32 },
+  subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 38, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center' },
+  stamp: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.ink, textAlign: 'center', marginTop: 10 },
   photoWrap: {
     marginTop: 32,
     borderWidth: 2,
-    borderColor: colors.gold,
+    borderColor: share.brand,
     borderRadius: 22,
     overflow: 'hidden',
-    backgroundColor: colors.background,
+    backgroundColor: share.bg,
   },
   photo: { width: '100%', height: 660 },
-  note: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: '#FFFFFF', lineHeight: 44, marginTop: 32, textAlign: 'center' },
+  note: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.ink, lineHeight: 44, marginTop: 32, textAlign: 'center' },
   footer: { alignItems: 'center', marginTop: 40 },
-  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: colors.gold, letterSpacing: 4 },
-  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: 'rgba(255,255,255,0.70)', marginTop: 8, textAlign: 'center' },
+  footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
+  footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
 });
