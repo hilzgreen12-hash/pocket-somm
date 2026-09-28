@@ -15,6 +15,7 @@ import { AddPhotoThumb } from '../../src/components/AddPhotoThumb';
 import { LabelPhotoViewer } from '../../src/components/LabelPhotoViewer';
 import { generateWineIntel } from '../../src/services/pricing';
 import { labelSignedUrl } from '../../src/api/labelPhotos';
+import { getCachedLabelUri } from '../../src/api/labelImageCache';
 import { fetchAutoLabelUri } from '../../src/api/label';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { useLastIntelStore } from '../../src/stores/lastIntelStore';
@@ -91,6 +92,7 @@ export default function RestaurantReviewsScreen() {
     ratingValue: number | null;
     note: string | null;
     wines: Array<{ producer: string | null; wineName: string; vintage: string | number | null; userScore: number | null }>;
+    imageUri?: string | null;
   } | null>(null);
 
   // Render a single rating as a "★★★★☆ (4/5)" plain-text line for the
@@ -119,6 +121,10 @@ export default function RestaurantReviewsScreen() {
       userScore: cw.user_score,
     }));
 
+    let venueUri: string | null = null;
+    if (item.restaurantPhotoPath) {
+      try { venueUri = await getCachedLabelUri(item.restaurantPhotoPath); } catch { /* no photo */ }
+    }
     setRestaurantSharePayload({
       restaurantName: restaurant,
       city: item.city?.trim() || null,
@@ -131,6 +137,7 @@ export default function RestaurantReviewsScreen() {
       ratingValue: item.ratingValue,
       note: item.restaurantNote?.trim() || null,
       wines: winesForCard,
+      imageUri: venueUri,
     });
     setRestaurantSharing(true);
 
@@ -1001,6 +1008,7 @@ export default function RestaurantReviewsScreen() {
             ratingValue={restaurantSharePayload.ratingValue}
             note={restaurantSharePayload.note}
             wines={restaurantSharePayload.wines}
+            imageUri={restaurantSharePayload.imageUri}
           />
         </View>
       )}

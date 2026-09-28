@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors, share } from '../constants/theme';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 
@@ -29,6 +29,7 @@ interface Props {
   ratingValue: number | null;
   note: string | null;
   wines: WineRow[];                           // wines chosen on this visit
+  imageUri?: string | null;                   // resolved local uri for the venue photo
 }
 
 // Renders a five-star line for a rating that fits the brand palette.
@@ -52,7 +53,7 @@ function wineRowLine(w: WineRow): string {
 }
 
 export const RestaurantReviewShareCard = forwardRef<View, Props>(
-  ({ restaurantName, city, date, ratingOverall, ratingFood, ratingService, ratingWineList, ratingAtmosphere, ratingValue, note, wines }, ref) => {
+  ({ restaurantName, city, date, ratingOverall, ratingFood, ratingService, ratingWineList, ratingAtmosphere, ratingValue, note, wines, imageUri }, ref) => {
     const stampLocation = [restaurantName, city].filter(Boolean).join(' · ');
     const hasAnyRating = ratingOverall != null || ratingFood != null || ratingService != null || ratingWineList != null || ratingAtmosphere != null || ratingValue != null;
 
@@ -72,6 +73,12 @@ export const RestaurantReviewShareCard = forwardRef<View, Props>(
             <Text style={styles.stampName} numberOfLines={2}>{stampLocation}</Text>
             {date ? <Text style={styles.stampDate}>{date}</Text> : null}
           </View>
+
+          {imageUri ? (
+            <View style={styles.photoFrame}>
+              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+            </View>
+          ) : null}
 
           {hasAnyRating ? (
             <View style={styles.ratingsBlock}>
@@ -138,6 +145,8 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 36 },
   subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
   stamp: { alignItems: 'center', marginBottom: 32, gap: 8 },
+  photoFrame: { width: '100%', height: 480, borderRadius: 22, borderWidth: 2, borderColor: share.brand, overflow: 'hidden', marginBottom: 28, backgroundColor: 'rgba(127,79,76,0.06)' },
+  photo: { width: '100%', height: '100%' },
   stampName: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 44, color: share.ink, textAlign: 'center', lineHeight: 52 },
   stampDate: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 28, color: share.brand, textTransform: 'uppercase', letterSpacing: 2.5 },
   ratingsBlock: {
