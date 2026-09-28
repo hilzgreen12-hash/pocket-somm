@@ -1,4 +1,5 @@
 import { generateWineIntel } from './pricing';
+import { fetchAutoLabelUri } from '../api/label';
 import { updateCellarWine } from '../api/cellar';
 import type { CellarWine } from '../types/wine';
 
@@ -38,6 +39,17 @@ export async function updateCellarIntelBatch(
           vintage: w.vintage || 'NV',
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
         } as any, currency);
+        // Give a photo-less wine a thumbnail while we're here: fetch a web label
+        // image for its identity (best-effort). A remote URL is a valid
+        // label_image_path — the app renders it directly. Skips wines that already
+        // have a photo.
+        let labelPatch: { label_image_path?: string } = {};
+        if (!w.label_image_path) {
+          try {
+            const lbl = await fetchAutoLabelUri(w.producer, w.wine_name);
+            if (lbl) labelPatch = { label_image_path: lbl };
+          } catch { /* no label found — leave without a photo */ }
+        }
         await updateCellarWine(w.id, {
           estimated_value: intel.estimatedValue,
           estimated_value_currency: currency,
@@ -47,6 +59,7 @@ export async function updateCellarIntelBatch(
           critic_score_note: intel.criticScoreNote ?? null,
           // Canonical identity anchor when Wine-Searcher matched.
           ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
+          ...labelPatch,
         });
       } catch {
         // Skip on error — partial progress beats failing the whole batch.
