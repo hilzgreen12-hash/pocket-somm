@@ -78,6 +78,12 @@ export function RecentScansCarousel() {
   const seen = new Set<string>();
   const labelItems: Recent[] = [];
   for (const l of labels) {
+    // Recent Scans surfaces genuine label scans, which carry a stored intel
+    // snapshot. Skip intel-less labels (older review / "Select from Cellar" rows):
+    // tapping one would try to regenerate from an incomplete identity and fail
+    // ("couldn't generate intel"). Filtered BEFORE de-dup so an intel-bearing
+    // duplicate of the same wine isn't shadowed by a newer intel-less one.
+    if (!l.intel) continue;
     const key = labelKey(l.producer, l.wine_name, l.vintage);
     if (seen.has(key)) continue;
     seen.add(key);
