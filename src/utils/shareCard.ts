@@ -58,14 +58,17 @@ function renameForShare(fromUri: string, sharerName: string | null | undefined, 
 // Share a captured (captureRef PNG) or generated (expo-print PDF) Vinster result.
 export async function shareResult(
   fromUri: string,
-  opts: { sharerName?: string | null; mimeType?: string; dialogTitle?: string } = {},
+  opts: { sharerName?: string | null; mimeType?: string; dialogTitle?: string; message?: string | null } = {},
 ): Promise<void> {
   const mime = opts.mimeType ?? 'image/png';
   const ext = mime === 'application/pdf' ? 'pdf' : 'png';
   const uri = renameForShare(fromUri, opts.sharerName, ext);
-  const message = vinsterShareMessage(opts.sharerName);
   const name = (opts.sharerName ?? '').trim() || 'Someone';
-  const sentence = `${name} has shared a Vinster result with you.`;
+  // Lead caption: a specific, branded sentence the caller supplied (e.g. "She's
+  // Vinster has shared a recipe with you: Seared Scallops paired to …"), else the
+  // generic "shared a Vinster result". The App Store link always rides along.
+  const sentence = (opts.message ?? '').trim() || `${name} has shared a Vinster result with you.`;
+  const message = `${sentence} Get Vinster: ${APP_STORE_URL}`;
 
   try {
     await RNShare.open({

@@ -36,7 +36,12 @@ export async function shareCellarListPdf(
         filterSummary: opts.filterSummary ?? null,
       }),
     });
-    await shareResult(uri, { sharerName: sharerNameFrom(opts.session), mimeType: 'application/pdf' });
+    const name = sharerNameFrom(opts.session);
+    await shareResult(uri, {
+      sharerName: name,
+      mimeType: 'application/pdf',
+      message: `${name} has shared a cellar list with you: ${opts.title} (${items.length} ${items.length === 1 ? 'wine' : 'wines'} · ${totalBottles} ${totalBottles === 1 ? 'bottle' : 'bottles'})`,
+    });
   } catch {
     const lines = items.map((w) => {
       const identity = [wineHeaderLine(w.producer, w.wineName, null), w.region, w.vintage]

@@ -97,7 +97,12 @@ export default function RecipeFullScreen() {
       const Print = require('expo-print');
       const { uri } = await Print.printToFileAsync({ html: buildRecipeHtml(pairing, wineLine) });
       if (await Sharing.isAvailableAsync()) {
-        await shareResult(uri, { sharerName: sharerNameFrom(session), mimeType: 'application/pdf' });
+        const name = sharerNameFrom(session);
+        await shareResult(uri, {
+          sharerName: name,
+          mimeType: 'application/pdf',
+          message: `${name} has shared a recipe with you: ${pairing.dishName}${wineLine ? ` paired to ${wineLine}` : ''}`,
+        });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
