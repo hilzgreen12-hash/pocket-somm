@@ -39,6 +39,24 @@ export const colors = {
   error: '#D44040',
 };
 
+// ---- Share-card palette --------------------------------------------------
+// Shareable/exported artwork (all *ShareCard components + the PDF/HTML builders)
+// uses ONE consistent template, distinct from the in-app terracotta theme:
+// a CREAM background with TERRACOTTA branding (wordmark, rules, borders, labels)
+// and BLACK body text. Change these in one place to restyle every share surface.
+export const share = {
+  bg: '#F4EBE0',                    // cream background
+  brand: '#7F4F4C',                 // terracotta — wordmark, borders, subheads, accents
+  brandDim: 'rgba(127,79,76,0.55)', // terracotta rule / faded label
+  rule: 'rgba(127,79,76,0.45)',     // divider lines
+  ink: '#1A1A1A',                   // near-black body text
+  inkMuted: 'rgba(26,26,26,0.60)',  // secondary/caption text
+  // Gold reserved for HIGHLIGHT FIGURES only (critic score, estimated value,
+  // ratings) so key numbers pop. Deeper than the app gold (#E0B84A), which is
+  // tuned for the dark app bg and would wash out on cream.
+  gold: '#B5852A',
+};
+
 export const spacing = {
   xs: 4,
   sm: 8,
