@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator, Keyboard } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, TextInput, StyleSheet, Image, ActivityIndicator } from 'react-native';
 import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import * as Sharing from 'expo-sharing';
 import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
@@ -70,11 +70,6 @@ export default function LineupDetailScreen() {
   // input, and saving converts it back to text.
   const [noteEditorOpen, setNoteEditorOpen] = useState(false);
   const [noteDraft, setNoteDraft] = useState('');
-  // Free-text venue (restaurant / bar / home), edited inline via the pin field.
-  const [venue, setVenue] = useState('');
-  // Shows a subtle "Done" beneath the inline venue while it's being edited, so
-  // there's a clear way to confirm and dismiss the keyboard.
-  const [venueFocused, setVenueFocused] = useState(false);
   // Inline "Title" field (the lineup's name), saved on blur.
   const [name, setName] = useState('');
   // Which wine row (index) is being matched to a cellar wine via the picker.
@@ -84,7 +79,6 @@ export default function LineupDetailScreen() {
     if (lineup && !hydrated.current) {
       hydrated.current = true;
       setNote(lineup.note ?? '');
-      setVenue(lineup.venue ?? '');
       setName(lineup.name ?? '');
       lineupSignedUrl(lineup.image_path).then(setPhotoUrl);
     }
@@ -110,18 +104,6 @@ export default function LineupDetailScreen() {
     }
   }
 
-  async function saveVenue() {
-    if (!lineup) return;
-    if ((venue.trim() || null) === (lineup.venue?.trim() || null)) return; // unchanged
-    try {
-      await updateLineupStamp(lineup.id, { venue });
-      qc.invalidateQueries({ queryKey: ['lineup', id] });
-      qc.invalidateQueries({ queryKey: ['lineup-archives'] });
-    } catch (err) {
-      showAlert({ title: 'Could not save venue', body: err instanceof Error ? err.message : 'Please try again.' });
-    }
-  }
-
   // Inline "Title" save (on blur) — the lineup's name.
   async function saveNameInline() {
     if (!lineup) return;
@@ -135,17 +117,42 @@ export default function LineupDetailScreen() {
     }
   }
 
-  // Inline "brief thoughts" save (on blur).
-  async function saveNoteInline() {
+  // Write the note to the DB (no local setState — callers own that). The lineup
+  // refetch this triggers won't clobber the live draft: hydration is one-shot.
+  async function saveNoteToDb(next: string) {
     if (!lineup) return;
-    if ((note.trim() || null) === (lineup.note?.trim() || null)) return; // unchanged
     try {
-      await setLineupNote(lineup.id, note.trim() || null);
+      await setLineupNote(lineup.id, next.trim() || null);
       qc.invalidateQueries({ queryKey: ['lineup', id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
     } catch (err) {
       showAlert({ title: 'Could not save note', body: err instanceof Error ? err.message : 'Please try again.' });
     }
+  }
+  // Mic dictation fires on every interim chunk — update the copy live, but debounce
+  // the DB write so a single dictation is one save, not dozens.
+  const noteSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function onNoteDictate(next: string) {
+    setNote(next);
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    noteSaveTimer.current = setTimeout(() => { void saveNoteToDb(next); }, 900);
+  }
+  // Immediate persist for clearing (trash / mic clear).
+  function persistNote(next: string) {
+    if (noteSaveTimer.current) clearTimeout(noteSaveTimer.current);
+    setNote(next);
+    void saveNoteToDb(next);
+  }
+  function confirmClearNote() {
+    if (!note.trim()) return;
+    showAlert({
+      title: 'Clear these notes?',
+      body: 'This removes your lineup notes & musings.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Clear', style: 'destructive', onPress: () => persistNote('') },
+      ],
+    });
   }
 
   // Persist an updated wines array (used by tick-to-confirm and cellar-matching).
@@ -160,13 +167,20 @@ export default function LineupDetailScreen() {
     }
   }
   // Tick / untick "this read is correct" on a wine.
-  function toggleWineConfirmed(index: number) {
-    if (!lineup) return;
-    const current: LineupWine[] = lineup.wines ?? [];
-    persistWines(current.map((w, i) => (i === index ? { ...w, confirmed: !w.confirmed } : w)));
+  // Tapping "Off Cellar" → confirm this bottle was from the cellar, then open the
+  // picker to link it to the real cellar wine.
+  function confirmFromCellar(index: number) {
+    showAlert({
+      title: 'This was from my cellar',
+      body: 'Link this bottle to a wine in your cellar so its review, intel and archiving all resolve correctly.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Choose from my cellar', onPress: () => setCellarPickerFor(index) },
+      ],
+    });
   }
-  // "This is in my cellar" → link a lineup wine to a chosen cellar wine, adopting
-  // its identity (so its review/intel/archiving all resolve correctly).
+  // Link a lineup wine to a chosen cellar wine, adopting its identity (so its
+  // review/intel/archiving all resolve correctly).
   function pickCellarForWine(cw: CellarWine) {
     if (cellarPickerFor == null || !lineup) { setCellarPickerFor(null); return; }
     const current: LineupWine[] = lineup.wines ?? [];
@@ -183,6 +197,7 @@ export default function LineupDetailScreen() {
   const [stampOpen, setStampOpen] = useState(false);
   const [dateDraft, setDateDraft] = useState('');
   const [cityDraft, setCityDraft] = useState('');
+  const [venueDraft, setVenueDraft] = useState('');
   const [savingStamp, setSavingStamp] = useState(false);
 
   function openStampEdit() {
@@ -193,6 +208,7 @@ export default function LineupDetailScreen() {
     const local = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     setDateDraft(local);
     setCityDraft(lineup.city ?? '');
+    setVenueDraft(lineup.venue ?? '');
     setStampOpen(true);
   }
   async function saveStamp() {
@@ -210,6 +226,7 @@ export default function LineupDetailScreen() {
       await updateLineupStamp(lineup.id, {
         archivedAt: valid ? new Date(`${ymd}T12:00:00`).toISOString() : undefined,
         city: cityDraft,
+        venue: venueDraft,
       });
       qc.invalidateQueries({ queryKey: ['lineup', id] });
       qc.invalidateQueries({ queryKey: ['lineup-archives'] });
@@ -592,7 +609,7 @@ export default function LineupDetailScreen() {
   );
 
   const dateStr = new Date(lineup.archived_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-  const stamp = [dateStr, lineup.city].filter(Boolean).join(' · ');
+  const stamp = [dateStr, lineup.city, lineup.venue].filter(Boolean).join(' · ');
   const wines: LineupWine[] = lineup.wines ?? [];
 
   return (
@@ -609,7 +626,7 @@ export default function LineupDetailScreen() {
           </TouchableOpacity>
         </View>
         {/* Fixed screen title for the review flow. */}
-        <Text style={styles.headerTitle} numberOfLines={1}>Capturing Your Lineup</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>Your Lineup</Text>
         {/* Title — the lineup's own name, saved on blur. */}
         <TextInput
           style={styles.titleInput}
@@ -624,54 +641,10 @@ export default function LineupDetailScreen() {
           spellCheck={false}
           autoCorrect={false}
         />
-        {/* Date · City below the title (tap to edit date/city). */}
+        {/* Date · Location · Venue on one line (tap to edit all three). */}
         <TouchableOpacity style={styles.headerStampWrap} onPress={openStampEdit} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
-          <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location'}</Text>
+          <Text style={styles.headerStamp} numberOfLines={1}>{stamp || 'Add date · location · venue'}</Text>
         </TouchableOpacity>
-        {/* Venue — a single centred input beneath the date/location (no pin icon);
-            saved on blur/submit. Shows "Input Venue" when empty. */}
-        <View style={styles.venueRow}>
-          <TextInput
-            style={styles.venueInput}
-            value={venue}
-            onChangeText={setVenue}
-            onFocus={() => setVenueFocused(true)}
-            onEndEditing={() => { setVenueFocused(false); saveVenue(); }}
-            onSubmitEditing={saveVenue}
-            placeholder="Input Venue"
-            placeholderTextColor={colors.textMuted}
-            returnKeyType="done"
-            textAlign="center"
-            spellCheck={false}
-            autoCorrect={false}
-          />
-          {venueFocused ? (
-            <TouchableOpacity onPress={() => Keyboard.dismiss()} hitSlop={{ top: 6, bottom: 6, left: 10, right: 10 }} activeOpacity={0.7}>
-              <Text style={styles.venueDone}>Done</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-        {/* Once linked, the row becomes a link straight to the matched
-            restaurant review card (long-press to re-match); otherwise it opens
-            the picker to match this lineup to a review. */}
-        {matchedRestaurant ? (
-          <View style={styles.matchRowInline}>
-            <TouchableOpacity
-              onPress={() => router.push(`/restaurants/reviews?openSession=${matchedRestaurant.id}` as any)}
-              activeOpacity={0.7}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Text style={styles.matchLink} numberOfLines={1}>View Your Matched Restaurant Review</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={unmatchLineup} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-              <Text style={styles.unmatchLink}>(unmatch)</Text>
-            </TouchableOpacity>
-          </View>
-        ) : noMatchDismissed ? null : (
-          <TouchableOpacity style={styles.matchRow} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-            <Text style={styles.matchLink} numberOfLines={2}>Match this lineup to a restaurant review?</Text>
-          </TouchableOpacity>
-        )}
       </View>
 
       <KeyboardAvoidingView behavior="padding" style={{ flex: 1 }}>
@@ -690,18 +663,27 @@ export default function LineupDetailScreen() {
             </View>
           </View>
 
-          {/* Brief thoughts — an always-visible input, saved on blur. */}
+          {/* Your Lineup Notes & Musings — dictate with the mic or tap to type;
+              once saved it reads back as copy (like a review) but stays editable. */}
           <View style={styles.noteBlock}>
-            <Text style={styles.noteHeadLabel}>Record some brief thoughts about this lineup</Text>
-            <TextInput
-              style={styles.thoughtsInput}
-              value={note}
-              onChangeText={setNote}
-              onEndEditing={saveNoteInline}
-              placeholder="A few words about the night…"
-              placeholderTextColor={colors.textMuted}
-              multiline
-            />
+            <View style={styles.noteHeadRow}>
+              <Text style={styles.noteHeadLabel}>Your Lineup Notes & Musings</Text>
+              <View style={styles.noteHeadActions}>
+                <MicButton value={note} onChangeText={onNoteDictate} onClear={() => persistNote('')} />
+                <TouchableOpacity onPress={confirmClearNote} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear notes" activeOpacity={0.7}>
+                  <Ionicons name="trash-outline" size={20} color={colors.gold} />
+                </TouchableOpacity>
+              </View>
+            </View>
+            {note.trim() ? (
+              <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
+                <Text style={styles.noteBodyText}>{note}</Text>
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
+                <Text style={styles.notePlaceholder}>Tap to write, or use the mic to dictate your thoughts on this lineup…</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Wines */}
@@ -726,35 +708,34 @@ export default function LineupDetailScreen() {
                 return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
-                    {/* Tap the name (or Edit) to correct a mis-read. */}
+                    {/* Tap the name (or Edit wine) to correct a mis-read. */}
                     <TouchableOpacity onPress={() => openWineEdit(i, w)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
                       <Text style={styles.wineName} numberOfLines={2}>
                         {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                       </Text>
                     </TouchableOpacity>
+                    {/* Status stamp: Your Cellar (matched), or a tappable Off Cellar
+                        that opens "This was from my cellar" to link the bottle. */}
+                    {w.cellar_wine_id ? (
+                      <Text style={styles.stampTag}>Your Cellar</Text>
+                    ) : (
+                      <TouchableOpacity onPress={() => confirmFromCellar(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                        <Text style={styles.stampTag}>Off Cellar</Text>
+                      </TouchableOpacity>
+                    )}
+                    {/* Actions on their own line beneath the stamp. */}
                     <View style={styles.tagRow}>
-                      {/* One status stamp: Your Cellar (matched) or Off Cellar. */}
-                      <Text style={styles.stampTag}>{w.cellar_wine_id ? 'Your Cellar' : 'Off Cellar'}</Text>
                       <TouchableOpacity onPress={() => goToWineReview(w, conn)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>Add/View Review</Text>
+                        <Text style={styles.viewLink}>Your Review</Text>
                       </TouchableOpacity>
                       <Text style={styles.tagDot}>·</Text>
                       <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>View Wine Intel</Text>
+                        <Text style={styles.viewLink}>Wine Intel</Text>
                       </TouchableOpacity>
                       <Text style={styles.tagDot}>·</Text>
                       <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>Edit</Text>
+                        <Text style={styles.viewLink}>Edit Wine</Text>
                       </TouchableOpacity>
-                      {/* Off-cellar wine wrongly read? Link it to the real cellar wine. */}
-                      {!w.cellar_wine_id ? (
-                        <>
-                          <Text style={styles.tagDot}>·</Text>
-                          <TouchableOpacity onPress={() => setCellarPickerFor(i)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                            <Text style={styles.viewLink}>This is in my cellar</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : null}
                       {/* A cellar bottle you drank but haven't archived — archive it here. */}
                       {w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id) ? (
                         <>
@@ -765,18 +746,32 @@ export default function LineupDetailScreen() {
                         </>
                       ) : null}
                     </View>
-                    {!w.confirmed ? (
-                      <Text style={styles.confirmHint}>Tick to confirm this read — or tap the name to correct it.</Text>
-                    ) : null}
                   </View>
-                  {/* Confirmation tick on the right. */}
-                  <TouchableOpacity style={styles.wineCheck} onPress={() => toggleWineConfirmed(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Text style={[styles.wineCheckText, w.confirmed && styles.wineCheckTextOn]}>{w.confirmed ? '☑' : '☐'}</Text>
-                  </TouchableOpacity>
                 </View>
                 );
               })}
             </View>
+          )}
+
+          {/* Match to a restaurant review — a white button at the foot of the page.
+              Once matched it becomes "Your Restaurant Review" (with an unmatch). */}
+          {matchedRestaurant ? (
+            <View style={styles.matchBottomWrap}>
+              <TouchableOpacity
+                style={styles.matchButton}
+                onPress={() => router.push(`/restaurants/reviews?openSession=${matchedRestaurant.id}` as any)}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.matchButtonText}>Your Restaurant Review</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={unmatchLineup} disabled={savingMatch} activeOpacity={0.7} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+                <Text style={styles.unmatchLink}>(unmatch)</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <TouchableOpacity style={styles.matchButton} onPress={() => setRestaurantPickerOpen(true)} activeOpacity={0.85}>
+              <Text style={styles.matchButtonText}>Match to a Restaurant Review</Text>
+            </TouchableOpacity>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -793,7 +788,7 @@ export default function LineupDetailScreen() {
       <Modal visible={stampOpen} transparent animationType="fade" onRequestClose={() => setStampOpen(false)}>
         <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setStampOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
-            <Text style={styles.stampTitle}>Date & location</Text>
+            <Text style={styles.stampTitle}>Date, location & venue</Text>
             <Text style={styles.stampFieldLabel}>Date</Text>
             <DateInput
               style={styles.stampInput}
@@ -811,6 +806,16 @@ export default function LineupDetailScreen() {
               spellCheck={false}
               autoCorrect={false}
             />
+            <Text style={styles.stampFieldLabel}>Venue</Text>
+            <TextInput
+              style={styles.stampInput}
+              value={venueDraft}
+              onChangeText={setVenueDraft}
+              placeholder="Restaurant, bar or home"
+              placeholderTextColor={colors.textMuted}
+              spellCheck={false}
+              autoCorrect={false}
+            />
             <TouchableOpacity style={[styles.stampSaveBtn, savingStamp && { opacity: 0.5 }]} onPress={saveStamp} disabled={savingStamp} activeOpacity={0.85}>
               <Text style={styles.stampSaveText}>{savingStamp ? 'Saving…' : 'Save'}</Text>
             </TouchableOpacity>
@@ -823,7 +828,7 @@ export default function LineupDetailScreen() {
         <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setNoteEditorOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
             <View style={styles.dictateRowFlush}>
-              <Text style={styles.stampTitle}>Your note</Text>
+              <Text style={styles.stampTitle}>Your Lineup Notes & Musings</Text>
               <View style={styles.noteHeaderRight}>
                 <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} />
                 <TouchableOpacity onPress={() => setNoteEditorOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
@@ -1016,14 +1021,11 @@ const styles = StyleSheet.create({
   back: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold },
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
-  headerTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.lg },
-  // "Title" — the lineup's own name, centred input beneath the page title.
-  titleInput: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.gold, textAlign: 'center', paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },
+  // Small white label above the title — same size as the date/location stamp.
+  headerTitle: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.lg },
+  // "Title" — the lineup's own name, the large heading (was the page title's font); stays gold.
+  titleInput: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
-  venueRow: { alignItems: 'center', marginTop: spacing.xs, paddingHorizontal: spacing.xl },
-  venueInput: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.text, textAlign: 'center', paddingVertical: 2, alignSelf: 'stretch' },
-  // Subtle "Done" beneath the venue while editing — confirm + dismiss keyboard.
-  venueDone: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.gold, textAlign: 'center', marginTop: 4 },
   matchRow: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.sm },
   // Matched state: "View …" link with a yellow underlined "(unmatch)" beside it.
   matchRowInline: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.sm, marginTop: spacing.sm },
@@ -1073,8 +1075,16 @@ const styles = StyleSheet.create({
   // Section headers — yellow, all-caps, matching the stats-bar type.
   sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
-  noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl, marginBottom: spacing.sm },
-  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
+  noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm },
+  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, flexShrink: 1 },
+  noteHeadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // Saved note reads back as copy (like a review); tap to edit in the popup.
+  noteBodyText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
+  notePlaceholder: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, fontStyle: 'italic', lineHeight: 22 },
+  // White "match to a restaurant review" button at the foot of the page.
+  matchBottomWrap: { alignItems: 'center', gap: spacing.sm },
+  matchButton: { alignSelf: 'center', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xl },
+  matchButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3 },
   // Always-visible "brief thoughts" input on the review form.
   thoughtsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 80, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlignVertical: 'top' },
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
