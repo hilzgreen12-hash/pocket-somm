@@ -253,7 +253,7 @@ const styles = StyleSheet.create({
   voiceLink: { position: 'absolute', right: spacing.xl, top: -22 },
   voiceLinkText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   // Full-width gold rule above the Import/Export buttons at the tab's foot.
-  goldSeparator: { height: 1, backgroundColor: colors.gold, marginVertical: spacing.lg },
+  goldSeparator: { height: 1, backgroundColor: 'rgba(224,184,74,0.40)', marginVertical: spacing.lg },
   // Export-by-location picker.
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.65)', justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.xl },
   pickerSheet: { backgroundColor: colors.background, borderRadius: 16, borderWidth: 1, borderColor: colors.gold, padding: spacing.xl, width: '100%', maxWidth: 460 },
