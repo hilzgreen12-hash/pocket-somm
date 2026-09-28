@@ -28,23 +28,23 @@ export function buildCellarListHtml(opts: {
 <style>
   @page { margin: 28px; }
   * { box-sizing: border-box; }
-  body { font-family: Georgia, 'Times New Roman', serif; margin: 0; background: #7F4F4C; color: #F4EBE0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .wrap { border: 2px solid #E0B84A; border-radius: 16px; padding: 26px 30px; }
-  .brand { text-align: center; letter-spacing: 8px; font-size: 32px; font-weight: bold; color: #fff; }
-  .tagline { text-align: center; font-style: italic; color: rgba(255,255,255,.7); font-size: 13px; margin-top: 4px; letter-spacing: 1px; }
-  .hr { height: 1px; background: rgba(224,184,74,.55); margin: 16px 0; }
-  .subhead { text-align: center; color: #E0B84A; text-transform: uppercase; letter-spacing: 4px; font-size: 19px; }
-  .count { text-align: center; font-style: italic; color: rgba(255,255,255,.85); font-size: 14px; margin-top: 6px; }
-  .filter { text-align: center; color: rgba(224,184,74,.85); text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; margin-top: 4px; }
+  body { font-family: Georgia, 'Times New Roman', serif; margin: 0; background: #F4EBE0; color: #1A1A1A; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .wrap { border: 2px solid #7F4F4C; border-radius: 16px; padding: 26px 30px; }
+  .brand { text-align: center; letter-spacing: 8px; font-size: 32px; font-weight: bold; color: #7F4F4C; }
+  .tagline { text-align: center; font-style: italic; color: rgba(26,26,26,.6); font-size: 13px; margin-top: 4px; letter-spacing: 1px; }
+  .hr { height: 1px; background: rgba(127,79,76,.45); margin: 16px 0; }
+  .subhead { text-align: center; color: #7F4F4C; text-transform: uppercase; letter-spacing: 4px; font-size: 19px; }
+  .count { text-align: center; font-style: italic; color: #1A1A1A; font-size: 14px; margin-top: 6px; }
+  .filter { text-align: center; color: rgba(127,79,76,.75); text-transform: uppercase; letter-spacing: 1.5px; font-size: 12px; margin-top: 4px; }
   table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-  td { padding: 8px 12px; border-bottom: 1px solid rgba(224,184,74,.25); vertical-align: top; }
+  td { padding: 8px 12px; border-bottom: 1px solid rgba(127,79,76,.25); vertical-align: top; }
   tr:last-child td { border-bottom: 0; }
-  td.name { color: #fff; font-size: 13.5px; line-height: 1.35; }
-  td.qty { color: #E0B84A; font-weight: bold; text-align: right; white-space: nowrap; font-size: 13px; }
+  td.name { color: #1A1A1A; font-size: 13.5px; line-height: 1.35; }
+  td.qty { color: #B5852A; font-weight: bold; text-align: right; white-space: nowrap; font-size: 13px; }
   .footer { text-align: center; margin-top: 22px; display: block; text-decoration: none; }
-  .footer .get { color: #E0B84A; font-weight: bold; letter-spacing: 3px; font-size: 14px; }
-  .footer .cta { color: rgba(255,255,255,.7); font-style: italic; font-size: 13px; margin-top: 4px; }
-  .footer .url { color: #E0B84A; font-size: 12px; margin-top: 6px; text-decoration: underline; }
+  .footer .get { color: #7F4F4C; font-weight: bold; letter-spacing: 3px; font-size: 14px; }
+  .footer .cta { color: rgba(26,26,26,.6); font-style: italic; font-size: 13px; margin-top: 4px; }
+  .footer .url { color: #7F4F4C; font-size: 12px; margin-top: 6px; text-decoration: underline; }
 </style></head><body>
   <div class="wrap">
     <div class="brand">VINSTER</div>

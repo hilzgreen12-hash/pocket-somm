@@ -1,16 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, Share } from 'react-native';
-import * as Sharing from 'expo-sharing';
-import { shareResult, sharerNameFrom } from '../../../src/utils/shareCard';
-import { captureRef } from 'react-native-view-shot';
+import { useEffect, useState } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCellar, useWishList } from '../../../src/hooks/useCellar';
 import { useAuth } from '../../../src/hooks/useAuth';
 import { getWineKnowledge } from '../../../src/api/label';
-import { WineKnowledgeShareCard } from '../../../src/components/WineKnowledgeShareCard';
 import { WineIdentityHeader } from '../../../src/components/WineIdentityHeader';
-import { VINSTER_TEXT_SHARE_FOOTER } from '../../../src/constants/share';
-import { showAlert } from '../../../src/components/AppAlert';
 import type { WineKnowledgeData } from '../../../src/types/wine';
 import { colors, spacing } from '../../../src/constants/theme';
 import { fonts } from '../../../src/constants/fonts';
@@ -97,56 +91,13 @@ export default function WineKnowledgeScreen() {
     return parts.filter(Boolean).join(' · ');
   })();
 
-  // Share the four profiles as a branded PNG (same off-screen-capture pattern
-  // the wine card uses), falling back to formatted text where unavailable.
-  const shareRef = useRef<View>(null);
-  const [sharing, setSharing] = useState(false);
-
-  async function handleShare() {
-    if (!knowledge || sharing) return;
-    setSharing(true);
-    try {
-      // One paint to let the off-screen card mount.
-      await new Promise((r) => setTimeout(r, 250));
-      if (shareRef.current && (await Sharing.isAvailableAsync())) {
-        const uri = await captureRef(shareRef, { format: 'png', quality: 1, result: 'tmpfile' });
-        await shareResult(uri, { sharerName: sharerNameFrom(session) });
-        return;
-      }
-      // Plain-text fallback for devices without share-sheet support.
-      const grapeLine = info.grape ? `\n${info.grape}` : '';
-      const body =
-        `${headerLine}${grapeLine}\n\n` +
-        `PRODUCER PROFILE\n${knowledge.producerProfile}\n\n` +
-        `REGION PROFILE\n${knowledge.regionProfile}\n\n` +
-        `VINTAGE PROFILE\n${knowledge.vintageProfile}\n\n` +
-        `GRAPE VARIETY\n${knowledge.grapeProfile}` +
-        VINSTER_TEXT_SHARE_FOOTER;
-      await Share.share({ message: body, title: headerLine });
-    } catch (err) {
-      showAlert({ title: 'Could not share', body: err instanceof Error ? err.message : 'Please try again.' });
-    } finally {
-      setSharing(false);
-    }
-  }
-
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
           <Text accessibilityLabel="Back" style={[styles.backText, { color: colors.gold, fontSize: 22 }]}>←</Text>
         </TouchableOpacity>
-        {knowledge ? (
-          <TouchableOpacity
-            onPress={handleShare}
-            disabled={sharing}
-            hitSlop={{ top: 10, bottom: 6, left: 12, right: 12 }}
-          >
-            <Text style={[styles.shareText, sharing && { color: colors.textMuted }]}>{sharing ? 'Preparing…' : 'Export'}</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 44 }} />
-        )}
+        <View style={{ width: 44 }} />
       </View>
 
       {!hasWine ? (
@@ -245,20 +196,6 @@ export default function WineKnowledgeScreen() {
         </ScrollView>
       )}
 
-      {/* Off-screen branded card, mounted only while a share is in flight. */}
-      {sharing && knowledge ? (
-        <View style={styles.shareCardWrap} pointerEvents="none">
-          <WineKnowledgeShareCard
-            ref={shareRef}
-            headerLine={headerLine}
-            grape={info.grape}
-            producerProfile={knowledge.producerProfile}
-            regionProfile={knowledge.regionProfile}
-            vintageProfile={knowledge.vintageProfile}
-            grapeProfile={knowledge.grapeProfile}
-          />
-        </View>
-      ) : null}
     </View>
   );
 }
