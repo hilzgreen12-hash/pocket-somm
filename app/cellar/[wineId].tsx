@@ -1190,6 +1190,10 @@ export default function CellarWineDetail() {
         ? [wine.producer, wine.vintage].filter(Boolean).join(' ')
         : [wine.producer, wine.wine_name, wine.vintage].filter(Boolean).join(' ');
     })();
+    let labelUri: string | null = null;
+    if (wine.label_image_path) {
+      try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ }
+    }
     setReviewSharePayload({
       producer: wine.producer,
       wineName: wine.wine_name,
@@ -1202,6 +1206,7 @@ export default function CellarWineDetail() {
       date: wine.review_date ? new Date(wine.review_date).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : null,
       location: wine.review_location ?? null,
       isFavourite: wine.is_favourite,
+      imageUri: labelUri,
     });
     setSharingOutside(true);
     try {

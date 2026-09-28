@@ -1,5 +1,5 @@
 import { forwardRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors, share } from '../constants/theme';
 import { VINSTER_INSTALL_URL, VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 import { wineHeaderLine } from '../utils/wineHeader';
@@ -29,10 +29,14 @@ interface Props {
   date: string | null;                // pre-formatted "19 May 2026"
   location: string | null;            // pre-formatted "Marco's, Soho"
   isFavourite?: boolean;
+
+  // Label photo — a resolved local uri (caller pre-resolves the stored path so the
+  // off-screen capture includes it). Omitted → the card renders without a photo.
+  imageUri?: string | null;
 }
 
 export const WineReviewShareCard = forwardRef<View, Props>(
-  ({ producer, wineName, vintage, region, userScore, criticScore, flavourProfile, tastingNote, otherObservations, date, location, isFavourite }, ref) => {
+  ({ producer, wineName, vintage, region, userScore, criticScore, flavourProfile, tastingNote, otherObservations, date, location, isFavourite, imageUri }, ref) => {
     const header = wineHeaderLine(producer, wineName, vintage);
     const stamp = [date, location].filter(Boolean).join(' · ');
 
@@ -50,6 +54,12 @@ export const WineReviewShareCard = forwardRef<View, Props>(
 
           {stamp ? (
             <Text style={styles.stamp} numberOfLines={2}>{stamp}</Text>
+          ) : null}
+
+          {imageUri ? (
+            <View style={styles.photoFrame}>
+              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+            </View>
           ) : null}
 
           <View style={styles.wineBlock}>
@@ -125,6 +135,8 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: share.brandDim, marginVertical: 36 },
   subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
   stamp: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 30, color: share.ink, textAlign: 'center', marginBottom: 32 },
+  photoFrame: { alignSelf: 'center', width: 520, height: 560, borderRadius: 22, borderWidth: 2, borderColor: share.brand, overflow: 'hidden', marginBottom: 28, backgroundColor: 'rgba(127,79,76,0.06)' },
+  photo: { width: '100%', height: '100%' },
   wineBlock: {
     borderWidth: 2,
     borderColor: share.brand,

@@ -103,7 +103,7 @@ const CSV_SOURCES: Record<CsvSource, {
   file: {
     name: 'File',
     lead: 'Upload a cellar spreadsheet or statement.',
-    hint: 'Choose an Excel spreadsheet (.xlsx, .xls), a CSV, or a storage invoice / reserves statement (PDF). Exported from Numbers or Google Sheets? Save it as Excel or CSV first. Vinster reads the columns wherever they are, as long as the top row names them.',
+    hint: 'Choose an Excel spreadsheet (.xlsx, .xls), a CSV, or a storage invoice / reserves statement (PDF).\n\nExported from Numbers or Google Sheets? Save it as Excel or CSV first.\n\nVinster needs each column named in the top row so it can read your file directly. Please remember to include purchase prices where you can.',
     steps: null,
     hasLabelImages: false,
   },
