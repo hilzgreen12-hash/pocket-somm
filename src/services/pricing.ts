@@ -1,5 +1,6 @@
 import { fetchWinePrice } from '../api/wine-searcher';
 import { getWineIntelligence } from '../api/label';
+import { fetchWineFacts } from '../api/wineFacts';
 import { wineQueryName } from '../utils/wineIdentity';
 import { withBordeauxInfo } from '../constants/bordeauxClassification';
 import type { GrapeVariant, PricingData, WineDetailsComplete, WineIntelligence } from '../types/wine';
@@ -192,17 +193,37 @@ export async function generateWineIntel(
   const vintageNum = wine.vintage && wine.vintage !== 'NV' ? Number(wine.vintage) : null;
 
   const vintageArg = Number.isFinite(vintageNum) ? vintageNum : null;
-  const first = await fetchPricing(queryName, vintageArg, currency);
-  const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
 
-  // Claude fills the rich fields; wsScore anchors its critic score to WS. It also
-  // returns wsSearchName — the canonical WS query we retry with on a miss.
-  const intel = await getWineIntelligence(wine, currency, firstMatched ? first.criticScore : null);
+  // Permanent facts captured from a PRIOR Wine-Searcher match (region/grape/score),
+  // read instantly and never expiring (see wine_facts / migration 110). Grows as
+  // real lookups happen; used to ground intel without waiting on a live WS call.
+  const facts = await fetchWineFacts(queryName, vintageArg);
+
+  let first: PricingData;
+  let intel: WineIntelligence;
+  if (facts?.criticScore != null) {
+    // Fast path: we already hold a real WS score to anchor Claude, so fetch the
+    // (volatile) price and generate intel IN PARALLEL rather than waiting for WS.
+    [first, intel] = await Promise.all([
+      fetchPricing(queryName, vintageArg, currency),
+      getWineIntelligence(wine, currency, facts.criticScore),
+    ]);
+  } else {
+    // No permanent score yet → keep the original sequence so Claude is still
+    // anchored to THIS session's WS score when there is one (no regression).
+    first = await fetchPricing(queryName, vintageArg, currency);
+    const firstMatched = first.source === 'wine-searcher' && first.matched !== false;
+    // Claude fills the rich fields; wsScore anchors its critic score to WS. It also
+    // returns wsSearchName — the canonical WS query we retry with on a miss.
+    intel = await getWineIntelligence(wine, currency, firstMatched ? first.criticScore : null);
+  }
 
   // Retry Wine-Searcher with Claude's canonical name on a miss (cult-producer gap).
   const pricing = await resolveWsPricing(first, queryName, intel.wsSearchName, vintageArg, currency);
   const wsMatched = pricing.source === 'wine-searcher' && pricing.matched !== false;
-  const wsScore = wsMatched ? pricing.criticScore : null;
+  // Prefer this session's live WS score; else fall back to the permanent facts
+  // score so a re-open stays accurate even after the 30-day price cache expired.
+  const wsScore = wsMatched ? pricing.criticScore : (facts?.criticScore ?? null);
 
   // Headline value: real WS market average (already in the user's currency)
   // when matched, else Claude's estimate.
@@ -219,7 +240,7 @@ export async function generateWineIntel(
     estimatedValue: useWs ? pricing.averageMarketPrice : intel.estimatedValue,
     estimatedValueLow: useWs ? pricing.minPrice : (intel.estimatedValueLow ?? null),
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
-    grapeVariety: intel.grapeVariety ?? pricing.grape ?? null,
+    grapeVariety: intel.grapeVariety ?? pricing.grape ?? facts?.grape ?? null,
     valueSource: useWs ? 'wine-searcher' : 'vinster',
     // Real Wine-Searcher market data is high-confidence; otherwise carry Claude's
     // own confidence so the card can flag a shaky (rare/no-market-data) estimate.
