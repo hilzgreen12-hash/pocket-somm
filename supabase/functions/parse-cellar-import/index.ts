@@ -44,7 +44,7 @@ For each wine return these keys (use null when unknown, never invent data):
 - cases: integer number of full cases, or null if loose.
 - looseBottles: integer loose bottles beyond full cases, or null/0.
 - drinkingWindowFrom, drinkingWindowTo: 4-digit year strings, or null (parse "2016 - 2025", "Ready 2025 - 2032", etc.).
-- purchasePricePerBottle: number in the row's currency, or null (if the price is per case, divide by bottlesPerCase).
+- purchasePricePerBottle: number in the row's currency, or null. The price/value column may be labelled many ways — "price", "purchase price", "cost", "unit cost", "purchase value", "stock value", "value", "valuation", "book value". Treat any of these as the holding's price. Work out PER BOTTLE: if the figure is per case, divide by bottlesPerCase; if it's a TOTAL holding value (i.e. the value of all the bottles on that row), divide by totalBottles. Only leave null when the row genuinely has no price/value figure at all.
 - currency: 3-letter code if determinable (GBP/USD/EUR…), else null.
 - notes: a tasting note from the row if present, else null.
 

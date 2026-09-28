@@ -19,6 +19,7 @@ import { parseVivinoReviews, isMonthFirstCurrency, type VivinoReview } from '../
 import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
+import { formatCurrency } from '../../src/constants/currency';
 import { showAlert } from '../../src/components/AppAlert';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -750,6 +751,11 @@ export default function ImportCellarScreen() {
                 const label = [w.vintage, w.producer, w.wineName].filter(Boolean).join(' ');
                 // quantity x format, matching the cellar list (e.g. 1x75, 2x150).
                 const qtyFormat = `${qty}x${bottleSizeCl(w.bottleSizeMl)}`;
+                // Purchase price per bottle (when the file gave one) — shown in gold
+                // next to the format so the user can confirm prices were read.
+                const priceStr = w.purchasePricePerBottle != null
+                  ? `${formatCurrency(w.purchasePricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl`
+                  : null;
                 return (
                   <TouchableOpacity
                     key={i}
@@ -759,9 +765,13 @@ export default function ImportCellarScreen() {
                   >
                     <Text style={[styles.checkbox, on && styles.checkboxOn]}>{on ? '☑' : '☐'}</Text>
                     <View style={styles.rowText}>
-                      <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}  <Text style={styles.qtyFormat}>{qtyFormat}</Text></Text>
+                      <Text style={styles.rowName} numberOfLines={2}>{label || 'Unnamed wine'}</Text>
+                      {/* Format + purchase price on one gold line below the name
+                          (format listed once; price shows only when the file gave one). */}
+                      <Text style={styles.qtyFormat} numberOfLines={1}>
+                        {isCased(w) ? caseSummary(w, bottleSizeCl) : qtyFormat}{priceStr ? `  ·  ${priceStr}` : ''}
+                      </Text>
                       <View style={styles.rowMetaRow}>
-                        {isCased(w) ? <Text style={styles.rowCase}>{caseSummary(w, bottleSizeCl)}</Text> : null}
                         {w.region ? <Text style={styles.rowMeta} numberOfLines={1}>{w.region}</Text> : null}
                         {flag ? <Text style={styles.rowTag}>{flag === 'cellar' ? `Already in cellar · +${qty} to existing` : 'Duplicate · tap to include'}</Text> : null}
                       </View>
