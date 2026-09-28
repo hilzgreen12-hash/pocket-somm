@@ -222,6 +222,10 @@ export default function ResultsScreen() {
     if (isFromHistory) return;
     if (!recommendation || !extractedWines) return;
     cacheScanLocally(session?.user.id ?? null, { extractedWines, recommendation, restaurantName: restaurantName || null });
+    // Cloud-persist the scan straight away (nameless) so it appears in Recent
+    // Scans even if the user never names a restaurant or reviews a wine. Naming a
+    // restaurant later updates this same row (getOrCreateSession de-dupes).
+    if (session) void getOrCreateSession();
   }, []);
 
   // "Still at the same restaurant?" — if the diner scans another list within
@@ -259,11 +263,21 @@ export default function ResultsScreen() {
           buttons: [
             {
               text: 'Yes',
-              onPress: () => {
+              onPress: async () => {
                 setRestaurantName(name);
                 // Reuse the SAME visit so picks + review consolidate into one
                 // Your Restaurants entry (no duplicate for the same 4h session).
+                // First discard the nameless row auto-created for THIS scan (await
+                // any in-flight create), so it doesn't linger as a blank duplicate.
+                let autoCreated = savedSessionIdRef.current;
+                if (!autoCreated && inFlightSaveRef.current) { try { autoCreated = await inFlightSaveRef.current; } catch { /* ignore */ } }
                 if (prev?.id) savedSessionIdRef.current = prev.id;
+                if (autoCreated && autoCreated !== prev?.id) {
+                  try {
+                    await supabase.from('scan_sessions').delete().eq('id', autoCreated);
+                    qc.invalidateQueries({ queryKey: ['scan-archive'] });
+                  } catch { /* best-effort cleanup */ }
+                }
               },
             },
             { text: 'No', style: 'cancel' },
@@ -336,60 +350,56 @@ export default function ResultsScreen() {
   // autoSave.data, which only updates on the next render and is stale right
   // after the await — the cause of the "add a restaurant first" prompt firing
   // even though the save had just succeeded.
-  async function handleSaveRestaurant(nameOverride?: string): Promise<string | null> {
-    setEditingRestaurant(false);
-    const trimmed = (nameOverride ?? restaurantName).trim();
-    // Read the id live (not the render-time effectiveSessionId, which lags a tick
-    // behind savedSessionIdRef within a rapid burst of taps).
-    const liveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
-    if (liveSessionId) {
-      // Row already in scan_sessions — just update the restaurant name.
-      // Covers both the in-session autoSave path and View Last Result
-      // re-opens where the sessionId came in via URL params.
-      try {
-        const { error } = await supabase
-          .from('scan_sessions')
-          .update({
-            restaurant_name: trimmed || null,
-            // Carry through a city the user edited before this row existed.
-            ...(cityOverride !== null ? { city: cityOverride } : {}),
-          })
-          .eq('id', liveSessionId);
-        if (error) throw error;
-        qc.invalidateQueries({ queryKey: ['scan-archive'] });
-      } catch (err) {
-        showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
-      }
-      return liveSessionId;
-    }
-    // No row yet — promote this scan to scan_sessions so the entry
-    // lands in Your Restaurants. Skip if there's no name to save and no
-    // recommendation to save against.
-    if (trimmed.length === 0 || !recommendation || !extractedWines) return null;
-    // If an autoSave is already in flight (e.g. the input's onBlur started it
-    // and the Review CTA tap then re-enters), join the same promise and return
-    // its resolved session id.
-    if (inFlightSaveRef.current) {
-      try { return await inFlightSaveRef.current; } catch { return null; }
-    }
+  // Ensure this scan is backed by a scan_sessions row, creating one (nameless) if
+  // needed. Runs at most once concurrently (inFlightSaveRef) and reuses any row
+  // already made this session, so the on-mount auto-persist and a later
+  // restaurant-name save share ONE row instead of inserting duplicates. A nameless
+  // row is intentional: it makes the scan appear in Recent Scans without polluting
+  // Your Restaurants (which only lists sessions with a name or note).
+  async function getOrCreateSession(): Promise<string | null> {
+    const existing = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+    if (existing) return existing;
+    if (inFlightSaveRef.current) return inFlightSaveRef.current;
+    if (!recommendation || !extractedWines) return null;
     const promise = autoSave
-      .mutateAsync({ extractedWines, recommendation, restaurantNameOverride: trimmed })
+      .mutateAsync({ extractedWines, recommendation })
       .then((result: any) => {
         const id = (result?.[0]?.sessionId ?? null) as string | null;
-        // Capture synchronously so the very next tap reuses this session instead
-        // of inserting another restaurant row.
         if (id) savedSessionIdRef.current = id;
         return id;
-      });
+      })
+      .finally(() => { inFlightSaveRef.current = null; });
     inFlightSaveRef.current = promise;
     try {
       return await promise;
     } catch (err) {
       showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
       return null;
-    } finally {
-      inFlightSaveRef.current = null;
     }
+  }
+
+  async function handleSaveRestaurant(nameOverride?: string): Promise<string | null> {
+    setEditingRestaurant(false);
+    const trimmed = (nameOverride ?? restaurantName).trim();
+    // Make sure a row exists (created on mount for every scan, but this covers a
+    // rapid name-save before that lands), then write the name onto it.
+    const liveSessionId = await getOrCreateSession();
+    if (!liveSessionId) return null;
+    try {
+      const { error } = await supabase
+        .from('scan_sessions')
+        .update({
+          restaurant_name: trimmed || null,
+          // Carry through a city the user edited before this row existed.
+          ...(cityOverride !== null ? { city: cityOverride } : {}),
+        })
+        .eq('id', liveSessionId);
+      if (error) throw error;
+      qc.invalidateQueries({ queryKey: ['scan-archive'] });
+    } catch (err) {
+      showAlert({ title: 'Could not save', body: err instanceof Error ? err.message : 'Please try again.' });
+    }
+    return liveSessionId;
   }
 
   // Persist an inline edit to the location/city on the results stamp. Vinster
