@@ -100,14 +100,20 @@ export function RecentScansCarousel() {
           bottleSizeMl: null,
           quantity: 1,
         });
-        ls.setIntelligence(l.intel ?? null);
+        // A stored snapshot is only worth displaying if it actually carries intel
+        // (a score or a value). An EMPTY snapshot — e.g. a Wine-Searcher/Claude
+        // hiccup at scan time — would just surface the "unable to generate intel"
+        // prompt, so treat it like a missing one and regenerate (results heals the
+        // stored row on success). A usable snapshot displays instantly, no cost.
+        const usable = !!(l.intel && (l.intel.criticScore != null || l.intel.estimatedValue != null));
+        ls.setIntelligence(usable ? l.intel : null);
         // Resolve the stored photo to a local uri for the hero image.
         let uri: string | null = null;
         try { uri = await getCachedLabelUri(l.label_image_path); } catch { /* no photo */ }
         ls.setImageUri(uri);
-        // labelId is carried so the screen won't re-write a cloud row; when the
-        // snapshot is missing we regenerate intel (gen=1) without recording anew.
-        const suffix = l.intel ? '' : '&gen=1&confirmed=1&noRecent=1';
+        // labelId is carried so the screen heals the existing row instead of writing
+        // a new one; gen=1 regenerates when the snapshot is missing or empty.
+        const suffix = usable ? '' : '&gen=1&confirmed=1&noRecent=1';
         router.push(`/label/results?context=intel&labelId=${l.id}${suffix}`);
       },
     });

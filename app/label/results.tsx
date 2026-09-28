@@ -205,10 +205,13 @@ export default function LabelResultsScreen() {
       const generated = await generateWineIntel(wineDetailsConfirmed, userCurrency);
       setIntelligence(generated);
       useLastIntelStore.getState().setLast(wineDetailsConfirmed, generated, { recordRecent: noRecent !== '1' });
+      // Opened from Recent Scans with an empty/missing snapshot → heal the stored
+      // label so it's instant (and never shows the prompt) next time.
+      if (labelId) { try { await updateLabelIntel(labelId, generated); } catch { /* best-effort */ } }
     } catch {
       setGenError(true);
     }
-  }, [wineDetailsConfirmed, userCurrency, noRecent, setIntelligence]);
+  }, [wineDetailsConfirmed, userCurrency, noRecent, setIntelligence, labelId]);
   useEffect(() => {
     if (!isIntelOnlyFlow || gen !== '1' || intelligence || awaitingConfirm || !wineDetailsConfirmed || genStartedRef.current) return;
     genStartedRef.current = true;
@@ -614,6 +617,12 @@ export default function LabelResultsScreen() {
     if (producerRangeTriedRef.current) return;
     // Already saved on the snapshot → the restore effect handles it; don't fetch.
     if (intelligence?.producerRange?.wines?.length) return;
+    // WAIT for the base intel to land before folding the range in. Otherwise this
+    // can resolve first, merge the range into a NULL intel (→ a snapshot with no
+    // score/value), setIntelligence that (a "couldn't generate intel" flash) AND
+    // persist that empty snapshot to the label. Deps include intelligence so this
+    // re-runs the moment the real result arrives, then folds into it.
+    if (!intelligence) return;
     if (!isIntelOnlyFlow || awaitingConfirm || !wineDetailsConfirmed?.producer?.trim()) return;
     producerRangeTriedRef.current = true;
     setProducerRangeLoading(true);
@@ -640,7 +649,7 @@ export default function LabelResultsScreen() {
       } catch { /* silent — the section simply doesn't render */ }
       finally { setProducerRangeLoading(false); }
     })();
-  }, [isIntelOnlyFlow, awaitingConfirm, wineDetailsConfirmed]);
+  }, [isIntelOnlyFlow, awaitingConfirm, wineDetailsConfirmed, intelligence]);
 
   // Cloud-back each genuine label scan: on a completed fresh Scan-a-Label / Upload
   // intel result, write it to the `labels` table (photo + identity + intel
@@ -649,7 +658,13 @@ export default function LabelResultsScreen() {
   // flows pass noRecent=1, and history/library opens carry a labelId.
   useEffect(() => {
     if (!isIntelOnlyFlow || noRecent === '1' || fresh !== '1' || labelId) return;
-    if (awaitingConfirm || !intelligence || !wineDetailsConfirmed) return;
+    if (awaitingConfirm || !wineDetailsConfirmed) return;
+    // Only store a USABLE snapshot (has a score or a value). Intel briefly passes
+    // through an empty state before the full result lands — storing that empty one
+    // is what made a re-opened Recent Scan show "unable to generate intel". Wait
+    // for real content; the effect re-runs when intelligence updates.
+    const usable = !!(intelligence && (intelligence.criticScore != null || intelligence.estimatedValue != null));
+    if (!usable) return;
     if (cloudSavedRef.current || !session?.user.id) return;
     cloudSavedRef.current = true;
     (async () => {
