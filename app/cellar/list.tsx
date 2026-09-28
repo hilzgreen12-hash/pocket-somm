@@ -21,7 +21,7 @@ import { archiveCellarWine, deleteCellarWine, addCellarWineRemoval, addCellarWin
 import { ArchiveNoteModal } from '../../src/components/ArchiveNoteModal';
 import { fetchCellarLocations, createCellarLocation, addWinesToFilter, setCustomFilterWines, renameCustomFilter, deleteCustomFilter, type CustomFilter } from '../../src/api/customFilters';
 import { fetchStorageLocations } from '../../src/api/storageLocations';
-import { fetchPlacementsForWines, reconcileLegacyLocationWines, type CellarPlacement } from '../../src/api/placements';
+import { fetchPlacementsForWines, reconcileLegacyLocationWines, deleteLocationKeepWines, deleteLocationAndWines, type CellarPlacement } from '../../src/api/placements';
 import { showAlert } from '../../src/components/AppAlert';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { LabelThumb } from '../../src/components/LabelThumb';
@@ -185,6 +185,73 @@ export default function FullCellarListScreen() {
               await deleteCustomFilter(id);
               if (locationFilter === `loc:${id}`) setLocationFilter('All');
               refetchLocations();
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  // Long-press a Home/External storage location (an alt cellar, e.g. an import's
+  // folder) in the filter → delete it two ways: keep the wines (unplace them) or
+  // delete the wines too. Used to wipe & re-do a bad import.
+  function openStorageLocationOptions(id: string, name: string) {
+    showAlert({
+      title: name,
+      body: 'Delete this location. Choose whether to keep the wines in your cellar (moved to Unplaced Bottles) or delete them too.',
+      buttons: [
+        { text: 'Delete location & move wines to Unplaced Bottles', onPress: () => confirmDeleteStorageKeepWines(id, name) },
+        { text: 'Delete location & wines', style: 'destructive', onPress: () => confirmDeleteStorageAndWines(id, name) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
+  function afterStorageLocationDeleted(id: string) {
+    if (locationFilter === `sloc:${id}`) setLocationFilter('All');
+    qc.invalidateQueries({ queryKey: ['cellar'] });
+    qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
+    qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+  }
+
+  function confirmDeleteStorageKeepWines(id: string, name: string) {
+    showAlert({
+      title: `Delete "${name}"?`,
+      body: 'The location is removed and its wines move to Unplaced Bottles. Your wines stay in your cellar.',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete location',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLocationKeepWines(id);
+              afterStorageLocationDeleted(id);
+            } catch (err) {
+              showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            }
+          },
+        },
+      ],
+    });
+  }
+
+  function confirmDeleteStorageAndWines(id: string, name: string) {
+    showAlert({
+      title: `Delete "${name}" and its wines?`,
+      body: `This permanently deletes the location AND every bottle filed only in it. Wines that also live elsewhere keep their other bottles. This cannot be undone.`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete location & wines',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const { deletedWines } = await deleteLocationAndWines(id);
+              afterStorageLocationDeleted(id);
+              showAlert({ title: 'Location deleted', body: `"${name}" and ${deletedWines} ${deletedWines === 1 ? 'wine' : 'wines'} removed.` });
             } catch (err) {
               showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
             }
@@ -1163,14 +1230,17 @@ export default function FullCellarListScreen() {
             {activeDropdown && (
               <>
                 <Text style={styles.modalTitle}>{activeDropdown.title}</Text>
-                {openDropdown === 'location' && locations.length > 0 ? (
-                  <Text style={styles.locationHint}>Long-press a location to rename or delete it</Text>
+                {openDropdown === 'location' && (locations.length > 0 || storageLocations.length > 0) ? (
+                  <Text style={styles.locationHint}>Long-press a location to manage or delete it</Text>
                 ) : null}
                 <ScrollView style={{ maxHeight: 400 }}>
                   {activeDropdown.options.map((opt) => {
                     const active = activeDropdown.selected === opt.value;
                     // Bespoke locations (loc:…) can be managed via long-press.
                     const isLocation = openDropdown === 'location' && opt.value.startsWith('loc:');
+                    // Home/External storage locations (sloc:…) — long-press to delete
+                    // the location (optionally with its wines).
+                    const isStorageLoc = openDropdown === 'location' && opt.value.startsWith('sloc:');
                     // Section headers and the "Nothing here yet" placeholder are
                     // labels, not choices — render them as plain, non-tappable rows.
                     if (opt.header || opt.disabled) {
@@ -1188,7 +1258,11 @@ export default function FullCellarListScreen() {
                           activeDropdown.onSelect(opt.value);
                           setOpenDropdown(null);
                         }}
-                        onLongPress={isLocation ? () => { setOpenDropdown(null); openLocationOptions(opt.value.slice(4), opt.label); } : undefined}
+                        onLongPress={
+                          isLocation ? () => { setOpenDropdown(null); openLocationOptions(opt.value.slice(4), opt.label); }
+                          : isStorageLoc ? () => { setOpenDropdown(null); openStorageLocationOptions(opt.value.slice(5), opt.label); }
+                          : undefined
+                        }
                         delayLongPress={400}
                         activeOpacity={0.7}
                       >

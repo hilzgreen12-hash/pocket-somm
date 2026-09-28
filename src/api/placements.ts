@@ -1,5 +1,7 @@
 import { supabase } from './supabase';
 import { removeSlotsForWine } from './racks';
+import { deleteStorageLocation } from './storageLocations';
+import { deleteCellarWine } from './cellar';
 
 // A single placement of some of a wine's bottles in ONE spot — a rack slot, a
 // bin cell, or an alt cellar (optionally in a case). Introduced by the unified
@@ -290,4 +292,74 @@ export async function reconcileLegacyLocationWines(
     healed++;
   }
   return healed;
+}
+
+// ---- Deleting a storage location (long-press in the Location filter) ---------
+
+// "Delete location & move wines to Unplaced Bottles": remove the location but
+// keep every bottle in the cellar. The DB cascades this location's placement
+// rows on delete (so those bottles become unplaced) and SET-NULLs the legacy
+// storage_location_id pointer — so this is simply the location delete.
+export async function deleteLocationKeepWines(locationId: string): Promise<void> {
+  await deleteStorageLocation(locationId);
+}
+
+// "Delete location & wines": remove the location AND the bottles filed in it.
+// A wine that lives ONLY here is deleted outright; a wine that also lives
+// elsewhere (e.g. an import that MERGED into an existing cellar wine, so it has
+// bottles at home too) keeps its other bottles — we only subtract the count that
+// was in this location. Returns how many whole wines were deleted.
+export async function deleteLocationAndWines(locationId: string): Promise<{ deletedWines: number }> {
+  // Bottles filed in this location, summed per wine.
+  const here = await fetchPlacementsForLocation(locationId);
+  const hereByWine = new Map<string, number>();
+  for (const p of here) {
+    hereByWine.set(p.cellar_wine_id, (hereByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+  }
+  // Also catch wines pointed here only via the legacy column (no placement row):
+  // treat the whole wine as living here.
+  const { data: legacyRows, error: legacyErr } = await supabase
+    .from('cellar_wines').select('id, quantity').eq('storage_location_id', locationId);
+  if (legacyErr) throw legacyErr;
+  for (const w of (legacyRows ?? []) as { id: string; quantity: number }[]) {
+    if (!hereByWine.has(w.id)) hereByWine.set(w.id, w.quantity ?? 0);
+  }
+
+  const wineIds = [...hereByWine.keys()];
+  let deletedWines = 0;
+  if (wineIds.length > 0) {
+    // Placements elsewhere (any spot that isn't this location) + current totals.
+    const allPlacements = await fetchPlacementsForWines(wineIds);
+    const otherByWine = new Map<string, number>();
+    for (const p of allPlacements) {
+      if (p.storage_location_id === locationId) continue;
+      otherByWine.set(p.cellar_wine_id, (otherByWine.get(p.cellar_wine_id) ?? 0) + (p.quantity ?? 0));
+    }
+    const { data: wineRows, error: wErr } = await supabase
+      .from('cellar_wines').select('id, quantity').in('id', wineIds);
+    if (wErr) throw wErr;
+    const qtyById = new Map((wineRows ?? []).map((w: any) => [w.id, w.quantity ?? 0]));
+
+    for (const id of wineIds) {
+      const inHere = hereByWine.get(id) ?? 0;
+      const total = qtyById.get(id) ?? 0;
+      const otherPlaced = otherByWine.get(id) ?? 0;
+      const remaining = total - inHere;
+      if (otherPlaced <= 0 && remaining <= 0) {
+        // Whole wine lives here → delete it (its placements cascade).
+        await deleteCellarWine(id);
+        deletedWines += 1;
+      } else {
+        // Wine also has bottles elsewhere → keep it, drop just the here-count.
+        // Its placement rows in this location cascade when the location is
+        // deleted below.
+        await supabase.from('cellar_wines').update({ quantity: Math.max(1, remaining) }).eq('id', id);
+      }
+    }
+  }
+
+  // Remove the location itself — cascades any remaining placements + storage
+  // cases + location filters, and nulls the legacy pointer on kept wines.
+  await deleteStorageLocation(locationId);
+  return { deletedWines };
 }
