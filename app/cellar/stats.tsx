@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { showAlert } from '../../src/components/AppAlert';
 import { useQueryClient } from '@tanstack/react-query';
@@ -53,6 +53,7 @@ export default function CellarStatsScreen() {
 
   const [calculating, setCalculating] = useState(false);
   const [calcProgress, setCalcProgress] = useState({ done: 0, total: 0 });
+  const calcAbortRef = useRef<AbortController | null>(null);
 
   // Heal any wines stuck with stale flags but still assigned to a rack.
   useEffect(() => {
@@ -183,6 +184,8 @@ export default function CellarStatsScreen() {
 
   async function processBatch(items: CellarWine[]) {
     const currency = preferences?.defaultCurrency ?? 'GBP';
+    const controller = new AbortController();
+    calcAbortRef.current = controller;
     let done = 0;
     setCalcProgress({ done: 0, total: items.length });
 
@@ -190,6 +193,7 @@ export default function CellarStatsScreen() {
     let cursor = 0;
     async function worker() {
       while (cursor < items.length) {
+        if (controller.signal.aborted) break;
         const myIdx = cursor++;
         const w = items[myIdx];
         try {
@@ -218,6 +222,15 @@ export default function CellarStatsScreen() {
       }
     }
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, () => worker()));
+    calcAbortRef.current = null;
+    qc.invalidateQueries({ queryKey: ['cellar'] });
+  }
+
+  // "Save Progress and Exit Update" — stop launching further wines (each already
+  // valued wine is saved) and close the progress screen.
+  function exitCalculate() {
+    calcAbortRef.current?.abort();
+    setCalculating(false);
     qc.invalidateQueries({ queryKey: ['cellar'] });
   }
 
@@ -289,12 +302,18 @@ export default function CellarStatsScreen() {
 
   if (calculating) {
     return (
-      <SearchProgress
-        title="Valuing your cellar…"
-        subtitle="Vinster needs a moment"
-        body="Vinster is fetching critic scores and market values for your wines."
-        durationMs={Math.max(15000, calcProgress.total * 2500)}
-      />
+      <View style={{ flex: 1 }}>
+        <SearchProgress
+          title="Valuing your cellar…"
+          subtitle="Vinster needs a moment"
+          body="Vinster is fetching critic scores and market values for your wines."
+          durationMs={Math.max(15000, calcProgress.total * 2500)}
+        />
+        {/* Let the user bail out of a long run — everything done so far is saved. */}
+        <TouchableOpacity style={styles.exitUpdateBtn} onPress={exitCalculate} activeOpacity={0.85}>
+          <Text style={styles.exitUpdateText}>Save Progress and Exit Update</Text>
+        </TouchableOpacity>
+      </View>
     );
   }
 
@@ -560,6 +579,8 @@ export default function CellarStatsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: spacing.xl },
+  exitUpdateBtn: { position: 'absolute', bottom: 64, alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
+  exitUpdateText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   header: { paddingTop: 70, paddingHorizontal: spacing.xl, paddingBottom: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // Inter — back/nav link
   backText: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.textMuted, width: 40 },

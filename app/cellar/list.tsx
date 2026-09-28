@@ -99,6 +99,8 @@ export default function FullCellarListScreen() {
   const { preferences } = usePreferences();
   const [intelUpdating, setIntelUpdating] = useState(false);
   const [intelProgress, setIntelProgress] = useState({ done: 0, total: 0 });
+  // Abort controller so the user can "Save Progress and Exit" a long intel update.
+  const intelAbortRef = useRef<AbortController | null>(null);
 
   // One-time, gentle backfill so wines added before entry-time maturity
   // generation (and never opened) still get a drinking window — otherwise the
@@ -680,16 +682,27 @@ export default function FullCellarListScreen() {
   async function handleUpdateAllIntel() {
     if (winesMissingIntel.length === 0 || intelUpdating) return;
     const currency = preferences?.defaultCurrency ?? 'GBP';
+    const controller = new AbortController();
+    intelAbortRef.current = controller;
     setIntelUpdating(true);
     setIntelProgress({ done: 0, total: winesMissingIntel.length });
     try {
-      await updateCellarIntelBatch(winesMissingIntel, currency, (done, total) => setIntelProgress({ done, total }));
+      await updateCellarIntelBatch(winesMissingIntel, currency, (done, total) => setIntelProgress({ done, total }), controller.signal);
       qc.invalidateQueries({ queryKey: ['cellar'] });
     } catch {
       showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
     } finally {
       setIntelUpdating(false);
+      intelAbortRef.current = null;
     }
+  }
+
+  // "Save Progress and Exit Update" — stop launching further wines (each already-
+  // updated wine is saved) and close the progress screen.
+  function exitIntelUpdate() {
+    intelAbortRef.current?.abort();
+    setIntelUpdating(false);
+    qc.invalidateQueries({ queryKey: ['cellar'] });
   }
 
   // Keep multi-select honest: when the filters/search change, drop any selected
@@ -870,12 +883,18 @@ export default function FullCellarListScreen() {
           number of wines (3-way concurrency); the tracker's own past-cap lines
           cover any overrun. Back is blocked so a mid-batch dismiss can't strand it. */}
       <Modal visible={intelUpdating} animationType="fade" onRequestClose={() => {}}>
-        <SearchProgress
-          title="Updating wine intel…"
-          subtitle="Vinster needs a moment"
-          body="Vinster is fetching critic scores and market values for your wines."
-          durationMs={Math.max(15000, intelProgress.total * 2500)}
-        />
+        <View style={{ flex: 1 }}>
+          <SearchProgress
+            title="Updating wine intel…"
+            subtitle="Vinster needs a moment"
+            body="Vinster is fetching critic scores and market values for your wines."
+            durationMs={Math.max(15000, intelProgress.total * 2500)}
+          />
+          {/* Let the user bail out of a long run — everything done so far is saved. */}
+          <TouchableOpacity style={styles.exitUpdateBtn} onPress={exitIntelUpdate} activeOpacity={0.85}>
+            <Text style={styles.exitUpdateText}>Save Progress and Exit Update</Text>
+          </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Filter row — Sort first so the most common interaction (changing
@@ -1299,6 +1318,8 @@ const styles = StyleSheet.create({
   // top-right so Add sits in line with Back and the title.
   addLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   shareLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
+  exitUpdateBtn: { position: 'absolute', bottom: 64, alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
+  exitUpdateText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   // Inter — body in modal
   addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },

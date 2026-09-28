@@ -24,12 +24,16 @@ export async function updateCellarIntelBatch(
   wines: CellarWine[],
   currency: string,
   onProgress?: (done: number, total: number) => void,
+  // Abort to stop launching further wines ("Save Progress and Exit"): every wine
+  // saves as it completes, so already-updated wines are kept — we just stop early.
+  signal?: AbortSignal,
 ): Promise<void> {
   let done = 0;
   onProgress?.(0, wines.length);
   let cursor = 0;
   async function worker() {
     while (cursor < wines.length) {
+      if (signal?.aborted) break;
       const w = wines[cursor++];
       try {
         const intel = await generateWineIntel({
