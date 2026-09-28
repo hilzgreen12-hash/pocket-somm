@@ -17,6 +17,7 @@ import { createLibraryFilter } from '../../src/api/libraryFilters';
 import { supabase } from '../../src/api/supabase';
 import { parseVivinoReviews, isMonthFirstCurrency, type VivinoReview } from '../../src/utils/vivinoCsv';
 import { fetchStorageLocations, createStorageLocation, createStorageCase, assignWineToCase } from '../../src/api/storageLocations';
+import { addLocationPlacement } from '../../src/api/placements';
 import type { CellarWine, StorageLocation } from '../../src/types/wine';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { formatCurrency } from '../../src/constants/currency';
@@ -161,6 +162,9 @@ export default function ImportCellarScreen() {
   // there; loose bottles are filed to it; "unplaced" skips it entirely).
   const [locations, setLocations] = useState<StorageLocation[]>([]);
   const [newLocationName, setNewLocationName] = useState('');
+  // Whether a NEW import location is stored externally (offsite) vs at home — so it
+  // files under "All Wines Stored Externally" vs "All Wines At Home" in the list.
+  const [newLocationExternal, setNewLocationExternal] = useState(false);
   const [savingLocation, setSavingLocation] = useState(false);
   // Vivino reviews import summary (matched onto cellar wines vs added as
   // standalone "other" reviews vs skipped because already reviewed).
@@ -493,7 +497,7 @@ export default function ImportCellarScreen() {
     if (!userId || !name || savingLocation) return;
     setSavingLocation(true);
     try {
-      const loc = await createStorageLocation(userId, name);
+      const loc = await createStorageLocation(userId, name, newLocationExternal);
       await confirmImport(loc.id);
     } catch (err) {
       showAlert({ title: 'Could not create location', body: err instanceof Error ? err.message : 'Please try again.' });
@@ -580,12 +584,20 @@ export default function ImportCellarScreen() {
         // Cased holding + a chosen location → create the OWC/non-OWC case and
         // file the wine into it. Non-fatal: a failure still leaves the wine
         // filed loose in the location.
+        let caseId: string | null = null;
         if (locationId && isCased(w)) {
           try {
             const name = caseSummary(w, bottleSizeCl);
             const created = await createStorageCase(userId, { storageLocationId: locationId, name });
             await assignWineToCase(saved.id, created.id);
+            caseId = created.id;
           } catch { /* wine stays loose in the location */ }
+        }
+        // Create the LOCATION PLACEMENT so the wine actually appears in its folder.
+        // The Full Cellar List filters on cellar_placements, not the legacy
+        // storage_location_id — without this the wine showed as "Unplaced".
+        if (locationId) {
+          try { await addLocationPlacement(saved.id, locationId, caseId, qty); } catch { /* best-effort */ }
         }
         succeeded.push(i);
         bottlesAdded += qty;
@@ -714,6 +726,23 @@ export default function ImportCellarScreen() {
             placeholder="e.g. Octavian Bond"
             placeholderTextColor={colors.textMuted}
           />
+          {/* Home vs external so the new folder sits under the right group. */}
+          <View style={styles.homeExtRow}>
+            <TouchableOpacity
+              style={[styles.homeExtBtn, !newLocationExternal && styles.homeExtBtnOn]}
+              onPress={() => setNewLocationExternal(false)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.homeExtText, !newLocationExternal && styles.homeExtTextOn]}>Stored at home</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.homeExtBtn, newLocationExternal && styles.homeExtBtnOn]}
+              onPress={() => setNewLocationExternal(true)}
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.homeExtText, newLocationExternal && styles.homeExtTextOn]}>Stored externally</Text>
+            </TouchableOpacity>
+          </View>
           <TouchableOpacity
             style={[styles.primaryBtn, (!newLocationName.trim() || savingLocation) && styles.primaryBtnDisabled]}
             onPress={createLocationAndImport}
@@ -884,6 +913,11 @@ const styles = StyleSheet.create({
   locName: { flex: 1, fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text },
   locChevron: { fontFamily: fonts.headingSemibold, fontSize: 22, color: colors.gold },
   newLocInput: { borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingHorizontal: spacing.md, paddingVertical: 12, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: 'rgba(255,255,255,0.04)', marginBottom: spacing.md },
+  homeExtRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
+  homeExtBtn: { flex: 1, borderWidth: 1, borderColor: colors.borderLight, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  homeExtBtnOn: { borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)' },
+  homeExtText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
+  homeExtTextOn: { color: colors.gold },
   backLink: { alignItems: 'center', paddingTop: spacing.md },
   backLinkText: { fontFamily: fonts.bodyRegular, fontSize: 14, color: colors.textMuted },
 });
