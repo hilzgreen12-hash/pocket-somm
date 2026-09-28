@@ -23,6 +23,7 @@ import { ShareIcon } from '../../src/components/ShareIcon';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { isMonthFirstCurrency } from '../../src/utils/vivinoCsv';
 import { WineReviewShareCard } from '../../src/components/WineReviewShareCard';
+import { getCachedLabelUri } from '../../src/api/labelImageCache';
 import { VINSTER_TEXT_SHARE_FOOTER } from '../../src/constants/share';
 import { useLabelStore } from '../../src/stores/labelStore';
 import { prepareImageBase64, scanLabel } from '../../src/api/label';
@@ -1031,6 +1032,7 @@ export default function ChosenWinesScreen() {
     date: string | null;
     location: string | null;
     isFavourite: boolean;
+    imageUri?: string | null;
   } | null>(null);
 
   // Hand a review to the native share sheet as a branded PNG — mirrors
@@ -1056,6 +1058,9 @@ export default function ChosenWinesScreen() {
     const otherObs = isChosen ? (cw!.other_observations ?? '') : '';
     const criticScore = isChosen ? cw!.critic_score : cellar!.critic_score;
 
+    let labelUri: string | null = null;
+    const lp = labelPathFor(item);
+    if (lp) { try { labelUri = await getCachedLabelUri(lp); } catch { /* no photo */ } }
     setReviewSharePayload({
       producer: w.producer,
       wineName: w.wine_name,
@@ -1068,6 +1073,7 @@ export default function ChosenWinesScreen() {
       date: formatDate(item.date),
       location: locText || null,
       isFavourite: !!(w as { is_favourite?: boolean }).is_favourite,
+      imageUri: labelUri,
     });
     setReviewSharing(true);
 
