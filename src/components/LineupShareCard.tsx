@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors, share } from '../constants/theme';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
+import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 
 // Branded card for sharing an archived night's lineup: the photo + a date (and
 // location, once lineups record one) stamp + the user's memory note. Rendered
@@ -48,6 +48,7 @@ export const LineupShareCard = forwardRef<View, Props>(
           <View style={styles.footer}>
             <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
             <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
+            <Text style={styles.footerUrl}>{VINSTER_APP_STORE_URL.replace(/^https?:\/\//, '')}</Text>
           </View>
         </View>
       </View>
@@ -86,4 +87,5 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', marginTop: 40 },
   footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
   footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
+  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.brand, marginTop: 8, letterSpacing: 0.5, textDecorationLine: 'underline' },
 });
