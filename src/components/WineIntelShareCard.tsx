@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { share } from '../constants/theme';
-import { VINSTER_GET_LABEL, VINSTER_TAGLINE } from '../constants/share';
+import { VINSTER_GET_LABEL, VINSTER_TAGLINE, VINSTER_APP_STORE_URL } from '../constants/share';
 import { wineHeaderLine } from '../utils/wineHeader';
 
 // Branded card for sharing a wine's Vinster "intelligence" — critic score,
@@ -25,10 +25,14 @@ interface Props {
   drinkingWindow?: string | null;   // pre-formatted "2024–2032" or a status label
   estimatedValue?: string | null;   // pre-formatted "£45"
   tastingNote?: string | null;      // Vinster's AI tasting note
+
+  // Label photo — a resolved local uri (caller pre-resolves the stored path so the
+  // off-screen capture includes it). Omitted → the card renders without a photo.
+  imageUri?: string | null;
 }
 
 export const WineIntelShareCard = forwardRef<View, Props>(
-  ({ producer, wineName, vintage, region, grape, criticScore, drinkingWindow, estimatedValue, tastingNote }, ref) => {
+  ({ producer, wineName, vintage, region, grape, criticScore, drinkingWindow, estimatedValue, tastingNote, imageUri }, ref) => {
     const header = wineHeaderLine(producer, wineName, vintage);
     const hasStats = criticScore != null || !!drinkingWindow || !!estimatedValue;
 
@@ -43,6 +47,12 @@ export const WineIntelShareCard = forwardRef<View, Props>(
           <View style={styles.divider} />
 
           <Text style={styles.subhead}>Wine Intelligence</Text>
+
+          {imageUri ? (
+            <View style={styles.photoFrame}>
+              <Image source={{ uri: imageUri }} style={styles.photo} resizeMode="cover" />
+            </View>
+          ) : null}
 
           <View style={styles.wineBlock}>
             <Text style={styles.wineName} numberOfLines={3}>{header}</Text>
@@ -80,6 +90,7 @@ export const WineIntelShareCard = forwardRef<View, Props>(
           <View style={styles.footer}>
             <Text style={styles.footerLine}>{VINSTER_GET_LABEL}</Text>
             <Text style={styles.footerCta}>{VINSTER_TAGLINE}</Text>
+            <Text style={styles.footerUrl}>{VINSTER_APP_STORE_URL.replace(/^https?:\/\//, '')}</Text>
           </View>
         </View>
       </View>
@@ -109,6 +120,8 @@ const styles = StyleSheet.create({
   brandTagline: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 32, color: share.inkMuted, marginTop: 8, letterSpacing: 1.5 },
   divider: { height: 1, backgroundColor: share.rule, marginVertical: 36 },
   subhead: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 34, color: share.brand, textTransform: 'uppercase', letterSpacing: 6, textAlign: 'center', marginBottom: 16 },
+  photoFrame: { alignSelf: 'center', width: 520, height: 560, borderRadius: 22, borderWidth: 2, borderColor: share.brand, overflow: 'hidden', marginBottom: 28, backgroundColor: 'rgba(127,79,76,0.06)' },
+  photo: { width: '100%', height: '100%' },
   wineBlock: {
     borderWidth: 2,
     borderColor: share.brand,
@@ -130,4 +143,5 @@ const styles = StyleSheet.create({
   footer: { alignItems: 'center', marginTop: 44 },
   footerLine: { fontFamily: 'CormorantGaramond_700Bold', fontSize: 26, color: share.brand, letterSpacing: 4 },
   footerCta: { fontFamily: 'CormorantGaramond_400Regular_Italic', fontSize: 26, color: share.inkMuted, marginTop: 8, textAlign: 'center' },
+  footerUrl: { fontFamily: 'CormorantGaramond_600SemiBold', fontSize: 24, color: share.brand, marginTop: 8, letterSpacing: 0.5, textDecorationLine: 'underline' },
 });

@@ -35,7 +35,7 @@ import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadLabelImage } from '../../src/api/labelPhotos';
-import { evictCachedLabel } from '../../src/api/labelImageCache';
+import { evictCachedLabel, getCachedLabelUri } from '../../src/api/labelImageCache';
 import { LabelThumb } from '../../src/components/LabelThumb';
 import { bottleSizeCl } from '../../src/components/BottleSizePicker';
 import { fetchCellarLocations, addWinesToFilter, removeWineFromFilter } from '../../src/api/customFilters';
@@ -1244,6 +1244,12 @@ export default function CellarWineDetail() {
     const estimatedValue = wine.estimated_value != null
       ? formatCurrency(Number(wine.estimated_value), wine.estimated_value_currency, { decimals: 0 })
       : null;
+    // Resolve the stored label photo to a local uri up front so the off-screen
+    // card includes it in the captured PNG.
+    let labelUri: string | null = null;
+    if (wine.label_image_path) {
+      try { labelUri = await getCachedLabelUri(wine.label_image_path); } catch { /* no photo */ }
+    }
     setIntelSharePayload({
       producer: wine.producer,
       wineName: wine.wine_name,
@@ -1254,6 +1260,7 @@ export default function CellarWineDetail() {
       drinkingWindow,
       estimatedValue,
       tastingNote: wine.tasting_notes,
+      imageUri: labelUri,
     });
     setSharingIntel(true);
     try {
