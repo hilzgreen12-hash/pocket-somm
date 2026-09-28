@@ -230,6 +230,12 @@ export default function ImportCellarScreen() {
       });
       return;
     }
+    // No bottle format on some rows → default to 1×75cl (single 75cl bottle) and
+    // flag it below. The parser returns null when the file gave no size.
+    const noFormatCount = all.filter((w) => (w.bottleSizeMl as number | null) == null).length;
+    if (noFormatCount > 0) {
+      all = all.map((w) => ((w.bottleSizeMl as number | null) == null ? { ...w, bottleSizeMl: 750 } : w));
+    }
     const map = new Map<string, CellarWine>();
     const userId = session?.user.id;
     if (userId) {
@@ -254,17 +260,22 @@ export default function ImportCellarScreen() {
     setDupFlags(flags);
     setKeep(initialKeep);
     setStage('review');
-    // No purchase prices anywhere → warn (non-blocking): stats need them. Offer to
-    // go back and add a price column, or proceed without.
+    // Flag the two things the user needs to know about, combined into one alert.
+    const formatNote = noFormatCount > 0
+      ? `\n\n${noFormatCount} wine${noFormatCount === 1 ? '' : 's'} had no bottle format, so ${noFormatCount === 1 ? 'it was' : 'they were'} set to 1×75cl (single 75cl bottles). You can change a wine's format later.`
+      : '';
     if (!all.some((w) => w.purchasePricePerBottle != null)) {
+      // No purchase prices anywhere → stats need them. Offer to go back or proceed.
       showAlert({
         title: 'No purchase prices found',
-        body: "Vinster can't see purchase prices in your file, and therefore won't be able to generate accurate Cellar Stats. Please go back and add a column with purchase prices.",
+        body: `Vinster can't see purchase prices in your file, and therefore won't be able to generate accurate Cellar Stats. Please go back and add a column with purchase prices.${formatNote}`,
         buttons: [
           { text: 'Go back', onPress: () => setStage('capture') },
           { text: 'Skip purchase prices' },
         ],
       });
+    } else if (noFormatCount > 0) {
+      showAlert({ title: 'No bottle format found', body: formatNote.trim(), buttons: [{ text: 'OK' }] });
     }
   }
 

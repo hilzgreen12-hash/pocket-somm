@@ -89,7 +89,9 @@ Deno.serve(async (req) => {
     // Normalise + sanity-clamp every field so the client can trust the shape.
     const wines = winesIn.map((w: any) => {
       const sizeNum = toInt(w?.bottleSizeMl);
-      const bottleSizeMl = sizeNum && sizeNum >= 50 && sizeNum <= 30000 ? sizeNum : 750;
+      // null when the file gave no bottle size — the client defaults to 750ml and
+      // flags it, rather than silently assuming a format.
+      const bottleSizeMl = sizeNum && sizeNum >= 50 && sizeNum <= 30000 ? sizeNum : null;
       const perCase = toInt(w?.bottlesPerCase);
       const cases = toInt(w?.cases);
       const loose = toInt(w?.looseBottles);
