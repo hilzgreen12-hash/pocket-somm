@@ -212,6 +212,16 @@ export default function ImportCellarScreen() {
   // creating a parallel line. Wines repeated within this same import are
   // pre-unticked ('import') so we don't double-count the same row twice.
   async function presentWines(all: CellarImportWine[]) {
+    // Vintage is core identity — a file with NO vintages at all can't be imported
+    // reliably. Block and send the user back to fix the file.
+    if (all.length && !all.some((w) => (w.vintage ?? '').toString().trim() !== '')) {
+      showAlert({
+        title: 'Vintages needed',
+        body: "Vinster can't import a file without vintages. Please add a vintage column to your file and upload it again.",
+        buttons: [{ text: 'OK', onPress: () => setStage('capture') }],
+      });
+      return;
+    }
     const map = new Map<string, CellarWine>();
     const userId = session?.user.id;
     if (userId) {
@@ -236,6 +246,18 @@ export default function ImportCellarScreen() {
     setDupFlags(flags);
     setKeep(initialKeep);
     setStage('review');
+    // No purchase prices anywhere → warn (non-blocking): stats need them. Offer to
+    // go back and add a price column, or proceed without.
+    if (!all.some((w) => w.purchasePricePerBottle != null)) {
+      showAlert({
+        title: 'No purchase prices found',
+        body: "Vinster can't see purchase prices in your file, and therefore won't be able to generate accurate Cellar Stats. Please go back and add a column with purchase prices.",
+        buttons: [
+          { text: 'Go back', onPress: () => setStage('capture') },
+          { text: 'Skip purchase prices' },
+        ],
+      });
+    }
   }
 
   // "How to import from {source}" — the exact export steps for the current CSV
@@ -664,11 +686,6 @@ export default function ImportCellarScreen() {
       ) : stage === 'location' ? (
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <Text style={styles.sectionLabel}>Where are these stored?</Text>
-          <Text style={styles.dedupNote}>
-            {keptHasCase
-              ? 'Filed into this location — full cases become OWC cases here, loose bottles are filed alongside. Or import them unplaced and organise later.'
-              : 'File these into a storage location, or import them unplaced and organise later.'}
-          </Text>
           {locations.map((loc) => (
             <TouchableOpacity key={loc.id} style={styles.locRow} onPress={() => confirmImport(loc.id)} activeOpacity={0.7}>
               <Text style={styles.locName} numberOfLines={1}>{loc.name}</Text>
