@@ -198,6 +198,12 @@ export default function RootLayout() {
             <Stack.Screen name="cellar/edit-wine/[wineId]" />
             <Stack.Screen name="cellar/archive" />
             <Stack.Screen name="cellar/mood-picks" />
+            {/* Lineup routes (opened from the Review/Scan tab) — register as root
+                screens over the tabs so opening one doesn't switch the active tab. */}
+            <Stack.Screen name="cellar/lineups" />
+            <Stack.Screen name="cellar/lineup/[id]" />
+            <Stack.Screen name="cellar/archive-night" />
+            <Stack.Screen name="cellar/scan-lineup" />
             <Stack.Screen name="discover/consult" />
             <Stack.Screen name="profile/wine" />
             <Stack.Screen name="profile/recipe" />
