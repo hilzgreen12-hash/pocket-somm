@@ -1880,6 +1880,15 @@ export default function LabelResultsScreen() {
   // (opens the +Add review pre-filled) or later (files it as an awaiting pick).
   function handleSaveToReviews() {
     if (!wine) return;
+    // A review already exists for this wine → go straight to its review card
+    // (Add/View), skipping the "review now / later" prompt.
+    const existingReview = findExistingReview(chosenWines, {
+      producer: wine.producer, wineName: wine.wineName, vintage: wine.vintage, wsWineId: intel.wsWineId ?? null,
+    });
+    if (existingReview) {
+      router.push(`/wines/chosen?openReview=${existingReview.id}&backTo=${encodeURIComponent('/label/results?context=intel')}&fromIntel=1` as any);
+      return;
+    }
     const label = [wine.producer, wine.wineName, wine.vintage].filter(Boolean).join(' ');
     showAlert({
       title: 'Add Your Wine Review',
