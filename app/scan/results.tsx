@@ -948,6 +948,13 @@ export default function ResultsScreen() {
           const headlineIsVinster = vs != null;
           const effRegion = wine.region || wsE?.region || null;
           const effGrape = wine.grape || wsE?.grape || null;
+          // Price shown on the pick: the menu price when the list gave one, else
+          // the live Wine-Searcher market average (flagged "avg") so a pick is
+          // never priceless just because the menu omitted it or OCR missed it.
+          const priceValue = wine.menuPrice != null ? wine.menuPrice
+            : (wsE?.avgPrice != null ? Math.round(wsE.avgPrice) : null);
+          const priceIsEstimate = wine.menuPrice == null && priceValue != null;
+          const priceCurrency = wine.currency || wsE?.currency || userPrefs?.defaultCurrency;
           const criticScoreText = wsE && wsE.criticScore != null
             ? `${wsE.criticScore} points · Wine-Searcher`
             : (wine.criticScoreNote
@@ -1026,12 +1033,15 @@ export default function ResultsScreen() {
                     field can be missing (some lists omit the price, some
                     wines lack a critic score) — the row stays balanced
                     by rendering only the present halves. */}
-                {(wine.menuPrice != null || headlineScore != null) && (
+                {(priceValue != null || headlineScore != null) && (
                   <View style={styles.priceScoreRow}>
-                    {wine.menuPrice != null && (
-                      <Text style={styles.priceScoreText}>{currencySymbol(wine.currency || userPrefs?.defaultCurrency)}{wine.menuPrice}</Text>
+                    {priceValue != null && (
+                      <Text style={styles.priceScoreText}>
+                        {currencySymbol(priceCurrency)}{priceValue}
+                        {priceIsEstimate ? <Text style={styles.priceEstimateTag}> avg</Text> : null}
+                      </Text>
                     )}
-                    {wine.menuPrice != null && headlineScore != null && (
+                    {priceValue != null && headlineScore != null && (
                       <Text style={styles.priceScoreDot}> · </Text>
                     )}
                     {headlineScore != null && (
@@ -1462,6 +1472,12 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemibold,
     fontSize: 13,
     color: colors.gold,
+  },
+  // "avg" marker when the shown price is a market estimate, not the menu price.
+  priceEstimateTag: {
+    fontFamily: fonts.bodySemibold,
+    fontSize: 12,
+    color: colors.textMuted,
   },
   // Flavour-profile line — italic gold "Vinster's voice".
   wineFlavour: {
