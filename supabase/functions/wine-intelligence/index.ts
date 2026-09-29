@@ -80,7 +80,7 @@ Return only the raw JSON — no markdown, no explanation.`;
     // already uses. (find() the text block rather than assuming content[0].)
     async function attempt(): Promise<any> {
       const response = await client.messages.create({
-        model: 'claude-sonnet-4-6',
+        model: 'claude-sonnet-5',
         max_tokens: 1500,
         messages: [{ role: 'user', content: prompt }],
       });

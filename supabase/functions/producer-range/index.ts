@@ -114,7 +114,7 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
       // Sonnet, not Haiku: producer-range needs real, accurate lineup knowledge —
       // Haiku fabricated and misranked bottlings (e.g. inventing "Clos d'Ambonnay"
       // variants and ranking Krug's flagship as entry level).
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       max_tokens: 900,
       messages: [{ role: 'user', content: prompt }],
     });

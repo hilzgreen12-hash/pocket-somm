@@ -105,7 +105,7 @@ Deno.serve(async (req) => {
     const prompt = buildPrompt(action, transcript, wines ?? [], locations ?? [], units ?? []);
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       max_tokens: 512,
       messages: [{ role: 'user', content: prompt }],
     });

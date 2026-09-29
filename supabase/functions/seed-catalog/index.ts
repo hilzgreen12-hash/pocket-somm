@@ -45,7 +45,7 @@ Return ONLY a JSON array (no markdown, no prose) of objects with exactly these k
 - "style": one of "Red","White","Rosé","Sparkling","Fortified", or null`;
 
     const resp = await client.messages.create({
-      model: 'claude-sonnet-4-6',
+      model: 'claude-sonnet-5',
       // High enough that a full batch of verbose entries can't truncate the JSON
       // array (truncation → parse failure → 0 inserted for that category).
       max_tokens: 16000,
