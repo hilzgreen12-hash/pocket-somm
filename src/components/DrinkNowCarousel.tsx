@@ -104,8 +104,8 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  // Yellow-and-black caution pill, top-right of the thumbnail (a warning cue,
-  // not alarming red): solid gold with near-black text.
-  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: colors.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#1A1A1A', letterSpacing: 0.3 },
+  // Yellow-and-black caution pill, top-right of the thumbnail: black ground with
+  // gold (yellow) text + border — same format as the score badge, not red.
+  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(18,11,10,0.82)', borderRadius: 8, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, letterSpacing: 0.3 },
 });
