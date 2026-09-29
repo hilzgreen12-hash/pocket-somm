@@ -113,11 +113,7 @@ export function ReviewDetailModal({
         <TouchableOpacity style={styles.addBtn} onPress={onAddReview} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
           <Text style={styles.addText}>+ Add Review</Text>
         </TouchableOpacity>
-        {onShare ? (
-          <TouchableOpacity style={styles.shareBtn} onPress={onShare} hitSlop={{ top: 8, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
-            <Text style={styles.shareText}>Export</Text>
-          </TouchableOpacity>
-        ) : null}
+        {/* Export moved to a full-width gold button at the foot of the card. */}
         {/* Centred card-type label — matches the Cellar wine card's gold chip so
             the two cards read as the same family. */}
         <Text style={styles.cardTypeLabel} pointerEvents="none">Wine Review</Text>
@@ -235,6 +231,13 @@ export function ReviewDetailModal({
               </View>
             );
           })}
+
+          {/* Export — a full-width gold button at the foot of the card. */}
+          {onShare ? (
+            <TouchableOpacity style={styles.exportBtn} onPress={onShare} activeOpacity={0.85}>
+              <Text style={styles.exportBtnText}>Export</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       </View>
     </Modal>
@@ -290,6 +293,9 @@ const styles = StyleSheet.create({
   // Share sits directly below "+ Add Review".
   shareBtn: { position: 'absolute', top: 84, right: spacing.xl, zIndex: 10, padding: 4, alignItems: 'flex-end' },
   shareText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold },
+  // Foot-of-card Export — full-width gold-outlined button.
+  exportBtn: { marginTop: spacing.lg, borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.md, alignItems: 'center', backgroundColor: 'rgba(224,184,74,0.12)' },
+  exportBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
   // Centred gold card-type chip — same face/size/spacing as the Cellar card's.
   // Sits BELOW the top controls (back / +Add Review / Export) rather than level
   // with them, so the card's title and everything under it clear the header.

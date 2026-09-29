@@ -916,6 +916,15 @@ export default function ChosenWinesScreen() {
     return cellarByIdentity.get(key)?.label_image_path ?? null;
   }
 
+  // Refresh a review item's wine from the LIVE chosen-wines query — detailItem is a
+  // snapshot, so a photo just added via "+ Add" wouldn't show on the open card /
+  // in a share until reopened. Resolving against the live row fixes both.
+  function liveItem(item: ReviewItem): ReviewItem {
+    if (item.source === 'cellar') return item;
+    const live = chosenWines.find((c) => c.id === item.wine.id);
+    return live ? ({ ...item, wine: live } as ReviewItem) : item;
+  }
+
   // Long-press a review. Other reviews get a first step so the user can file
   // them under a bespoke filter (e.g. "BBR Tasting") as well as delete; every
   // other source goes straight to the delete confirm.
@@ -1042,6 +1051,8 @@ export default function ChosenWinesScreen() {
   // devices, simulator without share support).
   async function handleShareReview(item: ReviewItem) {
     if (reviewSharing) return;
+    // Use the live row so a just-added label photo is included in the share card.
+    item = liveItem(item);
     const w = item.wine;
     // Both restaurant and other reviews live on chosen_wines, so they
     // share the same field shape for sharing. Only cellar splits off.
@@ -1261,7 +1272,7 @@ export default function ChosenWinesScreen() {
           if (it.source === 'cellar') { setEditingCellarLatest(true); setEditingCellarWine(it.wine as CellarWine); }
           else setEditingWine((it as Extract<ReviewItem, { source: 'restaurant' }>).entries[0]);
         }}
-        thumbPath={detailItem ? labelPathFor(detailItem) : null}
+        thumbPath={detailItem ? labelPathFor(liveItem(detailItem)) : null}
         onAddPhoto={() => {
           const it = detailItem; if (!it) return;
           attachPhoto.present({
