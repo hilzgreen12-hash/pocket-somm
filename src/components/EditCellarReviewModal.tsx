@@ -148,13 +148,23 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
     if (session?.user.id) {
       const { restaurantName, city } = splitLocationString(locationTrim);
       const identity = { producer: wine.producer, wineName: wine.wine_name, vintage: wine.vintage };
-      const fields = { userScore: parsedScore, restaurantName, city, reviewDate: dateTrim || undefined };
+      const fields = {
+        userScore: parsedScore,
+        tastingNote: reviewNote,
+        restaurantName,
+        city,
+        reviewDate: dateTrim || undefined,
+        labelImagePath: wine.label_image_path,
+      };
       try {
-        // Update a matching chosen_wines review if one exists, but DON'T
-        // create one — the cellar wine's review already shows in Your Wine
-        // Reviews as a 'cellar' item, so creating a chosen_wines row here
-        // duplicated it (as a score-only twin).
-        await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: false, region: wine.region });
+        // Create a chosen_wines row when none exists yet, so a review made
+        // directly on a cellar bottle (never scanned as a List wine) shows in
+        // Your Wine Reviews AND the home Recent Reviews carousel — the carousel
+        // reads only chosen_wines, so a cellar-only review was invisible there.
+        // Your Wine Reviews de-dupes the now-matching chosen row against the
+        // cellar 'cellar' item (see chosen.tsx dedupedCellarReviews), so it
+        // still lists once, not twice.
+        await syncEditToChosen(session.user.id, identity, fields, { createIfMissing: true, region: wine.region });
         await syncReviewToCellar(session.user.id, identity, fields, { excludeCellarWineId: wine.id });
         qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
         qc.invalidateQueries({ queryKey: ['wishlist', session.user.id] });

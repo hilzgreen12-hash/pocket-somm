@@ -373,7 +373,7 @@ export async function findMatchingChosenWine(
 export async function createChosenWineFromReview(
   userId: string,
   identity: { producer: string | null; wineName: string; vintage: string | number | null },
-  fields: { userScore?: number | null; restaurantName?: string; city?: string; reviewDate?: string; tastingNote?: string },
+  fields: { userScore?: number | null; restaurantName?: string; city?: string; reviewDate?: string; tastingNote?: string; labelImagePath?: string | null },
   region: string | null,
 ): Promise<void> {
   const v = identity.vintage;
@@ -390,6 +390,9 @@ export async function createChosenWineFromReview(
     city: fields.city?.trim() || null,
     tasting_note: fields.tastingNote?.trim() || null,
     user_score: fields.userScore ?? null,
+    // Carry the cellar bottle's label photo so the review card + home carousel
+    // thumbnail match the wine (blank otherwise).
+    label_image_path: fields.labelImagePath?.trim() || null,
   };
   // chosen_at defaults to now(); when the user gave a drink date, use
   // that instead so Your Wine Reviews sorts by when the wine was drunk.

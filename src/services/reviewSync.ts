@@ -29,6 +29,10 @@ export interface ReviewFields {
   city?: string;
   userScore?: number | null;
   reviewDate?: string;
+  // Only used when createIfMissing spawns a fresh chosen_wines row (a cellar
+  // review that had no chosen twin) — carries the bottle's label photo across so
+  // the new review card / carousel thumbnail isn't blank.
+  labelImagePath?: string | null;
 }
 
 function locationString(restaurant: string | undefined, city: string | undefined): string {
