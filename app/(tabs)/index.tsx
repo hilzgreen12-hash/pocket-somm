@@ -10,8 +10,7 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
-import { DrinkSoonCarousel, useDrinkSoonCount } from '../../src/components/DrinkSoonCarousel';
-import { RecentReviewsCarousel } from '../../src/components/RecentReviewsCarousel';
+import { DrinkNowCarousel, useDrinkNowCount } from '../../src/components/DrinkNowCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
 import { useScanStore } from '../../src/stores/scanStore';
@@ -74,7 +73,7 @@ export default function ScanLandingScreen() {
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const drinkSoonCount = useDrinkSoonCount();
+  const drinkNowCount = useDrinkNowCount();
 
   // The Scan tab always shows its normal compact header. On the first landing
   // after opening the app, a welcome overlay (logo · "Real Wine Experience, AI Delivered" ·
@@ -395,17 +394,14 @@ export default function ScanLandingScreen() {
       <Text style={styles.carouselStats}>Last 8 Wine Label and List Scans</Text>
       <View style={styles.carouselBleed}><RecentScansCarousel /></View>
 
-      {/* Recent Reviews — wine + restaurant reviews, most recent first. */}
+      {/* Drink Now — cellar bottles at last call (drinkable now, window closes
+          within 5 years), most urgent first. Replaces the redundant Recent
+          Reviews carousel (reviews live in the Review tab) and consolidates the
+          old "Drink Soon" carousel. */}
       <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Recent Reviews</Text>
-      <Text style={styles.carouselStats}>Last 8 Wine & Restaurant Reviews</Text>
-      <View style={styles.carouselBleed}><RecentReviewsCarousel /></View>
-
-      {/* Drink Soon — cellar bottles at their peak. */}
-      <View style={styles.sectionSeparator} />
-      <Text style={styles.carouselHeader}>Your Cellar - Drink Soon</Text>
-      <Text style={styles.carouselStats}>{drinkSoonCount} Wines Approaching Peak</Text>
-      <View style={styles.carouselBleed}><DrinkSoonCarousel /></View>
+      <Text style={styles.carouselHeader}>Your Cellar - Drink Now</Text>
+      <Text style={styles.carouselStats}>{drinkNowCount} {drinkNowCount === 1 ? 'Wine' : 'Wines'} at Last Call</Text>
+      <View style={styles.carouselBleed}><DrinkNowCarousel /></View>
 
       {/* Community Musings — coming soon (recently shared reviews, journal). */}
       <View style={styles.sectionSeparator} />
