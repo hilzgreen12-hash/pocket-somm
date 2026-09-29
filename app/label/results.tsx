@@ -243,9 +243,8 @@ export default function LabelResultsScreen() {
   const cloudSavedRef = useRef(false);
   // Tap-to-enlarge the label photo on the confirm screen (pinch/zoom/pan).
   const [zoomOpen, setZoomOpen] = useState(false);
-  // Vinster's Note + Vinster's Map are collapsible, both reduced by default.
+  // Vinster's Note is collapsible, reduced by default. (Vinster's Map removed for now.)
   const [noteExpanded, setNoteExpanded] = useState(false);
-  const [mapExpanded, setMapExpanded] = useState(false);
   // Vinster's Vintage & Market Comparison — a third collapsible; its Wine-Searcher
   // per-vintage table is generated on first expand (N live lookups) and cached.
   const [vintagesExpanded, setVintagesExpanded] = useState(false);
@@ -1859,7 +1858,7 @@ export default function LabelResultsScreen() {
   // table on first expand (N live lookups; cached after so re-opening is instant).
   function toggleVintages() {
     const opening = !vintagesExpanded;
-    setNoteExpanded(false); setMapExpanded(false);
+    setNoteExpanded(false);
     setVintagesExpanded(opening);
     if (opening && !vintagesTriedRef.current && wine) {
       vintagesTriedRef.current = true;
@@ -2241,28 +2240,15 @@ export default function LabelResultsScreen() {
           ) : null}
           <View style={styles.statBarRule} />
 
-          {/* Vinster's Note + Vinster's Map share ONE section — squeezed directly
-              one above the other with no separator between them; the section's
-              bottom border is the only separator (it sits below the Map, before
-              The Inside Line). "(what's this)" is replaced by the explainer shown
-              in gold italics below the note when it's open. */}
+          {/* Vinster's Note — collapsible; its "(what's this)" is replaced by the
+              explainer shown in gold italics below the note when it's open.
+              (Vinster's Map removed for now — to revisit later.) */}
           <View style={styles.noteMapSection}>
-            {/* Vinster's Note (left) and Vinster's Map (right) share ONE centred
-                line with an indent between them; each expands its body below. */}
             <View style={styles.noteMapHeadingRow}>
-              <VinstersNoteHeading expanded={noteExpanded} onToggle={() => { setMapExpanded(false); setNoteExpanded((v) => !v); }} hideExplainerLink />
-              <TouchableOpacity style={styles.mapHeadingRow} onPress={() => { setNoteExpanded(false); setMapExpanded((v) => !v); }} activeOpacity={0.7}>
-                <Text style={styles.mapTitle}>Vinster's Map</Text>
-                <Text style={styles.mapChevron}>{mapExpanded ? '⌃' : '⌄'}</Text>
-              </TouchableOpacity>
+              <VinstersNoteHeading expanded={noteExpanded} onToggle={() => setNoteExpanded((v) => !v)} hideExplainerLink />
             </View>
             {noteExpanded ? <Text style={styles.tastingNotes}>{intel.tastingNotes}</Text> : null}
             {noteExpanded ? <Text style={styles.noteExplainer}>{VINSTERS_NOTE_EXPLAINER}</Text> : null}
-            {mapExpanded ? (
-              <Text style={styles.mapBody}>
-                Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
-              </Text>
-            ) : null}
           </View>
 
           {/* Vinster's Vintage & Market Comparison — a third collapsible with a

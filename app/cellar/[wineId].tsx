@@ -359,7 +359,6 @@ export default function CellarWineDetail() {
   // The "(what's this)" link surfaces a short explanation modal so a
   // user encountering the field for the first time knows what it is.
   const [vinstersNoteOpen, setVinstersNoteOpen] = useState(false);
-  const [vinstersMapOpen, setVinstersMapOpen] = useState(false);
 
   // Off-screen share card for "Share outside the app" — captured to
   // PNG and handed to the native share sheet. Same pattern Wine
@@ -1893,25 +1892,14 @@ export default function CellarWineDetail() {
           the user's own, and Vinster's AI review only exists in the cellar. */}
       {!isWishlist ? (
         <>
-        {/* Vinster's Review (left) beside Vinster's Map (right) — the two headers
-            stay side by side; whichever is expanded lays its body out FULL WIDTH
-            below the row (not squeezed into its half-width column). */}
+        {/* Vinster's Review — its body lays out full width below. (Vinster's Map
+            removed for now — to revisit later.) */}
         <View style={styles.reviewRow}>
-          <View style={styles.reviewCol}>
-            <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={() => { setVinstersMapOpen(false); setVinstersNoteOpen((v) => !v); }} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
-                <Ionicons name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-              </TouchableOpacity>
-            </View>
-          </View>
-          <View style={styles.reviewCol}>
-            <View style={styles.vinsterHeaderRow}>
-              <TouchableOpacity onPress={() => { setVinstersNoteOpen(false); setVinstersMapOpen((v) => !v); }} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
-                <Text style={styles.vinsterReviewTitle}>Vinster's Map</Text>
-                <Ionicons name={vinstersMapOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
-              </TouchableOpacity>
-            </View>
+          <View style={styles.vinsterHeaderRow}>
+            <TouchableOpacity onPress={() => setVinstersNoteOpen((v) => !v)} activeOpacity={0.7} style={styles.vinsterReviewToggle}>
+              <Text style={styles.vinsterReviewTitle}>Vinster's Review</Text>
+              <Ionicons name={vinstersNoteOpen ? 'chevron-up-outline' : 'chevron-down-outline'} size={16} color={colors.gold} />
+            </TouchableOpacity>
           </View>
         </View>
         {vinstersNoteOpen ? (
@@ -1931,13 +1919,6 @@ export default function CellarWineDetail() {
                 <Text style={styles.generateNoteBtnText}>Generate</Text>
               </TouchableOpacity>
             )}
-          </View>
-        ) : null}
-        {vinstersMapOpen ? (
-          <View style={styles.reviewExpandedFull}>
-            <Text style={styles.tastingNotes}>
-              Soon, Vinster will offer a map of this wine's region and where the particular producer places within it. It'll show next to the highest profile producers in the region for comparison. We're currently working on Bordeaux, Burgundy, Champagne, California's North Coast, and Piedmont for a start.
-            </Text>
           </View>
         ) : null}
 
