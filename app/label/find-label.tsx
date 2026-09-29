@@ -9,6 +9,7 @@ import { searchLabelImages, type LabelImageCandidate } from '../../src/api/label
 import { uploadLabelImageFromUrl } from '../../src/api/labelPhotos';
 import { updateCellarWine } from '../../src/api/cellar';
 import { patchChosenWine } from '../../src/api/chosenWines';
+import { setLabelImage } from '../../src/api/labels';
 import { colors, spacing } from '../../src/constants/theme';
 import { fonts } from '../../src/constants/fonts';
 
@@ -52,6 +53,9 @@ export default function FindLabelScreen() {
       if (kind === 'chosen') {
         await patchChosenWine(wineId, { label_image_path: path });
         qc.invalidateQueries({ queryKey: ['chosen-wines', session.user.id] });
+      } else if (kind === 'label') {
+        await setLabelImage(wineId, path);
+        qc.invalidateQueries({ queryKey: ['labels'] });
       } else {
         await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: true } as any);
         qc.invalidateQueries({ queryKey: ['cellar'] });

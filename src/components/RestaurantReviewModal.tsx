@@ -812,7 +812,7 @@ export function RestaurantReviewModal({
             {/* Share lives in the top-right corner now — no bottom share row. */}
 
             <TouchableOpacity style={[styles.saveButton, (saving || !sessionId) && styles.btnDisabled]} onPress={handleSave} disabled={saving || !sessionId}>
-              <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurants'}</Text>
+              <Text style={styles.saveButtonText}>{saving ? 'Saving…' : !sessionId ? 'Preparing…' : 'Save to Your Restaurant Reviews'}</Text>
             </TouchableOpacity>
           </KeyboardAwareScrollView>
 

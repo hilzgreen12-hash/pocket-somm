@@ -85,6 +85,13 @@ export async function setLabelFavourite(id: string, value: boolean): Promise<voi
   if (error) throw new Error(error.message);
 }
 
+// Set (or clear, with null) a label scan's photo — used by the "Update photo"
+// long-press action on the Recent Scans carousel.
+export async function setLabelImage(id: string, path: string | null): Promise<void> {
+  const { error } = await supabase.from('labels').update({ label_image_path: path }).eq('id', id);
+  if (error) throw new Error(error.message);
+}
+
 // Correct the captured location on a library label (GPS can guess the wrong
 // town). Empty strings clear the field.
 // Persist the intel snapshot back onto a label — used to fold the producer

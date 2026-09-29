@@ -6,6 +6,7 @@ import { ensureMediaPermission } from '../utils/mediaPermissions';
 import { uploadLabelImage } from '../api/labelPhotos';
 import { patchChosenWine } from '../api/chosenWines';
 import { updateCellarWine } from '../api/cellar';
+import { setLabelImage } from '../api/labels';
 import { useAuth } from './useAuth';
 
 // The "add a photo" action sheet shared by the reviews list and the review
@@ -13,7 +14,7 @@ import { useAuth } from './useAuth';
 // shot, so we let the user attach one three ways — camera, library, or an
 // online label search — and store it against the right row (chosen_wines for
 // restaurant/other reviews, cellar_wines for cellar wines).
-export type AttachKind = 'chosen' | 'cellar';
+export type AttachKind = 'chosen' | 'cellar' | 'label';
 
 export function useAttachLabelPhoto() {
   const { session } = useAuth();
@@ -29,6 +30,10 @@ export function useAttachLabelPhoto() {
       // "Select from Cellar" pool and on shareable/community cards.
       await updateCellarWine(wineId, { label_image_path: path, label_image_fetched: false } as any);
       qc.invalidateQueries({ queryKey: ['cellar'] });
+    } else if (kind === 'label') {
+      // A Recent Scans label card (labels table).
+      await setLabelImage(wineId, path);
+      qc.invalidateQueries({ queryKey: ['labels'] });
     } else {
       await patchChosenWine(wineId, { label_image_path: path });
       qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });
@@ -62,6 +67,9 @@ export function useAttachLabelPhoto() {
       if (kind === 'cellar') {
         await updateCellarWine(wineId, { label_image_path: null, label_image_fetched: false } as any);
         qc.invalidateQueries({ queryKey: ['cellar'] });
+      } else if (kind === 'label') {
+        await setLabelImage(wineId, null);
+        qc.invalidateQueries({ queryKey: ['labels'] });
       } else {
         await patchChosenWine(wineId, { label_image_path: null });
         qc.invalidateQueries({ queryKey: ['chosen-wines', userId] });

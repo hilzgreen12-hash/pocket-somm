@@ -9,6 +9,8 @@ import { useScanStore } from '../stores/scanStore';
 import { getCachedLabelUri } from '../api/labelImageCache';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
 import { useAttachRestaurantPhoto } from '../hooks/useAttachRestaurantPhoto';
+import { useAttachLabelPhoto } from '../hooks/useAttachLabelPhoto';
+import { showAlert } from './AppAlert';
 import { formatWineTitle } from '../utils/wineTitle';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -25,8 +27,8 @@ import { fonts } from '../constants/fonts';
 // cloud (labels table + scan_sessions), so scans survive reinstalls and appear
 // across devices; the thumbnail resolves from the stored photo path.
 type Recent =
-  | { kind: 'label'; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; open: () => void }
-  | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void; onAddImage?: () => void };
+  | { kind: 'label'; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; open: () => void; onLongPress?: () => void }
+  | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void; onAddImage?: () => void; onLongPress?: () => void };
 
 // Shared date format for the "date · location" stamp beneath each thumbnail.
 function stampDate(d: Date): string {
@@ -68,7 +70,7 @@ function RecentCard({ item }: { item: Recent }) {
   // the add-photo flow, instead of a plain fallback thumbnail.
   const showAddImage = item.kind === 'list' && !item.path && !!item.onAddImage;
   return (
-    <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>
+    <TouchableOpacity style={styles.card} onPress={item.open} onLongPress={item.onLongPress} delayLongPress={400} activeOpacity={0.85}>
       {showAddImage ? (
         <TouchableOpacity style={styles.addImageThumb} onPress={item.onAddImage} activeOpacity={0.8}>
           <Ionicons name="camera-outline" size={26} color={colors.gold} />
@@ -89,9 +91,32 @@ function RecentCard({ item }: { item: Recent }) {
 }
 
 export function RecentScansCarousel() {
-  const { labels } = useLabels();
-  const { archive } = useScanHistory();
+  const { labels, remove: removeLabel } = useLabels();
+  const { archive, removeArchiveItem } = useScanHistory();
   const attachRestaurantPhoto = useAttachRestaurantPhoto();
+  const attachLabelPhoto = useAttachLabelPhoto();
+
+  // Long-press → "Update photo" / "Remove from carousel" for either card type.
+  function labelLongPress(l: { id: string; producer: string | null; wine_name: string | null; label_image_path: string | null }) {
+    showAlert({
+      title: 'Recent scan',
+      buttons: [
+        { text: 'Update photo', onPress: () => setTimeout(() => attachLabelPhoto.present({ kind: 'label', wineId: l.id, producer: l.producer, wineName: l.wine_name, hasPhoto: !!l.label_image_path }), 250) },
+        { text: 'Remove from carousel', style: 'destructive', onPress: () => removeLabel.mutate(l.id) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+  function listLongPress(a: ScanArchiveItem) {
+    showAlert({
+      title: 'Recent scan',
+      buttons: [
+        { text: 'Update photo', onPress: () => setTimeout(() => attachRestaurantPhoto.present({ sessionId: a.id, restaurant: a.restaurantName?.trim() || null, city: a.city?.trim() || null, hasPhoto: !!a.restaurantPhotoPath }), 250) },
+        { text: 'Remove from carousel', style: 'destructive', onPress: () => removeArchiveItem.mutate(a.id) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
 
   // Cloud label scans → Recent label cards, de-duped by identity (labels arrive
   // newest-first, so the first occurrence of each wine is the most recent).
@@ -109,6 +134,7 @@ export function RecentScansCarousel() {
       path: l.label_image_path,
       producer: l.producer,
       wineName: l.wine_name,
+      onLongPress: () => labelLongPress(l),
       open: async () => {
         const ls = useLabelStore.getState();
         ls.setWineDetailsConfirmed({
@@ -163,6 +189,7 @@ export function RecentScansCarousel() {
       onAddImage: a.restaurantPhotoPath
         ? undefined
         : () => attachRestaurantPhoto.present({ sessionId: a.id, restaurant: venue || null, city: loc || null, hasPhoto: false }),
+      onLongPress: () => listLongPress(a),
       open: () => {
         const ss = useScanStore.getState();
         ss.setExtractedWines(a.extractedWines);
