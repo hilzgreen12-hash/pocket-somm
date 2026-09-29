@@ -181,10 +181,11 @@ export function WineReviewFields({
           <TextInput
             style={[styles.input, styles.noteInput]}
             value={personalNotes}
-            onChangeText={onPersonalNotes}
-            placeholder="Just for you — anything you'd rather keep private."
+            onChangeText={(t) => onPersonalNotes(t.slice(0, 50))}
+            placeholder="A short private note — max 50 characters."
             placeholderTextColor={colors.textMuted}
-            multiline numberOfLines={4} textAlignVertical="top"
+            maxLength={50}
+            multiline numberOfLines={2} textAlignVertical="top"
           />
         </>
       ) : null}

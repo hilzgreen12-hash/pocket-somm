@@ -1220,6 +1220,20 @@ export default function ChosenWinesScreen() {
             .then(() => qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] }))
             .catch(() => { /* best-effort persistence */ });
         }}
+        onSavePersonalNote={async (entryId, note) => {
+          // Save / clear a chosen review's private note (other_observations) from
+          // the "Your Personal Note" popup. Cellar reviews don't surface it here.
+          const it = detailItem; if (!it || it.source === 'cellar') return;
+          const clean = note.trim() || null;
+          await patchChosenWine(entryId, { other_observations: clean });
+          qc.invalidateQueries({ queryKey: ['chosen-wines', session?.user.id] });
+          // Reflect it on the open card immediately (the link hides when cleared).
+          setDetailItem((prev) => {
+            if (!prev || prev.source === 'cellar') return prev;
+            const entries = prev.entries.map((e) => (e.id === entryId ? { ...e, other_observations: clean } : e));
+            return { ...prev, entries, wine: entries[0] ?? prev.wine } as ReviewItem;
+          });
+        }}
         onClose={() => { setDetailItem(null); if (cameViaLink) returnToLibrary(); }}
         onAddReview={() => {
           const it = detailItem; if (!it) return;
