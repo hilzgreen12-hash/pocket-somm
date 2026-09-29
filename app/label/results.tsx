@@ -2085,13 +2085,13 @@ export default function LabelResultsScreen() {
               <TextInput style={styles.editWineInput} value={editRegion} onChangeText={setEditRegion} placeholder="Region" placeholderTextColor={colors.textMuted} />
               <Text style={styles.editWineLabel}>Grape variety</Text>
               <TextInput style={styles.editWineInput} value={editGrape} onChangeText={setEditGrape} placeholder="Grape variety" placeholderTextColor={colors.textMuted} />
-              <Text style={styles.editWineLabel}>Style</Text>
+              <Text style={styles.editWineLabel}>Style (optional)</Text>
               <TextInput style={styles.editWineInput} value={editStyle} onChangeText={setEditStyle} placeholder="Red / White / Rosé / Sparkling / Fortified" placeholderTextColor={colors.textMuted} />
               <Text style={styles.editWineLabel}>Bottle size</Text>
               <BottleSizePicker value={editBottleSizeMl} onChange={setEditBottleSizeMl} />
 
               <TouchableOpacity style={[styles.editWineSave, savingEdit && styles.btnDisabled]} onPress={() => void saveEditWine()} disabled={savingEdit} activeOpacity={0.85}>
-                {savingEdit ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.editWineSaveText}>Save & Regenerate</Text>}
+                {savingEdit ? <ActivityIndicator color={colors.gold} /> : <Text style={styles.editWineSaveText}>Save & Regenerate</Text>}
               </TouchableOpacity>
               <TouchableOpacity style={styles.editWineCancel} onPress={() => setEditWineOpen(false)} disabled={savingEdit} activeOpacity={0.7}>
                 <Text style={styles.editWineCancelText}>Cancel</Text>
@@ -3003,8 +3003,8 @@ const styles = StyleSheet.create({
   editWinePhotoBtnText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   editWineLabel: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5, marginTop: spacing.sm, marginBottom: 4 },
   editWineInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 8, padding: spacing.sm, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface },
-  editWineSave: { backgroundColor: colors.gold, borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
-  editWineSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.surface, letterSpacing: 0.3 },
+  editWineSave: { borderWidth: 1, borderColor: colors.gold, backgroundColor: 'rgba(224,184,74,0.12)', borderRadius: 12, paddingVertical: spacing.md, alignItems: 'center', marginTop: spacing.lg },
+  editWineSaveText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
   editWineCancel: { alignItems: 'center', paddingVertical: spacing.md },
   editWineCancelText: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.textMuted },
   btnDisabled: { opacity: 0.5 },
