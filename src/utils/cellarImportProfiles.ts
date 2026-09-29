@@ -69,7 +69,7 @@ function mkWine(p: Partial<CellarImportWine>): CellarImportWine {
   return {
     producer: null, wineName: null, vintage: null, region: null, country: null, colour: null,
     bottleSizeMl: 750, totalBottles: 1, packaging: 'loose', bottlesPerCase: null, cases: null, looseBottles: null,
-    drinkingWindowFrom: null, drinkingWindowTo: null, purchasePricePerBottle: null, currency: 'GBP', notes: null,
+    drinkingWindowFrom: null, drinkingWindowTo: null, purchasePricePerBottle: null, marketPricePerBottle: null, currency: 'GBP', notes: null,
     ...p,
   };
 }

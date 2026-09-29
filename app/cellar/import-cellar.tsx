@@ -47,6 +47,7 @@ function fromImported(w: ImportedCellarWine): CellarImportWine {
     drinkingWindowFrom: null,
     drinkingWindowTo: null,
     purchasePricePerBottle: w.purchase_price ?? null,
+    marketPricePerBottle: null,
     currency: w.currency ?? null,
     notes: null,
   };
@@ -264,7 +265,20 @@ export default function ImportCellarScreen() {
     const formatNote = noFormatCount > 0
       ? `\n\n${noFormatCount} wine${noFormatCount === 1 ? '' : 's'} had no bottle format, so ${noFormatCount === 1 ? 'it was' : 'they were'} set to 1×75cl (single 75cl bottles). You can change a wine's format later.`
       : '';
-    if (!all.some((w) => w.purchasePricePerBottle != null)) {
+    const hasPurchase = all.some((w) => w.purchasePricePerBottle != null);
+    const hasMarket = all.some((w) => w.marketPricePerBottle != null);
+    if (!hasPurchase && hasMarket) {
+      // No purchase prices, but the doc carried market/current values — those are
+      // applied as each wine's estimated value, so the user can proceed.
+      showAlert({
+        title: 'Market values found',
+        body: `No purchase prices in your file, but Vinster found market/current values and will apply them as each wine's estimated value. Add purchase prices too for the most accurate Cellar Stats.${formatNote}`,
+        buttons: [
+          { text: 'Add purchase prices', onPress: () => setStage('capture') },
+          { text: 'Continue' },
+        ],
+      });
+    } else if (!hasPurchase) {
       // No purchase prices anywhere → stats need them. Offer to go back or proceed.
       showAlert({
         title: 'No purchase prices found',
@@ -585,9 +599,12 @@ export default function ImportCellarScreen() {
           label_image_path: null,
           user_notes: null,
           is_wishlist: false,
-          estimated_value: null,
-          estimated_value_currency: null,
-          estimated_value_at: null,
+          // Market/current value from the import doc (when the sheet had one) →
+          // the wine's estimated value, so Cellar Stats reflect it without a lookup.
+          estimated_value: w.marketPricePerBottle ?? null,
+          estimated_value_currency: w.marketPricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
+          estimated_value_at: w.marketPricePerBottle != null ? new Date().toISOString() : null,
+          estimated_value_source: w.marketPricePerBottle != null ? 'imported' : null,
           purchase_price: w.purchasePricePerBottle ?? null,
           purchase_price_currency: w.purchasePricePerBottle != null ? (w.currency ?? defaultCurrency) : null,
           bottle_size_ml: w.bottleSizeMl ?? 750,
@@ -836,11 +853,13 @@ export default function ImportCellarScreen() {
                 const label = [w.vintage, w.producer, w.wineName].filter(Boolean).join(' ');
                 // quantity x format, matching the cellar list (e.g. 1x75, 2x150).
                 const qtyFormat = `${qty}x${bottleSizeCl(w.bottleSizeMl)}`;
-                // Purchase price per bottle (when the file gave one) — shown in gold
-                // next to the format so the user can confirm prices were read.
-                const priceStr = w.purchasePricePerBottle != null
-                  ? `${formatCurrency(w.purchasePricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl`
-                  : null;
+                // Purchase and/or market price per bottle (when the file gave them)
+                // — shown in gold next to the format so the user can confirm prices
+                // were read. Market value is labelled so it's clear it's not cost.
+                const priceStr = [
+                  w.purchasePricePerBottle != null ? `${formatCurrency(w.purchasePricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl` : null,
+                  w.marketPricePerBottle != null ? `${formatCurrency(w.marketPricePerBottle, w.currency ?? defaultCurrency, { decimals: 0 })}/btl mkt` : null,
+                ].filter(Boolean).join('  ·  ') || null;
                 return (
                   <TouchableOpacity
                     key={i}

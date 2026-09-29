@@ -46,7 +46,10 @@ For each wine return these keys (use null when unknown, never invent data):
 - cases: integer number of full cases, or null if loose.
 - looseBottles: integer loose bottles beyond full cases, or null/0.
 - drinkingWindowFrom, drinkingWindowTo: 4-digit year strings, or null (parse "2016 - 2025", "Ready 2025 - 2032", etc.).
-- purchasePricePerBottle: number in the row's currency, or null. The price/value column may be labelled many ways — "price", "purchase price", "cost", "unit cost", "purchase value", "stock value", "value", "valuation", "book value". Treat any of these as the holding's price. Work out PER BOTTLE: if the figure is per case, divide by bottlesPerCase; if it's a TOTAL holding value (i.e. the value of all the bottles on that row), divide by totalBottles. Only leave null when the row genuinely has no price/value figure at all.
+- purchasePricePerBottle: number in the row's currency, or null — what the owner PAID. Column labels: "price", "purchase price", "cost", "unit cost", "purchase value", "book value", "paid", "ex-cellar". If the sheet has only ONE monetary column (however it's labelled — including "value" / "stock value"), treat it as the purchase price and put it here.
+- marketPricePerBottle: number in the row's currency, or null — the wine's CURRENT/MARKET worth. Column labels: "market value", "market price", "current value", "current price", "valuation", "value now", "stock value" (when a separate purchase/cost column also exists). Only set this when the sheet has a distinct market/current-value column IN ADDITION to (or instead of an explicit purchase column). Leave null if there's no such column.
+- BE THOROUGH: if the sheet plainly has monetary figures, you MUST extract them — do not return null prices when a price/value column exists. When a sheet has TWO monetary columns (e.g. "Purchase Price" and "Market Value"), populate BOTH fields; when it has one, populate purchasePricePerBottle.
+- For BOTH price fields work out PER BOTTLE: if the figure is per case, divide by bottlesPerCase; if it's a TOTAL holding value (the value of all the bottles on that row), divide by totalBottles. Strip currency symbols and thousands separators before returning the number.
 - currency: 3-letter code if determinable (GBP/USD/EUR…), else null.
 - notes: a tasting note from the row if present, else null.
 
@@ -122,6 +125,7 @@ Deno.serve(async (req) => {
         drinkingWindowFrom: year(w?.drinkingWindowFrom),
         drinkingWindowTo: year(w?.drinkingWindowTo),
         purchasePricePerBottle: toNum(w?.purchasePricePerBottle),
+        marketPricePerBottle: toNum(w?.marketPricePerBottle),
         currency: typeof w?.currency === 'string' && /^[A-Za-z]{3}$/.test(w.currency) ? w.currency.toUpperCase() : null,
         notes: str(w?.notes),
       };

@@ -418,6 +418,9 @@ export interface CellarImportWine {
   drinkingWindowFrom: string | null;
   drinkingWindowTo: string | null;
   purchasePricePerBottle: number | null;
+  // Current/market value per bottle from the import doc (a separate column) —
+  // applied as the wine's estimated value on save.
+  marketPricePerBottle: number | null;
   currency: string | null;
   notes: string | null;
 }
