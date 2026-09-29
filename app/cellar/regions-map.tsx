@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import { router } from 'expo-router';
 import { useCellar } from '../../src/hooks/useCellar';
-import { mostRepresentedRegions, baseRegionGroup } from '../../src/utils/wineRegionGroup';
+import { mostRepresentedRegions, baseRegionGroup, classifiedRegionBottles } from '../../src/utils/wineRegionGroup';
 import { foldAccents } from '../../src/utils/wineIdentity';
 import { CoteDorMap } from '../../src/components/CoteDorMap';
 import coteDorData from '../../assets/maps/cote-dor.data.json';
@@ -43,6 +43,9 @@ export default function CellarRegionsMapScreen() {
   const { wines } = useCellar();
   const totalWines = wines.length;
   const totalBottles = wines.reduce((sum, w) => sum + (w.quantity ?? 0), 0);
+  // Regional shares are of bottles with a KNOWN region — region-less wines would
+  // otherwise dilute every % so they couldn't sum toward 100%.
+  const classifiedBottles = classifiedRegionBottles(wines);
   const top3 = mostRepresentedRegions(wines, 999).slice(0, 3);
   const [expanded, setExpanded] = useState<string | null>(top3.length ? top3[0][0] : null);
 
@@ -92,7 +95,7 @@ export default function CellarRegionsMapScreen() {
                   <TouchableOpacity style={styles.regionTop} onPress={() => setExpanded(open ? null : region)} activeOpacity={0.7}>
                     <Text style={styles.regionLabel} numberOfLines={1}>{region}</Text>
                     <View style={styles.regionRight}>
-                      <Text style={styles.regionPct}>{pct(count, totalBottles)}</Text>
+                      <Text style={styles.regionPct}>{pct(count, classifiedBottles)}</Text>
                       <Text style={styles.chevron}>{open ? '▲' : '▼'}</Text>
                     </View>
                   </TouchableOpacity>

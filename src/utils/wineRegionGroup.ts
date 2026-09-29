@@ -155,3 +155,18 @@ export function mostRepresentedRegions(
   }
   return Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, topN);
 }
+
+// Total bottles that carry a RECOGNISABLE region — the correct denominator for
+// regional shares. Region-less wines (a merchant list with no region column, or
+// wines whose intel hasn't run) are excluded from the region tally, so dividing
+// by the whole-cellar bottle count would dilute every percentage and the shown
+// regions could never sum toward 100% (the "missing percentage points" bug).
+export function classifiedRegionBottles(
+  wines: { region: string | null; quantity: number | null }[],
+): number {
+  let total = 0;
+  for (const w of wines) {
+    if (baseRegionGroup(w.region)) total += (w.quantity ?? 0);
+  }
+  return total;
+}

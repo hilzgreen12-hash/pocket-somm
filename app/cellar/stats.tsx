@@ -14,7 +14,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
-import { mostRepresentedRegions } from '../../src/utils/wineRegionGroup';
+import { mostRepresentedRegions, classifiedRegionBottles } from '../../src/utils/wineRegionGroup';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
 import { WineValueEditorModal } from '../../src/components/WineValueEditorModal';
@@ -152,6 +152,9 @@ export default function CellarStatsScreen() {
   // Countries by default; France/Italy split into headline regions; and any
   // area the collector has real depth in is broken down further (see util).
   const topRegions = mostRepresentedRegions(wines, 3);
+  // Regional shares are of bottles with a KNOWN region (region-less wines would
+  // otherwise dilute every % so they can't sum toward 100%).
+  const classifiedBottles = classifiedRegionBottles(wines);
 
   // Style breakdown — uses explicit style column if present, falls back to a
   // grape/region heuristic. Wines that can't be classified bucket as "Other".
@@ -364,8 +367,13 @@ export default function CellarStatsScreen() {
               <>
                 <View style={styles.summaryDivider} />
                 <Text style={styles.summarySub}>
-                  {topRegions.map(([region, count]) => `${pct(count, totalBottles)} ${region}`).join('  ·  ')}
+                  {topRegions.map(([region, count]) => `${pct(count, classifiedBottles)} ${region}`).join('  ·  ')}
                 </Text>
+                {totalBottles - classifiedBottles > 0 ? (
+                  <Text style={styles.summaryNote}>
+                    Of {classifiedBottles} {classifiedBottles === 1 ? 'bottle' : 'bottles'} with a known region · {totalBottles - classifiedBottles} still unclassified
+                  </Text>
+                ) : null}
               </>
             ) : null}
             <TouchableOpacity onPress={() => router.push('/cellar/regions-map')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} activeOpacity={0.7}>
@@ -606,6 +614,7 @@ const styles = StyleSheet.create({
   summaryBar: { alignItems: 'center', paddingVertical: spacing.lg, gap: 6, borderBottomWidth: 1, borderBottomColor: colors.border },
   summaryLine: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
   summarySub: { fontFamily: fonts.bodySemibold, fontSize: 13, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+  summaryNote: { fontFamily: fonts.bodyRegular, fontSize: 11, color: colors.textMuted, letterSpacing: 0.2, textAlign: 'center', marginTop: 3 },
   summaryDivider: { alignSelf: 'stretch', height: 1, backgroundColor: colors.border, marginHorizontal: spacing.xl, marginVertical: 2 },
   viewMapsLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: '#FFFFFF', marginTop: 2 },
   section: { paddingHorizontal: spacing.xl, paddingVertical: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border },
