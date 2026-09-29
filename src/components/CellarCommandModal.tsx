@@ -13,7 +13,6 @@ import { getBins } from '../api/bins';
 import { parseCellarCommand, type CellarCommandAction, type CellarCommandResult } from '../api/cellarCommand';
 import { moveBottlesToLocation, clearLocationPlacements, releaseBottlesFromPlacements, fetchPlacementsForWine, placedCount } from '../api/placements';
 import { recommendFromCellar } from '../api/cellarRecommend';
-import { correctWineTerms } from '../utils/wineDictation';
 import { useMoodPicksStore, type MoodPickView } from '../stores/moodPicksStore';
 import type { CellarWine } from '../types/wine';
 import { colors, spacing } from '../constants/theme';
@@ -341,6 +340,10 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
         qc.invalidateQueries({ queryKey: ['cellar-removals', chosenWine.id] });
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
+        // Refresh the alt-cellar screens too — archiving a bottle that lived in a
+        // home storage location must remove its thumbnail there straight away.
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+        qc.invalidateQueries({ queryKey: ['storage-locations', userId] });
         setSuccess({
           action: 'archive',
           wine: [chosenWine.producer, chosenWine.wine_name].filter(Boolean).join(' '),
@@ -445,8 +448,9 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
               <Text style={styles.title}>Tap the mic and speak</Text>
               <View style={styles.micRow}>
-                {/* Mic output runs through the wine-term corrector; manual edits below don't. */}
-                <MicButton value={transcript} onChangeText={(t) => setTranscript(correctWineTerms(t))} onClear={() => setTranscript('')} />
+                {/* MicButton corrects misheard wine terms on the dictated text itself;
+                    manual edits in the field below are left as typed. */}
+                <MicButton value={transcript} onChangeText={setTranscript} onClear={() => setTranscript('')} />
               </View>
               {/* Editable so the user can fix any mis-hearing before confirming. */}
               <TextInput

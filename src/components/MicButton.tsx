@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { TouchableOpacity, View, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { showAlert } from './AppAlert';
+import { correctWineTerms } from '../utils/wineDictation';
 import { colors } from '../constants/theme';
 
 interface Props {
@@ -38,11 +39,18 @@ export function MicButton({ value, onChangeText, onClear, style }: Props) {
     if (!listeningRef.current) return;
     const transcript = e.results?.[0]?.transcript;
     if (transcript == null) return;
+    // Nudge misheard wine vocabulary (producer/region/grape names) back to the
+    // right spelling on the DICTATED text only — applied centrally here so every
+    // dictation surface benefits (tasting notes, reviews, voice commands), not
+    // just the ones that happened to wrap it. Correct only the spoken chunk and
+    // join onto the untouched base, so anything the user typed is left exactly
+    // as written.
+    const spoken = correctWineTerms(transcript);
     // Interim transcripts are the full hypothesis-so-far for the utterance,
     // so re-join onto the captured base each time rather than appending —
     // this fills the field live instead of only on stop.
-    onChangeText(joinDictation(baseRef.current, transcript));
-    if (e.isFinal) baseRef.current = joinDictation(baseRef.current, transcript);
+    onChangeText(joinDictation(baseRef.current, spoken));
+    if (e.isFinal) baseRef.current = joinDictation(baseRef.current, spoken);
   });
   useSpeechRecognitionEvent('end', () => { stopState(); });
   useSpeechRecognitionEvent('error', () => { stopState(); });
