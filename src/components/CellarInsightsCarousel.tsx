@@ -152,11 +152,12 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  cardMetaAlert: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.error, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
+  cardMetaAlert: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
   // Fact tile — same 220×165 footprint as a wine thumbnail so the row aligns.
   factBox: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: 10 },
   factValue: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.3 },
-  // "Only 1 Left" pill, top-right of the thumbnail (red — replenish urgency).
-  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(18,11,10,0.82)', borderRadius: 8, borderWidth: 1, borderColor: colors.error, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.error, letterSpacing: 0.3 },
+  // "Only 1 Left" pill, top-right of the thumbnail — yellow-and-black caution
+  // styling (solid gold, near-black text), matching the Drink Now "Last Call" pill.
+  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: colors.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#1A1A1A', letterSpacing: 0.3 },
 });

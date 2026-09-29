@@ -10,7 +10,7 @@ import { TabSwipeView } from '../../src/components/TabSwipeView';
 import { VinsterHeader } from '../../src/components/VinsterHeader';
 import { HelpTitle } from '../../src/components/HelpTitle';
 import { RecentScansCarousel } from '../../src/components/RecentScansCarousel';
-import { DrinkNowCarousel, useDrinkNowCount } from '../../src/components/DrinkNowCarousel';
+import { DrinkNowCarousel, useDrinkNowCounts } from '../../src/components/DrinkNowCarousel';
 import { CellarInsightsCarousel, useCellarInsightsCount } from '../../src/components/CellarInsightsCarousel';
 import { DiscoverVoiceModal } from '../../src/components/DiscoverVoiceModal';
 import { useAuth } from '../../src/hooks/useAuth';
@@ -74,7 +74,7 @@ export default function ScanLandingScreen() {
   // The "Search a Wine" tile opens the predictive typeahead in a prompt.
   const [searchModalOpen, setSearchModalOpen] = useState(false);
   const [voiceOpen, setVoiceOpen] = useState(false);
-  const drinkNowCount = useDrinkNowCount();
+  const drinkNow = useDrinkNowCounts();
   const insightsRunningLow = useCellarInsightsCount();
 
   // The Scan tab always shows its normal compact header. On the first landing
@@ -402,7 +402,7 @@ export default function ScanLandingScreen() {
           old "Drink Soon" carousel. */}
       <View style={styles.sectionSeparator} />
       <Text style={styles.carouselHeader}>Your Cellar - Drink Now</Text>
-      <Text style={styles.carouselStats}>{drinkNowCount} {drinkNowCount === 1 ? 'Wine' : 'Wines'} at Last Call</Text>
+      <Text style={styles.carouselStats}>{drinkNow.total} {drinkNow.total === 1 ? 'Wine' : 'Wines'} to Drink{drinkNow.lastCall > 0 ? ` · ${drinkNow.lastCall} Last Call` : ''}</Text>
       <View style={styles.carouselBleed}><DrinkNowCarousel /></View>
 
       {/* Cellar Insights — actionable "running low" bottles to replenish, then a

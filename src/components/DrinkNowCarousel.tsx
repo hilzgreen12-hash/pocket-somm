@@ -19,12 +19,13 @@ const DRINK_NOW_EXAMPLES: PlaceholderCard[] = [
 // there's no urgency, so they'd just be noise here.
 const WINDOW_HORIZON = 5;
 
-// "Last Call — Drink Now": a wine that is drinkable NOW (at peak, or already
-// declining) AND whose drinking window closes within the next 5 years (or has
-// already closed). Wines still maturing (too young / approaching) or cruising
-// well beyond 5 years are excluded — this carousel is only the bottles you
-// should actually open soon.
-function isLastCall(w: {
+// "Drink Now": a wine that is drinkable NOW (at peak, or already declining) AND
+// whose drinking window closes within the next 5 years (or has already closed).
+// Wines still maturing (too young / approaching) or cruising well beyond 5 years
+// are excluded — this carousel is only the bottles you should open soon. The
+// URGENT subset (already past close or in their final year, i.e. window_to <=
+// this year) additionally gets the "Last Call" badge; see isLastCall + render.
+function isDrinkNow(w: {
   drinking_window_from: number | null;
   drinking_window_to: number | null;
   drinking_window_status?: string | null;
@@ -45,24 +46,34 @@ function byUrgency(
   return (a.drinking_window_to ?? 9999) - (b.drinking_window_to ?? 9999);
 }
 
-// Total for the "XX Wines at Last Call" stats line under the header.
-export function useDrinkNowCount(): number {
+// The urgent subset of the Drink Now set that earns the "Last Call" badge:
+// already past its close year, or in its final good year (window_to <= now).
+function isLastCall(w: { drinking_window_to: number | null }): boolean {
+  const to = w.drinking_window_to;
+  if (to == null) return false;
+  return to <= new Date().getFullYear();
+}
+
+// Counts for the stats line under the header: the full Drink Now set, and how
+// many of those are truly "Last Call" (the badged, most-urgent subset).
+export function useDrinkNowCounts(): { total: number; lastCall: number } {
   const { wines } = useCellar();
-  return wines.filter(isLastCall).length;
+  const dn = wines.filter(isDrinkNow);
+  return { total: dn.length, lastCall: dn.filter(isLastCall).length };
 }
 
 // "Drink Now" — cellar bottles at last call, most urgent first. Tap → the wine.
 export function DrinkNowCarousel() {
   const { wines } = useCellar();
   const nowYear = new Date().getFullYear();
-  const urgent = wines.filter(isLastCall).sort(byUrgency);
+  const drinkNow = wines.filter(isDrinkNow).sort(byUrgency);
   // Real bottles fill from the left, replacing placeholder tiles in order; the
   // remaining example tiles stay until there are at least three.
-  const fill = urgent.length < DRINK_NOW_EXAMPLES.length ? DRINK_NOW_EXAMPLES.slice(urgent.length) : [];
+  const fill = drinkNow.length < DRINK_NOW_EXAMPLES.length ? DRINK_NOW_EXAMPLES.slice(drinkNow.length) : [];
 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
-      {urgent.map((w) => {
+      {drinkNow.map((w) => {
         const to = w.drinking_window_to as number;
         const past = to < nowYear;
         const finalYear = to === nowYear;
@@ -93,7 +104,8 @@ const styles = StyleSheet.create({
   card: { width: 220 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardMeta: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, marginTop: 2, textTransform: 'uppercase', letterSpacing: 0.4 },
-  // Urgency pill, top-right of the thumbnail (red — distinct from the gold score badge).
-  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(18,11,10,0.82)', borderRadius: 8, borderWidth: 1, borderColor: colors.error, paddingHorizontal: 8, paddingVertical: 3 },
-  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.error, letterSpacing: 0.3 },
+  // Yellow-and-black caution pill, top-right of the thumbnail (a warning cue,
+  // not alarming red): solid gold with near-black text.
+  badge: { position: 'absolute', top: 6, right: 6, backgroundColor: colors.gold, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
+  badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: '#1A1A1A', letterSpacing: 0.3 },
 });
