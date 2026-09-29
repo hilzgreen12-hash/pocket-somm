@@ -29,6 +29,11 @@ export interface ReviewFields {
   city?: string;
   userScore?: number | null;
   reviewDate?: string;
+  // Personal Notes + the user's drinking-window opinion — synced so a chosen
+  // twin created/updated from a cellar review carries the FULL review, not just
+  // note + score (otherwise Your Wine Reviews opens the twin with these blank).
+  otherObservations?: string;
+  drinkingWindow?: string;
   // Only used when createIfMissing spawns a fresh chosen_wines row (a cellar
   // review that had no chosen twin) — carries the bottle's label photo across so
   // the new review card / carousel thumbnail isn't blank.
@@ -139,7 +144,11 @@ export async function syncEditToChosen(
 ): Promise<void> {
   const match = await findMatchingChosenWine(userId, identity);
   if (!match) {
-    if (options.createIfMissing) {
+    // Only spawn a chosen twin for a review with actual review CONTENT — a
+    // tasting note or a score. A save carrying only Personal Notes / a location
+    // or date isn't a review, so it shouldn't create a (UI-invisible) chosen row.
+    const hasContent = !!(fields.tastingNote && fields.tastingNote.trim()) || fields.userScore != null;
+    if (options.createIfMissing && hasContent) {
       await createChosenWineFromReview(userId, identity, fields, options.region ?? null);
     }
     return;
@@ -149,6 +158,10 @@ export async function syncEditToChosen(
   if (fields.userScore !== undefined) updates.user_score = fields.userScore;
   if (fields.restaurantName !== undefined) updates.restaurant_name = fields.restaurantName.trim() || null;
   if (fields.city !== undefined) updates.city = fields.city.trim() || null;
+  // Keep Personal Notes + drinking window in lock-step too, so editing a cellar
+  // review doesn't leave a stale/blank twin in Your Wine Reviews.
+  if (fields.otherObservations !== undefined) updates.other_observations = fields.otherObservations.trim() || null;
+  if (fields.drinkingWindow !== undefined) updates.user_drinking_window = fields.drinkingWindow.trim() || null;
   if (Object.keys(updates).length === 0) return;
   await patchChosenWine(match.id, updates);
 }

@@ -373,7 +373,7 @@ export async function findMatchingChosenWine(
 export async function createChosenWineFromReview(
   userId: string,
   identity: { producer: string | null; wineName: string; vintage: string | number | null },
-  fields: { userScore?: number | null; restaurantName?: string; city?: string; reviewDate?: string; tastingNote?: string; labelImagePath?: string | null },
+  fields: { userScore?: number | null; restaurantName?: string; city?: string; reviewDate?: string; tastingNote?: string; otherObservations?: string; drinkingWindow?: string; labelImagePath?: string | null },
   region: string | null,
 ): Promise<void> {
   const v = identity.vintage;
@@ -390,6 +390,11 @@ export async function createChosenWineFromReview(
     city: fields.city?.trim() || null,
     tasting_note: fields.tastingNote?.trim() || null,
     user_score: fields.userScore ?? null,
+    // Carry Personal Notes + the drinking-window opinion so the twin is the FULL
+    // review (not note+score only) — Your Wine Reviews opens this row, not the
+    // cellar copy, once it exists.
+    other_observations: fields.otherObservations?.trim() || null,
+    user_drinking_window: fields.drinkingWindow?.trim() || null,
     // Carry the cellar bottle's label photo so the review card + home carousel
     // thumbnail match the wine (blank otherwise).
     label_image_path: fields.labelImagePath?.trim() || null,

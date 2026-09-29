@@ -151,6 +151,8 @@ export function EditCellarReviewModal({ wine, visible, onClose, onSaved, editLat
       const fields = {
         userScore: parsedScore,
         tastingNote: reviewNote,
+        otherObservations: personalNotes,
+        drinkingWindow,
         restaurantName,
         city,
         reviewDate: dateTrim || undefined,
