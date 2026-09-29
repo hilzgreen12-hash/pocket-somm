@@ -2233,11 +2233,8 @@ export default function LabelResultsScreen() {
               Each stat is tappable (opens a "how Vinster worked it out" popup);
               static bars elsewhere omit this caption. */}
           <Text style={styles.statBarHint}>Tap any stat to see how Vinster worked it out</Text>
-          {/* Rare/no-market-data wines: flag that the value is a soft estimate so
-              a low figure isn't mistaken for a firm market price. */}
-          {intel.valueSource === 'vinster' && intel.valueConfidence === 'low' && intel.estimatedValue != null ? (
-            <Text style={styles.valueCaveat}>Estimated value only — no reliable market data for this bottle. Rare wines can trade well above this.</Text>
-          ) : null}
+          {/* The "estimated value only / no reliable market data" caveat is no longer
+              shown in the bar — it surfaces when the user taps the value (openValueInfo). */}
           <View style={styles.statBarRule} />
 
           {/* Vinster's Note — collapsible; its "(what's this)" is replaced by the
