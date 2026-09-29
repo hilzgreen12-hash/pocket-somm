@@ -27,6 +27,7 @@ interface RangeWine {
   band: number;         // 1 (entry) … 5 (flagship), relative within this producer
   tier: string | null;  // short word: Entry / Estate / Premium / Flagship, etc.
   isThis: boolean;      // the scanned wine
+  grouped: boolean;     // a single consolidated entry-level line (not one wine)
 }
 
 Deno.serve(async (req) => {
@@ -85,7 +86,15 @@ ACCURACY IS CRITICAL — a wrong lineup is worse than a short one:
 - MINIMUM RANGE: for any producer who makes more than one wine — which is almost all of them — the list MUST contain at least their standard / entry wine AND the scanned wine. A single-item list that contains only the scanned wine is a FAILURE unless the producer genuinely makes just that one wine. (Pazo de Señoráns, for example, must never come back as only "Selección de Añada" — the standard Albariño belongs there too.)
 - ENTRY TIER ACROSS APPELLATIONS: always include the producer's entry-level wine even when it sits in a DIFFERENT appellation to their flagship. For a Montalcino estate the Rosso di Montalcino MUST appear alongside the Brunello di Montalcino (and any Brunello Riserva) — a Brunello producer's range that omits their Rosso is wrong. Likewise include the Langhe Nebbiolo for a Barolo/Barbaresco estate, and the Bourgogne / village wine for a Burgundy grand-cru domaine. These entry wines anchor the range and are frequently the exact bottle a user scanned.
 
-You MUST include the scanned wine itself in the list (set "isThis": true on exactly one entry — the one matching "${wineName || producer}"). If the scanned cuvée isn't among the producer's well-known wines, still place it at its approximate prestige level and flag it.
+ENTRY-LEVEL CONSOLIDATION (important — top-tier wines are what interest the user):
+- If this producer makes MORE THAN THREE entry-level bottlings, do NOT list them individually. Collapse ALL of them into ONE entry and set "grouped": true on it:
+  - If those entry wines are single-varietal, name the entry "<N> Individual Varietal Bottlings: <Grape>, <Grape>, …" listing each grape, e.g. "6 Individual Varietal Bottlings: Sauvignon, Pinot Gris, Chardonnay, Gewürztraminer, Pinot Noir, Riesling".
+  - If they are NOT varietal, name it "<N> Entry Level Bottlings" and, only where genuinely helpful, append the names in the same entry.
+  - Give this consolidated entry band 1 and tier "Entry".
+- Three or fewer entry-level wines are listed individually as normal (grouped: false).
+- ALWAYS list the producer's TOP-TIER / prestige wines INDIVIDUALLY — never group or drop them. They are the most intriguing to the user and MUST appear. If the range is large, prefer trimming lesser entry wines (via the consolidation above) over omitting any prestige wine.
+
+You MUST include the scanned wine itself in the list (set "isThis": true on exactly one entry — the one matching "${wineName || producer}"). If the scanned cuvée isn't among the producer's well-known wines, still place it at its approximate prestige level and flag it. If the scanned wine is itself an entry-level varietal that you consolidate, keep it INSIDE the grouped entry and set that grouped entry's "isThis": true.
 
 Each "wineName" must be ONLY the distinguishing cuvée/bottling name — NEVER repeat the producer's name in it (e.g. "Rosal", not "Pazo de Señorans Rosal"). For a flagship sold simply under the producer's own name, use its grape or appellation.
 
@@ -94,7 +103,7 @@ For each wine give a relative price band from 1 to 5 WITHIN THIS PRODUCER'S OWN 
 Return ONLY a JSON object (no markdown, no prose) with exactly these keys:
 {
   "wines": [
-    { "wineName": "<full distinguishing bottling name>", "band": <integer 1-5>, "tier": "<Entry|Estate|Classic|Premium|Prestige|Flagship or similar single word>", "isThis": <true|false> }
+    { "wineName": "<full distinguishing bottling name, OR the consolidated entry-level line>", "band": <integer 1-5>, "tier": "<Entry|Estate|Classic|Premium|Prestige|Flagship or similar single word>", "isThis": <true|false>, "grouped": <true only for a consolidated entry-level line, else false> }
   ],
   "summary": "<ONE short sentence — 25 words max — placing the scanned wine in the producer's range, e.g. 'Bin 707 sits near the top of Penfolds' range, one tier below the flagship Grange.'>"
 }
@@ -119,15 +128,27 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
     try { parsed = JSON.parse(match[0]); } catch { return json({ wines: [], summary: null }, 200); }
 
     const rawWines = Array.isArray(parsed?.wines) ? parsed.wines : [];
-    const wines: RangeWine[] = rawWines
+    let wines: RangeWine[] = rawWines
       .map((w: any) => ({
         wineName: typeof w?.wineName === 'string' ? w.wineName.trim() : '',
         band: clampBand(w?.band),
         tier: typeof w?.tier === 'string' && w.tier.trim() ? w.tier.trim() : null,
         isThis: w?.isThis === true,
+        grouped: w?.grouped === true,
       }))
-      .filter((w: RangeWine) => w.wineName)
-      .slice(0, 12);
+      .filter((w: RangeWine) => w.wineName);
+
+    // Cap the list, but top-tier wines are the most intriguing — so when trimming
+    // drop the LOWEST-band (entry) wines first, always keeping the scanned wine,
+    // any consolidated entry line, and the highest-prestige bottlings.
+    const MAX = 12;
+    if (wines.length > MAX) {
+      const priority = [...wines].sort((a, b) =>
+        (b.isThis ? 1 : 0) - (a.isThis ? 1 : 0) || b.band - a.band,
+      ).slice(0, MAX);
+      const keepSet = new Set(priority);
+      wines = wines.filter((w) => keepSet.has(w)); // preserve entry→flagship order
+    }
 
     // Guarantee exactly one flagged wine: if Claude flagged none (or several),
     // keep the first flag and clear the rest; if none, leave unflagged rather

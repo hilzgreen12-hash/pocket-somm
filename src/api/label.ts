@@ -180,6 +180,9 @@ export interface ProducerRangeWine {
   band: number;
   tier: string | null;
   isThis: boolean;
+  // A single consolidated entry-level line (e.g. "6 Individual Varietal
+  // Bottlings: …") rather than one wine — rendered non-tappable, wrapping fully.
+  grouped?: boolean;
 }
 export interface ProducerRange {
   wines: ProducerRangeWine[];
@@ -204,6 +207,7 @@ export async function fetchProducerRange(input: { producer?: string | null; regi
       band: Math.max(1, Math.min(5, Math.round(Number(w?.band)) || 3)),
       tier: typeof w?.tier === 'string' && w.tier.trim() ? w.tier.trim() : null,
       isThis: w?.isThis === true,
+      grouped: w?.grouped === true,
     }))
     .filter((w) => w.wineName);
   return { wines, summary: typeof data.summary === 'string' && data.summary.trim() ? data.summary.trim() : null };

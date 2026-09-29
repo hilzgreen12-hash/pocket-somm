@@ -2332,11 +2332,12 @@ export default function LabelResultsScreen() {
               {producerRange ? (
                 <>
                   {rangeWines.map((rw, i) => (
-                    // The current wine isn't tappable — you're already on its intel card.
-                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={rw.isThis ? 1 : 0.7} disabled={rw.isThis}>
+                    // The current wine — and a consolidated entry-level line — aren't
+                    // tappable (there's no single inside line for a group of wines).
+                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
                       <View style={styles.rangeRowMain}>
                         <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
-                        <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={2}>{rw.wineName}</Text>
+                        <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={rw.grouped ? 4 : 2}>{rw.wineName}</Text>
                       </View>
                       <View style={styles.rangeRight}>
                         <Text style={[styles.rangeBand, rw.isThis && styles.rangeBandThis]}>{currencySymbol(userCurrency).repeat(rw.band)}</Text>
