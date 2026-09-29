@@ -349,7 +349,7 @@ export default function ImportCellarScreen() {
       if (parsedSheets.length === 0) {
         showAlert({
           title: "Couldn't read that file",
-          body: "We couldn't find any rows in that file. Make sure it's an Excel or CSV spreadsheet with a header row naming the columns, and try again.",
+          body: "We couldn't find any rows in that file. If you exported it from Numbers, a CSV reads most reliably — File → Export To → CSV, then import that. Make sure the top row names the columns.",
         });
         setStage('capture');
         return;
@@ -484,7 +484,7 @@ export default function ImportCellarScreen() {
       if (all.length === 0) {
         showAlert({
           title: "Couldn't read that list",
-          body: "We couldn't find any wines. Make sure the sheet has a header row naming the columns (producer, wine, vintage, quantity…) and try again.",
+          body: "We couldn't find any wines. If this was an Excel file exported from Numbers, try a CSV instead — File → Export To → CSV — which reads most reliably. Make sure the top row names the columns (producer, wine, vintage, quantity…).",
         });
         setStage('capture');
         return;
