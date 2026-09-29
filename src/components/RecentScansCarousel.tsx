@@ -1,4 +1,5 @@
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
@@ -7,6 +8,7 @@ import { useLabelStore } from '../stores/labelStore';
 import { useScanStore } from '../stores/scanStore';
 import { getCachedLabelUri } from '../api/labelImageCache';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
+import { useAttachRestaurantPhoto } from '../hooks/useAttachRestaurantPhoto';
 import { formatWineTitle } from '../utils/wineTitle';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -15,9 +17,16 @@ import { fonts } from '../constants/fonts';
 // list scan — merged by recency for the Home tab carousel. Both now read from the
 // cloud (labels table + scan_sessions), so scans survive reinstalls and appear
 // across devices; the thumbnail resolves from the stored photo path.
+// A wine-list card with no photo shows a "+ Add Image" tile (onAddImage) that
+// runs the restaurant-photo flow; opening a list card revisits it read-only.
+
+// A unified "recent scan" — either a single-bottle label→intel scan or a wine-
+// list scan — merged by recency for the Home tab carousel. Both now read from the
+// cloud (labels table + scan_sessions), so scans survive reinstalls and appear
+// across devices; the thumbnail resolves from the stored photo path.
 type Recent =
   | { kind: 'label'; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; open: () => void }
-  | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void };
+  | { kind: 'list'; ts: number; title: string; stamp: string; path: string | null; open: () => void; onAddImage?: () => void };
 
 // Shared date format for the "date · location" stamp beneath each thumbnail.
 function stampDate(d: Date): string {
@@ -55,14 +64,24 @@ export function useRecentScanCounts(): { labels: number; lists: number } {
 }
 
 function RecentCard({ item }: { item: Recent }) {
+  // A wine-list card with no photo shows a tappable "+ Add Image" tile that runs
+  // the add-photo flow, instead of a plain fallback thumbnail.
+  const showAddImage = item.kind === 'list' && !item.path && !!item.onAddImage;
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>
-      <WineCardThumb
-        path={item.path}
-        producer={item.kind === 'label' ? item.producer : null}
-        wineName={item.kind === 'label' ? item.wineName : null}
-        fallbackText={item.title}
-      />
+      {showAddImage ? (
+        <TouchableOpacity style={styles.addImageThumb} onPress={item.onAddImage} activeOpacity={0.8}>
+          <Ionicons name="camera-outline" size={26} color={colors.gold} />
+          <Text style={styles.addImageText}>+ Add Image</Text>
+        </TouchableOpacity>
+      ) : (
+        <WineCardThumb
+          path={item.path}
+          producer={item.kind === 'label' ? item.producer : null}
+          wineName={item.kind === 'label' ? item.wineName : null}
+          fallbackText={item.title}
+        />
+      )}
       <Text style={styles.cardName} numberOfLines={2}>{item.title}</Text>
       {item.stamp ? <Text style={styles.cardStamp} numberOfLines={1}>{item.stamp}</Text> : null}
     </TouchableOpacity>
@@ -72,6 +91,7 @@ function RecentCard({ item }: { item: Recent }) {
 export function RecentScansCarousel() {
   const { labels } = useLabels();
   const { archive } = useScanHistory();
+  const attachRestaurantPhoto = useAttachRestaurantPhoto();
 
   // Cloud label scans → Recent label cards, de-duped by identity (labels arrive
   // newest-first, so the first occurrence of each wine is the most recent).
@@ -126,12 +146,23 @@ export function RecentScansCarousel() {
   const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0 && !restaurantReviewed(a)).map((a) => {
     const d = a.capturedAt ? new Date(a.capturedAt) : null;
     const dateStr = d ? stampDate(d) : '';
+    const venue = a.restaurantName?.trim() || '';
+    const loc = a.city?.trim() || '';
+    // Title = the venue/location the user entered; date (+ location when the title
+    // is the venue) sits beneath it.
+    const title = venue || loc || 'Wine list';
+    const stamp = [dateStr, venue && loc ? loc : null].filter(Boolean).join(' · ');
     return {
       kind: 'list' as const,
       ts: a.capturedAt ? new Date(a.capturedAt).getTime() : 0,
-      title: a.restaurantName?.trim() || 'Wine list',
-      stamp: [dateStr, a.city?.trim()].filter(Boolean).join(' · '),
+      title,
+      stamp,
       path: a.restaurantPhotoPath,
+      // No photo yet → the card shows "+ Add Image", which runs the restaurant
+      // photo flow (take / upload / find online) for this scan's session.
+      onAddImage: a.restaurantPhotoPath
+        ? undefined
+        : () => attachRestaurantPhoto.present({ sessionId: a.id, restaurant: venue || null, city: loc || null, hasPhoto: false }),
       open: () => {
         const ss = useScanStore.getState();
         ss.setExtractedWines(a.extractedWines);
@@ -165,6 +196,9 @@ const styles = StyleSheet.create({
   thumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderColor: colors.borderWhite, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', overflow: 'hidden', padding: spacing.sm },
   thumbImg: { width: '100%', height: '100%' },
   thumbFallback: { fontFamily: fonts.headingSemibold, fontSize: 13, color: colors.gold, textAlign: 'center' },
+  // "+ Add Image" tile for a photo-less wine-list card.
+  addImageThumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', gap: 6 },
+  addImageText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginTop: 3 },
   emptyCard: { height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, alignItems: 'center', justifyContent: 'center', padding: spacing.md },

@@ -434,6 +434,8 @@ export default function ResultsScreen() {
   // tap. Rendered as a sibling of the name so tapping the city edits the city
   // while tapping the name still opens the restaurant review.
   function renderCity() {
+    // Revisiting a saved scan is read-only — show the city as plain text, no edit.
+    if (isFromHistory) return stampCity ? <Text style={styles.restaurantLineCity}>· {stampCity}</Text> : null;
     if (editingCity) {
       return (
         <TextInput
@@ -874,7 +876,16 @@ export default function ResultsScreen() {
             Locked to read-only display when a scan_sessions row already
             backs this result (edits happen via the CTA at the bottom of
             the page). */}
-        {effectiveSessionId && restaurantName.trim().length > 0 ? (
+        {isFromHistory ? (
+          // Revisiting a saved scan → read-only line: view the venue/location, no edit.
+          <View style={styles.restaurantLine}>
+            <Text style={styles.restaurantPin}>📍</Text>
+            <Text style={[styles.restaurantLineText, !restaurantName && styles.restaurantLinePlaceholder]} numberOfLines={1}>
+              {restaurantName || stampCity || 'Wine list'}
+            </Text>
+            {restaurantName ? renderCity() : null}
+          </View>
+        ) : effectiveSessionId && restaurantName.trim().length > 0 ? (
           <TouchableOpacity style={styles.restaurantLine} onPress={openRestaurantReview} activeOpacity={0.7}>
             <Text style={styles.restaurantPin}>📍</Text>
             <Text style={styles.restaurantLineText} numberOfLines={1}>
@@ -987,8 +998,9 @@ export default function ResultsScreen() {
                 {/* Gold "Select This Wine" bar above the name — mirrors the
                     cellar stats bars. Records the pick in Your Restaurants
                     (prompting for a restaurant name first if none is set);
-                    tap again to remove. */}
-                {session && (
+                    tap again to remove. Hidden when revisiting a saved scan
+                    (read-only) — you view it, but can't re-select from it. */}
+                {session && !isFromHistory && (
                   <TouchableOpacity
                     style={[styles.selectBar, isSelectedNow(i) && styles.selectBarDone]}
                     onPress={() => {
