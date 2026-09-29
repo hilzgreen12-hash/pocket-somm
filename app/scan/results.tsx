@@ -27,6 +27,7 @@ import { ChosenWineModal } from '../../src/components/ChosenWineModal';
 import { PickReveal } from '../../src/components/PickReveal';
 import { WineIdentityHeader } from '../../src/components/WineIdentityHeader';
 import { RestaurantReviewModal } from '../../src/components/RestaurantReviewModal';
+import { useAttachRestaurantPhoto } from '../../src/hooks/useAttachRestaurantPhoto';
 import { WineListShareCard } from '../../src/components/WineListShareCard';
 import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
@@ -185,6 +186,7 @@ export default function ResultsScreen() {
   // via View Last Result or the archive), falling back to whatever
   // autoSave landed in this session.
   const effectiveSessionId = sessionId ?? savedSessionIdRef.current ?? autoSave.data?.[0]?.sessionId ?? null;
+  const attachRestaurantPhoto = useAttachRestaurantPhoto();
   const [restaurantReviewOpen, setRestaurantReviewOpen] = useState(false);
   const [reviewSessionId, setReviewSessionId] = useState<string | null>(null);
 
@@ -853,11 +855,8 @@ export default function ResultsScreen() {
                 {sharing ? 'Preparing…' : '+ Export Results'}
               </Text>
             </TouchableOpacity>
-            {restaurantName.trim().length > 0 && !editingRestaurant && (
-              <TouchableOpacity onPress={openRestaurantReview} hitSlop={{ top: 8, bottom: 8, left: 12, right: 12 }} activeOpacity={0.7}>
-                <Text style={styles.shareBtnText}>+ Review/Edit Restaurant</Text>
-              </TouchableOpacity>
-            )}
+            {/* "+ Review/Edit Restaurant" removed — tapping the venue/location
+                beneath the results opens the same review page (more instinctive). */}
           </View>
         </View>
 
@@ -1242,6 +1241,13 @@ export default function ResultsScreen() {
             capturedAt={item?.capturedAt ?? null}
             wines={pickedWines.map(({ w }) => ({ producer: w.producer ?? null, wineName: w.name, vintage: w.vintage ?? null, userScore: null }))}
             onReviewWine={(idx) => { setRestaurantReviewOpen(false); setChosenModalWine(pickedWines[idx]?.w ?? null); }}
+            onAddPhoto={async (name, city) => {
+              // The "+ Add Photo" link needs a scan_sessions row to attach to;
+              // ensure one exists (every scan auto-persists, but this is belt-and-braces).
+              const sid = reviewSessionId ?? (await getOrCreateSession());
+              if (!sid) { showAlert({ title: 'Add a restaurant first', body: 'Enter the restaurant name so Vinster can attach the photo to this visit.' }); return; }
+              attachRestaurantPhoto.present({ sessionId: sid, restaurant: name || null, city: city || null, hasPhoto: !!item?.restaurantPhotoPath });
+            }}
             onClose={() => setRestaurantReviewOpen(false)}
             onSaved={(details) => {
               setRestaurantReviewOpen(false);

@@ -665,11 +665,13 @@ export function RestaurantReviewModal({
     <Modal visible={visible} animationType="slide" onRequestClose={handleBack}>
       <View style={styles.overlay}>
         <View style={styles.sheet}>
-          {/* Top bar: gold back arrow (left); Share + favourite star (right). */}
+          {/* Top bar: gold back arrow (left); Share + favourite star (right).
+              Centred title names the page for a first-time user. */}
           <View style={styles.topBar}>
             <TouchableOpacity onPress={handleBack} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }} activeOpacity={0.7}>
               <Text accessibilityLabel="Back" style={styles.backArrow}>←</Text>
             </TouchableOpacity>
+            <Text style={styles.topTitle} numberOfLines={1} pointerEvents="none">Your Restaurant Review</Text>
             <View style={styles.topRight}>
               <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 6, left: 10, right: 10 }} activeOpacity={0.7}>
                 <Text style={[styles.topShareText, sharing && styles.btnDisabled]}>{sharing ? 'Preparing…' : 'Export'}</Text>
@@ -1038,6 +1040,8 @@ const styles = StyleSheet.create({
   // Top bar — gold back arrow (left), Share + favourite star stacked (right).
   topBar: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', paddingTop: 56, paddingHorizontal: spacing.xl, paddingBottom: spacing.sm },
   backArrow: { fontSize: 22, fontFamily: fonts.bodyRegular, color: colors.gold, width: 40 },
+  // Centred page title, overlaid on the top bar between the back arrow and Export.
+  topTitle: { position: 'absolute', top: 58, left: 0, right: 0, textAlign: 'center', fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, letterSpacing: 0.4 },
   topRight: { alignItems: 'flex-end', gap: 4 },
   topShareText: { fontSize: 16, fontFamily: fonts.headingSemibold, color: colors.gold },
   favouriteStar: { fontSize: 26, color: colors.textMuted },
@@ -1058,7 +1062,9 @@ const styles = StyleSheet.create({
   // Overlaid, editable identity anchored to the bottom of the banner.
   photoBannerText: { position: 'absolute', left: spacing.xl, right: spacing.xl, bottom: spacing.md },
   addPhotoLink: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3, marginBottom: 4, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 5 },
-  bannerNameInput: { fontFamily: fonts.headingBold, fontSize: 28, color: '#fff', letterSpacing: 0.3, paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
+  // Venue name shares the LOCATION field's font family (bodyRegular) so the two
+  // read as one family — just larger for hierarchy.
+  bannerNameInput: { fontFamily: fonts.bodyRegular, fontSize: 28, color: '#fff', letterSpacing: 0.3, paddingVertical: 2, textShadowColor: 'rgba(0,0,0,0.85)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 6 },
   // Location + date stacked (date on its own line beneath the location).
   bannerMetaCol: { alignItems: 'flex-start', marginTop: 2 },
   // Gold italic "Matched to … from your Lineup Archive", sized like the location.
