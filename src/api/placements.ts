@@ -294,6 +294,31 @@ export async function reconcileLegacyLocationWines(
   return healed;
 }
 
+// Merge-safe removal of the bottles a unit (rack/fridge/bin) held when the unit
+// is deleted "& Contents". `countHere` is how many of the wine's bottles were in
+// that unit. If the wine lived ENTIRELY in the unit, delete the whole wine;
+// otherwise reduce its quantity by countHere (its bottles elsewhere survive). Call
+// AFTER the unit itself is deleted, so the unit's slots/cells have already
+// cascaded away and the remaining placements reflect the other units.
+export async function trimOrDeleteWineOnUnitDelete(wineId: string, countHere: number): Promise<void> {
+  const [{ data, error }, placements] = await Promise.all([
+    supabase.from('cellar_wines').select('quantity').eq('id', wineId).maybeSingle(),
+    fetchPlacementsForWine(wineId), // remaining placements (the deleted unit already cascaded)
+  ]);
+  if (error) throw error;
+  const qty = (data?.quantity as number) ?? 0;
+  const elsewhere = placedCount(placements);
+  // Only delete the whole wine when nothing of it remains in any OTHER unit and the
+  // deleted unit held its entire quantity — otherwise trim, never below what's still
+  // placed elsewhere, so bottles in other racks/bins/cellars are never destroyed.
+  if (elsewhere <= 0 && countHere >= qty) {
+    await deleteCellarWine(wineId);
+  } else {
+    const remaining = Math.max(elsewhere, qty - countHere, 1);
+    await supabase.from('cellar_wines').update({ quantity: remaining }).eq('id', wineId);
+  }
+}
+
 // ---- Deleting a storage location (long-press in the Location filter) ---------
 
 // "Delete location & move wines to Unplaced Bottles": remove the location but

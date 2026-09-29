@@ -7,8 +7,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useRackStore } from '../stores/rackStore';
 import { getRackBottleCounts, getSlotAssignments } from '../api/racks';
 import { getBins, getBinBottleCounts, deleteBin, getBinCells } from '../api/bins';
-import { fetchStorageLocations, deleteStorageLocation, fetchStorageLocationWines, renameStorageLocation } from '../api/storageLocations';
-import { deleteCellarWine } from '../api/cellar';
+import { fetchStorageLocations, deleteStorageLocation, renameStorageLocation } from '../api/storageLocations';
+import { deleteLocationAndWines, trimOrDeleteWineOnUnitDelete } from '../api/placements';
 import { showAlert } from './AppAlert';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
@@ -144,10 +144,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           style: 'destructive',
           onPress: async () => {
             try {
+              // Count this unit's bottles per wine, delete the unit (cascades its
+              // slots), THEN trim/delete each wine merge-safely — so a wine that
+              // also sits in another unit keeps its other bottles.
               const slots = await getSlotAssignments([rack.id]);
-              const wineIds = Array.from(new Set(slots.map((s) => s.cellar_wine_id)));
-              for (const id of wineIds) await deleteCellarWine(id);
+              const countByWine = new Map<string, number>();
+              for (const s of slots) countByWine.set(s.cellar_wine_id, (countByWine.get(s.cellar_wine_id) ?? 0) + 1);
               await new Promise<void>((resolve, reject) => removeRack.mutate(rack.id, { onSuccess: () => resolve(), onError: reject }));
+              for (const [id, count] of countByWine) await trimOrDeleteWineOnUnitDelete(id, count);
               qc.invalidateQueries({ queryKey: ['cellar'] });
             } catch (err) { onError(err); }
           },
@@ -172,10 +176,14 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           style: 'destructive',
           onPress: async () => {
             try {
+              // A bin holds a wine's full quantity in a cell; count that, delete the
+              // bin, then trim/delete each wine merge-safely (a wine also in a rack
+              // keeps its racked bottles).
               const cells = await getBinCells(bin.id);
-              const wineIds = Array.from(new Set(cells.flatMap((c) => (c.wines ?? []).map((w) => w.id))));
-              for (const id of wineIds) await deleteCellarWine(id);
+              const countByWine = new Map<string, number>();
+              for (const c of cells) for (const w of (c.wines ?? [])) countByWine.set(w.id, (countByWine.get(w.id) ?? 0) + (w.quantity ?? 1));
               await deleteBin(bin.id);
+              for (const [id, count] of countByWine) await trimOrDeleteWineOnUnitDelete(id, count);
               invalidate();
             } catch (err) { onError(err); }
           },
@@ -200,9 +208,11 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
           style: 'destructive',
           onPress: async () => {
             try {
-              const wines = await fetchStorageLocationWines(loc.id);
-              for (const w of wines) await deleteCellarWine(w.id);
-              await deleteStorageLocation(loc.id);
+              // Placement-aware + merge-safe: deletes wines that live ONLY here and
+              // trims the here-count from wines that also live elsewhere (rather than
+              // the old legacy-field lookup, which missed placement-based wines and
+              // could destroy bottles held in other units).
+              await deleteLocationAndWines(loc.id);
               invalidate();
             } catch (err) { onError(err); }
           },
