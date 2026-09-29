@@ -767,17 +767,38 @@ export default function FullCellarListScreen() {
   // Wines shown that have no critic score / pricing downloaded yet.
   const winesMissingIntel = filtered.filter(isMissingIntel);
 
-  // "Update all" — refresh critic score + pricing for every missing-intel wine,
-  // showing the same percentage calculator as Cellar Stats. No reviews written.
-  async function handleUpdateAllIntel() {
+  // "Update all" — refresh critic score + pricing (and a thumbnail + region/grape
+  // for wines missing them) in batches of 10 for efficiency. Each run confirms
+  // first, then does the next 10; the missing-intel count drops by 10 and the user
+  // presses again for the next batch.
+  const INTEL_BATCH_SIZE = 10;
+  function handleUpdateAllIntel() {
     if (winesMissingIntel.length === 0 || intelUpdating) return;
+    const total = winesMissingIntel.length;
+    const batch = winesMissingIntel.slice(0, INTEL_BATCH_SIZE);
+    showAlert({
+      title: 'Update wine intel',
+      body: `Vinster updates your wines in batches of ${INTEL_BATCH_SIZE} at a time for efficiency.${
+        total > batch.length
+          ? ` This will do the next ${batch.length} of ${total} — press "Update all" again for each further batch.`
+          : ''
+      }`,
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Go', onPress: () => void runIntelBatch(batch) },
+      ],
+    });
+  }
+
+  async function runIntelBatch(batch: CellarWine[]) {
+    if (batch.length === 0 || intelUpdating) return;
     const currency = preferences?.defaultCurrency ?? 'GBP';
     const controller = new AbortController();
     intelAbortRef.current = controller;
     setIntelUpdating(true);
-    setIntelProgress({ done: 0, total: winesMissingIntel.length });
+    setIntelProgress({ done: 0, total: batch.length });
     try {
-      await updateCellarIntelBatch(winesMissingIntel, currency, (done, total) => setIntelProgress({ done, total }), controller.signal);
+      await updateCellarIntelBatch(batch, currency, (done, total) => setIntelProgress({ done, total }), controller.signal);
       qc.invalidateQueries({ queryKey: ['cellar'] });
     } catch {
       showAlert({ title: 'Could not finish', body: 'Some wines could not be updated. Please try again.' });
