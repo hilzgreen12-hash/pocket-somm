@@ -115,7 +115,10 @@ If you cannot confidently identify the producer's range, return {"wines": [], "s
       // Haiku fabricated and misranked bottlings (e.g. inventing "Clos d'Ambonnay"
       // variants and ranking Krug's flagship as entry level).
       model: 'claude-sonnet-5',
-      max_tokens: 900,
+      // Headroom so a full ~12-wine JSON (plus the consolidated entry line) never
+      // truncates mid-object — a cut-off response fails to parse and the range
+      // silently comes back empty.
+      max_tokens: 1600,
       messages: [{ role: 'user', content: prompt }],
     });
 
