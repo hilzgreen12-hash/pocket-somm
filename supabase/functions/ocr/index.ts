@@ -102,7 +102,7 @@ Deno.serve(async (req) => {
         // colour-from-section-heading, and picked glass prices over bottle —
         // garbage in for every downstream recommendation. Sonnet is the read
         // quality the rest of the pipeline assumes.
-        model: 'claude-sonnet-5',
+        model: 'claude-sonnet-5-5',
         // Headroom for the JSON output. At 8192 a normal-length list sits right
         // on the ceiling: it truncates → invalid JSON → the retry below fires a
         // second full call → the two together blow past the function's time

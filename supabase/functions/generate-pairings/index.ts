@@ -254,7 +254,7 @@ Deno.serve(async (req) => {
     const temperature = isRegeneration ? 1.0 : 0.8;
 
     const params = {
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: 8192,
       temperature,
       messages: [{ role: 'user' as const, content: buildPrompt(wine, filters ?? {}, excludeChefsList, additionalRequestText) }],

@@ -52,7 +52,7 @@ Return ONLY a valid JSON object with exactly this structure. Alongside each pros
 Write the prose in an elegant, knowledgeable sommelier voice. Be accurate and honest; it is far better to leave a stat null or stay general than to invent specifics. Return only the raw JSON — no markdown, no explanation.`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: 1600,
       messages: [{ role: 'user', content: prompt }],
     });

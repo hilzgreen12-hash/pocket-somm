@@ -309,7 +309,7 @@ ${countryLine}
     // removed); only TRANSIENT API/transport errors are retried, in callWithRetry.
     async function attemptClaudeCall(): Promise<any> {
       const claudeStream = await client.messages.create({
-        model: 'claude-sonnet-5',
+        model: 'claude-sonnet-5-5',
         max_tokens: 8192,
         system: [
           {

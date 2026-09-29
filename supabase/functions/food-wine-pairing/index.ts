@@ -168,7 +168,7 @@ Deno.serve(async (req) => {
       : buildGeneralPrompt(dish, stylePreference, budget, currency, userPreferences);
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: 2048,
       messages: [{ role: 'user', content: prompt }],
     });

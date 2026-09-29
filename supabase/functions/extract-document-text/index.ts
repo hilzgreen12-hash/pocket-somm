@@ -73,7 +73,7 @@ Deno.serve(async (req) => {
 
     if (kind === 'pdf') {
       const resp = await client.messages.create({
-        model: 'claude-sonnet-5',
+        model: 'claude-sonnet-5-5',
         max_tokens: 16000,
         system:
           'You extract the full readable text of a document verbatim. Return ONLY the document text, preserving paragraph breaks. Do not summarise, comment, translate, or add anything of your own.',

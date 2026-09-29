@@ -217,7 +217,7 @@ Deno.serve(async (req) => {
         : buildWinePrompt(body);
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-5',
+      model: 'claude-sonnet-5-5',
       max_tokens: 700,
       messages: [{ role: 'user', content: prompt }],
     });
