@@ -20,10 +20,12 @@ The lists vary enormously — read them intelligently:
 - On an invoice/statement each line item is usually one holding; a value may embed the format, e.g. "Château Providence, Pomerol, 2008, 6x75cl".
 
 QUANTITY — the crux. Work out how many INDIVIDUAL BOTTLES each holding is:
-- If a column gives bottles directly (e.g. "Quantity in Bottles", "Btls."), use it as bottles.
-- If the count refers to CASES/UNITS and a pack is given ("6x75cl", "12X75cl", "Case, 6 Bottles", a "Case Size" of 6), then totalBottles = cases × bottlesPerCase.
+- If a column gives bottles directly (e.g. "Quantity in Bottles", "Btls.", or a plain "Quantity"/"Qty" that is not labelled as cases), use it AS BOTTLES — that IS totalBottles.
+- CRITICAL — DO NOT DOUBLE-COUNT. A pack/format like "6x75cl" describes the BOTTLE SIZE and how a full case is composed; it is NOT a multiplier to apply to a quantity column. NEVER multiply a bottle quantity by the pack size. Example: a row "Quantity: 7" with format "6x75cl" is 7 BOTTLES of 750ml (bottleSizeMl 750, totalBottles 7) — it is NOT 7 cases (42). Only multiply when the count column is EXPLICITLY cases/units.
+- Only when the count EXPLICITLY refers to CASES/UNITS (column labelled "Cases", "Cs", "Units", "OWC", or the value plainly means cases) AND a pack is given, then totalBottles = cases × bottlesPerCase.
 - Some rows give BOTH cases and loose bottles (e.g. a "Cs." column AND a "Btls." column): totalBottles = cases × bottlesPerCase + looseBottles.
-- Formats: "6x75cl" = 6 bottles of 750ml; "12x75cl" = 12 × 750ml; "1x150cl" = 1 × 1500ml (magnum); "24x37.5cl" = 24 × 375ml; "6x150cl" = 6 × 1500ml. cl→ml is ×10. "75 cl" = 750ml. Treat X/x the same.
+- If unsure whether a number is bottles or cases, treat it as BOTTLES — under-counting a case is far less harmful than multiplying a bottle count into a huge phantom holding.
+- Formats: "6x75cl" = a case of 6 bottles, each 750ml (so bottleSizeMl 750; "6" is the case composition, use it for bottlesPerCase ONLY when the row is genuinely counted in cases). "1x150cl" = 1 × 1500ml (magnum); "24x37.5cl" = 24 × 375ml. cl→ml is ×10. "75 cl" = 750ml. Treat X/x the same.
 
 PACKAGING — preserve the case structure:
 - "owc" for a complete/original case of a single wine (the default when a wine is held as full cases).

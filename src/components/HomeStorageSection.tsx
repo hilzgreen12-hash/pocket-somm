@@ -89,11 +89,15 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
     enabled: rackIds.length > 0,
   });
 
+  // Home storage only — external cellars (imports filed offsite) never appear
+  // here or count toward the home totals; they live in the Full Cellar List's
+  // "Stored Externally" grouping, not "Your Wines At Home".
+  const homeLocations = storageLocations.filter((l) => !l.is_external);
   const rackBottles = Object.values(rackCounts).reduce((sum: number, n: number) => sum + n, 0);
   const binBottles = Object.values(binCounts).reduce((sum: number, n: number) => sum + n, 0);
-  const locationBottles = storageLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
+  const locationBottles = homeLocations.reduce((sum, l) => sum + (l.wineCount ?? 0), 0);
   const totalBottles = rackBottles + binBottles + locationBottles;
-  const totalLocations = racks.length + bins.length + storageLocations.length;
+  const totalLocations = racks.length + bins.length + homeLocations.length;
   const hasStorage = totalLocations > 0;
 
   // ---- Add flows (verbatim from the old racks page) ------------------------
@@ -261,7 +265,7 @@ export function HomeStorageSection({ requireAuth }: { requireAuth: (action: () =
                   <Text style={styles.storageCardCount}>{bottleLabel(binCounts[bin.id] ?? 0)}</Text>
                 </TouchableOpacity>
               ))}
-              {storageLocations.map((loc) => (
+              {homeLocations.map((loc) => (
                 <TouchableOpacity
                   key={loc.id}
                   style={styles.storageCard}

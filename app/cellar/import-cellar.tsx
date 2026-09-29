@@ -600,13 +600,18 @@ export default function ImportCellarScreen() {
           try {
             const name = caseSummary(w, bottleSizeCl);
             const created = await createStorageCase(userId, { storageLocationId: locationId, name });
-            await assignWineToCase(saved.id, created.id);
+            // NB: do NOT call assignWineToCase here. It updates cellar_wines.case_id,
+            // which fires the Phase-2 legacy→placements sync trigger (migration 104)
+            // and creates a location placement of `qty`. addLocationPlacement below
+            // would then ADD another `qty` on top → double the bottle count (a 6-pack
+            // showing as 12). The case is linked purely via the placement's case_id.
             caseId = created.id;
           } catch { /* wine stays loose in the location */ }
         }
         // Create the LOCATION PLACEMENT so the wine actually appears in its folder.
         // The Full Cellar List filters on cellar_placements, not the legacy
-        // storage_location_id — without this the wine showed as "Unplaced".
+        // storage_location_id — without this the wine showed as "Unplaced". This is
+        // the SINGLE source of the wine's placement (see the no-assignWineToCase note).
         if (locationId) {
           try { await addLocationPlacement(saved.id, locationId, caseId, qty); } catch { /* best-effort */ }
         }

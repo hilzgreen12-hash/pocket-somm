@@ -1755,9 +1755,14 @@ export default function CellarWineDetail() {
           {locationPlacements.map((p) => {
             const loc = storageLocations.find((l) => l.id === p.storage_location_id);
             const cs = placementCases.find((c) => c.id === p.case_id);
-            return (
+            const line = `${p.quantity} bottle${p.quantity === 1 ? '' : 's'} in ${loc?.name ?? 'a location'}${cs ? ` - ${cs.name}` : ''}`;
+            // External cellars aren't browsable like home storage, so their line is
+            // plain text — no link, no arrow.
+            return loc?.is_external ? (
+              <Text key={p.id} style={styles.statActionPlain}>{line}</Text>
+            ) : (
               <TouchableOpacity key={p.id} onPress={() => router.push(`/cellar/storage-location/${p.storage_location_id}` as any)}>
-                <Text style={styles.statAction}>{p.quantity} bottle{p.quantity === 1 ? '' : 's'} in {loc?.name ?? 'a location'}{cs ? ` - ${cs.name}` : ''} →</Text>
+                <Text style={styles.statAction}>{line} →</Text>
               </TouchableOpacity>
             );
           })}
@@ -2638,6 +2643,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: fonts.bodyItalic,
     color: colors.textMuted,
+    marginTop: 4,
+  },
+  // External-cellar placement line — same weight as a link but not tappable
+  // (external cellars aren't browsable), so no arrow and the neutral text colour.
+  statActionPlain: {
+    fontSize: 12,
+    fontFamily: fonts.headingSemibold,
+    color: colors.text,
     marginTop: 4,
   },
   // Inter — subtle cancel
