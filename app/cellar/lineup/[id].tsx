@@ -1016,7 +1016,8 @@ const styles = StyleSheet.create({
   backLink: { fontSize: 15, color: colors.gold },
   title: { fontSize: 22, fontFamily: fonts.headingSemibold, color: colors.text, letterSpacing: 1 },
   // Small white label above the title — same size as the date/location stamp.
-  headerTitle: { fontFamily: fonts.headingSemibold, fontSize: 17, color: colors.text, textAlign: 'center', letterSpacing: 0.5, marginTop: spacing.lg },
+  // Matches the Full Cellar List page header (Your Cellar List) — 22 / headingBold.
+  headerTitle: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.text, textAlign: 'center', letterSpacing: 0.8, marginTop: spacing.lg },
   // "Title" — the lineup's own name, the large heading (was the page title's font); stays gold.
   titleInput: { fontFamily: fonts.headingBold, fontSize: 22, color: colors.gold, textAlign: 'center', letterSpacing: 0.5, paddingVertical: 4, marginTop: spacing.xs, alignSelf: 'stretch', paddingHorizontal: spacing.xl },
   headerStampWrap: { alignItems: 'center', paddingHorizontal: spacing.sm, marginTop: spacing.xs },
@@ -1077,10 +1078,12 @@ const styles = StyleSheet.create({
   notePlaceholder: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.textMuted, fontStyle: 'italic', lineHeight: 22 },
   // White "match to a restaurant review" button at the foot of the page.
   matchBottomWrap: { alignItems: 'center', gap: spacing.sm },
-  matchButton: { alignSelf: 'center', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xl },
-  matchButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3 },
-  exportButton: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(224,184,74,0.12)' },
-  exportButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
+  // Match + Export are the two foot buttons — same width so Export isn't a small
+  // pill next to the long "Match to a Restaurant Review" label.
+  matchButton: { alignSelf: 'center', alignItems: 'center', minWidth: '82%', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xl },
+  matchButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3, textAlign: 'center' },
+  exportButton: { alignSelf: 'center', alignItems: 'center', minWidth: '82%', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(224,184,74,0.12)' },
+  exportButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3, textAlign: 'center' },
   // Always-visible "brief thoughts" input on the review form.
   thoughtsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 80, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlignVertical: 'top' },
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
