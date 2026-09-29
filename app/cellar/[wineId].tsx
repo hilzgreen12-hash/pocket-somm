@@ -29,7 +29,7 @@ import { useRackStore } from '../../src/stores/rackStore';
 import { generatePairings, fetchProducerRange, type ProducerRange, type ProducerRangeWine } from '../../src/api/label';
 import { valueWine } from '../../src/services/pricing';
 import { getSlotAssignments, clearWineFromRacks, removeSlotsForWine } from '../../src/api/racks';
-import { fetchPlacementsForWine, placedCount } from '../../src/api/placements';
+import { fetchPlacementsForWine, placedCount, clearLocationPlacements } from '../../src/api/placements';
 import { addCellarWine, addCellarWineRemoval, listCellarWineRemovals } from '../../src/api/cellar';
 import { publishCommunityReview } from '../../src/api/community';
 import { supabase } from '../../src/api/supabase';
@@ -780,6 +780,11 @@ export default function CellarWineDetail() {
           },
         });
         await clearWineFromRacks(wine!.id);
+        // Also drop its alt-cellar ('location') placements — these are app-owned
+        // (migration 106) and NOT cleared by clearWineFromRacks, so without this
+        // an archived bottle's thumbnail lingers in the home storage location
+        // screen (which reads cellar_placements) even after a refetch.
+        await clearLocationPlacements(wine!.id);
         // Leaving the cellar also leaves any case it was boxed in — clear the
         // case pointer and sweep a now-empty case, so a wine archived from its
         // own card (not the location menu) doesn't leave a ghost case behind.
@@ -798,11 +803,13 @@ export default function CellarWineDetail() {
         }
         qc.invalidateQueries({ queryKey: ['slot-assignments'] });
         qc.invalidateQueries({ queryKey: ['rack-slots'] });
-        if (archLocId) {
-          qc.invalidateQueries({ queryKey: ['storage-location-wines', archLocId] });
-          qc.invalidateQueries({ queryKey: ['storage-location-cases', archLocId] });
-          qc.invalidateQueries({ queryKey: ['storage-locations'] });
-        }
+        // Refresh the alt-cellar screens broadly. Keying off the legacy
+        // storage_location_id (as before) skipped this entirely for
+        // placements-native alt-cellar wines, where that column is null — the
+        // root cause of the archived-bottle thumbnail lingering in the location.
+        qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+        qc.invalidateQueries({ queryKey: ['storage-location-cases'] });
+        qc.invalidateQueries({ queryKey: ['storage-locations'] });
         showAlert({
           title: 'Archived',
           body: confirmMsg,

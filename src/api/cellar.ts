@@ -1,6 +1,7 @@
 import { supabase } from './supabase';
 import type { CellarWine } from '../types/wine';
 import { wineNameKey } from '../utils/wineIdentity';
+import { clearWineFromRacks } from './racks';
 
 export async function getCellarWines(userId: string): Promise<CellarWine[]> {
   const { data, error } = await supabase
@@ -118,6 +119,17 @@ export async function archiveCellarWine(id: string): Promise<void> {
   if (!data || data.length === 0) {
     throw new Error('That wine could not be updated — please pull to refresh (you may need to sign in again).');
   }
+  // An archived wine has left physical storage, so detach it from EVERY spot:
+  // rack/fridge slots AND all cellar_placements (rack, bin and — crucially —
+  // alt-cellar 'location' rows). Location placements are app-owned since
+  // migration 106 (the DB no longer mirrors/clears them), so without this the
+  // alt-cellar screen — which reads cellar_placements — keeps showing the
+  // archived bottle's thumbnail even after a refetch. Centralised here so every
+  // full-archive caller (Full Cellar List, bulk select, useCellar, voice) is
+  // covered, not just the ones that happened to call clearWineFromRacks.
+  await clearWineFromRacks(id);
+  const { error: pErr } = await supabase.from('cellar_placements').delete().eq('cellar_wine_id', id);
+  if (pErr) throw pErr;
 }
 
 export async function getArchivedWines(userId: string): Promise<CellarWine[]> {

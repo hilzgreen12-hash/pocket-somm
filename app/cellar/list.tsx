@@ -330,6 +330,11 @@ export default function FullCellarListScreen() {
     qc.invalidateQueries({ queryKey: ['slot-assignments'] });
     qc.invalidateQueries({ queryKey: ['rack-slots'] });
     qc.invalidateQueries({ queryKey: ['cellar-locations', userId] });
+    // Archiving/deleting a wine also detaches it from any alt cellar, so refresh
+    // the home-storage-location screens or an archived bottle's thumbnail lingers
+    // there. Broad (no id) — the wine's location isn't known at this layer.
+    qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+    qc.invalidateQueries({ queryKey: ['storage-locations'] });
   }
 
   // Long-press a wine → a per-wine action popup (replaces the bottom select

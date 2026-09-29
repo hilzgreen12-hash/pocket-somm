@@ -75,6 +75,13 @@ export function useCellar() {
       // archived_at but leaves the wishlist row visible until the next
       // cache GC. Invalidate the wishlist query so it disappears immediately.
       qc.invalidateQueries({ queryKey: ['wishlist', userId] });
+      // archiveCellarWine also detaches the wine from every rack/bin/alt-cellar
+      // placement, so refresh those screens or the archived bottle keeps showing
+      // in the rack or home storage location it just left.
+      qc.invalidateQueries({ queryKey: ['slot-assignments'] });
+      qc.invalidateQueries({ queryKey: ['rack-slots'] });
+      qc.invalidateQueries({ queryKey: ['storage-location-wines'] });
+      qc.invalidateQueries({ queryKey: ['storage-locations'] });
     },
   });
 
