@@ -2347,7 +2347,7 @@ export default function LabelResultsScreen() {
       {isIntelOnlyFlow ? (
         <View style={styles.section}>
           <TouchableOpacity style={styles.saveReviewBtn} onPress={handleSaveToReviews} activeOpacity={0.85}>
-            <Text style={styles.saveReviewBtnText}>Add Your Wine Review</Text>
+            <Text style={styles.saveReviewBtnText}>Add/View Your Wine Review</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.saveReviewBtn, { marginTop: spacing.sm }]}
