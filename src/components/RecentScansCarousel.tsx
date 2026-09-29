@@ -35,16 +35,6 @@ function stampDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
-// A session the user has RATED or noted is a restaurant review — it belongs in
-// Recent Reviews, not Recent Scans (even though it may also carry a scanned list).
-function restaurantReviewed(a: ScanArchiveItem): boolean {
-  return !!(
-    a.ratingOverall != null || a.ratingFood != null || a.ratingService != null ||
-    a.ratingWineList != null || a.ratingAtmosphere != null || a.ratingValue != null ||
-    (a.restaurantNote && a.restaurantNote.trim())
-  );
-}
-
 // Example cards shown when a new user has no scans yet.
 const SCAN_EXAMPLES: PlaceholderCard[] = [
   { kind: 'label', producer: 'Domaine de la Romanée-Conti', wineName: 'La Romanée-Conti', title: 'La Romanée-Conti 2002', stamp: '01 Jan 2030 · At Home', overlay: 'Your first scan replaces this content' },
@@ -61,7 +51,7 @@ function labelKey(producer: string | null, wineName: string | null, vintage: num
 export function useRecentScanCounts(): { labels: number; lists: number } {
   const { labels } = useLabels();
   const { archive } = useScanHistory();
-  const lists = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0 && !restaurantReviewed(a)).length;
+  const lists = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0).length;
   return { labels: labels.length, lists };
 }
 
@@ -167,9 +157,11 @@ export function RecentScansCarousel() {
     });
   }
 
-  // Only genuine wine-list scans that HAVEN'T been reviewed — a scanned list the
-  // user then rated/noted is a restaurant review and belongs in Recent Reviews.
-  const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0 && !restaurantReviewed(a)).map((a) => {
+  // Every wine-list scan belongs in Recent Scans — it's the scanned list itself.
+  // Rating/noting the restaurant additionally surfaces it in Recent Reviews, but
+  // must NOT remove it from here (previously it did, so saving a restaurant review
+  // made the scan vanish from the scans carousel).
+  const listItems: Recent[] = archive.filter((a) => (a.extractedWines?.length ?? 0) > 0).map((a) => {
     const d = a.capturedAt ? new Date(a.capturedAt) : null;
     const dateStr = d ? stampDate(d) : '';
     const venue = a.restaurantName?.trim() || '';
