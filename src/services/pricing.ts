@@ -240,6 +240,10 @@ export async function generateWineIntel(
     estimatedValue: useWs ? pricing.averageMarketPrice : intel.estimatedValue,
     estimatedValueLow: useWs ? pricing.minPrice : (intel.estimatedValueLow ?? null),
     estimatedValueHigh: useWs ? pricing.maxPrice : (intel.estimatedValueHigh ?? null),
+    // Resolved region: the (Bordeaux-filled) input region, else Claude's region on
+    // the intel, else the permanent WS facts — so a region-less wine can be
+    // classified by "Update all".
+    region: (wine.region ?? '').trim() || (intel as { region?: string | null }).region || facts?.region || null,
     grapeVariety: intel.grapeVariety ?? pricing.grape ?? facts?.grape ?? null,
     valueSource: useWs ? 'wine-searcher' : 'vinster',
     // Real Wine-Searcher market data is high-confidence; otherwise carry Claude's

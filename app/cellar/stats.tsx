@@ -206,6 +206,11 @@ export default function CellarStatsScreen() {
             wineName: w.wine_name || null,
             vintage: w.vintage || 'NV',
           } as any, currency);
+          // Backfill a missing region / grape so region-less imports classify in
+          // these very stats (only fills blanks — never overwrites user data).
+          const classifyPatch: { region?: string; grape_variety?: string } = {};
+          if (!(w.region ?? '').trim() && (intel.region ?? '').trim()) classifyPatch.region = intel.region!.trim();
+          if (!(w.grape_variety ?? '').trim() && (intel.grapeVariety ?? '').trim()) classifyPatch.grape_variety = intel.grapeVariety!.trim();
           await updateCellarWine(w.id, {
             estimated_value: intel.estimatedValue,
             estimated_value_currency: currency,
@@ -215,6 +220,7 @@ export default function CellarStatsScreen() {
             estimated_value_source: intel.valueSource ?? 'vinster',
             critic_score: intel.criticScore,
             critic_score_note: intel.criticScoreNote ?? null,
+            ...classifyPatch,
           });
         } catch {
           // Skip this wine on error — partial progress is better than failing the lot

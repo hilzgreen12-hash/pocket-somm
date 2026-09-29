@@ -54,6 +54,12 @@ export async function updateCellarIntelBatch(
             if (lbl) labelPatch = { label_image_path: lbl };
           } catch { /* no label found — leave without a photo */ }
         }
+        // Backfill a missing region / grape from the intel so region-less imports
+        // become classifiable in Cellar Statistics (and grape shows on the card).
+        // Only fills blanks — never overwrites a value the user or import supplied.
+        const classifyPatch: { region?: string; grape_variety?: string } = {};
+        if (!(w.region ?? '').trim() && (intel.region ?? '').trim()) classifyPatch.region = intel.region!.trim();
+        if (!(w.grape_variety ?? '').trim() && (intel.grapeVariety ?? '').trim()) classifyPatch.grape_variety = intel.grapeVariety!.trim();
         await updateCellarWine(w.id, {
           estimated_value: intel.estimatedValue,
           estimated_value_currency: currency,
@@ -63,6 +69,7 @@ export async function updateCellarIntelBatch(
           critic_score_note: intel.criticScoreNote ?? null,
           // Canonical identity anchor when Wine-Searcher matched.
           ...(intel.wsWineId ? { ws_wine_id: intel.wsWineId, ws_wine_name: intel.wsWineName ?? null } : {}),
+          ...classifyPatch,
           ...labelPatch,
         });
       } catch {

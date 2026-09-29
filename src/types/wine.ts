@@ -150,6 +150,9 @@ export interface WineIntelligence {
   drinkingWindowFrom: number | null;
   drinkingWindowTo: number | null;
   drinkingWindowStatus: 'too_young' | 'approaching' | 'peak' | 'declining' | 'unknown';
+  // Best-resolved region for this wine (Bordeaux appellation fill / Wine-Searcher
+  // facts) — surfaced so bulk "Update all" can backfill a region-less cellar wine.
+  region?: string | null;
   grapeVariety: string | null;
   // Genuine grape ambiguity: this exact producer + wine name is released as more
   // than one wine under the identical name (e.g. a single-vineyard sold as both a
