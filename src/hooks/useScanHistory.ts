@@ -250,18 +250,12 @@ export function useScanHistory() {
         throw new Error(`scan_sessions row ${sessionId} not visible after insert — RLS read policy may be rejecting your own rows.`);
       }
 
-      // Save a top-strip of the scanned wine list as this session's card
-      // thumbnail (the top usually carries the restaurant name). Non-fatal — the
-      // scan still archives without a photo, and a photo added later in a review
-      // overwrites this at the same storage path.
-      try {
-        const scanUri = useScanStore.getState().imageUri ?? useScanStore.getState().imageUris?.[0] ?? null;
-        if (scanUri) {
-          const cropped = await cropWineListTop(scanUri);
-          const path = await uploadRestaurantPhoto(session.user.id, cropped, sessionId!);
-          await supabase.from('scan_sessions').update({ restaurant_photo_path: path }).eq('id', sessionId!);
-        }
-      } catch { /* non-fatal — archived without a thumbnail */ }
+      // NB: we deliberately DON'T auto-set a photo from the scanned wine-list
+      // image any more. Cropping the list's top strip in as restaurant_photo_path
+      // (a) put a photo of the menu — not the night — on the Recent Scans / Recent
+      // Reviews card, and (b) made the "+ Add Image / + Add Photo" flow think a
+      // photo already existed, so the user couldn't add their own. The photo now
+      // stays empty until the user adds one via that flow (take / upload / find).
 
       const newItem: ScanHistoryItem = {
         id: Date.now().toString(),
