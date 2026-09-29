@@ -1495,6 +1495,11 @@ export default function ChosenWinesScreen() {
             <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={handleChooseCellar} activeOpacity={0.85}>
               <Text style={styles.chooserBtnText}>Select from Cellar</Text>
             </TouchableOpacity>
+            {/* Bulk-import reviews from a file (Vivino CSV / spreadsheet) — same flow
+                as the old top-right "+ Import". */}
+            <TouchableOpacity style={[styles.chooserBtn, { marginTop: spacing.sm }]} onPress={() => { setChooserOpen(false); openReviewImportMenu(); }} activeOpacity={0.85}>
+              <Text style={styles.chooserBtnText}>Import Review Files</Text>
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => setChooserOpen(false)} style={styles.chooserCancel}>
               <Text style={styles.chooserCancelText}>Cancel</Text>
             </TouchableOpacity>
@@ -1657,12 +1662,9 @@ export default function ChosenWinesScreen() {
         </TouchableOpacity>
         <Text style={styles.title}>Your Wine Reviews</Text>
         <View style={styles.headerActions}>
-          <TouchableOpacity onPress={openReviewImportMenu} hitSlop={{ top: 8, bottom: 4, left: 8, right: 8 }}>
-            <Text style={styles.headerActionLink}>+ Import</Text>
-          </TouchableOpacity>
           <TouchableOpacity
             onPress={() => { setAddSource('other'); setAddToGroupId(null); setChooserOpen(true); }}
-            hitSlop={{ top: 4, bottom: 8, left: 8, right: 8 }}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           >
             <Text style={styles.headerActionLink}>+ Add Review</Text>
           </TouchableOpacity>
