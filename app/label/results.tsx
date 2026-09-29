@@ -3095,8 +3095,8 @@ const styles = StyleSheet.create({
   // Yellow italic "Dive deeper" link, sits below The Inside Line blurb.
   diveDeeperLink: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.gold, marginTop: spacing.sm },
   // Primary CTA above Dive Deeper — gold-filled to stand out.
-  saveReviewBtn: { borderWidth: 1, borderColor: colors.gold, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
-  saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.gold, letterSpacing: 0.3 },
+  saveReviewBtn: { borderWidth: 1, borderColor: colors.text, borderRadius: 10, paddingVertical: spacing.md, alignItems: 'center' },
+  saveReviewBtnText: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, letterSpacing: 0.3 },
   tastingNotes: { fontSize: 16, fontFamily: fonts.bodyItalic, color: colors.textMuted, lineHeight: 22 },
   // Vinster's Map — collapsible heading + placeholder body.
   mapHeadingRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
