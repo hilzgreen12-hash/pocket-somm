@@ -885,15 +885,13 @@ export default function ResultsScreen() {
             </Text>
             {restaurantName ? renderCity() : null}
           </View>
-        ) : effectiveSessionId && restaurantName.trim().length > 0 ? (
-          <TouchableOpacity style={styles.restaurantLine} onPress={openRestaurantReview} activeOpacity={0.7}>
-            <Text style={styles.restaurantPin}>📍</Text>
-            <Text style={styles.restaurantLineText} numberOfLines={1}>
-              {restaurantName}
-            </Text>
-            {renderCity()}
-          </TouchableOpacity>
         ) : editingRestaurant ? (
+          // Editing MUST be checked before the "session exists + has a name"
+          // read-only branch below: typing the first character makes
+          // restaurantName non-empty, and if that branch were first it would win
+          // and unmount this focused TextInput mid-keystroke — the "screen trips
+          // out after the first letter" bug. While editing, we always show the
+          // input, regardless of the current value.
           <View style={styles.restaurantLine}>
             <Text style={styles.restaurantPin}>📍</Text>
             <TextInput
@@ -909,6 +907,14 @@ export default function ResultsScreen() {
             />
             {renderCity()}
           </View>
+        ) : effectiveSessionId && restaurantName.trim().length > 0 ? (
+          <TouchableOpacity style={styles.restaurantLine} onPress={openRestaurantReview} activeOpacity={0.7}>
+            <Text style={styles.restaurantPin}>📍</Text>
+            <Text style={styles.restaurantLineText} numberOfLines={1}>
+              {restaurantName}
+            </Text>
+            {renderCity()}
+          </TouchableOpacity>
         ) : (
           <View style={styles.restaurantLine}>
             <Text style={styles.restaurantPin}>📍</Text>
@@ -1378,7 +1384,8 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   restaurantLineCity: {
-    fontFamily: fonts.bodyRegular,
+    // Match the venue name's font so the venue · location line reads as one.
+    fontFamily: fonts.bodySemibold,
     fontSize: 16,
     color: colors.text,
   },
@@ -1389,7 +1396,8 @@ const styles = StyleSheet.create({
   },
   // Inline city editor — mirrors restaurantLineInput but narrower.
   cityLineInput: {
-    fontFamily: fonts.bodyRegular,
+    // Same font as the venue input so both fields on the stamp line match.
+    fontFamily: fonts.bodySemibold,
     fontSize: 16,
     color: colors.text,
     borderBottomWidth: 1,
