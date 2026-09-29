@@ -1706,11 +1706,17 @@ export default function ChosenWinesScreen() {
                   return sum + Math.max(1, entries);
                 }, 0);
                 const n = wineKeys.size;
-                // Total awaiting in the current collection (independent of the
-                // toggle, so the label stays stable when tapped).
-                const a = awaitingReview.filter((w) =>
-                  typeFilter === 'all' || collectionOf(w.producer, w.wine_name, w.vintage, w.source) === typeFilter,
-                ).length;
+                // Awaiting count reflects the SAME filtered set as the wine/review
+                // counts, so it tracks every active filter (not just the collection).
+                // Distinct awaiting identities so it reads as "X Wines". Stable across
+                // the awaiting-only toggle: that toggle only hides reviewed items, so
+                // the awaiting subset — and thus this count — is unchanged.
+                const a = new Set(
+                  filtered.filter(isAwaitingItem).map((it) => {
+                    const w = it.wine as { producer?: string | null; wine_name?: string | null; vintage?: string | number | null };
+                    return `${(w.producer ?? '').toLowerCase()}|${(w.wine_name ?? '').toLowerCase()}|${w.vintage ?? ''}`;
+                  }),
+                ).size;
                 return (
                   <>
                     {`${n} ${n === 1 ? 'Wine' : 'Wines'} · ${r} ${r === 1 ? 'Review' : 'Reviews'}`}
