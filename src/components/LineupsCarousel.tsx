@@ -5,8 +5,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../hooks/useAuth';
 import { listLineupArchives, lineupSignedUrl, deleteLineupArchive, type LineupArchive } from '../api/lineups';
 import { showAlert } from './AppAlert';
+import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
+
+// Placeholder tiles shown until the user saves their first lineup — faded bottle
+// glyphs with a scrim overlay, mirroring the empty "Your Recent Scans" carousel.
+const LINEUP_EXAMPLES: PlaceholderCard[] = [
+  { kind: 'icon', icon: 'wine', title: 'Your Lineup', stamp: '20 Dec 2029 · La Steakhouse', overlay: 'Your first lineup replaces this content' },
+  { kind: 'icon', icon: 'wine', title: 'Your Lineup', stamp: '18 Dec 2029 · At Home', overlay: 'Your second lineup replaces this content' },
+  { kind: 'icon', icon: 'wine', title: 'Your Lineup', stamp: '02 Dec 2029 · The Cellar Door', overlay: 'Your third lineup replaces this content' },
+];
 
 // One lineup in the carousel — a large thumbnail with a date · location stamp.
 function LineupCard({ item }: { item: LineupArchive }) {
@@ -64,6 +73,8 @@ export function LineupsCarousel({ requireAccount }: { requireAccount?: (action: 
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.carousel}>
       {lineups.map((l) => <LineupCard key={l.id} item={l} />)}
+      {/* Empty state → three faded bottle placeholders (like the scan carousel). */}
+      {lineups.length === 0 ? LINEUP_EXAMPLES.map((c, i) => <PlaceholderCardView key={`ph-${i}`} card={c} />) : null}
       <TouchableOpacity style={styles.addCard} onPress={() => gate(() => router.push('/cellar/archive-night'))} activeOpacity={0.85}>
         <Text style={styles.addCardIcon}>＋</Text>
         <Text style={styles.addCardText}>Add</Text>
