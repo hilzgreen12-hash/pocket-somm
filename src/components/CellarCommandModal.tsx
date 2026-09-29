@@ -27,6 +27,33 @@ function wineLabel(w: CellarWine | undefined): string {
   return [w.producer, w.wine_name, w.vintage].filter(Boolean).join(' · ');
 }
 
+// Identity of a cellar wine for de-duping disambiguation candidates — producer +
+// name + vintage + format. Two rows with the same identity are the SAME wine to
+// the user, so offering them both as "which did you mean?" is never helpful.
+function wineIdentityKey(w: CellarWine): string {
+  return [
+    (w.producer ?? '').toLowerCase().trim(),
+    (w.wine_name ?? '').toLowerCase().trim(),
+    w.vintage ?? '',
+    w.bottle_size_ml ?? 750,
+  ].join('|');
+}
+// Keep the first candidate id per distinct identity — collapses duplicate rows /
+// a wine the model listed twice, so identical options never reach the picker.
+function distinctCandidateIds(ids: string[], wines: CellarWine[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const id of ids) {
+    const w = wines.find((x) => x.id === id);
+    if (!w) continue;
+    const key = wineIdentityKey(w);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(id);
+  }
+  return out;
+}
+
 
 // True if the spoken command names a vintage (a 19xx/20xx year) or explicitly
 // flags a non-vintage bottle ("non-vintage" / "NV"). Move / archive / add all
@@ -206,7 +233,11 @@ export function CellarCommandModal({ visible, onClose, introText, suggestions, a
 
       // move / archive both need a resolved wine
       if (!res.wineId || res.needs === 'wine') {
-        if (res.candidates.length > 1) { setPhase('pick'); return; }
+        // Collapse candidates that are the same wine (duplicate cellar rows / a wine
+        // listed twice) so identical "which did you mean?" options never appear.
+        const distinct = distinctCandidateIds(res.candidates, wines);
+        if (distinct.length > 1) { setResult({ ...res, candidates: distinct }); setPhase('pick'); return; }
+        if (distinct.length === 1) { setChosenWineId(distinct[0]); setPhase('confirm'); return; }
         setPhase('need');
         return;
       }
