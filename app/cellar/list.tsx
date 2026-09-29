@@ -632,6 +632,21 @@ export default function FullCellarListScreen() {
     }
   }, [add, isArchiveView]);
 
+  // "Import Cellar Doc" → the same source chooser as the Cellar tab's "Import
+  // Cellar" button (photo / screenshot / spreadsheet file).
+  function openImportChooser() {
+    showAlert({
+      title: 'Import Cellar Document',
+      body: 'Bring in an existing cellar list.',
+      buttons: [
+        { text: 'Scan Photo', onPress: () => router.push('/cellar/import-cellar?source=camera' as any) },
+        { text: 'Upload Screenshot', onPress: () => router.push('/cellar/import-cellar?source=library' as any) },
+        { text: 'Upload File', onPress: () => router.push('/cellar/import-cellar?source=file' as any) },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    });
+  }
+
   async function handleUpload() {
     if (!(await ensureMediaPermission('library'))) return;
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 });
@@ -1341,8 +1356,8 @@ export default function FullCellarListScreen() {
       <Modal visible={addWineOpen} transparent animationType="fade" onRequestClose={() => setAddWineOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setAddWineOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.modalSheet} onPress={() => {}}>
-            <Text style={styles.modalTitle}>Add a wine</Text>
-            <Text style={styles.addBody}>Scan the label or upload a photo and Vinster will pull in the details — or enter them yourself.</Text>
+            <Text style={styles.modalTitle}>Add Wine to Your Cellar</Text>
+            <Text style={styles.addBody}>Scan or Upload a Label or Lineup, or manually input the details.</Text>
             <TouchableOpacity
               style={styles.addBtn}
               onPress={() => { setAddWineOpen(false); router.push('/label/camera'); }}
@@ -1351,15 +1366,15 @@ export default function FullCellarListScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={startLineup}
+              onPress={() => { setAddWineOpen(false); handleUpload(); }}
             >
-              <Text style={styles.addBtnText}>Add a Lineup (up to 6 bottles)</Text>
+              <Text style={styles.addBtnText}>Upload Label</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
-              onPress={() => { setAddWineOpen(false); handleUpload(); }}
+              onPress={startLineup}
             >
-              <Text style={styles.addBtnText}>Upload A Wine Label</Text>
+              <Text style={styles.addBtnText}>Add a Lineup (up to 6 bottles)</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.addBtn, { marginTop: spacing.sm }]}
@@ -1371,7 +1386,13 @@ export default function FullCellarListScreen() {
                 router.push('/label/confirm?manual=1');
               }}
             >
-              <Text style={styles.addBtnText}>Manual Input</Text>
+              <Text style={styles.addBtnText}>Search/Manual Input</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.addBtn, { marginTop: spacing.sm }]}
+              onPress={() => { setAddWineOpen(false); openImportChooser(); }}
+            >
+              <Text style={styles.addBtnText}>Import Cellar Doc</Text>
             </TouchableOpacity>
             <TouchableOpacity onPress={() => setAddWineOpen(false)} style={styles.modalCancel}>
               <Text style={styles.modalCancelText}>Cancel</Text>
