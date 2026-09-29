@@ -2974,7 +2974,7 @@ const styles = StyleSheet.create({
   // between the note and the map.
   // Note/Map + the Vintage & Market Comparison read as one group — no separator
   // line between them (the comparison's own bottom border closes the group).
-  noteMapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  noteMapSection: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: spacing.xs },
   // Vinster's Note beside Vinster's Map — centred as a pair with an indent
   // between them; text baselines aligned so both titles sit on one line.
   noteMapHeadingRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'baseline', gap: spacing.xl, flexWrap: 'wrap' },

@@ -114,7 +114,9 @@ export function RecentScansCarousel() {
         // labelId is carried so the screen heals the existing row instead of writing
         // a new one; gen=1 regenerates when the snapshot is missing or empty.
         const suffix = usable ? '' : '&gen=1&confirmed=1&noRecent=1';
-        router.push(`/label/results?context=intel&labelId=${l.id}${suffix}`);
+        // Opened from the Home carousel → Back returns to Home, not the Scan tab
+        // (the results screen's default origin).
+        router.push(`/label/results?context=intel&labelId=${l.id}${suffix}&backTo=${encodeURIComponent('/(tabs)')}`);
       },
     });
   }
