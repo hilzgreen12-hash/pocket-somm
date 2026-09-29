@@ -14,6 +14,7 @@ import { colors, spacing } from '../../src/constants/theme';
 import { fontsSpectral as fonts } from '../../src/constants/fonts';
 import { formatCurrency } from '../../src/constants/currency';
 import { inferWineStyle, type WineStyle } from '../../src/utils/wineStyle';
+import { effectiveMaturity } from '../../src/utils/maturity';
 import { mostRepresentedRegions, classifiedRegionBottles } from '../../src/utils/wineRegionGroup';
 import { bottleSizeLabel } from '../../src/components/BottleSizePicker';
 import { ArchiveSignInPrompt } from '../../src/components/ArchiveSignInPrompt';
@@ -169,12 +170,15 @@ export default function CellarStatsScreen() {
     else styleBuckets.Other += w.quantity;
   }
 
-  // Condition breakdown — four buckets matching the rack drinking-window
+  // Drinking Window breakdown — four buckets matching the rack drinking-window
   // statuses: Peak / Approaching / Too Young / Declining.
-  // Condition relates to the WINE, not the bottle count — count distinct wines
-  // in each drinking-window bucket, not their bottle quantities.
+  // Relates to the WINE, not the bottle count — count distinct wines in each
+  // drinking-window bucket, not their bottle quantities. Uses the SAME live
+  // derivation as the Full Cellar List filter + the Drink Now carousel
+  // (effectiveMaturity) instead of the stored status column, so the numbers stay
+  // current and never miss a wine that has a window but no saved status.
   const sumByStatus = (status: string) =>
-    wines.filter((w) => w.drinking_window_status === status).length;
+    wines.filter((w) => effectiveMaturity(w) === status).length;
   const peakCount = sumByStatus('peak');
   const approachingCount = sumByStatus('approaching');
   const tooYoungCount = sumByStatus('too_young');
@@ -474,9 +478,9 @@ export default function CellarStatsScreen() {
             ) : null}
           </View>
 
-          {/* Condition */}
+          {/* Drinking Window */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Condition</Text>
+            <Text style={styles.sectionTitle}>Drinking Window</Text>
             {([
               { status: 'too_young', label: 'Too Young', count: tooYoungCount },
               { status: 'approaching', label: 'Early but Approachable', count: approachingCount },
@@ -501,7 +505,7 @@ export default function CellarStatsScreen() {
                   </TouchableOpacity>
                   {expanded ? (
                     <View style={styles.conditionWines}>
-                      {wines.filter((w) => w.drinking_window_status === c.status).map((w) => (
+                      {wines.filter((w) => effectiveMaturity(w) === c.status).map((w) => (
                         <TouchableOpacity key={w.id} style={styles.conditionWineRow} onPress={() => router.push(`/cellar/${w.id}` as any)} activeOpacity={0.7}>
                           <Text style={styles.conditionWineName} numberOfLines={1}>{[w.producer, w.wine_name, w.vintage].filter(Boolean).join(' ')}</Text>
                           <Text style={styles.conditionWineMeta} numberOfLines={1}>
