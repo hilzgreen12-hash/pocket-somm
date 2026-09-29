@@ -615,14 +615,11 @@ export default function LineupDetailScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        {/* Back + Share on their own row, so the stamp's tap area no longer sits
-            against the back arrow (which is what hijacked Back into the editor). */}
+        {/* Back on its own row. Export moved to a button beneath "Match to a
+            Restaurant Review" at the foot of the page. */}
         <View style={styles.headerTopRow}>
           <TouchableOpacity onPress={() => router.back()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 16 }}>
             <Text accessibilityLabel="Back" style={styles.back}>←</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={handleShare} disabled={sharing} hitSlop={{ top: 10, bottom: 10, left: 16, right: 10 }}>
-            <Text style={[styles.shareText, sharing && { opacity: 0.5 }]}>{sharing ? '…' : 'Export'}</Text>
           </TouchableOpacity>
         </View>
         {/* Fixed screen title for the review flow. */}
@@ -698,15 +695,21 @@ export default function LineupDetailScreen() {
                   { producer: w.producer, wineName: w.wine_name, vintage: w.vintage },
                   { labels, chosenWines, cellarWines },
                 );
+                // Region · grape from the matched cellar wine, so the row mirrors the
+                // Full Cellar List format (name line + region/grape line).
+                const matchedCellar = w.cellar_wine_id ? cellarWines.find((c) => c.id === w.cellar_wine_id) : null;
+                const subParts = [matchedCellar?.region, matchedCellar?.grape_variety].filter(Boolean) as string[];
                 return (
                 <View key={`${w.cellar_wine_id ?? 'x'}-${i}`} style={styles.wineRow}>
                   <View style={{ flex: 1 }}>
-                    {/* Tap the name (or Edit wine) to correct a mis-read. */}
+                    {/* Tap the name to edit the wine (correct a mis-read). Matches the
+                        Full Cellar List's name + region/grape formatting. */}
                     <TouchableOpacity onPress={() => openWineEdit(i, w)} activeOpacity={0.7} hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}>
-                      <Text style={styles.wineName} numberOfLines={2}>
+                      <Text style={styles.wineName}>
                         {w.count > 1 ? `${w.count}× ` : ''}{wineHeaderLine(w.producer, w.wine_name, w.vintage)}
                       </Text>
                     </TouchableOpacity>
+                    {subParts.length > 0 ? <Text style={styles.wineDetail} numberOfLines={1}>{subParts.join(' · ')}</Text> : null}
                     {/* Status stamp: Your Cellar (matched), or a tappable Off Cellar
                         that opens "This was from my cellar" to link the bottle. */}
                     {w.cellar_wine_id ? (
@@ -716,7 +719,9 @@ export default function LineupDetailScreen() {
                         <Text style={styles.stampTag}>Off Cellar</Text>
                       </TouchableOpacity>
                     )}
-                    {/* Actions on their own line beneath the stamp. */}
+                    {/* Actions on their own line beneath the stamp: Your Review · Wine
+                        Intel only. (Editing is via the name; archiving is done from the
+                        cellar card, not here.) */}
                     <View style={styles.tagRow}>
                       <TouchableOpacity onPress={() => goToWineReview(w, conn)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>Your Review</Text>
@@ -725,19 +730,6 @@ export default function LineupDetailScreen() {
                       <TouchableOpacity onPress={() => viewLineupWineIntel(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
                         <Text style={styles.viewLink}>Wine Intel</Text>
                       </TouchableOpacity>
-                      <Text style={styles.tagDot}>·</Text>
-                      <TouchableOpacity onPress={() => openWineEdit(i, w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                        <Text style={styles.viewLink}>Edit Wine</Text>
-                      </TouchableOpacity>
-                      {/* A cellar bottle you drank but haven't archived — archive it here. */}
-                      {w.cellar_wine_id && cellarWines.some((c) => c.id === w.cellar_wine_id) ? (
-                        <>
-                          <Text style={styles.tagDot}>·</Text>
-                          <TouchableOpacity onPress={() => archiveOneLineupWine(w)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                            <Text style={styles.viewLink}>Archive from Cellar</Text>
-                          </TouchableOpacity>
-                        </>
-                      ) : null}
                     </View>
                   </View>
                 </View>
@@ -766,6 +758,11 @@ export default function LineupDetailScreen() {
               <Text style={styles.matchButtonText}>Match to a Restaurant Review</Text>
             </TouchableOpacity>
           )}
+
+          {/* Export — a button beneath the Match button. */}
+          <TouchableOpacity style={styles.exportButton} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+            <Text style={styles.exportButtonText}>{sharing ? 'Exporting…' : 'Export'}</Text>
+          </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
 
@@ -850,6 +847,10 @@ export default function LineupDetailScreen() {
       <Modal visible={editWineIndex !== null} transparent animationType="fade" onRequestClose={() => setEditWineIndex(null)}>
         <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setEditWineIndex(null)}>
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
+            {/* White X (top-right) to exit the edit screen. */}
+            <TouchableOpacity style={styles.pickerCloseX} onPress={() => setEditWineIndex(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Close">
+              <Text style={styles.closeX}>✕</Text>
+            </TouchableOpacity>
             <Text style={styles.stampTitle}>Edit wine</Text>
             <Text style={styles.stampFieldLabel}>Producer</Text>
             <TextInput style={styles.stampInput} value={editProducer} onChangeText={setEditProducer} placeholder="e.g. Château Batailley" placeholderTextColor={colors.textMuted} />
@@ -1078,6 +1079,8 @@ const styles = StyleSheet.create({
   matchBottomWrap: { alignItems: 'center', gap: spacing.sm },
   matchButton: { alignSelf: 'center', borderWidth: 1, borderColor: colors.text, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.xl },
   matchButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.text, letterSpacing: 0.3 },
+  exportButton: { alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 12, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, marginTop: spacing.md, backgroundColor: 'rgba(224,184,74,0.12)' },
+  exportButtonText: { fontFamily: fonts.headingSemibold, fontSize: 15, color: colors.gold, letterSpacing: 0.3 },
   // Always-visible "brief thoughts" input on the review form.
   thoughtsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 80, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlignVertical: 'top' },
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
@@ -1099,7 +1102,9 @@ const styles = StyleSheet.create({
   saveNoteText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold },
   wineList: { paddingHorizontal: spacing.xl },
   wineRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border },
-  wineName: { fontSize: 15, fontFamily: fonts.bodySemibold, color: colors.text },
+  wineName: { fontSize: 16, fontFamily: fonts.bodySemibold, color: colors.text },
+  // Region · grape line beneath the name — mirrors the Full Cellar List row detail.
+  wineDetail: { fontSize: 13, fontFamily: fonts.bodyRegular, color: colors.textMuted, marginTop: 2 },
   tagRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, marginTop: 4 },
   // Right-hand confirmation tick on each wine row.
   wineCheck: { paddingLeft: spacing.sm },
@@ -1111,7 +1116,7 @@ const styles = StyleSheet.create({
   intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
   stampTag: { alignSelf: 'flex-start', fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
-  viewLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold },
+  viewLink: { fontSize: 13, fontFamily: fonts.bodySemibold, color: colors.gold },
   tagDot: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   muted: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, lineHeight: 20 },
   offscreen: { position: 'absolute', left: -9999, top: -9999 },
