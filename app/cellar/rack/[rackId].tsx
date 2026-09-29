@@ -1766,7 +1766,7 @@ export default function RackGridScreen() {
         {moving && (
           <View style={styles.movingBanner}>
             <Text style={styles.movingBannerText} numberOfLines={2}>
-              {`Moving ${moving.wineName} — tap a slot to place${moving.sourceRackId === rackId ? ', or tap its slot to cancel' : ' (you can switch racks with the ‹ › arrows)'}`}
+              {`Moving ${moving.wineName} — tap an empty slot to place it, or navigate to the storage location you'd like to move it to.`}
             </Text>
             <TouchableOpacity onPress={() => setPendingMove(null)}>
               <Text style={styles.movingCancelLink}>Cancel</Text>
