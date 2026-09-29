@@ -388,6 +388,7 @@ export default function CellarWineDetail() {
   const [producerRangeLoading, setProducerRangeLoading] = useState(false);
   const producerRangeTriedRef = useRef<string | null>(null);
   const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
+  const [rangeNoteTier, setRangeNoteTier] = useState<string | null>(null);
   // Deduped range — same as the scan Wine Intel card: collapse the same wine
   // listed twice (bare vs. with the château in parentheses) by a normalised key.
   const rangeWines = useMemo<ProducerRangeWine[]>(() => {
@@ -1950,7 +1951,7 @@ export default function CellarWineDetail() {
                 {rangeWines.map((rw, i) => (
                   // The current wine — and a consolidated entry-level line — aren't
                   // tappable (no single inside line for a group of wines).
-                  <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
+                  <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => { setRangeNoteWine(rw.wineName); setRangeNoteTier(rw.tier ?? null); }} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
                     <View style={styles.rangeRowMain}>
                       <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
                       <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={rw.grouped ? 4 : 2}>{rw.wineName}</Text>
@@ -1977,6 +1978,7 @@ export default function CellarWineDetail() {
           producer={wine.producer}
           wineName={rangeNoteWine}
           region={wine.region}
+          tier={rangeNoteTier}
           visible={!!rangeNoteWine}
           onClose={() => setRangeNoteWine(null)}
         />

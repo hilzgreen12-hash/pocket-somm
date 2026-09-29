@@ -187,6 +187,7 @@ export default function LabelResultsScreen() {
   }, [producerRange]);
   // The range wine the user tapped for its "inside line" note.
   const [rangeNoteWine, setRangeNoteWine] = useState<string | null>(null);
+  const [rangeNoteTier, setRangeNoteTier] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const intelShareRef = useRef<View>(null);
   const [intelSharePayload, setIntelSharePayload] = useState<ComponentProps<typeof WineIntelShareCard> | null>(null);
@@ -1985,28 +1986,17 @@ export default function LabelResultsScreen() {
         <Text accessibilityLabel="Back" style={[styles.backLink, { color: colors.gold, fontSize: 22 }]}>←</Text>
       </TouchableOpacity>
 
-      {/* Top-right actions, stacked: Export the intel card, then Edit / Scan
-          Again (correct the wine or re-scan) — the relocated replacement for the
-          old "Not this wine?" link. */}
-      {isIntelOnlyFlow ? (
+      {/* Top-right action: Edit Wine (correct the wine or re-scan). Export moved
+          to a gold button beneath "Find me a Recipe" in the actions section. */}
+      {isIntelOnlyFlow && intelligence ? (
         <View style={styles.topRightActions}>
           <TouchableOpacity
-            onPress={handleShare}
-            hitSlop={{ top: 8, bottom: 6, left: 10, right: 10 }}
+            onPress={openEditWine}
+            hitSlop={{ top: 6, bottom: 8, left: 10, right: 10 }}
             activeOpacity={0.7}
-            disabled={sharing}
           >
-            <Text style={styles.scanAgainText}>{sharing ? 'Exporting…' : 'Export'}</Text>
+            <Text style={styles.scanAgainText}>Edit Wine</Text>
           </TouchableOpacity>
-          {intelligence ? (
-            <TouchableOpacity
-              onPress={openEditWine}
-              hitSlop={{ top: 6, bottom: 8, left: 10, right: 10 }}
-              activeOpacity={0.7}
-            >
-              <Text style={styles.scanAgainText}>Edit Wine</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       ) : null}
 
@@ -2317,7 +2307,7 @@ export default function LabelResultsScreen() {
                   {rangeWines.map((rw, i) => (
                     // The current wine — and a consolidated entry-level line — aren't
                     // tappable (there's no single inside line for a group of wines).
-                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => setRangeNoteWine(rw.wineName)} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
+                    <TouchableOpacity key={`${rw.wineName}-${i}`} style={[styles.rangeRow, rw.isThis && styles.rangeRowThis]} onPress={() => { setRangeNoteWine(rw.wineName); setRangeNoteTier(rw.tier ?? null); }} activeOpacity={(rw.isThis || rw.grouped) ? 1 : 0.7} disabled={rw.isThis || rw.grouped}>
                       <View style={styles.rangeRowMain}>
                         <Text style={[styles.rangeMarker, !rw.isThis && styles.rangeMarkerHidden]}>▸</Text>
                         <Text style={[styles.rangeName, rw.isThis && styles.rangeNameThis]} numberOfLines={rw.grouped ? 4 : 2}>{rw.wineName}</Text>
@@ -2344,6 +2334,7 @@ export default function LabelResultsScreen() {
             producer={wine.producer}
             wineName={rangeNoteWine}
             region={wine.region}
+            tier={rangeNoteTier}
             visible={!!rangeNoteWine}
             onClose={() => setRangeNoteWine(null)}
           />
@@ -2372,6 +2363,9 @@ export default function LabelResultsScreen() {
           </TouchableOpacity>
           <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleChefPairing} activeOpacity={0.85}>
             <Text style={styles.saveReviewBtnText}>Find me a Recipe</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={[styles.saveReviewBtn, { marginTop: spacing.sm }]} onPress={handleShare} disabled={sharing} activeOpacity={0.85}>
+            <Text style={styles.saveReviewBtnText}>{sharing ? 'Exporting…' : 'Export'}</Text>
           </TouchableOpacity>
         </View>
       ) : null}

@@ -8,11 +8,14 @@ import { fonts } from '../constants/fonts';
 // that wine plus its key technical details, fetched on demand. Shared by the
 // scan intel card and the cellar wine card.
 export function RangeWineNoteSheet({
-  producer, wineName, region, visible, onClose,
+  producer, wineName, region, tier, visible, onClose,
 }: {
   producer: string | null;
   wineName: string | null;
   region?: string | null;
+  // The wine's placement in the producer's range (Entry … Flagship) so the note
+  // stays consistent with the range card.
+  tier?: string | null;
   visible: boolean;
   onClose: () => void;
 }) {
@@ -22,9 +25,9 @@ export function RangeWineNoteSheet({
   const norm = (s?: string | null) => (s ?? '').trim().toLowerCase();
   const enabled = visible && !!(wineName && wineName.trim());
   const { data: note, isFetching, isError } = useQuery({
-    queryKey: ['range-wine-note', norm(producer), norm(wineName), norm(region)],
+    queryKey: ['range-wine-note', norm(producer), norm(wineName), norm(region), norm(tier)],
     queryFn: async () => {
-      const r = await fetchRangeWineNote({ producer, wineName, region });
+      const r = await fetchRangeWineNote({ producer, wineName, region, tier });
       if (!r) throw new Error('no inside line'); // don't cache an empty result — let a retry re-fetch
       return r;
     },

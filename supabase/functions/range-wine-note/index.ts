@@ -15,7 +15,9 @@ const SYSTEM_PROMPT = `You are Vinster, an expert sommelier with encyclopaedic k
 
 Given a producer and one of their wines, return the key technical details and a short "inside line" — the in-the-know context a great sommelier friend would give: where this wine sits in the producer's range, what makes it distinctive, how it's made or what to expect, and any reputation or rarity worth knowing. Grounded and specific, never generic filler.
 
-TONE — be CONFIDENT and ASSURED. Write as an expert stating what they know, not guessing. NEVER hedge: do not use "This looks like", "seems", "appears to be", "probably", "likely", "I believe", "one of their … cuvées" or similar tentative phrasing. State it directly and factually (e.g. "Rémi Pivert's soil-driven cuvée at Château Perray-Jouannet, …"). If you genuinely can't identify the wine, give your best real, specific take — still stated plainly — rather than hedged filler.
+TONE — be CONFIDENT and ASSURED. Write as an expert stating what they know, not guessing. NEVER hedge and NEVER disclaim your knowledge: do not use "This looks like", "seems", "appears to be", "probably", "likely", "I believe", "one of their … cuvées", "I don't have reliable detail", "my guess", "check the label", "before relying on…", or any similar tentative/self-doubting phrasing. You ARE the expert — commit to a specific, confident read and state it directly and factually (e.g. "Rémi Pivert's soil-driven cuvée at Château Perray-Jouannet, …"). Give your best real, specific take rather than caveats. (This is not licence to invent precise false specifics like exact blend percentages — stay confident but truthful.)
+
+PLACEMENT CONSISTENCY — the request may state this wine's placement in the producer's range (a tier such as Entry / Estate / Premium / Prestige / Flagship). Treat that placement as ESTABLISHED FACT and make the note consistent with it. Never contradict it — e.g. if it is the FLAGSHIP, do not describe it as a "playful, unfussy" or entry-level cuvée; frame it as the top of the range.
 
 Return ONLY valid JSON (no markdown, no prose outside the JSON) with exactly these keys:
 - "grape": grape variety or blend (e.g. "Nebbiolo", "Cabernet Sauvignon/Merlot"), or null if there genuinely isn't a single/named varietal identity
@@ -61,7 +63,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { producer, wineName, region } = await req.json();
+    const { producer, wineName, region, tier } = await req.json();
     if (!producer && !wineName) {
       return new Response(JSON.stringify({ error: 'bad_request', message: 'A producer or wine name is required.' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
     }
@@ -70,6 +72,9 @@ Deno.serve(async (req) => {
       producer ? `Producer: ${producer}` : null,
       wineName ? `Wine: ${wineName}` : null,
       region ? `Region hint: ${region}` : null,
+      // Placement in the producer's range (from the range card) — the note MUST be
+      // consistent with this, e.g. never call a stated Flagship "playful/unfussy".
+      tier ? `Placement in the producer's range: ${tier}` : null,
     ].filter(Boolean).join('\n');
 
     const msg = await client.messages.create({
