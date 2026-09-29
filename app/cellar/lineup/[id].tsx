@@ -663,18 +663,11 @@ export default function LineupDetailScreen() {
             </View>
           </View>
 
-          {/* Your Lineup Notes & Musings — dictate with the mic or tap to type;
-              once saved it reads back as copy (like a review) but stays editable. */}
+          {/* Your Lineup Notes & Musings — the heading, then the note as copy (tap
+              to edit). The mic + trash live in the editor popup only, so they don't
+              sit over the saved copy. */}
           <View style={styles.noteBlock}>
-            <View style={styles.noteHeadRow}>
-              <Text style={styles.noteHeadLabel}>Your Lineup Notes & Musings</Text>
-              <View style={styles.noteHeadActions}>
-                <MicButton value={note} onChangeText={onNoteDictate} onClear={() => persistNote('')} />
-                <TouchableOpacity onPress={confirmClearNote} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} accessibilityLabel="Clear notes" activeOpacity={0.7}>
-                  <Ionicons name="trash-outline" size={20} color={colors.gold} />
-                </TouchableOpacity>
-              </View>
-            </View>
+            <Text style={styles.noteHeadLabel}>Your Lineup Notes & Musings</Text>
             {note.trim() ? (
               <TouchableOpacity onPress={openNoteEditor} activeOpacity={0.7}>
                 <Text style={styles.noteBodyText}>{note}</Text>
@@ -828,7 +821,7 @@ export default function LineupDetailScreen() {
         <TouchableOpacity style={styles.stampOverlay} activeOpacity={1} onPress={() => setNoteEditorOpen(false)}>
           <TouchableOpacity activeOpacity={1} style={styles.stampSheet} onPress={() => {}}>
             <View style={styles.dictateRowFlush}>
-              <Text style={styles.stampTitle}>Your Lineup Notes & Musings</Text>
+              <Text style={[styles.stampTitle, styles.noteEditorTitle]} numberOfLines={2}>Your Lineup Notes & Musings</Text>
               <View style={styles.noteHeaderRight}>
                 <MicButton value={noteDraft} onChangeText={setNoteDraft} onClear={() => setNoteDraft('')} />
                 <TouchableOpacity onPress={() => setNoteEditorOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} accessibilityLabel="Cancel">
@@ -1073,10 +1066,10 @@ const styles = StyleSheet.create({
   dictateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: spacing.xl },
   dictateRowFlush: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm },
   // Section headers — yellow, all-caps, matching the stats-bar type.
-  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
+  sectionLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, paddingHorizontal: spacing.xl, marginTop: spacing.md, marginBottom: spacing.sm },
   noteBlock: { marginTop: spacing.md, marginBottom: spacing.sm, paddingHorizontal: spacing.xl },
   noteHeadRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.sm, gap: spacing.sm },
-  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.text, textTransform: 'uppercase', letterSpacing: 0.8, flexShrink: 1 },
+  noteHeadLabel: { fontFamily: fonts.bodySemibold, fontSize: 14, color: colors.gold, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm },
   noteHeadActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // Saved note reads back as copy (like a review); tap to edit in the popup.
   noteBodyText: { fontFamily: fonts.bodyRegular, fontSize: 15, color: colors.text, lineHeight: 22 },
@@ -1088,7 +1081,10 @@ const styles = StyleSheet.create({
   // Always-visible "brief thoughts" input on the review form.
   thoughtsInput: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: spacing.md, minHeight: 80, fontSize: 15, fontFamily: fonts.bodyRegular, color: colors.text, backgroundColor: colors.surface, textAlignVertical: 'top' },
   // Mic + ✕ cluster in the note/name editor headers; white ✕ to cancel.
-  noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  noteHeaderRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 0 },
+  // In the editor popup's header row the title must shrink so the mic + close
+  // icons stay on the sheet instead of overflowing to the right.
+  noteEditorTitle: { flexShrink: 1, textAlign: 'left', marginBottom: 0, marginRight: spacing.sm },
   closeX: { fontFamily: fonts.bodyRegular, fontSize: 20, color: '#FFFFFF' },
   // Restaurant-match picker: white X, a "no match" dismiss link, then a divider.
   pickerCloseX: { position: 'absolute', top: spacing.sm, right: spacing.sm, zIndex: 2, padding: 4 },
@@ -1114,7 +1110,7 @@ const styles = StyleSheet.create({
   intelOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(18,11,10,0.85)', alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   intelOverlayText: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold },
   // Non-link status stamps — all yellow (Off-cellar, Not reviewed, Archived).
-  stampTag: { fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
+  stampTag: { alignSelf: 'flex-start', fontSize: 11, fontFamily: fonts.bodySemibold, textTransform: 'uppercase', letterSpacing: 0.4, color: colors.gold, borderWidth: 1, borderColor: 'rgba(224,184,74,0.4)', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 999, overflow: 'hidden' },
   viewLink: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.gold },
   tagDot: { fontSize: 12, fontFamily: fonts.bodySemibold, color: colors.textMuted },
   muted: { fontSize: 14, fontFamily: fonts.bodyItalic, color: colors.textMuted, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, lineHeight: 20 },
