@@ -1,14 +1,16 @@
 import { Text, TouchableOpacity, StyleSheet, ScrollView, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { WineCardThumb } from './WineCardThumb';
 import { PlaceholderCardView, type PlaceholderCard } from './ExamplePlaceholder';
 import { useChosenWines } from '../hooks/useChosenWines';
 import { useScanHistory, type ScanArchiveItem } from '../hooks/useScanHistory';
+import { useAttachRestaurantPhoto } from '../hooks/useAttachRestaurantPhoto';
 import { wineHeaderLine } from '../utils/wineHeader';
 import { colors, spacing } from '../constants/theme';
 import { fonts } from '../constants/fonts';
 
-type Review = { key: string; ts: number; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; badge: string | null; open: () => void };
+type Review = { key: string; ts: number; kind: 'wine' | 'restaurant'; title: string; stamp: string; path: string | null; producer: string | null; wineName: string | null; badge: string | null; open: () => void; onAddPhoto?: () => void };
 
 function stampDate(d: Date): string {
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -40,10 +42,25 @@ export function useRecentReviewCounts(): { wines: number; restaurants: number } 
 }
 
 function ReviewCard({ item }: { item: Review }) {
+  // A restaurant review the user saved WITHOUT a photo shows a tappable tile —
+  // the restaurant name with "+ Add Photo" beneath it — that opens the add-photo
+  // flow (take / upload / find online) for that visit, instead of a plain
+  // name-only fallback thumbnail.
+  const showAddPhoto = item.kind === 'restaurant' && !item.path && !!item.onAddPhoto;
   return (
     <TouchableOpacity style={styles.card} onPress={item.open} activeOpacity={0.85}>
       <View>
-        <WineCardThumb path={item.path} producer={item.producer} wineName={item.wineName} fallbackText={item.title} />
+        {showAddPhoto ? (
+          <TouchableOpacity style={styles.addPhotoThumb} onPress={item.onAddPhoto} activeOpacity={0.8}>
+            <Text style={styles.addPhotoName} numberOfLines={2}>{item.title}</Text>
+            <View style={styles.addPhotoRow}>
+              <Ionicons name="camera-outline" size={16} color={colors.gold} />
+              <Text style={styles.addPhotoText}>+ Add Photo</Text>
+            </View>
+          </TouchableOpacity>
+        ) : (
+          <WineCardThumb path={item.path} producer={item.producer} wineName={item.wineName} fallbackText={item.title} />
+        )}
         {/* Top-right score (wines, XX/100) or overall star rating (restaurants);
             nothing shown when a review carries neither. */}
         {item.badge ? (
@@ -61,10 +78,12 @@ function ReviewCard({ item }: { item: Review }) {
 export function RecentReviewsCarousel() {
   const { chosenWines } = useChosenWines();
   const { archive } = useScanHistory();
+  const attachRestaurantPhoto = useAttachRestaurantPhoto();
 
   const wineItems: Review[] = chosenWines.map((w) => ({
     key: `w-${w.id}`,
     ts: w.chosen_at ? new Date(w.chosen_at).getTime() : 0,
+    kind: 'wine' as const,
     title: wineHeaderLine(w.producer, w.wine_name, w.vintage) || (w.wine_name ?? 'Wine'),
     stamp: [w.chosen_at ? stampDate(new Date(w.chosen_at)) : '', (w.restaurant_name || w.city || '').trim()].filter(Boolean).join(' · '),
     path: w.label_image_path,
@@ -74,17 +93,27 @@ export function RecentReviewsCarousel() {
     open: () => router.push(`/wines/chosen?openReview=${w.id}` as any),
   }));
 
-  const restaurantItems: Review[] = archive.filter(restaurantReviewed).map((a) => ({
-    key: `r-${a.id}`,
-    ts: a.capturedAt ? new Date(a.capturedAt).getTime() : 0,
-    title: a.restaurantName?.trim() || 'Restaurant',
-    stamp: [a.capturedAt ? stampDate(new Date(a.capturedAt)) : '', a.city?.trim()].filter(Boolean).join(' · '),
-    path: a.restaurantPhotoPath,
-    producer: null,
-    wineName: null,
-    badge: a.ratingOverall != null ? `${a.ratingOverall}★` : null,
-    open: () => router.push(`/restaurants/reviews?openSession=${a.id}` as any),
-  }));
+  const restaurantItems: Review[] = archive.filter(restaurantReviewed).map((a) => {
+    const venue = a.restaurantName?.trim() || '';
+    const loc = a.city?.trim() || '';
+    return {
+      key: `r-${a.id}`,
+      ts: a.capturedAt ? new Date(a.capturedAt).getTime() : 0,
+      kind: 'restaurant' as const,
+      title: venue || 'Restaurant',
+      stamp: [a.capturedAt ? stampDate(new Date(a.capturedAt)) : '', loc].filter(Boolean).join(' · '),
+      path: a.restaurantPhotoPath,
+      producer: null,
+      wineName: null,
+      badge: a.ratingOverall != null ? `${a.ratingOverall}★` : null,
+      open: () => router.push(`/restaurants/reviews?openSession=${a.id}` as any),
+      // No photo yet → the card shows the restaurant name + "+ Add Photo", which
+      // opens the add-photo flow (take / upload / find online) for this visit.
+      onAddPhoto: a.restaurantPhotoPath
+        ? undefined
+        : () => attachRestaurantPhoto.present({ sessionId: a.id, restaurant: venue || null, city: loc || null, hasPhoto: false }),
+    };
+  });
 
   const merged = [...wineItems, ...restaurantItems].sort((a, b) => b.ts - a.ts).slice(0, 8);
   // Real reviews fill from the left, replacing placeholder tiles in order; the
@@ -105,6 +134,12 @@ const styles = StyleSheet.create({
   thumb: { width: 220, height: 165 },
   cardName: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.text, marginTop: 6, letterSpacing: 0.2 },
   cardStamp: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.textMuted, marginTop: 3 },
+  // Photo-less restaurant review tile: the venue name with "+ Add Photo" beneath,
+  // both inside the thumbnail. Mirrors the "+ Add Image" tile on Recent Scans.
+  addPhotoThumb: { width: 220, height: 165, borderRadius: 12, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.gold, backgroundColor: colors.surface, alignItems: 'center', justifyContent: 'center', padding: spacing.md, gap: 10 },
+  addPhotoName: { fontFamily: fonts.headingSemibold, fontSize: 16, color: colors.text, letterSpacing: 0.2, textAlign: 'center' },
+  addPhotoRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  addPhotoText: { fontFamily: fonts.headingSemibold, fontSize: 14, color: colors.gold, letterSpacing: 0.3 },
   // Score (XX/100) or overall stars, top-right of the thumbnail.
   badge: { position: 'absolute', top: 6, right: 6, backgroundColor: 'rgba(18,11,10,0.82)', borderRadius: 8, borderWidth: 1, borderColor: colors.gold, paddingHorizontal: 8, paddingVertical: 3 },
   badgeText: { fontFamily: fonts.bodySemibold, fontSize: 12, color: colors.gold, letterSpacing: 0.3 },
