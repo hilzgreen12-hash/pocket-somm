@@ -1766,6 +1766,11 @@ export default function CellarWineDetail() {
               </TouchableOpacity>
             );
           })}
+          {/* Wine-bin placements — previously the breakdown skipped bins, so a
+              bin-only wine showed just the total with no "in <bin>" line. */}
+          {winePlacements.filter((p) => p.kind === 'bin').map((p) => (
+            <Text key={p.id} style={styles.statActionPlain}>{p.quantity} bottle{p.quantity === 1 ? '' : 's'} in a wine bin</Text>
+          ))}
           {/* Bottles not covered by any placement — surfaced from the unified
               placements model so partially-placed wines no longer hide bottles. */}
           {(() => {
