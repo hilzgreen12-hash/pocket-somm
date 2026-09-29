@@ -204,13 +204,14 @@ export default function LabelResultsScreen() {
   const intelLoading = isIntelOnlyFlow && gen === '1' && !intelligence && !awaitingConfirm && !genError;
   // Generate the intel on THIS screen (skeleton arrival). Records to Recent Scans
   // unless the caller passed noRecent=1 (Manually Search / voice / lineup / reviews).
-  const runGenerate = useCallback(async () => {
-    if (!wineDetailsConfirmed) return;
+  const runGenerate = useCallback(async (detailsOverride?: WineDetailsComplete) => {
+    const details = detailsOverride ?? wineDetailsConfirmed;
+    if (!details) return;
     setGenError(false);
     try {
-      const generated = await generateWineIntel(wineDetailsConfirmed, userCurrency);
+      const generated = await generateWineIntel(details, userCurrency);
       setIntelligence(generated);
-      useLastIntelStore.getState().setLast(wineDetailsConfirmed, generated, { recordRecent: noRecent !== '1' });
+      useLastIntelStore.getState().setLast(details, generated, { recordRecent: noRecent !== '1' });
       // Opened from Recent Scans with an empty/missing snapshot → heal the stored
       // label so it's instant (and never shows the prompt) next time.
       if (labelId) { try { await updateLabelIntel(labelId, generated); } catch { /* best-effort */ } }
@@ -220,6 +221,10 @@ export default function LabelResultsScreen() {
   }, [wineDetailsConfirmed, userCurrency, noRecent, setIntelligence, labelId]);
   useEffect(() => {
     if (!isIntelOnlyFlow || gen !== '1' || intelligence || awaitingConfirm || !wineDetailsConfirmed || genStartedRef.current) return;
+    // Hold generation on a fresh scan that couldn't read a vintage — the prompt
+    // (below) fires first and drives a SINGLE generation for the right year, so
+    // the card builds once (fast, streaming) instead of generate-as-NV → regen.
+    if (fresh === '1' && !(wineDetailsConfirmed.vintage ?? '').trim()) return;
     genStartedRef.current = true;
     void runGenerate();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -580,11 +585,13 @@ export default function LabelResultsScreen() {
   // blank (a detected 'NV' or a real year is left alone).
   useEffect(() => {
     if (vintagePromptedRef.current) return;
-    if (!isIntelOnlyFlow || fresh !== '1' || awaitingConfirm || !intelligence) return;
+    // Fire immediately after the scan (not after intel lands) so the user confirms
+    // the vintage up front and the card then builds ONCE for that year.
+    if (!isIntelOnlyFlow || fresh !== '1' || awaitingConfirm) return;
     if ((wineDetailsConfirmed?.vintage ?? '').trim()) return;
     vintagePromptedRef.current = true;
     setVintagePromptOpen(true);
-  }, [isIntelOnlyFlow, fresh, awaitingConfirm, intelligence, wineDetailsConfirmed]);
+  }, [isIntelOnlyFlow, fresh, awaitingConfirm, wineDetailsConfirmed]);
 
   // Save the entered vintage → rebuild the card for it (score / value / drinking
   // window all depend on the year). Reuses resolveConfirm's regenerate path.
@@ -597,12 +604,29 @@ export default function LabelResultsScreen() {
       return;
     }
     if (!wineDetailsConfirmed) { setVintagePromptOpen(false); return; }
-    await resolveConfirm({ ...wineDetailsConfirmed, vintage: raw });
+    const updated = { ...wineDetailsConfirmed, vintage: raw };
+    setWineDetailsConfirmed(updated);
     setVintagePromptOpen(false);
+    // Generation was held for the missing vintage → build the card now, once, for
+    // this year (streams like the has-vintage flow). If intel already existed
+    // (a re-open), regenerate for the new year instead.
+    if (!intelligence && !genStartedRef.current) {
+      genStartedRef.current = true;
+      void runGenerate(updated);
+    } else {
+      await resolveConfirm(updated);
+    }
   }
   function confirmNoVintage() {
     setVintagePromptOpen(false);
-    if (wineDetailsConfirmed) setWineDetailsConfirmed({ ...wineDetailsConfirmed, vintage: 'NV' });
+    if (!wineDetailsConfirmed) return;
+    const updated = { ...wineDetailsConfirmed, vintage: 'NV' };
+    setWineDetailsConfirmed(updated);
+    // Same as submitVintage: build once now if generation was held.
+    if (!intelligence && !genStartedRef.current) {
+      genStartedRef.current = true;
+      void runGenerate(updated);
+    }
   }
 
   // "Where this wine sits in the producer's range" — fetched once on the Wine
@@ -2097,7 +2121,7 @@ export default function LabelResultsScreen() {
       </Modal>
 
       {/* Vintage prompt — the label had no readable vintage. */}
-      <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={() => setVintagePromptOpen(false)}>
+      <Modal visible={vintagePromptOpen} transparent animationType="fade" onRequestClose={confirmNoVintage}>
         <View style={styles.candOverlay}>
           <View style={styles.candSheet}>
             {confirmGenerating ? (
@@ -2120,8 +2144,8 @@ export default function LabelResultsScreen() {
                 <TouchableOpacity style={styles.candConfirmBtn} onPress={submitVintage} activeOpacity={0.8}>
                   <Text style={styles.candConfirmText}>Save</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.candCancel} onPress={() => setVintagePromptOpen(false)} activeOpacity={0.7}>
-                  <Text style={styles.candCancelText}>Cancel</Text>
+                <TouchableOpacity style={styles.candCancel} onPress={confirmNoVintage} activeOpacity={0.7}>
+                  <Text style={styles.candCancelText}>Skip (treat as NV)</Text>
                 </TouchableOpacity>
               </>
             )}
