@@ -439,17 +439,13 @@ export default function RestaurantReviewsScreen() {
     const pool = sameCity.length > 0 ? sameCity : candidates;
     const visitTime = new Date(item.capturedAt).getTime();
     const DAY = 24 * 60 * 60 * 1000;
-    // Everything within ~a day of the visit belongs to it; otherwise fall back
-    // to the single closest so a lone legacy bottle still shows somewhere.
-    const near = pool.filter((c) => Math.abs(new Date(c.chosen_at).getTime() - visitTime) <= DAY);
-    if (near.length > 0) return near;
-    let closest: ChosenWine | null = null;
-    let closestDelta = Infinity;
-    for (const c of pool) {
-      const delta = Math.abs(new Date(c.chosen_at).getTime() - visitTime);
-      if (delta < closestDelta) { closestDelta = delta; closest = c; }
-    }
-    return closest ? [closest] : [];
+    // Only unlinked bottles chosen within ~a day of the visit belong to it. We do
+    // NOT fall back to "the single closest regardless of time": that pulled a pick
+    // from a DIFFERENT visit to the same restaurant into this review (and, after
+    // deleting it, surfaced the next-closest), showing bottles the user never
+    // selected here. A genuinely orphaned legacy bottle simply won't attach to an
+    // unrelated visit — correct over convenient.
+    return pool.filter((c) => Math.abs(new Date(c.chosen_at).getTime() - visitTime) <= DAY);
   }
 
   // A visit's bottles = FK-linked rows (definitely this visit) MERGED with any
