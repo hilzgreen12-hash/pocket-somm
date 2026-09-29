@@ -60,6 +60,16 @@ export async function updateCellarWineRemoval(id: string, updates: { note?: stri
   if (error) throw error;
 }
 
+// Distinct cellar_wine ids that have at least one logged removal (a bottle
+// drunk/archived from this wine). Used to tell a wine drawn DOWN to its last
+// bottle ("running low" → replenish) from one that was simply added as a single.
+// RLS scopes the read to the signed-in user, so no user filter is needed.
+export async function fetchWineIdsWithRemovals(): Promise<string[]> {
+  const { data, error } = await supabase.from('cellar_wine_removals').select('cellar_wine_id');
+  if (error) throw error;
+  return Array.from(new Set((data ?? []).map((r: any) => r.cellar_wine_id).filter(Boolean)));
+}
+
 // Heal data inconsistency: if a wine is currently assigned to a rack_slot, it
 // is by definition part of the user's live cellar. Older versions of the app
 // occasionally left wines flagged is_wishlist=true or archived_at non-null
