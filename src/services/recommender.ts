@@ -111,6 +111,26 @@ function matchExtracted(rec: { producer: string; name: string; vintage: number |
     const hits = list.filter(pred);
     if (hits.length === 1) return hits[0]; // unambiguous only — never guess a price
   }
+  // Final safe fallback: token-SUBSET match. The model sometimes restates a pick's
+  // name more (or less) fully than OCR read it — e.g. it echoes the full
+  // "Producer, Vineyard, Cuvée" while the menu row was terser, so the exact key
+  // differs and the price is lost even though it's clearly the same wine. Match
+  // when one identity's meaningful tokens are a subset of the other's, still
+  // requiring a UNIQUE hit (with a vintage tiebreak) so a price is never guessed.
+  const rTok = new Set(rKey.split(' ').filter((t) => t.length >= 3));
+  if (rTok.size >= 2) {
+    const subset = (a: Set<string>, b: Set<string>) => { for (const t of a) if (!b.has(t)) return false; return true; };
+    const subsetHits = list.filter((e) => {
+      const eTok = new Set(wineNameKey(e.producer, e.name).split(' ').filter((t) => t.length >= 3));
+      if (eTok.size < 2) return false;
+      return rTok.size <= eTok.size ? subset(rTok, eTok) : subset(eTok, rTok);
+    });
+    if (subsetHits.length === 1) return subsetHits[0];
+    if (subsetHits.length > 1) {
+      const vHits = subsetHits.filter((e) => e.vintage === rv);
+      if (vHits.length === 1) return vHits[0];
+    }
+  }
   return null;
 }
 
