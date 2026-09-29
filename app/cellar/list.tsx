@@ -206,7 +206,7 @@ export default function FullCellarListScreen() {
       title: name,
       body: 'Delete this location. Choose whether to keep the wines in your cellar (moved to Unplaced Bottles) or delete them too.',
       buttons: [
-        { text: 'Delete location & move wines to Unplaced Bottles', onPress: () => confirmDeleteStorageKeepWines(id, name) },
+        { text: 'Delete location &\nmove wines to Unplaced Bottles', onPress: () => confirmDeleteStorageKeepWines(id, name) },
         { text: 'Delete location & wines', style: 'destructive', onPress: () => confirmDeleteStorageAndWines(id, name) },
         { text: 'Cancel', style: 'cancel' },
       ],
