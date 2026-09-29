@@ -99,6 +99,10 @@ export default function FullCellarListScreen() {
   const { preferences } = usePreferences();
   const [intelUpdating, setIntelUpdating] = useState(false);
   const [intelProgress, setIntelProgress] = useState({ done: 0, total: 0 });
+  // Deleting a location's wines (a big import can be ~1000 rows, deleted one-by-one)
+  // — show a real percentage so it never looks frozen.
+  const [deleting, setDeleting] = useState(false);
+  const [deleteProgress, setDeleteProgress] = useState({ done: 0, total: 0 });
   // Abort controller so the user can "Save Progress and Exit" a long intel update.
   const intelAbortRef = useRef<AbortController | null>(null);
 
@@ -248,12 +252,16 @@ export default function FullCellarListScreen() {
           text: 'Delete location & wines',
           style: 'destructive',
           onPress: async () => {
+            setDeleteProgress({ done: 0, total: 0 });
+            setDeleting(true);
             try {
-              const { deletedWines } = await deleteLocationAndWines(id);
+              const { deletedWines } = await deleteLocationAndWines(id, (done, total) => setDeleteProgress({ done, total }));
               afterStorageLocationDeleted(id);
               showAlert({ title: 'Location deleted', body: `"${name}" and ${deletedWines} ${deletedWines === 1 ? 'wine' : 'wines'} removed.` });
             } catch (err) {
               showAlert({ title: 'Could not delete', body: err instanceof Error ? err.message : 'Please try again.' });
+            } finally {
+              setDeleting(false);
             }
           },
         },
@@ -964,6 +972,24 @@ export default function FullCellarListScreen() {
         </View>
       </Modal>
 
+      {/* Deleting a location's wines — a real percentage bar so a big import's
+          delete never looks frozen. Back blocked mid-delete. */}
+      <Modal visible={deleting} animationType="fade" onRequestClose={() => {}}>
+        <View style={styles.deleteProgressWrap}>
+          <ActivityIndicator color={colors.gold} />
+          <Text style={styles.deleteProgressTitle}>Deleting these wines…</Text>
+          <Text style={styles.deleteProgressCount}>
+            {deleteProgress.total > 0
+              ? `${deleteProgress.done} of ${deleteProgress.total} · ${Math.round((deleteProgress.done / deleteProgress.total) * 100)}%`
+              : 'Preparing…'}
+          </Text>
+          <View style={styles.deleteProgressTrack}>
+            <View style={[styles.deleteProgressFill, { width: `${deleteProgress.total > 0 ? Math.round((deleteProgress.done / deleteProgress.total) * 100) : 0}%` }]} />
+          </View>
+          <Text style={styles.deleteProgressHint}>This can take a moment for a large import — please keep Vinster open.</Text>
+        </View>
+      </Modal>
+
       {/* Filter row — Sort first so the most common interaction (changing
           order) is closest to the user's thumb. Rack / Country / Colour
           follow in descending likelihood of use. */}
@@ -1394,6 +1420,12 @@ const styles = StyleSheet.create({
   shareLink: { fontSize: 16, fontFamily: fonts.bodyRegular, color: colors.gold, textAlign: 'right' },
   exitUpdateBtn: { position: 'absolute', bottom: 64, alignSelf: 'center', borderWidth: 1, borderColor: colors.gold, borderRadius: 14, paddingVertical: spacing.sm, paddingHorizontal: spacing.xl, backgroundColor: colors.background },
   exitUpdateText: { fontSize: 15, fontFamily: fonts.headingSemibold, color: colors.gold },
+  deleteProgressWrap: { flex: 1, backgroundColor: colors.background, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.xl, gap: spacing.md },
+  deleteProgressTitle: { fontFamily: fonts.headingSemibold, fontSize: 20, color: colors.text, textAlign: 'center', letterSpacing: 0.4 },
+  deleteProgressCount: { fontFamily: fonts.bodySemibold, fontSize: 15, color: colors.gold, textAlign: 'center' },
+  deleteProgressTrack: { width: '100%', maxWidth: 340, height: 8, borderRadius: 4, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
+  deleteProgressFill: { height: '100%', backgroundColor: colors.gold },
+  deleteProgressHint: { fontFamily: fonts.bodyItalic, fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 },
   shareCardWrap: { position: 'absolute', left: -10000, top: 0, opacity: 0 },
   // Inter — body in modal
   addBody: { fontFamily: fonts.bodyItalic, fontSize: 15, color: colors.textMuted, textAlign: 'center', lineHeight: 20, marginBottom: spacing.lg },

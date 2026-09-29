@@ -309,7 +309,12 @@ export async function deleteLocationKeepWines(locationId: string): Promise<void>
 // elsewhere (e.g. an import that MERGED into an existing cellar wine, so it has
 // bottles at home too) keeps its other bottles — we only subtract the count that
 // was in this location. Returns how many whole wines were deleted.
-export async function deleteLocationAndWines(locationId: string): Promise<{ deletedWines: number }> {
+export async function deleteLocationAndWines(
+  locationId: string,
+  // Fires as each wine is processed so a big import's delete shows real progress
+  // (deleting ~1000 rows one-by-one is slow; without this the screen looks frozen).
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ deletedWines: number }> {
   // Bottles filed in this location, summed per wine.
   const here = await fetchPlacementsForLocation(locationId);
   const hereByWine = new Map<string, number>();
@@ -340,6 +345,8 @@ export async function deleteLocationAndWines(locationId: string): Promise<{ dele
     if (wErr) throw wErr;
     const qtyById = new Map((wineRows ?? []).map((w: any) => [w.id, w.quantity ?? 0]));
 
+    let processed = 0;
+    onProgress?.(0, wineIds.length);
     for (const id of wineIds) {
       const inHere = hereByWine.get(id) ?? 0;
       const total = qtyById.get(id) ?? 0;
@@ -355,6 +362,7 @@ export async function deleteLocationAndWines(locationId: string): Promise<{ dele
         // deleted below.
         await supabase.from('cellar_wines').update({ quantity: Math.max(1, remaining) }).eq('id', id);
       }
+      onProgress?.(++processed, wineIds.length);
     }
   }
 
