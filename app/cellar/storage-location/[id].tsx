@@ -180,6 +180,11 @@ export default function StorageLocationScreen() {
         // Whole listing moves here — clear any rack slots / bin cell / case.
         await clearWineFromRacks(w.id);
         await updateCellarWine(w.id, { storage_location_id: id, bin_cell_id: null, case_id: null });
+        // Since mig-106 the trigger no longer mirrors storage_location_id into a
+        // location placement, and this screen reads from placements — so create the
+        // placement explicitly, or the moved wine wouldn't show here until the Full
+        // Cellar List reconcile ran. (Mirrors the scan/label add path.)
+        await addLocationPlacement(w.id, id!, null, N);
       } else {
         // Partial — split M bottles into a new row here; source keeps the rest.
         await updateCellarWine(w.id, { quantity: N - M });
@@ -187,6 +192,7 @@ export default function StorageLocationScreen() {
         const { id: _id, created_at: _c, updated_at: _u, ...rest } = w;
         const created = await addCellarWine({ ...rest, quantity: M, storage_location_id: id, bin_cell_id: null, case_id: null, is_wishlist: false } as any);
         landedWineId = (created as any)?.id ?? w.id;
+        await addLocationPlacement(landedWineId, id!, null, M);
       }
       invalidateAfterMove(w);
       setMoveModal(null);

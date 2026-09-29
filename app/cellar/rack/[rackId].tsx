@@ -16,7 +16,7 @@ import { useCustomFilters } from '../../../src/hooks/useCustomFilters';
 import { assignSlot, assignSlots, clearSlot, clearWineFromRacks, removeSlotsForWine } from '../../../src/api/racks';
 import { addCellarWineRemoval, addCellarWine } from '../../../src/api/cellar';
 import { fetchStorageLocations, assignWineToStorageLocation } from '../../../src/api/storageLocations';
-import { addLocationPlacement } from '../../../src/api/placements';
+import { addLocationPlacement, fetchPlacementsForWine } from '../../../src/api/placements';
 import { getBins } from '../../../src/api/bins';
 import { supabase } from '../../../src/api/supabase';
 import * as ImagePicker from 'expo-image-picker';
@@ -751,12 +751,24 @@ export default function RackGridScreen() {
     if (!pendingSlot) return;
     const { rackId: rid, row, col } = pendingSlot;
     // If the wine is filed in a home storage location or bin, offer to MOVE it
-    // here (clearing the source) rather than double-counting it in both.
-    const inLocOrBin = !!wine.storage_location_id || !!wine.bin_cell_id;
+    // here (clearing the source) rather than double-counting it in both. Check the
+    // unified placements too — an alt-cellar wine added the normal way has a
+    // location PLACEMENT with a null legacy storage_location_id, so the legacy
+    // check alone missed it (and it silently mis-placed).
+    let placedLocationId: string | null = wine.storage_location_id ?? null;
+    let placedInBin = !!wine.bin_cell_id;
+    if (!placedLocationId && !placedInBin) {
+      try {
+        const pls = await fetchPlacementsForWine(wine.id);
+        placedLocationId = pls.find((p) => p.kind === 'location')?.storage_location_id ?? null;
+        placedInBin = pls.some((p) => p.kind === 'bin');
+      } catch { /* fall through to plain placement */ }
+    }
+    const inLocOrBin = !!placedLocationId || placedInBin;
     if (inLocOrBin) {
       setCellarPickerOpen(false);
-      const where = wine.storage_location_id
-        ? (allLocations.find((l) => l.id === wine.storage_location_id)?.name ?? 'a home storage location')
+      const where = placedLocationId
+        ? (allLocations.find((l) => l.id === placedLocationId)?.name ?? 'a home storage location')
         : 'a wine bin';
       const N = wine.quantity ?? 1;
       if (N <= 1) {
@@ -836,8 +848,10 @@ export default function RackGridScreen() {
   // model). The wine's total is unchanged; its bottles just relocate.
   async function moveWineToLocation(wineId: string, locId: string) {
     try {
-      const movedCount = wines.find((w) => w.id === wineId)?.quantity ?? 1;
-      await clearWineFromRacks(wineId);
+      // Move only the bottles that are in THIS rack (a wine can also sit in another
+      // rack/fridge), and free only this rack's slots — not every rack it's in.
+      const movedCount = slotsForWine(wineId) || 1;
+      await removeSlotsForWine(wineId, movedCount, rackId);
       await addLocationPlacement(wineId, locId, null, movedCount);
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
       qc.invalidateQueries({ queryKey: ['slot-assignments'] });
@@ -1094,7 +1108,7 @@ export default function RackGridScreen() {
           const { id: _id, created_at: _ca, updated_at: _ua, ...rest } = wine;
           await addCellarWine({ ...rest, quantity: count, archived_at: `${today}T12:00:00.000Z`, is_wishlist: false });
         }
-        await removeSlotsForWine(wineId, count);
+        await removeSlotsForWine(wineId, count, rackId); // scope to THIS rack (a wine can span units)
         if (session?.user.id) qc.invalidateQueries({ queryKey: ['cellar-archive', session.user.id] });
       }
       qc.invalidateQueries({ queryKey: ['rack-slots', rackId] });
