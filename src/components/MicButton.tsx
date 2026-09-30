@@ -3,6 +3,7 @@ import { TouchableOpacity, View, StyleSheet, type StyleProp, type ViewStyle } fr
 import { ExpoSpeechRecognitionModule, useSpeechRecognitionEvent } from 'expo-speech-recognition';
 import { showAlert } from './AppAlert';
 import { correctWineTerms } from '../utils/wineDictation';
+import { useDictationCorrect } from '../hooks/useDictationCorrect';
 import { colors } from '../constants/theme';
 
 interface Props {
@@ -29,6 +30,12 @@ export function MicButton({ value, onChangeText, onClear, style }: Props) {
   // (which are cumulative) can be re-joined onto it live.
   const listeningRef = useRef(false);
   const baseRef = useRef('');
+  // Data-driven producer correction from the user's cellar (long tail beyond the
+  // hand-written dictionary). Held in a ref so the event handler always uses the
+  // latest index even if the cellar changes mid-mount.
+  const refine = useDictationCorrect();
+  const refineRef = useRef(refine);
+  refineRef.current = refine;
 
   function stopState() {
     listeningRef.current = false;
@@ -46,11 +53,19 @@ export function MicButton({ value, onChangeText, onClear, style }: Props) {
     // join onto the untouched base, so anything the user typed is left exactly
     // as written.
     const spoken = correctWineTerms(transcript);
-    // Interim transcripts are the full hypothesis-so-far for the utterance,
-    // so re-join onto the captured base each time rather than appending —
-    // this fills the field live instead of only on stop.
-    onChangeText(joinDictation(baseRef.current, spoken));
-    if (e.isFinal) baseRef.current = joinDictation(baseRef.current, spoken);
+    // Interim transcripts are the full hypothesis-so-far for the utterance, so
+    // re-join onto the captured base each time rather than appending — this fills
+    // the field live instead of only on stop. On the FINAL transcript, also run
+    // the (heavier) fuzzy cellar-producer correction once, so a misheard producer
+    // snaps to the real name the user owns without slowing the live typing.
+    if (e.isFinal) {
+      const refined = refineRef.current(spoken);
+      const joined = joinDictation(baseRef.current, refined);
+      onChangeText(joined);
+      baseRef.current = joined;
+    } else {
+      onChangeText(joinDictation(baseRef.current, spoken));
+    }
   });
   useSpeechRecognitionEvent('end', () => { stopState(); });
   useSpeechRecognitionEvent('error', () => { stopState(); });
