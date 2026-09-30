@@ -29,7 +29,7 @@ const INSIGHT_EXAMPLES: PlaceholderCard[] = [
 
 type Tile =
   | { kind: 'bottle'; key: string; dismissKey: string; wine: CellarWine }
-  | { kind: 'fact'; key: string; dismissKey: string; icon: keyof typeof Ionicons.glyphMap; value: string; title: string; meta: string; wineId?: string };
+  | { kind: 'fact'; key: string; dismissKey: string; icon: keyof typeof Ionicons.glyphMap; value: string; title: string; meta: string; wineId?: string; thumbWine?: CellarWine };
 
 function runningLowWines(wines: CellarWine[], removalSet: Set<string>, dismissed: string[]): CellarWine[] {
   const dset = new Set(dismissed);
@@ -91,7 +91,11 @@ export function CellarInsightsCarousel() {
   // different grape that later becomes top-rated.
   const grapeKey = topGrape ? `fact:grape:${topGrape.label.toLowerCase()}` : '';
   if (topGrape && !dset.has(grapeKey)) {
-    facts.push({ kind: 'fact', key: 'grape', dismissKey: grapeKey, icon: 'sparkles-outline', value: topGrape.label, title: 'Top-Rated Grape', meta: `Avg ${topGrape.avg}` });
+    // Representative wine for the thumbnail: the highest-scored wine of that grape.
+    const grapeWine = wines
+      .filter((w) => (w.grape_variety ?? '').toLowerCase() === topGrape.label.toLowerCase() && w.critic_score != null)
+      .sort((a, b) => (b.critic_score ?? 0) - (a.critic_score ?? 0))[0];
+    facts.push({ kind: 'fact', key: 'grape', dismissKey: grapeKey, icon: 'sparkles-outline', value: topGrape.label, title: topGrape.label, meta: `Top-Rated Grape · Avg ${topGrape.avg}`, wineId: grapeWine?.id, thumbWine: grapeWine });
   }
 
   // Oldest vintage in the cellar (vintage is stored as a string).
@@ -102,9 +106,11 @@ export function CellarInsightsCarousel() {
   const vintageKey = oldest ? `fact:vintage:${oldest.y}` : '';
   if (oldest && !dset.has(vintageKey)) {
     facts.push({
-      kind: 'fact', key: 'vintage', dismissKey: vintageKey, icon: 'time-outline', value: String(oldest.y), title: 'Oldest Vintage',
+      kind: 'fact', key: 'vintage', dismissKey: vintageKey, icon: 'time-outline', value: String(oldest.y),
+      // Vintage in the title, per request; the bottle thumbnail comes from thumbWine.
+      title: `Oldest Vintage · ${oldest.y}`,
       meta: [oldest.w.producer, oldest.w.wine_name].filter(Boolean).join(' ') || 'In your cellar',
-      wineId: oldest.w.id,
+      wineId: oldest.w.id, thumbWine: oldest.w,
     });
   }
 
@@ -120,7 +126,11 @@ export function CellarInsightsCarousel() {
   const topProducer = [...producerAgg.values()].sort((a, b) => b.bottles - a.bottles)[0];
   const producerKey = topProducer ? `fact:producer:${topProducer.label.toLowerCase()}` : '';
   if (topProducer && topProducer.bottles >= 2 && !dset.has(producerKey)) {
-    facts.push({ kind: 'fact', key: 'producer', dismissKey: producerKey, icon: 'trophy-outline', value: topProducer.label, title: 'Most Collected', meta: `${topProducer.bottles} bottles` });
+    // Representative wine for the thumbnail: the top-scored wine from that producer.
+    const producerWine = wines
+      .filter((w) => (w.producer ?? '').toLowerCase() === topProducer.label.toLowerCase())
+      .sort((a, b) => (b.critic_score ?? 0) - (a.critic_score ?? 0))[0];
+    facts.push({ kind: 'fact', key: 'producer', dismissKey: producerKey, icon: 'trophy-outline', value: topProducer.label, title: topProducer.label, meta: `Most Collected · ${topProducer.bottles} bottles`, wineId: producerWine?.id, thumbWine: producerWine });
   }
 
   // Last-bottle tiles first (actionable), then the facts.
@@ -168,10 +178,16 @@ export function CellarInsightsCarousel() {
             delayLongPress={400}
             activeOpacity={t.wineId ? 0.85 : 1}
           >
-            <View style={styles.factBox}>
-              <Ionicons name={t.icon} size={30} color={colors.gold} />
-              <Text style={styles.factValue} numberOfLines={2}>{t.value}</Text>
-            </View>
+            {t.thumbWine ? (
+              // Show the actual bottle we're referring to (top-rated grape's wine,
+              // the oldest bottle, a wine from the most-collected producer).
+              <WineCardThumb path={t.thumbWine.label_image_path} producer={t.thumbWine.producer} wineName={t.thumbWine.wine_name} fallbackText={t.title} />
+            ) : (
+              <View style={styles.factBox}>
+                <Ionicons name={t.icon} size={30} color={colors.gold} />
+                <Text style={styles.factValue} numberOfLines={2}>{t.value}</Text>
+              </View>
+            )}
             <Text style={styles.cardName} numberOfLines={2}>{t.title}</Text>
             <Text style={styles.cardMeta} numberOfLines={1}>{t.meta}</Text>
           </TouchableOpacity>
